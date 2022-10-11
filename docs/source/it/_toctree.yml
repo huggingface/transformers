@@ -39,3 +39,7 @@
 - sections:
   - local: add_new_pipeline
     title: Come aggiungere una pipeline a 🤗 Transformers?
+  - local: add_new_model
+    title: Come aggiungere un modello a 🤗 Transformers?
+  title: Guide How-to
+  

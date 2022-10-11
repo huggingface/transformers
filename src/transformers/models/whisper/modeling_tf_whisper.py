@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The OpenAI Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,14 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 Bart model."""
+""" TensorFlow Whisper model."""
 
 
+import math
 import random
-from contextlib import nullcontext
-from typing import Optional, Tuple, Union
+from typing import Dict, Optional, Tuple
 
-import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
@@ -29,38 +28,26 @@ from ...modeling_tf_outputs import (
     TFSeq2SeqLMOutput,
     TFSeq2SeqModelOutput,
 )
-
-# Public API
-from ...modeling_tf_utils import (
-    DUMMY_INPUTS,
-    TFCausalLanguageModelingLoss,
-    TFModelInputType,
-    TFPreTrainedModel,
-    keras_serializable,
-    unpack_inputs,
-)
+from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, keras_serializable, unpack_inputs
 from ...tf_utils import shape_list, stable_softmax
-from ...utils import (
-    add_code_sample_docstrings,
-    add_end_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
-from .configuration_bart import BartConfig
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from .configuration_whisper import WhisperConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "facebook/bart-large"
-_CONFIG_FOR_DOC = "BartConfig"
-_TOKENIZER_FOR_DOC = "BartTokenizer"
+_CONFIG_FOR_DOC = "WhisperConfig"
 
+
+TF_WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "openai/whisper-base",
+    # See all Whisper models at https://huggingface.co/models?filter=whisper
+]
 
 LARGE_NEGATIVE = -1e8
 
 
+# Copied from transformers.models.bart.modeling_tf_bart.shift_tokens_right
 def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
     pad_token_id = tf.cast(pad_token_id, input_ids.dtype)
     decoder_start_token_id = tf.cast(decoder_start_token_id, input_ids.dtype)
@@ -85,6 +72,7 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_to
     return shifted_input_ids
 
 
+# Copied from transformers.models.bart.modeling_tf_bart._make_causal_mask
 def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: int = 0):
     """
     Make causal mask used for bi-directional self-attention.
@@ -102,6 +90,7 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     return tf.tile(mask[None, None, :, :], (bsz, 1, 1, 1))
 
 
+# Copied from transformers.models.bart.modeling_tf_bart._expand_mask
 def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
@@ -115,35 +104,29 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
 
-class TFBartLearnedPositionalEmbedding(tf.keras.layers.Embedding):
-    """
-    This module learns positional embeddings up to a fixed maximum size.
-    """
+class TFWhisperPositionalEmbedding(tf.keras.layers.Layer):
+    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None, **kwargs):
+        super().__init__(**kwargs)
+        self.num_positions = num_positions
+        self.embedding_dim = embedding_dim
+        self.padding_idx = padding_idx
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, **kwargs):
-        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models don't have this hack
-        self.offset = 2
-        super().__init__(num_embeddings + self.offset, embedding_dim, **kwargs)
+    def build(self, input_shape):
+        self.weight = self.add_weight(
+            name="weight",
+            shape=[self.num_positions, self.embedding_dim],
+            trainable=True,
+        )
+        super().build(input_shape)
 
-    def call(
-        self,
-        input_shape: Optional[tf.TensorShape] = None,
-        past_key_values_length: int = 0,
-        position_ids: Optional[tf.Tensor] = None,
-    ):
-        """Input is expected to be of size [bsz x seqlen]."""
-        if position_ids is None:
-            seq_len = input_shape[1]
-            position_ids = tf.range(seq_len, delta=1, name="range")
-            position_ids += past_key_values_length
-
-        offset_dtype = position_ids.dtype if isinstance(position_ids, tf.Tensor) else tf.int32
-        return super().call(position_ids + tf.constant(self.offset, dtype=offset_dtype))
+    def call(self, input_ids, past_key_values_length=0):
+        past_key_values_length = tf.cast(past_key_values_length, tf.int32)
+        gather_indices = tf.range(tf.shape(input_ids)[-1], delta=1) + past_key_values_length
+        return tf.gather(self.weight, gather_indices)
 
 
-class TFBartAttention(tf.keras.layers.Layer):
-    """Multi-headed attention from "Attention Is All You Need"""
+class TFWhisperAttention(tf.keras.layers.Layer):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
         self,
@@ -152,14 +135,14 @@ class TFBartAttention(tf.keras.layers.Layer):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
-        **kwargs,
+        **kwargs
     ):
         super().__init__(**kwargs)
         self.embed_dim = embed_dim
-
         self.num_heads = num_heads
         self.dropout = tf.keras.layers.Dropout(dropout)
         self.head_dim = embed_dim // num_heads
+
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
@@ -168,14 +151,16 @@ class TFBartAttention(tf.keras.layers.Layer):
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
-        self.q_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
+        self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=False, name="k_proj")
         self.v_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
+        self.q_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
         self.out_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
 
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention._shape with BART->whisper
     def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
         return tf.transpose(tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)), (0, 2, 1, 3))
 
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention.call with BART->whisper
     def call(
         self,
         hidden_states: tf.Tensor,
@@ -295,11 +280,12 @@ class TFBartAttention(tf.keras.layers.Layer):
         return attn_output, attn_weights, past_key_value
 
 
-class TFBartEncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, config: BartConfig, **kwargs):
+# Copied from transformers.models.speech_to_text.modeling_tf_speech_to_text.TFSpeech2TextEncoderLayer with Speech2Text->Whisper
+class TFWhisperEncoderLayer(tf.keras.layers.Layer):
+    def __init__(self, config: WhisperConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
-        self.self_attn = TFBartAttention(
+        self.self_attn = TFWhisperAttention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, name="self_attn"
         )
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
@@ -311,12 +297,8 @@ class TFBartEncoderLayer(tf.keras.layers.Layer):
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
 
     def call(
-        self,
-        hidden_states: tf.Tensor,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]],
-        layer_head_mask: Optional[tf.Tensor],
-        training: Optional[bool] = False,
-    ) -> tf.Tensor:
+        self, hidden_states: tf.Tensor, attention_mask: tf.Tensor, layer_head_mask: tf.Tensor, training: bool = False
+    ):
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
@@ -326,8 +308,12 @@ class TFBartEncoderLayer(tf.keras.layers.Layer):
                 `(encoder_attention_heads,)`
         """
         residual = hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, self_attn_weights, _ = self.self_attn(
-            hidden_states=hidden_states, attention_mask=attention_mask, layer_head_mask=layer_head_mask
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            layer_head_mask=layer_head_mask,
+            training=training,
         )
 
         tf.debugging.assert_equal(
@@ -338,24 +324,25 @@ class TFBartEncoderLayer(tf.keras.layers.Layer):
 
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.activation_dropout(hidden_states, training=training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
 
         return hidden_states, self_attn_weights
 
 
-class TFBartDecoderLayer(tf.keras.layers.Layer):
-    def __init__(self, config: BartConfig, **kwargs):
+# Copied from transformers.models.speech_to_text.modeling_tf_speech_to_text.TFSpeech2TextDecoderLayer with Speech2Text->Whisper
+class TFWhisperDecoderLayer(tf.keras.layers.Layer):
+    def __init__(self, config: WhisperConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
-        self.self_attn = TFBartAttention(
+
+        self.self_attn = TFWhisperAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -367,7 +354,7 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
         self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
 
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.encoder_attn = TFBartAttention(
+        self.encoder_attn = TFWhisperAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -381,14 +368,14 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
 
     def call(
         self,
-        hidden_states: tf.Tensor,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        hidden_states,
+        attention_mask: Optional[tf.Tensor] = None,
+        encoder_hidden_states: Optional[tf.Tensor] = None,
+        encoder_attention_mask: Optional[tf.Tensor] = None,
         layer_head_mask: Optional[tf.Tensor] = None,
         cross_attn_layer_head_mask: Optional[tf.Tensor] = None,
-        past_key_value: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        training: Optional[bool] = False,
+        past_key_value: Optional[Tuple[tf.Tensor]] = None,
+        training=False,
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
         """
         Args:
@@ -406,6 +393,7 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
             past_key_value (`Tuple(tf.Tensor)`): cached past key and value projection states
         """
         residual = hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
@@ -416,16 +404,17 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
             past_key_value=self_attn_past_key_value,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
+            training=training,
         )
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
         cross_attn_present_key_value = None
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -435,22 +424,22 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
                 attention_mask=encoder_attention_mask,
                 layer_head_mask=cross_attn_layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
+                training=training,
             )
             hidden_states = self.dropout(hidden_states, training=training)
             hidden_states = residual + hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # add cross-attn to positions 3,4 of present_key_value tuple
             present_key_value = present_key_value + cross_attn_present_key_value
 
         # Fully Connected
         residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.activation_dropout(hidden_states, training=training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
 
         return (
             hidden_states,
@@ -460,27 +449,38 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
         )
 
 
-class TFBartPretrainedModel(TFPreTrainedModel):
-    config_class = BartConfig
+class TFWhisperPreTrainedModel(TFPreTrainedModel):
+    config_class = WhisperConfig
     base_model_prefix = "model"
+    main_input_name = "input_features"
+
+    def _get_feat_extract_output_lengths(self, input_lengths: tf.Tensor) -> int:
+        """
+        Computes the output length of the convolutional layers
+        """
+        input_lengths = (input_lengths - 1) // 2 + 1
+
+        return input_lengths
 
     @property
-    def dummy_inputs(self):
-        pad_token = 1
-        input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
-        decoder_input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
-        dummy_inputs = {
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": tf.math.not_equal(input_ids, pad_token),
-            "input_ids": input_ids,
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        """
+        Dummy inputs to build the network.
+
+        Returns:
+            `Dict[str, tf.Tensor]`: The dummy inputs.
+        """
+        return {
+            self.main_input_name: tf.random.uniform(
+                [2, self.config.num_mel_bins, self.config.max_source_positions * 2 - 1], dtype=tf.float32
+            ),
+            "decoder_input_ids": tf.constant([[2, 3]], dtype=tf.int64),
         }
-        return dummy_inputs
 
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "input_features": tf.TensorSpec((None, None, None), tf.float32, name="input_features"),
                 "decoder_input_ids": tf.TensorSpec((None, None), tf.int64, name="decoder_input_ids"),
                 "decoder_attention_mask": tf.TensorSpec((None, None), tf.int64, name="decoder_attention_mask"),
             }
@@ -488,11 +488,10 @@ class TFBartPretrainedModel(TFPreTrainedModel):
     )
     def serving(self, inputs):
         output = self.call(inputs)
-
         return self.serving_output(output)
 
 
-BART_START_DOCSTRING = r"""
+WHISPER_START_DOCSTRING = r"""
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -501,108 +500,39 @@ BART_START_DOCSTRING = r"""
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
-    <Tip>
-
-    TensorFlow models and layers in `transformers` accept two formats as input:
-
-    - having all inputs as keyword arguments (like PyTorch models), or
-    - having all inputs as a list, tuple or dict in the first positional argument.
-
-    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
-    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
-    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
-    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
-    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
-    positional argument:
-
-    - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
-    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-    `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
-    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-    `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
-
-    Note that when creating models and layers with
-    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
-    about any of this, as you can just pass inputs like you would to any other Python function!
-
-    </Tip>
-
-    Args:
-        config ([`BartConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
+    Parameters:
+        config ([`WhisperConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-
-BART_GENERATION_EXAMPLE = r"""
-    Summarization example:
-
-    ```python
-    >>> from transformers import BartTokenizer, TFBartForConditionalGeneration
-
-    >>> model = TFBartForConditionalGeneration.from_pretrained("facebook/bart-large")
-    >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
-
-    >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="tf")
-
-    >>> # Generate Summary
-    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
-    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
-    ```
-
-    Mask filling example:
-
-    ```python
-    >>> from transformers import BartTokenizer, TFBartForConditionalGeneration
-
-    >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
-    >>> TXT = "My friends are <mask> but they eat too many carbs."
-
-    >>> model = TFBartForConditionalGeneration.from_pretrained("facebook/bart-large")
-    >>> input_ids = tokenizer([TXT], return_tensors="tf")["input_ids"]
-    >>> logits = model(input_ids).logits
-    >>> probs = tf.nn.softmax(logits[0])
-    >>> # probs[5] is associated with the mask token
-    ```
-"""
-
-
-BART_INPUTS_DOCSTRING = r"""
+WHISPER_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`tf.Tensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`tf.Tensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
+        input_features (`tf.Tensor` of shape `(batch_size, feature_size, sequence_length)`):
+            Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
+            by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.*
+            via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
+            [`WhisperFeatureExtractor`] should be used for extracting the fbank features, padding and conversion into a
+            tensor of type `tf.Tensor`. See [`~WhisperFeatureExtractor.__call__`]
         decoder_input_ids (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`SpeechToTextTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            Bart uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
-            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
-
-            For translation and summarization training, `decoder_input_ids` should be provided. If no
-            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
-            for denoising pre-training following the paper.
+            SpeechToText uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If
+            `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `past_key_values`).
         decoder_attention_mask (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.
-        decoder_position_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
-            range `[0, config.max_position_embeddings - 1]`.
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+
+            If you want to change padding behavior, you should read
+            [`modeling_whisper._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in [the
+            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
         head_mask (`tf.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
@@ -621,102 +551,103 @@ BART_INPUTS_DOCSTRING = r"""
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        encoder_outputs (`tf.FloatTensor`, *optional*):
-            hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-            of shape `(batch_size, sequence_length, hidden_size)` is a sequence of
-        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
-            contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+        encoder_outputs (`tuple(tuple(tf.Tensor)`, *optional*):
+            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+        past_key_values (`tuple(tuple(tf.Tensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(tf.Tensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*, defaults to `True`):
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`. decoder_inputs_embeds (`tf.Tensor` of shape
+            `(batch_size, target_sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
+            `decoder_input_ids` you can choose to directly pass an embedded representation. If `past_key_values` is
+            used, optionally only the last `decoder_inputs_embeds` have to be input (see `past_key_values`). This is
+            useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
+
+            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
+            of `inputs_embeds`.
+        use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`). Set to `False` during training, `True` during generation
+            `past_key_values`).
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
-            config will be used instead.
+            tensors for more detail.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
-            used instead.
+            more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
-            eager mode, in graph mode the value will always be set to True.
-        training (`bool`, *optional*, defaults to `False`):
-            Whether or not to use the model in training mode (some modules like dropout modules have different
-            behaviors between training and evaluation).
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
 @keras_serializable
-class TFBartEncoder(tf.keras.layers.Layer):
-    config_class = BartConfig
+class TFWhisperEncoder(tf.keras.layers.Layer):
+    config_class = WhisperConfig
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`TFBartEncoderLayer`].
+    [`TFWhisperEncoderLayer`].
 
     Args:
-        config: BartConfig
+        config: WhisperConfig
+        embed_tokens (TFWhisperEmbedding): output embedding
     """
 
-    def __init__(self, config: BartConfig, embed_tokens: Optional[tf.keras.layers.Embedding] = None, **kwargs):
+    def __init__(self, config: WhisperConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.layerdrop = config.encoder_layerdrop
-        self.padding_idx = config.pad_token_id
-        self.max_source_positions = config.max_position_embeddings
-        self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
 
-        self.embed_tokens = embed_tokens
-        self.embed_positions = TFBartLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            config.d_model,
-            name="embed_positions",
+        self.embed_dim = config.d_model
+        self.num_mel_bins = config.num_mel_bins
+        self.padding_idx = config.pad_token_id
+        self.max_source_positions = config.max_source_positions
+        self.embed_scale = math.sqrt(self.embed_dim) if config.scale_embedding else 1.0
+
+        # Padding is added in call() to match the PyTorch implementation
+        self.conv1 = tf.keras.layers.Conv1D(self.embed_dim, kernel_size=3, strides=1, padding="valid", name="conv1")
+        self.conv2 = tf.keras.layers.Conv1D(self.embed_dim, kernel_size=3, strides=2, padding="valid", name="conv2")
+
+        self.embed_positions = TFWhisperPositionalEmbedding(
+            self.max_source_positions, self.embed_dim, name="embed_positions"
         )
-        self.layers = [TFBartEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
-        self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
+
+        self.encoder_layers = [TFWhisperEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
+
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
 
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
-        """
+        input_features=None,
+        head_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
+    ):
+        r"""
         Args:
-            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using [`BartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
-
-                [What are input IDs?](../glossary#input-ids)
-            attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            head_mask (`tf.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, `optional):
+            input_features (`tf.Tensor` of shape `(batch_size, feature_size, sequence_length)`):
+                Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be
+                obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
+                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+                `input_features`, the [`WhisperFeatureExtractor`] should be used for extracting the fbank features,
+                padding and conversion into a tensor of type `tf.Tensor`. See [`~WhisperFeatureExtractor.__call__`]
+            head_mask (`tf.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
                 Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            inputs_embeds (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -727,48 +658,24 @@ class TFBartEncoder(tf.keras.layers.Layer):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
 
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = shape_list(input_ids)
-        elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if inputs_embeds is None:
-            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
-            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
-            # is used with a name ending in `/`, that name replaces the current name scope.
-            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
-            if hasattr(self.embed_tokens, "load_weight_prefix"):
-                context_manager = tf.name_scope(self.embed_tokens.load_weight_prefix + "/")
-            else:
-                context_manager = nullcontext()
-            with context_manager:
-                # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-                # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-                tf.debugging.assert_less(
-                    input_ids,
-                    tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
-                    message=(
-                        "input_ids must be smaller than the embedding layer's input dimension (got"
-                        f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
-                    ),
-                )
-                inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+        # TF 2.0 layers can't use channels first format when running on CPU.
+        input_features = tf.transpose(input_features, perm=(0, 2, 1))
+        input_features = tf.pad(input_features, [[0, 0], [1, 1], [0, 0]])
+        inputs_embeds = tf.keras.activations.gelu(self.conv1(input_features))
+        inputs_embeds = tf.pad(inputs_embeds, [[0, 0], [1, 1], [0, 0]])
+        inputs_embeds = tf.keras.activations.gelu(self.conv2(inputs_embeds))
+        inputs_embeds = tf.transpose(inputs_embeds, perm=(0, 1, 2))
 
-        embed_pos = self.embed_positions(input_shape)
+        embed_pos = self.embed_positions(input_ids=tf.zeros((1, self.max_source_positions), dtype=tf.int32))
+
         hidden_states = inputs_embeds + embed_pos
-        hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
-
-        # check attention mask and invert
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask)
-        else:
-            attention_mask = None
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -777,16 +684,14 @@ class TFBartEncoder(tf.keras.layers.Layer):
         if head_mask is not None:
             tf.debugging.assert_equal(
                 shape_list(head_mask)[0],
-                len(self.layers),
+                len(self.encoder_layers),
                 message=(
-                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for"
+                    f"The head_mask should be specified for {len(self.encoder_layers)} layers, but it is for"
                     f" {shape_list(head_mask)[0]}."
                 ),
             )
 
-        # encoder layers
-        for idx, encoder_layer in enumerate(self.layers):
-
+        for idx, encoder_layer in enumerate(self.encoder_layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -796,13 +701,15 @@ class TFBartEncoder(tf.keras.layers.Layer):
 
             hidden_states, attn = encoder_layer(
                 hidden_states,
-                attention_mask,
-                head_mask[idx] if head_mask is not None else None,
+                None,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                training=training,
             )
 
             if output_attentions:
                 all_attentions += (attn,)
 
+        hidden_states = self.layer_norm(hidden_states)
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
@@ -814,58 +721,93 @@ class TFBartEncoder(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFBartDecoder(tf.keras.layers.Layer):
-    config_class = BartConfig
+class TFWhisperDecoder(tf.keras.layers.Layer):
+    config_class = WhisperConfig
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`TFBartDecoderLayer`]
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`TFWhisperDecoderLayer`]
 
     Args:
-        config: BartConfig
-        embed_tokens: output embedding
+        config: WhisperConfig
     """
 
-    def __init__(self, config: BartConfig, embed_tokens: Optional[tf.keras.layers.Embedding] = None, **kwargs):
+    def __init__(self, config: WhisperConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self.padding_idx = config.pad_token_id
-        self.embed_tokens = embed_tokens
-        self.layerdrop = config.decoder_layerdrop
-        self.embed_positions = TFBartLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            config.d_model,
-            name="embed_positions",
-        )
-        self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
-        self.layers = [TFBartDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
-        self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
-
         self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.layerdrop = config.decoder_layerdrop
+        self.padding_idx = config.pad_token_id
+        self.max_target_positions = config.max_target_positions
+        self.max_source_positions = config.max_source_positions
+        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+
+        self.embed_tokens = tf.keras.layers.Embedding(
+            input_dim=config.vocab_size,
+            output_dim=config.d_model,
+            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.init_std),
+            name="embed_tokens",
+        )
+        self.embed_positions = TFWhisperPositionalEmbedding(
+            self.max_target_positions, config.d_model, name="embed_positions"
+        )
+
+        self.decoder_layers = [TFWhisperDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
+
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
+
+    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, past_key_values_length):
+        # create causal mask
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        batch_size, seq_len = input_shape[0], input_shape[1]
+
+        combined_attention_mask = tf.cond(
+            tf.math.greater(seq_len, 1),
+            lambda: _make_causal_mask(input_shape, past_key_values_length=past_key_values_length),
+            lambda: _expand_mask(tf.ones((batch_size, seq_len + past_key_values_length)), tgt_len=seq_len),
+        )
+
+        if attention_mask is not None:
+            attention_mask = tf.cond(
+                tf.greater(tf.shape(attention_mask)[-1], seq_len) & tf.greater(seq_len, 0),
+                lambda: attention_mask[:, : seq_len + past_key_values_length],
+                lambda: attention_mask,
+            )
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            expanded_attn_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
+            combined_attention_mask = (
+                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
+            )
+        return combined_attention_mask
 
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        cross_attn_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
+        input_ids=None,
+        attention_mask=None,
+        position_ids=None,
+        encoder_hidden_states=None,
+        head_mask=None,
+        cross_attn_head_mask=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
+    ):
         r"""
         Args:
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`BartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`WhisperTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -882,14 +824,6 @@ class TFBartDecoder(tf.keras.layers.Layer):
             encoder_hidden_states (`tf.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
-            encoder_attention_mask (`tf.Tensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
-                Mask to avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values
-                selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
             head_mask (`tf.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
                 Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
 
@@ -897,14 +831,19 @@ class TFBartDecoder(tf.keras.layers.Layer):
                 - 0 indicates the head is **masked**.
 
             cross_attn_head_mask (`tf.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
+                Mask to nullify selected heads of the attention modules in encoder to avoid performing cross-attention
+                on hidden heads. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-                Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
-                decoding.
+            past_key_values (`tuple(tuple(tf.Tensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+                Tuple of `tuple(tf.Tensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+                `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+                `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
+                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
@@ -922,200 +861,196 @@ class TFBartDecoder(tf.keras.layers.Layer):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = shape_list(input_ids)
+            input_shape = tf.shape(input_ids)
+            input_ids = tf.reshape(input_ids, (-1, input_shape[-1]))
         elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            input_shape = tf.shape(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
-        past_key_values_length = shape_list(past_key_values[0][0])[2] if past_key_values is not None else 0
-
-        # embed positions
-        if position_ids is None:
-            positions = self.embed_positions(input_shape, past_key_values_length)
-        else:
-            positions = self.embed_positions(input_shape, position_ids=position_ids)
+        # past_key_values_length
+        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
-            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
-            # is used with a name ending in `/`, that name replaces the current name scope.
-            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
-            if hasattr(self.embed_tokens, "load_weight_prefix"):
-                context_manager = tf.name_scope(self.embed_tokens.load_weight_prefix + "/")
-            else:
-                context_manager = nullcontext()
-            with context_manager:
-                # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-                # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-                tf.debugging.assert_less(
-                    input_ids,
-                    tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
-                    message=(
-                        "input_ids must be smaller than the embedding layer's input dimension (got"
-                        f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
-                    ),
-                )
-                inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-
-        hidden_states = inputs_embeds
-
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
-        else:
-            combined_attention_mask = _expand_mask(
-                tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
+            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+            tf.debugging.assert_less(
+                input_ids,
+                tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
+                message=(
+                    "input_ids must be smaller than the embedding layer's input dimension (got"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
+                ),
             )
+            inputs_embeds = self.embed_tokens(input_ids)
 
-        if attention_mask is not None:
-            combined_attention_mask = combined_attention_mask + _expand_mask(attention_mask, tgt_len=input_shape[-1])
+        attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, past_key_values_length)
 
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _expand_mask(encoder_attention_mask, tgt_len=input_shape[-1])
+        # embed positions
+        filled_past_positions = past_key_values_length if position_ids is None else position_ids[0, -1]
+        positions = self.embed_positions(input_ids, past_key_values_length=filled_past_positions)
 
-        hidden_states = self.layernorm_embedding(hidden_states + positions)
+        hidden_states = inputs_embeds + positions
         hidden_states = self.dropout(hidden_states, training=training)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        all_cross_attns = () if (output_attentions and encoder_hidden_states is not None) else None
-        present_key_values = () if use_cache else None
+        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+        next_decoder_cache = () if use_cache else None
 
-        # check if head_mask and cross_attn_head_mask have a correct number of layers specified if desired
+        # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask_name, attn_mask in [("head_mask", head_mask), ("cross_attn_head_mask", cross_attn_head_mask)]:
             if attn_mask is not None:
                 tf.debugging.assert_equal(
                     shape_list(attn_mask)[0],
-                    len(self.layers),
+                    len(self.decoder_layers),
                     message=(
-                        f"The {attn_mask_name} should be specified for {len(self.layers)} layers, but it is for"
-                        f" {shape_list(attn_mask)[0]}."
+                        f"The {attn_mask_name} should be specified for {len(self.decoder_layers)} layers, but it is"
+                        f" for {shape_list(attn_mask)[0]}."
                     ),
                 )
 
-        for idx, decoder_layer in enumerate(self.layers):
+        for idx, decoder_layer in enumerate(self.decoder_layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-
             dropout_probability = random.uniform(0, 1)
-
             if training and (dropout_probability < self.layerdrop):
                 continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            hidden_states, layer_self_attn, layer_cross_attn, present_key_value = decoder_layer(
+            layer_outputs = decoder_layer(
                 hidden_states,
-                attention_mask=combined_attention_mask,
+                attention_mask=attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-                layer_head_mask=head_mask[idx] if head_mask is not None else None,
-                cross_attn_layer_head_mask=cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
                 past_key_value=past_key_value,
+                training=training,
             )
+            hidden_states = layer_outputs[0]
 
             if use_cache:
-                present_key_values += (present_key_value,)
+                next_decoder_cache += (layer_outputs[3],)
 
             if output_attentions:
-                all_self_attns += (layer_self_attn,)
+                all_self_attns += (layer_outputs[1],)
 
                 if encoder_hidden_states is not None:
-                    all_cross_attns += (layer_cross_attn,)
+                    all_cross_attentions += (layer_outputs[2],)
 
+        hidden_states = self.layer_norm(hidden_states)
+        # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
+        next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
-            return hidden_states, present_key_values, all_hidden_states, all_self_attns, all_cross_attns
-        else:
-            return TFBaseModelOutputWithPastAndCrossAttentions(
-                last_hidden_state=hidden_states,
-                past_key_values=present_key_values,
-                hidden_states=all_hidden_states,
-                attentions=all_self_attns,
-                cross_attentions=all_cross_attns,
+            return tuple(
+                v
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
+                if v is not None
             )
+        return TFBaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=hidden_states,
+            past_key_values=next_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+            cross_attentions=all_cross_attentions,
+        )
 
 
+@add_start_docstrings(
+    "The bare Whisper Model outputting raw hidden-states without any specific head on top.",
+    WHISPER_START_DOCSTRING,
+)
 @keras_serializable
-class TFBartMainLayer(tf.keras.layers.Layer):
-    config_class = BartConfig
+class TFWhisperMainLayer(tf.keras.layers.Layer):
+    config_class = WhisperConfig
 
-    def __init__(self, config: BartConfig, load_weight_prefix=None, **kwargs):
+    def __init__(self, config: WhisperConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self.shared = tf.keras.layers.Embedding(
-            input_dim=config.vocab_size,
-            output_dim=config.d_model,
-            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.init_std),
-            name="model.shared",
-        )
-        # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
-        self.shared.load_weight_prefix = "model.shared" if load_weight_prefix is None else load_weight_prefix
-
-        self.encoder = TFBartEncoder(config, self.shared, name="encoder")
-        self.decoder = TFBartDecoder(config, self.shared, name="decoder")
+        self.encoder = TFWhisperEncoder(config, name="encoder")
+        self.decoder = TFWhisperDecoder(config, name="decoder")
 
     def get_input_embeddings(self):
-        return self.shared
+        return self.decoder.embed_tokens
 
-    def set_input_embeddings(self, new_embeddings):
-        self.shared = new_embeddings
-        self.encoder.embed_tokens = self.shared
-        self.decoder.embed_tokens = self.shared
+    def set_input_embeddings(self, value):
+        self.decoder.embed_tokens = value
 
+    def get_encoder(self):
+        return self.encoder
+
+    def get_decoder(self):
+        return self.decoder
+
+    @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        cross_attn_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-        **kwargs
-    ) -> Union[TFSeq2SeqModelOutput, Tuple[tf.Tensor]]:
+        input_features=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        decoder_position_ids=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        encoder_outputs=None,
+        past_key_values=None,
+        decoder_inputs_embeds=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
+    ):
+        r"""
+        Returns:
 
-        # different to other models, Bart automatically creates decoder_input_ids from
-        # input_ids if no decoder_input_ids are provided
-        if decoder_input_ids is None and decoder_inputs_embeds is None:
-            if input_ids is None:
-                raise ValueError(
-                    "If no `decoder_input_ids` or `decoder_inputs_embeds` are "
-                    "passed, `input_ids` cannot be `None`. Please pass either "
-                    "`input_ids` or `decoder_input_ids` or `decoder_inputs_embeds`."
-                )
+        Example:
 
-            decoder_input_ids = shift_tokens_right(
-                input_ids, self.config.pad_token_id, self.config.decoder_start_token_id
-            )
+         ```python
+         >>> import tensorflow as tf
+         >>> from transformers import TFWhisperModel, WhisperFeatureExtractor
+         >>> from datasets import load_dataset
+
+         >>> model = TFWhisperModel.from_pretrained("openai/whisper-base")
+         >>> feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
+         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+         >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="tf")
+         >>> input_features = inputs.input_features
+         >>> decoder_input_ids = tf.convert_to_tensor([[1, 1]]) * model.config.decoder_start_token_id
+         >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
+         >>> list(last_hidden_state.shape)
+         [1, 2, 512]
+         ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
+                input_features,
                 head_mask=head_mask,
-                inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1128,16 +1063,13 @@ class TFBartMainLayer(tf.keras.layers.Layer):
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
-        # If the user passed a TFBaseModelOutput for encoder_outputs, we wrap it in a tuple when return_dict=False
-        elif not return_dict and not isinstance(encoder_outputs, tuple):
-            encoder_outputs = encoder_outputs.to_tuple()
 
+        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
-            decoder_input_ids,
+            input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             position_ids=decoder_position_ids,
             encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
@@ -1165,17 +1097,20 @@ class TFBartMainLayer(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    "The bare BART Model outputting raw hidden-states without any specific head on top.",
-    BART_START_DOCSTRING,
+    "The bare Whisper Model outputting raw hidden-states without any specific head on top.",
+    WHISPER_START_DOCSTRING,
 )
-class TFBartModel(TFBartPretrainedModel):
+class TFWhisperModel(TFWhisperPreTrainedModel):
+    def __init__(self, config: WhisperConfig, **kwargs):
+        super().__init__(config, **kwargs)
 
-    _requires_load_weight_prefix = True
+        self.model = TFWhisperMainLayer(config, name="model")
 
-    def __init__(self, config: BartConfig, load_weight_prefix=None, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
+    def get_input_embeddings(self):
+        return self.model.decoder.embed_tokens
 
-        self.model = TFBartMainLayer(config, load_weight_prefix=load_weight_prefix, name="model")
+    def set_input_embeddings(self, value):
+        self.model.decoder.embed_tokens = value
 
     def get_encoder(self):
         return self.model.encoder
@@ -1183,39 +1118,55 @@ class TFBartModel(TFBartPretrainedModel):
     def get_decoder(self):
         return self.model.decoder
 
-    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFSeq2SeqModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    def decoder(self):
+        return self.model.decoder
+
+    def encoder(self):
+        return self.model.encoder
+
+    @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        cross_attn_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
-        **kwargs
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+        input_features=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        decoder_position_ids=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        encoder_outputs=None,
+        past_key_values=None,
+        decoder_inputs_embeds=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
+    ):
+        r"""
+        Returns:
 
+        Example:
+
+         ```python
+         >>> import tensorflow as tf
+         >>> from transformers import TFWhisperModel, WhisperFeatureExtractor
+         >>> from datasets import load_dataset
+
+         >>> model = TFWhisperModel.from_pretrained("openai/whisper-base")
+         >>> feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
+         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+         >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="tf")
+         >>> input_features = inputs.input_features
+         >>> decoder_input_ids = tf.convert_to_tensor([[1, 1]]) * model.config.decoder_start_token_id
+         >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
+         >>> list(last_hidden_state.shape)
+         [1, 2, 512]
+         ```"""
         outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
+            input_features=input_features,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             decoder_position_ids=decoder_position_ids,
@@ -1224,7 +1175,6 @@ class TFBartModel(TFBartPretrainedModel):
             cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1232,7 +1182,6 @@ class TFBartModel(TFBartPretrainedModel):
             return_dict=return_dict,
             training=training,
         )
-
         return outputs
 
     def serving_output(self, output):
@@ -1255,45 +1204,30 @@ class TFBartModel(TFBartPretrainedModel):
         )
 
 
-class BiasLayer(tf.keras.layers.Layer):
-    """
-    Bias as a layer. It is used for serialization purposes: `tf.keras.Model.save_weights` stores on a per-layer basis,
-    so all weights have to be registered in a layer.
-    """
-
-    def __init__(self, shape, initializer, trainable, name, **kwargs):
-        super().__init__(name=name, **kwargs)
-        # Note: the name of this variable will NOT be scoped when serialized, i.e. it will not be in the format of
-        # "outer_layer/inner_layer/.../name:0". Instead, it will be "name:0". For further details, see:
-        # https://github.com/huggingface/transformers/pull/18833#issuecomment-1233090214
-        self.bias = self.add_weight(name=name, shape=shape, initializer=initializer, trainable=trainable)
-
-    def call(self, x):
-        return x + self.bias
-
-
 @add_start_docstrings(
-    "The BART Model with a language modeling head. Can be used for summarization.",
-    BART_START_DOCSTRING,
+    "The Whisper Model with a language modeling head. Can be used for automatic speech recognition.",
+    WHISPER_START_DOCSTRING,
 )
-class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageModelingLoss):
-    _keys_to_ignore_on_load_missing = [r"final_logits_bias"]
-    _requires_load_weight_prefix = True
+class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLanguageModelingLoss):
+    base_model_prefix = "model"
+    _keys_to_ignore_on_load_missing = [
+        r"encoder.version",
+        r"decoder.version",
+        r"proj_out.weight",
+    ]
+    _keys_to_ignore_on_save = [
+        r"proj_out.weight",
+    ]
 
-    def __init__(self, config, load_weight_prefix=None, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-        self.model = TFBartMainLayer(config, load_weight_prefix=load_weight_prefix, name="model")
-        self.use_cache = config.use_cache
-        # final_bias_logits is registered as a buffer in pytorch, so not trainable for the sake of consistency.
-        self.bias_layer = BiasLayer(
-            name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
-        )
-
-    def get_decoder(self):
-        return self.model.decoder
+    def __init__(self, config: WhisperConfig, **kwargs):
+        super().__init__(config, **kwargs)
+        self.model = TFWhisperMainLayer(config, name="model")
 
     def get_encoder(self):
-        return self.model.encoder
+        return self.model.get_encoder()
+
+    def get_decoder(self):
+        return self.model.get_decoder()
 
     def get_output_embeddings(self):
         return self.get_input_embeddings()
@@ -1301,67 +1235,71 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
     def set_output_embeddings(self, value):
         self.set_input_embeddings(value)
 
-    def get_bias(self):
-        return {"final_logits_bias": self.bias_layer.bias}
+    def resize_token_embeddings(self, new_num_tokens: int) -> tf.keras.layers.Embedding:
+        new_embeddings = super().resize_token_embeddings(new_num_tokens)
+        return new_embeddings
 
-    def set_bias(self, value):
-        # Replaces the existing layers containing bias for correct (de)serialization.
-        vocab_size = value["final_logits_bias"].shape[-1]
-        self.bias_layer = BiasLayer(
-            name="final_logits_bias", shape=[1, vocab_size], initializer="zeros", trainable=False
-        )
-        self.bias_layer.bias.assign(value["final_logits_bias"])
-
-    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    @add_end_docstrings(BART_GENERATION_EXAMPLE)
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        cross_attn_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_outputs: Optional[TFBaseModelOutput] = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[tf.Tensor] = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFSeq2SeqLMOutput, Tuple[tf.Tensor]]:
+        input_features=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        decoder_position_ids=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        encoder_outputs=None,
+        past_key_values=None,
+        decoder_inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
+    ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+            Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
+            or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the loss is
+            only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:
 
-        """
+        Example:
+
+        ```python
+        >>> import tensorflow as tf
+        >>> from transformers import WhisperProcessor, TFWhisperForConditionalGeneration
+        >>> from datasets import load_dataset
+
+        >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        >>> model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
+        >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="tf")
+        >>> input_features = inputs.input_features
+
+        >>> generated_ids = model.generate(input_ids=input_features)
+
+        >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        >>> transcription
+        ' Mr. Quilter is the apostle of the middle classes, and we are glad to'
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
-            labels = tf.where(
-                labels == self.config.pad_token_id,
-                tf.cast(tf.fill(shape_list(labels), -100), labels.dtype),
-                labels,
-            )
-            use_cache = False
             if decoder_input_ids is None:
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
 
         outputs = self.model(
-            input_ids,
-            attention_mask=attention_mask,
+            input_features,
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
@@ -1370,7 +1308,6 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
             decoder_head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1378,25 +1315,26 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
             return_dict=return_dict,
             training=training,
         )
-        # TODO (joao): the line below is for models with tied embeddings. The previous TFBart had tied embeddings.
-        # The PT Bart does not have tied embeddings. Untie the weights while keeping loading retrocompatibility.
-        lm_logits = tf.matmul(outputs[0], self.model.shared.weights, transpose_b=True)
-        lm_logits = self.bias_layer(lm_logits)
-        masked_lm_loss = None if labels is None else self.hf_compute_loss(labels, lm_logits)
+        decoder_last_hidden_state = outputs[0]
+        # Decoder and encoder embeddings are tied
+        lm_logits = tf.matmul(decoder_last_hidden_state, self.get_output_embeddings().weights, transpose_b=True)
+
+        loss = None if labels is None else self.hf_compute_loss(labels, lm_logits)
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            return ((loss,) + output) if loss is not None else output
+
         return TFSeq2SeqLMOutput(
-            loss=masked_lm_loss,
+            loss=loss,
             logits=lm_logits,
-            past_key_values=outputs.past_key_values,  # index 1 of d outputs
-            decoder_hidden_states=outputs.decoder_hidden_states,  # index 2 of d outputs
-            decoder_attentions=outputs.decoder_attentions,  # index 3 of d outputs
-            cross_attentions=outputs.cross_attentions,  # index 4 of d outputs
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,  # index 0 of encoder outputs
-            encoder_hidden_states=outputs.encoder_hidden_states,  # 1 of e out
-            encoder_attentions=outputs.encoder_attentions,  # 2 of e out
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
         )
 
     def serving_output(self, output):
@@ -1422,16 +1360,12 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         self,
         decoder_input_ids,
         past=None,
-        attention_mask=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
+        attention_mask=None,
+        decoder_attention_mask=None,
         **kwargs
     ):
-
         # cut decoder_input_ids if past is used
         if past is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
@@ -1442,30 +1376,22 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
             decoder_position_ids = past[0][0].shape[2]
         else:  # no xla + no past
             decoder_position_ids = tf.range(decoder_input_ids.shape[1])
+        decoder_position_ids = tf.broadcast_to(decoder_position_ids, decoder_input_ids.shape)
 
         return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
+            "input_features": None,  # Needs to be passed to make Keras.layer.__call__ happy
             "encoder_outputs": encoder_outputs,
             "past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
+            "use_cache": use_cache,
             "decoder_attention_mask": decoder_attention_mask,
             "decoder_position_ids": decoder_position_ids,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
-    def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
-        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
-
+    #
     @staticmethod
     def _reorder_cache(past, beam_idx):
         reordered_past = ()
         for layer_past in past:
-            # cached cross_attention states don't have to be reordered -> they are always the same
-            reordered_past += (
-                tuple(tf.gather(past_state, beam_idx, axis=0) for past_state in layer_past[:2]) + layer_past[2:],
-            )
+            reordered_past += (tuple(tf.gather(past_state, beam_idx) for past_state in layer_past),)
         return reordered_past

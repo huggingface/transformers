@@ -3714,6 +3714,13 @@ class OPTForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class OPTForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class OPTForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -5630,6 +5637,13 @@ class XLMProphetNetModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class XLMProphetNetPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -5676,6 +5690,13 @@ class XLMRobertaForTokenClassification(metaclass=DummyObject):
 
 
 class XLMRobertaModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class XLMRobertaPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
