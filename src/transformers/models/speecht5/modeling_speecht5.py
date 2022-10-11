@@ -723,6 +723,7 @@ class SpeechT5TextDecoderPrenet(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
     ):
         if input_ids is not None:
@@ -732,17 +733,13 @@ class SpeechT5TextDecoderPrenet(nn.Module):
         else:
             raise ValueError("You have to specify decoder_input_ids")
 
-        # TODO? this is the tgt_mask that gets returned
-        # if prev_output_tokens.eq(self.padding_idx).any():
-        #     x_mask = prev_output_tokens.eq(self.padding_idx)
-        # else:
-        #     x_mask = None
-
-        # TODO? I think this happens in the generate input func, but maybe not positions?
-        # if incremental_state is not None:
-        #     prev_output_tokens = prev_output_tokens[:, -1:]
-        #     if positions is not None:
-        #         positions = positions[:, -1:]
+        # TODO: Just like the original model, if the input_ids contain padding tokens,
+        # we set these positions to zero in the attention mask. However, other models
+        # from Transformers don't appear to do this?
+        if input_ids.eq(self.config.pad_token_id).any():
+            if attention_mask is None:
+                attention_mask = torch.ones_like(input_ids, dtype=torch.long)
+            attention_mask[input_ids.eq(self.config.pad_token_id)] = 0
 
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
         positions = self.embed_positions(input, past_key_values_length)
@@ -751,7 +748,7 @@ class SpeechT5TextDecoderPrenet(nn.Module):
         inputs_embeds += positions
         inputs_embeds = self.dropout(inputs_embeds)
 
-        return inputs_embeds
+        return inputs_embeds, attention_mask
 
 
 class SpeechT5TextDecoderPostnet(nn.Module):
@@ -1724,10 +1721,7 @@ class SpeechT5TextDecoder(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
 
-        # TODO: anything I need to do with tgt_mask?
-        # prev_output_tokens, tgt_mask, incremental_state = self.text_decoder_prenet(tokens, incremental_state)
-
-        decoder_hidden_states = self.prenet(input_values, past_key_values)
+        decoder_hidden_states, attention_mask = self.prenet(input_values, attention_mask, past_key_values)
 
         outputs = self.wrapped_decoder(
             hidden_states=decoder_hidden_states,
