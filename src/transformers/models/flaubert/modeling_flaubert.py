@@ -942,7 +942,7 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
     """,
     FLAUBERT_START_DOCSTRING,
 )
-# Copied from transformers.models.xlm.modeling_xlm.XLMForQuestionAnsweringSimple with XLMModel->FlaubertModel, XLMForQuestionAnsweringSimple->FlaubertForQuestionAnsweringSimple, XLMPreTrainedModel->FlaubertPreTrainedModel, XLM_INPUTS_DOCSTRING->FLAUBERT_INPUTS_DOCSTRING
+# Copied from transformers.models.xlm.modeling_xlm.XLMForQuestionAnsweringSimple with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
