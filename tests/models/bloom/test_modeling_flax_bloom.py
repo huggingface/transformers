@@ -196,7 +196,7 @@ class FlaxBloomModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGeneration
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("bigscience/bloom-350m")
+            model = model_class_name.from_pretrained("bigscience/bloom-560m")
             input_ids = np.ones((1, 1)) * model.config.eos_token_id
             outputs = model(input_ids)
             self.assertIsNotNone(outputs)
