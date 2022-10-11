@@ -197,24 +197,6 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             raw_samples = [x["array"] for x in speech_samples]
             return raw_samples
 
-        model_forward_signature = set(inspect.signature(pt_model.forward).parameters.keys())
-        processor_inputs = {}
-        if "input_ids" in model_forward_signature:
-            processor_inputs.update(
-                {
-                    "text": ["Hi there!", "I am a batch with more than one row and different input lengths."],
-                    "padding": True,
-                    "truncation": True,
-                }
-            )
-        if "pixel_values" in model_forward_signature:
-            sample_images = load_dataset("cifar10", "plain_text", split="test")[:2]["img"]
-            processor_inputs.update({"images": sample_images})
-        if "input_features" in model_forward_signature:
-            processor_inputs.update({"raw_speech": _get_audio_input(), "padding": True})
-        if "input_values" in model_forward_signature:  # Wav2Vec2 audio input
-            processor_inputs.update({"raw_speech": _get_audio_input(), "padding": True})
-
         model_config_class = type(pt_model.config)
         if model_config_class in PROCESSOR_MAPPING:
             processor = AutoProcessor.from_pretrained(self._local_dir)
@@ -229,6 +211,34 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         else:
             raise ValueError(f"Unknown data processing type (model config type: {model_config_class})")
 
+        model_forward_signature = set(inspect.signature(pt_model.forward).parameters.keys())
+        processor_inputs = {}
+        if "input_ids" in model_forward_signature:
+            processor_inputs.update(
+                {
+                    "text": ["Hi there!", "I am a batch with more than one row and different input lengths."],
+                    "padding": True,
+                    "truncation": True,
+                }
+            )
+        if "pixel_values" in model_forward_signature:
+            sample_images = load_dataset("cifar10", "plain_text", split="test")[:2]["img"]
+            processor_inputs.update({"images": sample_images})
+        if "input_features" in model_forward_signature:
+            feature_extractor_signature = inspect.signature(processor.feature_extractor).parameters
+            # Pad to the largest input length by default but take feature extractor default
+            # padding value if it exists e.g. "max_length" and is not False or None
+            if "padding" in feature_extractor_signature:
+                default_strategy = feature_extractor_signature["padding"].default
+                if default_strategy is not False and default_strategy is not None:
+                    padding_strategy = default_strategy
+                else:
+                    padding_strategy = True
+            else:
+                padding_strategy = True
+            processor_inputs.update({"audio": _get_audio_input(), "padding": padding_strategy})
+        if "input_values" in model_forward_signature:  # Wav2Vec2 audio input
+            processor_inputs.update({"audio": _get_audio_input(), "padding": True})
         pt_input = processor(**processor_inputs, return_tensors="pt")
         tf_input = processor(**processor_inputs, return_tensors="tf")
 
