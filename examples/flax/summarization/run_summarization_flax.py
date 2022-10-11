@@ -827,10 +827,17 @@ def main():
         labels = batch.pop("labels")
         logits = model(**batch, params=params, train=False)[0]
         loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
+        
+        weight = batch["decoder_attention_mask"].sum()
+        total_weight = jax.lax.psum(weight, axis_name="batch")
 
         # summarize metrics
-        metrics = {"loss": loss}
-        metrics = jax.lax.pmean(metrics, axis_name="batch")
+        metrics = {"loss": loss * weight}
+        metrics = jax.lax.psum(metrics, axis_name="batch")
+        metrics = jax.tree_util.tree_map(
+            lambda x: x / total_weight, metrics
+        )
+        
         return metrics
 
     # Define generation function
