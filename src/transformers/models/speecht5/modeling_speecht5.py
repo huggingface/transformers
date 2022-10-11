@@ -724,10 +724,15 @@ class SpeechT5TextDecoderPrenet(nn.Module):
         # TODO: Just like the original model, if the input_ids contain padding tokens,
         # we set these positions to zero in the attention mask. However, other models
         # from Transformers don't appear to do this?
-        if input_ids.eq(self.config.pad_token_id).any():
-            if attention_mask is None:
-                attention_mask = torch.ones_like(input_ids, dtype=torch.long)
-            attention_mask[input_ids.eq(self.config.pad_token_id)] = 0
+        # Having this logic also breaks `model.generate` when using it on a batch;
+        # as one output sequence is finished, it will start to emit pad_tokens and
+        # suddenly the logic here starts to create an attention mask but it will be
+        # too small to cover the entire sequence. That's why the code is commented out.
+        # Not sure if it's worth trying to fix, or better to simply not do this.
+        # if input_ids.eq(self.config.pad_token_id).any():
+        #     if attention_mask is None:
+        #         attention_mask = torch.ones_like(input_ids, dtype=torch.long)
+        #     attention_mask[input_ids.eq(self.config.pad_token_id)] = 0
 
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
         positions = self.embed_positions(input, past_key_values_length)
