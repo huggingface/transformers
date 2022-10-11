@@ -1253,13 +1253,13 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
 
         self.visual_projection = [
             tf.keras.layers.Dense(self.projection_intermediate_dim, name="visual_projection.0"),
-            tf.keras.layers.BatchNormalization(name="visual_projection.1", momentum=0.1, epsilon=1e-5),
+            tf.keras.layers.BatchNormalization(name="visual_projection.1", momentum=0.9, epsilon=1e-5),
             tf.keras.layers.ReLU(name="visual_projection.2"),
             tf.keras.layers.Dense(self.projection_dim, name="visual_projection.3"),
         ]
         self.text_projection = [
             tf.keras.layers.Dense(self.projection_intermediate_dim, name="text_projection.0"),
-            tf.keras.layers.BatchNormalization(name="text_projection.1", momentum=0.1, epsilon=1e-5),
+            tf.keras.layers.BatchNormalization(name="text_projection.1", momentum=0.9, epsilon=1e-5),
             tf.keras.layers.ReLU(name="text_projection.2"),
             tf.keras.layers.Dense(self.projection_dim, name="text_projection.3"),
         ]
