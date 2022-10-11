@@ -41,6 +41,7 @@ else:
         "OPTModel",
         "OPTPreTrainedModel",
         "OPTForSequenceClassification",
+        "OPTForQuestionAnswering",
     ]
 
 try:
@@ -76,6 +77,7 @@ if TYPE_CHECKING:
         from .modeling_opt import (
             OPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             OPTForCausalLM,
+            OPTForQuestionAnswering,
             OPTForSequenceClassification,
             OPTModel,
             OPTPreTrainedModel,

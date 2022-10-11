@@ -1,4 +1,5 @@
 import enum
+import warnings
 
 from ..tokenization_utils import TruncationStrategy
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
@@ -59,6 +60,7 @@ class Text2TextGenerationPipeline(Pipeline):
         return_type=None,
         clean_up_tokenization_spaces=None,
         truncation=None,
+        stop_sequence=None,
         **generate_kwargs
     ):
         preprocess_params = {}
@@ -75,6 +77,15 @@ class Text2TextGenerationPipeline(Pipeline):
 
         if clean_up_tokenization_spaces is not None:
             postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
+
+        if stop_sequence is not None:
+            stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
+            if len(stop_sequence_ids) > 1:
+                warnings.warn(
+                    "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
+                    " the stop sequence will be used as the stop sequence string in the interim."
+                )
+            generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
 
         return preprocess_params, forward_params, postprocess_params
 

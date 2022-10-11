@@ -17,7 +17,7 @@ import json
 import math
 import os
 import warnings
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from pathlib import Path
@@ -119,7 +119,6 @@ class OptimizerNames(ExplicitEnum):
 
 @dataclass
 class TrainingArguments:
-    framework = "pt"
     """
     TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
     itself**.
@@ -500,6 +499,7 @@ class TrainingArguments:
             Whether to use Apple Silicon chip based `mps` device.
     """
 
+    framework = "pt"
     output_dir: str = field(
         metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
     )
@@ -1000,10 +1000,6 @@ class TrainingArguments:
         if env_local_rank != -1 and env_local_rank != self.local_rank:
             self.local_rank = env_local_rank
 
-        # convert to int
-        self.log_level = trainer_log_levels[self.log_level]
-        self.log_level_replica = trainer_log_levels[self.log_level_replica]
-
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
         #  see https://github.com/huggingface/transformers/issues/10628
@@ -1197,7 +1193,7 @@ class TrainingArguments:
                 "`--fsdp offload` can't work on its own. It needs to be added to `--fsdp full_shard` or "
                 '`--fsdp shard_grad_op`. For example, `--fsdp "full_shard offload"`.'
             )
-        elif FSDPOption.FULL_SHARD in self.fsdp and FSDPOption.SHARD_GRAD_OP in self.sharded_ddp:
+        elif FSDPOption.FULL_SHARD in self.fsdp and FSDPOption.SHARD_GRAD_OP in self.fsdp:
             raise ValueError("`--fsdp full_shard` is not compatible with `--fsdp shard_grad_op`.")
 
         if len(self.fsdp) == 0 and self.fsdp_min_num_params > 0:
@@ -1604,8 +1600,12 @@ class TrainingArguments:
         The choice between the main and replica process settings is made according to the return value of `should_log`.
         """
 
-        log_level_main_node = logging.INFO if self.log_level == -1 else self.log_level
-        log_level_replica_node = logging.WARNING if self.log_level_replica == -1 else self.log_level_replica
+        # convert to int
+        log_level = trainer_log_levels[self.log_level]
+        log_level_replica = trainer_log_levels[self.log_level_replica]
+
+        log_level_main_node = logging.INFO if log_level == -1 else log_level
+        log_level_replica_node = logging.WARNING if log_level_replica == -1 else log_level_replica
         return log_level_main_node if self.should_log else log_level_replica_node
 
     @property
@@ -1691,7 +1691,9 @@ class TrainingArguments:
         Serializes this instance while replace `Enum` by their values (for JSON serialization support). It obfuscates
         the token values by removing their value.
         """
-        d = asdict(self)
+        # filter out fields that are defined as field(init=False)
+        d = dict((field.name, getattr(self, field.name)) for field in fields(self) if field.init)
+
         for k, v in d.items():
             if isinstance(v, Enum):
                 d[k] = v.value

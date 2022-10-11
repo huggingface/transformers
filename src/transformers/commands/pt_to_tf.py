@@ -18,7 +18,6 @@ from argparse import ArgumentParser, Namespace
 from importlib import import_module
 
 import numpy as np
-from datasets import load_dataset
 from packaging import version
 
 import huggingface_hub
@@ -31,6 +30,7 @@ from .. import (
     AutoFeatureExtractor,
     AutoProcessor,
     AutoTokenizer,
+    is_datasets_available,
     is_tf_available,
     is_torch_available,
 )
@@ -45,6 +45,9 @@ if is_tf_available():
 
 if is_torch_available():
     import torch
+
+if is_datasets_available():
+    from datasets import load_dataset
 
 
 MAX_ERROR = 5e-5  # larger error tolerance than in our internal tests, to avoid flaky user-facing errors
@@ -257,11 +260,11 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         if architectures is None:  # No architecture defined -- use auto classes
             pt_class = getattr(import_module("transformers"), "AutoModel")
             tf_class = getattr(import_module("transformers"), "TFAutoModel")
-            self._logger.warn("No detected architecture, using AutoModel/TFAutoModel")
+            self._logger.warning("No detected architecture, using AutoModel/TFAutoModel")
         else:  # Architecture defined -- use it
             if len(architectures) > 1:
                 raise ValueError(f"More than one architecture was found, aborting. (architectures = {architectures})")
-            self._logger.warn(f"Detected architecture: {architectures[0]}")
+            self._logger.warning(f"Detected architecture: {architectures[0]}")
             pt_class = getattr(import_module("transformers"), architectures[0])
             try:
                 tf_class = getattr(import_module("transformers"), "TF" + architectures[0])
@@ -336,9 +339,9 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             repo.git_add(auto_lfs_track=True)
             repo.git_commit(commit_message)
             repo.git_push(blocking=True)  # this prints a progress bar with the upload
-            self._logger.warn(f"TF weights pushed into {self._model_name}")
+            self._logger.warning(f"TF weights pushed into {self._model_name}")
         elif not self._no_pr:
-            self._logger.warn("Uploading the weights into a new PR...")
+            self._logger.warning("Uploading the weights into a new PR...")
             commit_descrition = (
                 "Model converted by the [`transformers`' `pt_to_tf`"
                 " CLI](https://github.com/huggingface/transformers/blob/main/src/transformers/commands/pt_to_tf.py). "
@@ -375,4 +378,4 @@ class PTtoTFCommand(BaseTransformersCLICommand):
                 repo_type="model",
                 create_pr=True,
             )
-            self._logger.warn(f"PR open in {hub_pr_url}")
+            self._logger.warning(f"PR open in {hub_pr_url}")

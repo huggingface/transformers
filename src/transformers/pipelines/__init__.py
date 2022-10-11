@@ -72,6 +72,7 @@ from .token_classification import (
 from .visual_question_answering import VisualQuestionAnsweringPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
+from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
 
 
 if is_tf_available():
@@ -124,6 +125,7 @@ if is_torch_available():
         AutoModelForTokenClassification,
         AutoModelForVision2Seq,
         AutoModelForVisualQuestionAnswering,
+        AutoModelForZeroShotObjectDetection,
     )
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -222,7 +224,7 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForDocumentQuestionAnswering,) if is_torch_available() else (),
         "tf": (),
         "default": {
-            "model": {"pt": ("impira/layoutlm-document-qa", "3a93017")},
+            "model": {"pt": ("impira/layoutlm-document-qa", "52e01b3")},
         },
         "type": "multimodal",
     },
@@ -335,6 +337,13 @@ SUPPORTED_TASKS = {
         "default": {"model": {"pt": ("facebook/detr-resnet-50", "2729413")}},
         "type": "image",
     },
+    "zero-shot-object-detection": {
+        "impl": ZeroShotObjectDetectionPipeline,
+        "tf": (),
+        "pt": (AutoModelForZeroShotObjectDetection,) if is_torch_available() else (),
+        "default": {"model": {"pt": ("google/owlvit-base-patch32", "17740e1")}},
+        "type": "multimodal",
+    },
 }
 
 NO_FEATURE_EXTRACTOR_TASKS = set()
@@ -385,7 +394,7 @@ def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
     return task
 
 
-def check_task(task: str) -> Tuple[Dict, Any]:
+def check_task(task: str) -> Tuple[str, Dict, Any]:
     """
     Checks an incoming task string, to validate it's correct and return the default Pipeline and Model classes, and
     default models if they exist.

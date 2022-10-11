@@ -354,7 +354,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "feature_extraction_utils.py": "test_feature_extraction_common.py",
     "file_utils.py": ["utils/test_file_utils.py", "utils/test_model_output.py"],
     "utils/generic.py": ["utils/test_file_utils.py", "utils/test_model_output.py", "utils/test_generic.py"],
-    "utils/hub.py": "utils/test_file_utils.py",
+    "utils/hub.py": "utils/test_hub_utils.py",
     "modelcard.py": "utils/test_model_card.py",
     "modeling_flax_utils.py": "test_modeling_flax_common.py",
     "modeling_tf_utils.py": ["test_modeling_tf_common.py", "utils/test_modeling_tf_core.py"],
@@ -437,7 +437,7 @@ def module_to_test_file(module_fname):
         return ["tests/onnx/test_features.py", "tests/onnx/test_onnx.py", "tests/onnx/test_onnx_v2.py"]
     # Special case for utils (not the one in src/transformers, the ones at the root of the repo).
     elif len(splits) > 0 and splits[0] == "utils":
-        default_test_file = f"tests/utils/test_utils_{module_name}"
+        default_test_file = f"tests/repo_utils/test_{module_name}"
     elif len(splits) > 4 and splits[2] == "models":
         default_test_file = f"tests/models/{splits[3]}/test_{module_name}"
     elif len(splits) > 2 and splits[2].startswith("generation"):
@@ -619,6 +619,25 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None, j
                 json.dump(test_map, fp, ensure_ascii=False)
 
 
+def filter_pipeline_tests(output_file):
+    if not os.path.isfile(output_file):
+        print("No test file found.")
+        return
+    with open(output_file, "r", encoding="utf-8") as f:
+        test_files = f.read().split(" ")
+
+    if len(test_files) == 0:
+        print("No tests to filter.")
+        return
+    if test_files == ["tests"]:
+        test_files = [os.path.join("tests", f) for f in os.listdir("tests") if f not in ["__init__.py", "pipelines"]]
+    else:
+        test_files = [f for f in test_files if not f.startswith(os.path.join("tests", "pipelines"))]
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        f.write(" ".join(test_files))
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -646,6 +665,11 @@ if __name__ == "__main__":
         help="Only keep the test files matching one of those filters.",
     )
     parser.add_argument(
+        "--filter_pipeline_tests",
+        action="store_true",
+        help="Will filter the pipeline tests outside of the generated list of tests.",
+    )
+    parser.add_argument(
         "--print_dependencies_of",
         type=str,
         help="Will only print the tree of modules depending on the file passed.",
@@ -656,6 +680,8 @@ if __name__ == "__main__":
         print_tree_deps_of(args.print_dependencies_of)
     elif args.sanity_check:
         sanity_check()
+    elif args.filter_pipeline_tests:
+        filter_pipeline_tests(args.output_file)
     else:
         repo = Repo(PATH_TO_TRANFORMERS)
 

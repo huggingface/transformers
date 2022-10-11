@@ -16,17 +16,17 @@ import unittest
 
 from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING, TextGenerationPipeline, pipeline
 from transformers.testing_utils import (
-    is_pipeline_test,
     require_accelerate,
     require_tf,
     require_torch,
     require_torch_gpu,
+    require_torch_or_tf,
 )
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
 
-@is_pipeline_test
+@require_torch_or_tf
 class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_CAUSAL_LM_MAPPING
@@ -146,6 +146,18 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
         text_generator = TextGenerationPipeline(model=model, tokenizer=tokenizer)
         return text_generator, ["This is a test", "Another test"]
+
+    def test_stop_sequence_stopping_criteria(self):
+        prompt = """Hello I believe in"""
+        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2")
+        output = text_generator(prompt)
+        self.assertEqual(
+            output,
+            [{"generated_text": "Hello I believe in fe fe fe fe fe fe fe fe fe fe fe fe"}],
+        )
+
+        output = text_generator(prompt, stop_sequence=" fe")
+        self.assertEqual(output, [{"generated_text": "Hello I believe in fe"}])
 
     def run_pipeline_test(self, text_generator, _):
         model = text_generator.model
