@@ -16,6 +16,7 @@ import collections
 import contextlib
 import functools
 import inspect
+import logging
 import os
 import re
 import shlex
@@ -84,11 +85,10 @@ from .utils import (
     is_torchaudio_available,
     is_torchdynamo_available,
     is_vision_available,
-    logging,
 )
 
 
-logger = logging.get_logger(__name__)
+logger = transformers_logging.get_logger(__name__)
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
 DUMMY_UNKNOWN_IDENTIFIER = "julien-c/dummy-unknown"
