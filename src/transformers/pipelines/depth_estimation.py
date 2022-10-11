@@ -1,7 +1,6 @@
 from typing import List, Union
 
 import numpy as np
-import torch
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
 from .base import PIPELINE_INIT_ARGS, Pipeline
@@ -13,6 +12,8 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
+    import torch
+
     from ..models.auto.modeling_auto import MODEL_FOR_DEPTH_ESTIMATION_MAPPING
 
 logger = logging.get_logger(__name__)

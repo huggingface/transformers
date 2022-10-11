@@ -15,9 +15,7 @@
 import hashlib
 import unittest
 
-import torch
-
-from transformers import MODEL_FOR_DEPTH_ESTIMATION_MAPPING, is_vision_available
+from transformers import MODEL_FOR_DEPTH_ESTIMATION_MAPPING, is_torch_available, is_vision_available
 from transformers.pipelines import DepthEstimationPipeline, pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
@@ -31,6 +29,9 @@ from transformers.testing_utils import (
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
+
+if is_torch_available():
+    import torch
 
 if is_vision_available():
     from PIL import Image
@@ -52,6 +53,7 @@ def hashimage(image: Image) -> str:
 @require_torch
 @is_pipeline_test
 class DepthEstimationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+
     model_mapping = MODEL_FOR_DEPTH_ESTIMATION_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
