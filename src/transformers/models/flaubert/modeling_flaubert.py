@@ -655,7 +655,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
     """,
     FLAUBERT_START_DOCSTRING,
 )
-# Copied transformers.models.xlm.modeling_xlm.XLMWithLMHeadModel with XLM->Flaubert
+# Copied transformers.models.xlm.modeling_xlm.XLMWithLMHeadModel with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertWithLMHeadModel(FlaubertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
