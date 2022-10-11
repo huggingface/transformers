@@ -529,6 +529,9 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
             config.pad_token_id,
         )
 
+    def freeze_feature_encoder(self):
+        self.feature_encoder._freeze_parameters()
+
     def forward(
         self,
         input_values: torch.Tensor,
@@ -1886,6 +1889,14 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        if isinstance(self.encoder, SpeechT5SpeechEncoder):
+            self.encoder.prenet.freeze_feature_encoder()
+
     @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -2026,7 +2037,7 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        self.get_encoder().prenet._freeze_parameters()
+        self.get_encoder().prenet.freeze_feature_encoder()
 
     def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
         new_embeddings = super().resize_token_embeddings(new_num_tokens)
@@ -2203,7 +2214,7 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        self.encoder.prenet._freeze_parameters()
+        self.encoder.prenet.freeze_feature_encoder()
 
     @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -2307,7 +2318,7 @@ class SpeechT5ForPreTraining(SpeechT5PreTrainedModel):
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        self.speecht5.encoder.prenet._freeze_parameters()
+        self.speecht5.encoder.prenet.freeze_feature_encoder()
 
     @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SpeechT5ForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
