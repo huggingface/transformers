@@ -1982,7 +1982,7 @@ class GenerationMixin:
                 f" than your model's device. `input_ids` is on {input_ids.device.type}, whereas the model"
                 f" is on {self.device.type}. You may experience unexpected behaviors or slower generation."
                 " Please make sure that you have put `input_ids` to the"
-                " correct GPU by calling for example input_ids = input_ids.to('cuda') before"
+                f" correct device by calling for example input_ids = input_ids.to({self.device.type}) before"
                 " running `.generate()`.",
                 UserWarning,
             )
