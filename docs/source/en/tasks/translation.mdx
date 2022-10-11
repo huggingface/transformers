@@ -54,7 +54,7 @@ Start by loading the English-French subset of the [OPUS Books](https://huggingfa
 Split the dataset into a train and test set with the [`~Dataset.train_test_split`] method:
 
 ```py
-books = books["train"].train_test_split(test_size=0.2)
+>>> books = books["train"].train_test_split(test_size=0.2)
 ```
 
 Then take a look at an example:
@@ -141,11 +141,13 @@ Then create a function that passes your predictions and labels to [`~evaluate.Ev
 ```py
 >>> import numpy as np
 
+
 >>> def postprocess_text(preds, labels):
 ...     preds = [pred.strip() for pred in preds]
 ...     labels = [[label.strip()] for label in labels]
 
 ...     return preds, labels
+
 
 >>> def compute_metrics(eval_preds):
 ...     preds, labels = eval_preds
@@ -225,6 +227,7 @@ Once training is completed, share your model to the Hub with the [`~transformers
 
 ```py
 >>> trainer.push_to_hub()
+```
 </pt>
 <tf>
 <Tip>
