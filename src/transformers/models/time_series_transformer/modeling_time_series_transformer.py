@@ -50,11 +50,11 @@ TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 class AffineTransformed(TransformedDistribution):
-    def __init__(self, base_distribution: Distribution, loc=None, scale=None):
+    def __init__(self, base_distribution: Distribution, loc=None, scale=None, event_dim=0):
         self.scale = 1.0 if scale is None else scale
         self.loc = 0.0 if loc is None else loc
 
-        super().__init__(base_distribution, [AffineTransform(self.loc, self.scale)])
+        super().__init__(base_distribution, [AffineTransform(loc=self.loc, scale=self.scale, event_dim=event_dim)])
 
     @property
     def mean(self):
@@ -127,7 +127,7 @@ class DistributionOutput:
         if loc is None and scale is None:
             return distr
         else:
-            return AffineTransformed(distr, loc=loc, scale=scale)
+            return AffineTransformed(distr, loc=loc, scale=scale, event_dim=self.event_dim)
 
     @property
     def event_shape(self) -> Tuple:
