@@ -537,14 +537,13 @@ class FlaxBloomBlockCollection(nn.Module):
             for layer_number in range(self.config.num_hidden_layers)
         ]
 
-        if self.use_scan:
-            self.scan_fn = scan_with_axes(
-                FlaxBloomBlock,
-                variable_axes={"params": 0, "cache": 0},
-                split_rngs={"params": True, "dropout": True},
-                in_axes=(nn.broadcast, nn.broadcast, 0, nn.broadcast, nn.broadcast, nn.broadcast),
-                length=self.config.num_hidden_layers,
-            )(self.config, dtype=self.dtype, use_scan=True, name="FlaxBloomBlockLayers")
+        self.scan_fn = scan_with_axes(
+            FlaxBloomBlock,
+            variable_axes={"params": 0, "cache": 0},
+            split_rngs={"params": True, "dropout": True},
+            in_axes=(nn.broadcast, nn.broadcast, 0, nn.broadcast, nn.broadcast, nn.broadcast),
+            length=self.config.num_hidden_layers,
+        )(self.config, dtype=self.dtype, use_scan=True, name="FlaxBloomBlockLayers")
 
     def __call__(
         self,
