@@ -15,12 +15,20 @@
 """ PyTorch CLIP model."""
 
 
+import os
+import warnings
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
+
+import xformers
+import xformers.ops
+
+
+_USE_MEMORY_EFFICIENT_ATTENTION = int(os.environ.get("USE_MEMORY_EFFICIENT_ATTENTION", 0)) == 1
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -272,6 +280,77 @@ class CLIPAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights_reshaped
+
+    def forward_memory_efficient(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        causal_attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+
+        if attention_mask is not None:
+            # xformer does not support attention mask, it might raise error, so we use normal forward
+            warnings.warn("Attention mask is not supported for memory efficient forward, using normal forward")
+            return self.forward_normal(hidden_states, attention_mask, causal_attention_mask, output_attentions)
+
+        if output_attentions:
+            warnings.warn("output_attentions is not supported for memory efficient forward, it will be ignored")
+
+        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        # get query proj
+        # NOTE: this is slightly different from the normal forward
+        # the softmax scaling is done inside xformers, so we should not scale the query here
+        query_states = self.q_proj(hidden_states)  # * self.scale
+        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+
+        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
+        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
+        key_states = key_states.view(*proj_shape)
+        value_states = value_states.view(*proj_shape)
+
+        src_len = key_states.size(1)
+        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+
+        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+            raise ValueError(
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {attn_weights.size()}"
+            )
+
+        # apply the causal_attention_mask first
+
+        mask = None
+        if causal_attention_mask is not None:
+            mask = causal_attention_mask
+            mask = xformers.ops.LowerTriangularMask(causal_attention_mask)
+            # mask._tensor = causal_attention_mask.squeeze()
+            # the content of the mask is actually not used, xformers will only check the type
+
+        q = query_states
+        k = key_states
+        v = value_states
+        q, k, v = map(lambda t: t.contiguous(), (q, k, v))
+
+        # actually compute the attention, what we cannot get enough of
+        out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=mask, op=None)
+        b = bsz
+        d = self.head_dim
+        h = self.num_heads
+        out = out.unsqueeze(0).reshape(b, h, out.shape[1], d).permute(0, 2, 1, 3).reshape(b, out.shape[1], h * d)
+        out = out.to(dtype=hidden_states.dtype)  # cast back to original dtype
+
+        attn_output = self.out_proj(out)
+        attn_weights_reshaped = None
+        return attn_output, attn_weights_reshaped
+
+
+if _USE_MEMORY_EFFICIENT_ATTENTION:
+    CLIPAttention.forward_normal = CLIPAttention.forward
+    CLIPAttention.forward = CLIPAttention.forward_memory_efficient
 
 
 class CLIPMLP(nn.Module):
