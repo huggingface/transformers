@@ -541,16 +541,6 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
         extract_features = self.feature_encoder(input_values)
         extract_features = extract_features.transpose(1, 2)
 
-        # TODO: the original implementation does the following, which is only used
-        #       when the argument `require_feat_pen=True` or when `target_list != None`
-        #       do we need this, maybe for training / fine-tuning?
-        #
-        # x = x.transpose(1, 2) # [batch, hidden_size, length]
-        # if target_list is not None:
-        #     x, target_list = self.forward_targets(x, target_list)
-        # features_pen = x.float().pow(2).mean()
-        # x = x.transpose(1, 2) # [batch, length, hidden_size]
-
         if attention_mask is not None:
             # compute reduced attention_mask corresponding to feature vectors
             attention_mask = self._get_feature_vector_attention_mask(
