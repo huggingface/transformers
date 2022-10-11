@@ -1675,13 +1675,11 @@ from ...modeling_tf_outputs import (
 from ...modeling_tf_utils import (
     DUMMY_INPUTS,
     TFPreTrainedModel,
-    TFSharedEmbeddings,
-    TFWrappedEmbeddings,
     keras_serializable,
     unpack_inputs,
 )
 from ...tf_utils import shape_list, stable_softmax
-from ...utils import logging
+from ...utils import ContextManagers, logging
 from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Config
 
 
@@ -1747,7 +1745,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
 
-class TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(TFSharedEmbeddings):
+class TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(tf.keras.layers.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
@@ -1757,12 +1755,10 @@ class TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(TFSharedE
 
     def call(self, input_shape: tf.TensorShape, past_key_values_length: int = 0):
         """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = input_shape[:2]
-
-        positions = tf.range(
-            past_key_values_length, seq_len + past_key_values_length, delta=1, name="range"
-        )
-        return super().call(positions)
+        seq_len = input_shape[1]
+        position_ids = tf.range(seq_len, delta=1, name="range")
+        position_ids += past_key_values_length
+        return super().call(tf.cast(position_ids, dtype=tf.int32))
 
 
 class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
@@ -2226,7 +2222,7 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
         config: {{cookiecutter.camelcase_modelname}}Config
     """
 
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, embed_tokens: Optional[TFSharedEmbeddings] = None, **kwargs):
+    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, embed_tokens: Optional[tf.keras.layers.Embedding] = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.dropout = tf.keras.layers.Dropout(config.dropout)
@@ -2315,17 +2311,25 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-            tf.debugging.assert_less(
-                input_ids,
-                tf.cast(self.embed_tokens.vocab_size, dtype=input_ids.dtype),
-                message=(
-                    "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.vocab_size})"
-                ),
-            )
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
+            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
+            # is used with a name ending in `/`, that name replaces the current name scope.
+            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
+            context = []
+            if hasattr(self.embed_tokens, "load_weight_prefix"):
+                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
+            with ContextManagers(context):
+                # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+                # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+                tf.debugging.assert_less(
+                    input_ids,
+                    tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
+                    message=(
+                        "input_ids must be smaller than the embedding layer's input dimension (got"
+                        f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
+                    ),
+                )
+                inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         embed_pos = self.embed_positions(input_shape)
         hidden_states = inputs_embeds + embed_pos
@@ -2388,7 +2392,7 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
         embed_tokens: output embedding
     """
 
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, embed_tokens: Optional[TFSharedEmbeddings] = None, **kwargs):
+    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, embed_tokens: Optional[tf.keras.layers.Embedding] = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.padding_idx = config.pad_token_id
@@ -2514,17 +2518,25 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
         positions = self.embed_positions(input_shape, past_key_values_length)
 
         if inputs_embeds is None:
-            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-            tf.debugging.assert_less(
-                input_ids,
-                tf.cast(self.embed_tokens.vocab_size, dtype=input_ids.dtype),
-                message=(
-                    "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.vocab_size})"
-                ),
-            )
-            inputs_embeds = self.embed_tokens(input_ids)
+            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
+            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
+            # is used with a name ending in `/`, that name replaces the current name scope.
+            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
+            context = []
+            if hasattr(self.embed_tokens, "load_weight_prefix"):
+                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
+            with ContextManagers(context):
+                # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+                # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+                tf.debugging.assert_less(
+                    input_ids,
+                    tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
+                    message=(
+                        "input_ids must be smaller than the embedding layer's input dimension (got"
+                        f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
+                    ),
+                )
+                inputs_embeds = self.embed_tokens(input_ids)
 
         hidden_states = inputs_embeds
 
@@ -2637,32 +2649,25 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.config = config
-        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, config.pad_token_id, name="model.shared")
+        self.shared = tf.keras.layers.Embedding(
+            input_dim=config.vocab_size,
+            output_dim=config.d_model,
+            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.init_std),
+            name="model.shared"
+        )
+        # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
+        self.shared.load_weight_prefix = "model.shared"
 
-        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
-            pass
-
-        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-        embed_tokens.vocab_size = self.shared.vocab_size
-        embed_tokens.hidden_size = self.shared.hidden_size
-
-        self.encoder = TF{{cookiecutter.camelcase_modelname}}Encoder(config, embed_tokens, name="encoder")
-        self.decoder = TF{{cookiecutter.camelcase_modelname}}Decoder(config, embed_tokens, name="decoder")
+        self.encoder = TF{{cookiecutter.camelcase_modelname}}Encoder(config, self.shared, name="encoder")
+        self.decoder = TF{{cookiecutter.camelcase_modelname}}Decoder(config, self.shared, name="decoder")
 
     def get_input_embeddings(self):
         return self.shared
 
     def set_input_embeddings(self, new_embeddings):
-        self.shared.weight = new_embeddings
-        self.shared.vocab_size = self.shared.weight.shape[0]
-        # retrieve correct absolute scope for embed token wrapper
-        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
-            pass
-        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-        self.encoder.set_embed_tokens(embed_tokens)
-        self.decoder.set_embed_tokens(embed_tokens)
+        self.shared = new_embeddings
+        self.encoder.embed_tokens = self.shared
+        self.decoder.embed_tokens = self.shared
 
     @unpack_inputs
     def call(
@@ -2866,7 +2871,6 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
         self.bias_layer = BiasLayer(
             name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
-        self.final_logits_bias = self.bias_layer.bias  # alias to keep the same interface with PT
 
     def get_decoder(self):
         return self.model.decoder
@@ -2875,10 +2879,15 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
         return self.model.encoder
 
     def get_bias(self):
-        return {"final_logits_bias": self.final_logits_bias}
+        return {"final_logits_bias": self.bias_layer.bias}
 
     def set_bias(self, value):
-        self.final_logits_bias = value["final_logits_bias"]
+        # Replaces the existing layers containing bias for correct (de)serialization.
+        vocab_size = value["final_logits_bias"].shape[-1]
+        self.bias_layer = BiasLayer(
+            name="final_logits_bias", shape=[1, vocab_size], initializer="zeros", trainable=False
+        )
+        self.bias_layer.bias.assign(value["final_logits_bias"])
 
     def get_output_embeddings(self):
         return self.get_input_embeddings()
@@ -2952,7 +2961,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
             return_dict=return_dict,
             training=training
         )
-        lm_logits = self.model.shared(outputs[0], mode="linear")
+        lm_logits = tf.matmul(outputs[0], self.model.shared.weights, transpose_b=True)
         lm_logits = self.bias_layer(lm_logits)
         masked_lm_loss = None if labels is None else self.hf_compute_loss(labels, lm_logits)
 
