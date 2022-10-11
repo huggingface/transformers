@@ -4092,6 +4092,8 @@ if TYPE_CHECKING:
             FlaubertForTokenClassification,
             FlaubertModel,
             FlaubertWithLMHeadModel,
+            FlaubertPreTrainedModel,
+            
         )
         from .models.flava import (
             FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,

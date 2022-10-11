@@ -81,6 +81,7 @@ if TYPE_CHECKING:
             FlaubertForTokenClassification,
             FlaubertModel,
             FlaubertWithLMHeadModel,
+            FlaubertPreTrainedModel
         )
 
     try:
