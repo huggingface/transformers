@@ -1214,7 +1214,7 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
     """,
     FLAUBERT_START_DOCSTRING,
 )
-# Copied from transformer.models.xlm.modeling_xlm.XLMForMultipleChoice with XLM->Flaubert
+# Copied from transformer.models.xlm.modeling_xlm.XLMForMultipleChoice with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
