@@ -275,7 +275,8 @@ class LiltModelIntegrationTest(unittest.TestCase):
         bbox = torch.tensor([[[1, 2, 3, 4], [5, 6, 7, 8]]], device=torch_device)
 
         # forward pass
-        outputs = model(input_ids=input_ids, bbox=bbox)
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids, bbox=bbox)
 
         expected_shape = torch.Size([1, 2, 768])
         expected_slice = torch.tensor(
