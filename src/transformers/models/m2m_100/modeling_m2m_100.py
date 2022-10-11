@@ -152,7 +152,7 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
         if padding_idx is not None:
             emb[padding_idx, :] = 0
 
-        return emb
+        return emb.to(torch.get_default_dtype())
 
     @torch.no_grad()
     def forward(
