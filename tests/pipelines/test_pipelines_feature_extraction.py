@@ -13,10 +13,10 @@
 # limitations under the License.
 
 import unittest
-import torch
-import tensorflow as tf
 
 import numpy as np
+import tensorflow as tf
+import torch
 
 from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
