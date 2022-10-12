@@ -97,6 +97,9 @@ class ModelArguments:
     freeze_feature_encoder: bool = field(
         default=False, metadata={"help": "Whether to freeze the feature encoder layers of the model."}
     )
+    freeze_encoder: bool = field(
+        default=False, metadata={"help": "Whether to freeze the entire encoder of the seq2seq model."}
+    )
 
 
 @dataclass
