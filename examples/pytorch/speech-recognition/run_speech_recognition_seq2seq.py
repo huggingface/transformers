@@ -215,6 +215,9 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         input_features = [{self.model_input_name: feature[self.model_input_name]} for feature in features]
         batch = self.processor.feature_extractor.pad(input_features, return_tensors="pt")
 
+        # TODO: remove once PR is merged
+        batch.pop("attention_mask")
+
         # now handle the target labels
         for feature in features:
             # if bos token is appended in previous tokenization step,
