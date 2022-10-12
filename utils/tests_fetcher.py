@@ -620,7 +620,7 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None, j
                 json.dump(test_map, fp, ensure_ascii=False)
 
 
-def filter_pipeline_tests(output_file):
+def filter_tests(output_file):
     if not os.path.isfile(output_file):
         print("No test file found.")
         return
@@ -631,12 +631,23 @@ def filter_pipeline_tests(output_file):
         print("No tests to filter.")
         return
     if test_files == ["tests"]:
-        test_files = [os.path.join("tests", f) for f in os.listdir("tests") if f not in ["__init__.py", "pipelines"]]
+        repo_utils_launch = True
+        test_files = [
+            os.path.join("tests", f)
+            for f in os.listdir("tests")
+            if f not in ["__init__.py", "pipelines", "repo_utils"]
+        ]
     else:
-        test_files = [f for f in test_files if not f.startswith(os.path.join("tests", "pipelines"))]
+        repo_utils_launch = any(f.split(os.path.sep)[1] == "repo_utils" for f in test_files)
+        test_files = [f for f in test_files if not f.split(os.path.sep)[1] not in ["pipelines", "repo_utils"]]
 
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(" ".join(test_files))
+
+    if repo_utils_launch:
+        repo_util_file = Path(output_file).parent / "test_repo_utils.txt"
+        with open(repo_util_file, "w", encoding="utf-8") as f:
+            f.write("tests/repo_utils")
 
 
 if __name__ == "__main__":
@@ -666,9 +677,9 @@ if __name__ == "__main__":
         help="Only keep the test files matching one of those filters.",
     )
     parser.add_argument(
-        "--filter_pipeline_tests",
+        "--filter_tests",
         action="store_true",
-        help="Will filter the pipeline tests outside of the generated list of tests.",
+        help="Will filter the pipeline/repo utils tests outside of the generated list of tests.",
     )
     parser.add_argument(
         "--print_dependencies_of",
@@ -682,7 +693,7 @@ if __name__ == "__main__":
     elif args.sanity_check:
         sanity_check()
     elif args.filter_pipeline_tests:
-        filter_pipeline_tests(args.output_file)
+        filter_tests(args.output_file)
     else:
         repo = Repo(PATH_TO_TRANFORMERS)
 
