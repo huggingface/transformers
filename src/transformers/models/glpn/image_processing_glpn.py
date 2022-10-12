@@ -139,7 +139,7 @@ class GLPNImageProcessor(BaseImageProcessor):
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PIL.Image.Resampling`,
                 Only has an effect if `do_resize` is set to `True`.
-            return_tensors (`str`, *optional*, defaults to `None`):
+            return_tensors (`str`, *optional*):
                 The type of tensors to return. Can be one of:
                     - `None`: Return a list of `np.ndarray`.
                     - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.

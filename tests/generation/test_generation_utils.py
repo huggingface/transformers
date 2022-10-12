@@ -37,6 +37,7 @@ if is_torch_available():
         Speech2TextForConditionalGeneration,
         SpeechEncoderDecoderModel,
         VisionEncoderDecoderModel,
+        pipeline,
         top_k_top_p_filtering,
     )
     from transformers.generation_beam_constraints import DisjunctiveConstraint, PhrasalConstraint
@@ -327,6 +328,7 @@ class GenerationTesterMixin:
             remove_invalid_values=True,
             **logits_warper_kwargs,
             **process_kwargs,
+            **model_kwargs,
         )
 
         torch.manual_seed(0)
@@ -361,6 +363,7 @@ class GenerationTesterMixin:
                 **kwargs,
                 **model_kwargs,
             )
+
         return output_sample, output_generate
 
     def _beam_search_generate(
@@ -1977,6 +1980,25 @@ class GenerationIntegrationTests(unittest.TestCase):
             [1, 18],
         )
 
+    def test_stop_sequence_stopping_criteria(self):
+
+        prompt = """Hello I believe in"""
+        generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-bart")
+        output = generator(prompt)
+        self.assertEqual(
+            output,
+            [
+                {
+                    "generated_text": (
+                        "Hello I believe in in in number number number number number number number number number"
+                    )
+                }
+            ],
+        )
+
+        output = generator(prompt, stop_sequence=" number")
+        self.assertEqual(output, [{"generated_text": "Hello I believe in in in number"}])
+
     def test_custom_logits_processor(self):
         bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
@@ -2702,8 +2724,8 @@ class GenerationIntegrationTests(unittest.TestCase):
             model.generate(input_ids, force_words_ids=[[[-1]]])
 
     def test_validate_generation_inputs(self):
-        tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/t5-tiny-random")
-        model = AutoModelForSeq2SeqLM.from_pretrained("patrickvonplaten/t5-tiny-random")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-t5")
+        model = AutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-t5")
 
         encoder_input_str = "Hello world"
         input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids

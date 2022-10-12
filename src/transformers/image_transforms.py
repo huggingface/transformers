@@ -167,7 +167,7 @@ def get_resize_output_image_size(
             (`size`,`size`). If set to `False`, will replicate
             [`torchvision.transforms.Resize`](https://pytorch.org/vision/stable/transforms.html#torchvision.transforms.Resize)
             with support for resizing only the smallest edge and providing an optional `max_size`.
-        max_size (`int`, *optional*, defaults to `None`):
+        max_size (`int`, *optional*):
             The maximum allowed for the longer edge of the resized image: if the longer edge of the image is greater
             than `max_size` after being resized according to `size`, then the image is resized again so that the longer
             edge is equal to `max_size`. As a result, `size` might be overruled, i.e the smaller edge may be shorter
@@ -223,7 +223,7 @@ def resize(
             The size to use for resizing the image.
         resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
             The filter to user for resampling.
-        data_format (`ChannelDimension`, *optional*, defaults to `None`):
+        data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the output image. If `None`, will use the inferred format from the input.
         return_numpy (`bool`, *optional*, defaults to `True`):
             Whether or not to return the resized image as a numpy array. If False a PIL.Image.Image object is returned.
