@@ -45,7 +45,7 @@ jobs:
           tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}
       # Push CI images still need to be re-built daily
       -
-        name: Build and push (for Push CI)
+        name: Build and push (for Push CI) in a daily basis
         if: github.event_name == 'schedule'
         uses: docker/build-push-action@v2
         with:
