@@ -101,14 +101,6 @@ def prepare_xlm_input(args, model, tokenizer, prompt_text):
                 language = input("Using XLM. Select language in " + str(list(available_languages)) + " >>> ")
 
         model.config.lang_id = model.config.lang2id[language]
-        # kwargs["language"] = tokenizer.lang2id[language]
-
-    # TODO fix mask_token_id setup when configurations will be synchronized between models and tokenizers
-    # XLM masked-language modeling (MLM) models need masked token
-    # is_xlm_mlm = "mlm" in args.model_name_or_path
-    # if is_xlm_mlm:
-    #     kwargs["mask_token_id"] = tokenizer.mask_token_id
-
     return prompt_text
 
 
