@@ -21,7 +21,9 @@ from datasets import load_dataset
 
 from transformers import Wav2Vec2Config, is_flax_available
 from transformers.testing_utils import (
+    is_flaky,
     is_librosa_available,
+    is_pt_flax_cross_test,
     is_pyctcdecode_available,
     require_flax,
     require_librosa,
@@ -301,6 +303,11 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
             model = model_class_name.from_pretrained("facebook/wav2vec2-large-960h-lv60-self", from_pt=True)
             outputs = model(np.ones((1, 1024), dtype="f4"))
             self.assertIsNotNone(outputs)
+
+    @is_pt_flax_cross_test
+    @is_flaky()
+    def test_equivalence_pt_to_flax(self):
+        super().test_equivalence_pt_to_flax()
 
 
 @require_flax
