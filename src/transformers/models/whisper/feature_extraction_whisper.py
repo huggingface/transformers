@@ -65,18 +65,23 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         chunk_length=30,
         n_fft=400,
         padding_value=0.0,
+        return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
         **kwargs
     ):
-        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
+        super().__init__(
+            feature_size=feature_size,
+            sampling_rate=sampling_rate,
+            padding_value=padding_value,
+            return_attention_mask=return_attention_mask,
+            **kwargs,
+        )
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.chunk_length = chunk_length
-        self.return_attention_mask = True
         self.n_samples = chunk_length * sampling_rate
         self.nb_max_frames = self.n_samples // hop_length
         self.sampling_rate = sampling_rate
         self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=feature_size)
-        self.return_attention_mask = False  # pad inputs to max length with silence token (zero) and no attention mask
 
     def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
         # Initialize the weights
