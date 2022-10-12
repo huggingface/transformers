@@ -632,11 +632,13 @@ def filter_tests(output_file, filters):
         print("No test file found.")
         return
     with open(output_file, "r", encoding="utf-8") as f:
-        test_files = f.read().strip().split(" ")
+        test_files = f.read().split(" ")
 
-    if len(test_files) == 0:
+    if len(test_files) == 0 or test_files == [""]:
         print("No tests to filter.")
         return
+    
+    print(test_files)
     if test_files == ["tests"]:
         test_files = [os.path.join("tests", f) for f in os.listdir("tests") if f not in ["__init__.py"] + filters]
     else:
