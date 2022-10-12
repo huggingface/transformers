@@ -692,7 +692,7 @@ if __name__ == "__main__":
         print_tree_deps_of(args.print_dependencies_of)
     elif args.sanity_check:
         sanity_check()
-    elif args.filter_pipeline_tests:
+    elif args.filter_tests:
         filter_tests(args.output_file)
     else:
         repo = Repo(PATH_TO_TRANFORMERS)
