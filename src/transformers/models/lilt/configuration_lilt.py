@@ -41,7 +41,7 @@ class LiltConfig(PretrainedConfig):
             Vocabulary size of the LiLT model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`LiltModel`].
         hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
+            Dimensionality of the encoder layers and the pooler layer. Should be a multiple of 24.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
