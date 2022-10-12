@@ -68,7 +68,8 @@ checkpoint: 检查点
         <a href="https://github.com/huggingface/transformers/">English</a> |
         <b>简体中文</b> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_zh-hant.md">繁體中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/README_ko.md">한국어</a>
+        <a href="https://github.com/huggingface/transformers/blob/main/README_ko.md">한국어</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README_es.md">Español</a> 
     <p>
 </h4>
 

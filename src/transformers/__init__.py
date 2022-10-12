@@ -2113,6 +2113,7 @@ else:
             "XLMProphetNetForCausalLM",
             "XLMProphetNetForConditionalGeneration",
             "XLMProphetNetModel",
+            "XLMProphetNetPreTrainedModel",
         ]
     )
     _import_structure["models.xlm_roberta"].extend(
@@ -2125,6 +2126,7 @@ else:
             "XLMRobertaForSequenceClassification",
             "XLMRobertaForTokenClassification",
             "XLMRobertaModel",
+            "XLMRobertaPreTrainedModel",
         ]
     )
     _import_structure["models.xlm_roberta_xl"].extend(
@@ -2354,6 +2356,14 @@ else:
             "TFCTRLLMHeadModel",
             "TFCTRLModel",
             "TFCTRLPreTrainedModel",
+        ]
+    )
+    _import_structure["models.cvt"].extend(
+        [
+            "TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFCvtForImageClassification",
+            "TFCvtModel",
+            "TFCvtPreTrainedModel",
         ]
     )
     _import_structure["models.data2vec"].extend(
@@ -4795,6 +4805,7 @@ if TYPE_CHECKING:
             XLMProphetNetForCausalLM,
             XLMProphetNetForConditionalGeneration,
             XLMProphetNetModel,
+            XLMProphetNetPreTrainedModel,
         )
         from .models.xlm_roberta import (
             XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -4805,6 +4816,7 @@ if TYPE_CHECKING:
             XLMRobertaForSequenceClassification,
             XLMRobertaForTokenClassification,
             XLMRobertaModel,
+            XLMRobertaPreTrainedModel,
         )
         from .models.xlm_roberta_xl import (
             XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5019,6 +5031,12 @@ if TYPE_CHECKING:
             TFCTRLLMHeadModel,
             TFCTRLModel,
             TFCTRLPreTrainedModel,
+        )
+        from .models.cvt import (
+            TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFCvtForImageClassification,
+            TFCvtModel,
+            TFCvtPreTrainedModel,
         )
         from .models.data2vec import (
             TFData2VecVisionForImageClassification,
