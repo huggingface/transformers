@@ -133,7 +133,7 @@ def check_onnxruntime_requirements(minimum_version: Version):
 
 def ensure_valid_input(model, tokens, input_names):
     """
-    Ensure input are presented in the correct order, without any Non
+    Ensure inputs are presented in the correct order, without any Non
 
     Args:
         model: The model used to forward the input data

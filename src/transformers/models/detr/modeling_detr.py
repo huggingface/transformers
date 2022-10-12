@@ -1605,12 +1605,12 @@ class DetrForSegmentation(DetrPreTrainedModel):
 
         >>> # Use the `post_process_panoptic_segmentation` method of `DetrFeatureExtractor` to retrieve post-processed panoptic segmentation maps
         >>> # Segmentation results are returned as a list of dictionaries
-        >>> result = feature_extractor.post_process_panoptic_segmentation(outputs, processed_sizes)
+        >>> result = feature_extractor.post_process_panoptic_segmentation(outputs, target_sizes=[(300, 500)])
 
-        >>> # A tensor of shape (height, width) where each value denotes a segment id
+        >>> # A tensor of shape (height, width) where each value denotes a segment id, filled with -1 if no segment is found
         >>> panoptic_seg = result[0]["segmentation"]
-        >>> # Get mapping of segment ids to semantic class ids
-        >>> panoptic_segments_info = result[0]["segment_ids"]
+        >>> # Get prediction score and segment_id to class_id mapping of each segment
+        >>> panoptic_segments_info = result[0]["segments_info"]
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

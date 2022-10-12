@@ -117,7 +117,7 @@ jobs:
         # TODO: add `git-python` in the docker images
         run: |
           pip install --upgrade git-python
-          python utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
+          python3 utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
 
       - name: Report fetched tests
         uses: actions/upload-artifact@v2
