@@ -74,7 +74,7 @@ def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDim
 
 
 def rescale(
-    image: np.ndarray, scale: Union[float, int] = 255, data_format: Optional[ChannelDimension] = None, dtype=np.float32
+    image: np.ndarray, scale: float, data_format: Optional[ChannelDimension] = None, dtype=np.float32
 ) -> np.ndarray:
     """
     Rescales `image` by `scale`.
@@ -82,7 +82,7 @@ def rescale(
     Args:
         image (`np.ndarray`):
             The image to rescale.
-        scale (`float` or `int`, *optional*, defaults to 255):
+        scale (`float`):
             The scale to use for rescaling the image.
         data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the image. If not provided, it will be the same as the input image.
@@ -104,7 +104,8 @@ def rescale(
 
 
 def to_pil_image(
-    image: Union[np.ndarray, PIL.Image.Image, "torch.Tensor", "tf.Tensor", "jnp.Tensor"], do_rescale=None
+    image: Union[np.ndarray, PIL.Image.Image, "torch.Tensor", "tf.Tensor", "jnp.Tensor"],
+    do_rescale: Optional[bool] = None,
 ) -> PIL.Image.Image:
     """
     Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last axis if
@@ -143,7 +144,7 @@ def get_resize_output_image_size(
     input_image: np.ndarray,
     size: Union[int, Tuple[int, int], List[int], Tuple[int]],
     default_to_square: bool = True,
-    max_size: int = None,
+    max_size: Optional[int] = None,
 ) -> tuple:
     """
     Find the target (height, width) dimension of the output image after resizing given the input image and the desired
