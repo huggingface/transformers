@@ -306,8 +306,8 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     @is_pt_flax_cross_test
     @is_flaky()
-    def test_pt_flax_equivalence(self):
-        super().test_pt_flax_equivalence()
+    def test_equivalence_pt_to_flax(self):
+        super().ttest_equivalence_pt_to_flax()
 
 
 @require_flax
