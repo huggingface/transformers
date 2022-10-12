@@ -917,6 +917,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
                     head_mask[idx] if head_mask is not None else None,
                     cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
                     None,
+                    None,
                 )
             else:
 
