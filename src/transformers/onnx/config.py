@@ -104,6 +104,7 @@ class OnnxConfig(ABC):
         "sequence-classification": OrderedDict({"logits": {0: "batch"}}),
         "token-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "vision2seq-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "speech2seq-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
     }
 
     def __init__(self, config: "PretrainedConfig", task: str = "default", patching_specs: List[PatchingSpec] = None):
@@ -325,7 +326,8 @@ class OnnxConfig(ABC):
                 seq_length, fixed_dimension=OnnxConfig.default_fixed_sequence, num_token_to_add=token_to_add
             )
             # Generate dummy inputs according to compute batch and sequence
-            dummy_input = [" ".join([preprocessor.unk_token]) * seq_length] * batch_size
+            input_token = preprocessor.unk_token if preprocessor.unk_token else "0"
+            dummy_input = [" ".join([input_token]) * seq_length] * batch_size
             if self.task == "multiple-choice":
                 # If dynamic axis (-1) we forward with a fixed dimension of 4 candidate answers to avoid optimizations
                 # made by ONNX
@@ -345,6 +347,14 @@ class OnnxConfig(ABC):
             batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
             dummy_input = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
             return dict(preprocessor(images=dummy_input, return_tensors=framework))
+        elif (
+            isinstance(preprocessor, FeatureExtractionMixin) and preprocessor.model_input_names[0] == "input_features"
+        ):
+            # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
+            batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
+            # 80000 random samples between -1 and 1
+            dummy_input = np.random.uniform(-1, 1, 80000)
+            return dict(preprocessor(dummy_input, return_tensors=framework))
         else:
             raise ValueError(
                 "Unable to generate dummy inputs for the model. Please provide a tokenizer or a preprocessor."
