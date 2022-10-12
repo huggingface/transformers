@@ -736,6 +736,23 @@ class TFModelTesterMixin:
                         dtype="float32",
                     ),
                 }
+            elif model_class.__name__ in ["TFWhisperModel", "TFWhisperForConditionalGeneration"]:
+                inputs = {
+                    "decoder_input_ids": tf.keras.Input(
+                        batch_shape=(2, max_input),
+                        name="decoder_input_ids",
+                        dtype="int32",
+                    ),
+                    "input_features": tf.keras.Input(
+                        batch_shape=(
+                            2,
+                            self.model_tester.num_mel_bins,
+                            self.model_tester.seq_length,
+                        ),
+                        name="input_features",
+                        dtype="float32",
+                    ),
+                }
             elif self.is_encoder_decoder:
                 inputs = {
                     "decoder_input_ids": tf.keras.Input(
@@ -757,7 +774,7 @@ class TFModelTesterMixin:
                     name="pixel_values",
                     dtype="float32",
                 )
-            elif model_class.__name__ in ["TFCLIPModel"]:
+            elif model_class.__name__ in ["TFCLIPModel", "TFGroupViTModel"]:
                 inputs = {
                     "input_ids": tf.keras.Input(batch_shape=(3, max_input), name="input_ids", dtype="int32"),
                     "pixel_values": tf.keras.Input(
@@ -1223,8 +1240,17 @@ class TFModelTesterMixin:
 
             # fetch the output for an input exclusively made of new members of the vocabulary
             inputs_dict = copy.deepcopy(original_inputs_dict)
-            new_vocab_input_ids = ids_tensor(inputs_dict["input_ids"].shape, new_tokens_size)
+            ids_feat_name = None
+            if "input_ids" in inputs_dict:
+                ids_feat_name = "input_ids"
+            elif "decoder_input_ids" in inputs_dict:
+                ids_feat_name = "decoder_input_ids"
+            else:
+                assert False, "No input ids feature found in the inputs dict"
+
+            new_vocab_input_ids = ids_tensor(inputs_dict[ids_feat_name].shape, new_tokens_size)
             new_vocab_input_ids += old_total_size
+            inputs_dict[ids_feat_name] = new_vocab_input_ids
             if "input_ids" in inputs_dict:
                 inputs_dict["input_ids"] = new_vocab_input_ids
             if "decoder_input_ids" in inputs_dict:
@@ -2189,6 +2215,46 @@ class UtilsFunctionsTest(unittest.TestCase):
 
                 for p1, p2 in zip(model.weights, new_model.weights):
                     self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
+    def test_save_pretrained_signatures(self):
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # Short custom TF signature function.
+        # `input_signature` is specific to BERT.
+        @tf.function(
+            input_signature=[
+                [
+                    tf.TensorSpec([None, None], tf.int32, name="input_ids"),
+                    tf.TensorSpec([None, None], tf.int32, name="token_type_ids"),
+                    tf.TensorSpec([None, None], tf.int32, name="attention_mask"),
+                ]
+            ]
+        )
+        def serving_fn(input):
+            return model(input)
+
+        # Using default signature (default behavior) overrides 'serving_default'
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, saved_model=True, signatures=None)
+            model_loaded = tf.keras.models.load_model(f"{tmp_dir}/saved_model/1")
+            self.assertTrue("serving_default" in list(model_loaded.signatures.keys()))
+
+        # Providing custom signature function
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, saved_model=True, signatures={"custom_signature": serving_fn})
+            model_loaded = tf.keras.models.load_model(f"{tmp_dir}/saved_model/1")
+            self.assertTrue("custom_signature" in list(model_loaded.signatures.keys()))
+
+        # Providing multiple custom signature function
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(
+                tmp_dir,
+                saved_model=True,
+                signatures={"custom_signature_1": serving_fn, "custom_signature_2": serving_fn},
+            )
+            model_loaded = tf.keras.models.load_model(f"{tmp_dir}/saved_model/1")
+            self.assertTrue("custom_signature_1" in list(model_loaded.signatures.keys()))
+            self.assertTrue("custom_signature_2" in list(model_loaded.signatures.keys()))
 
 
 @require_tf

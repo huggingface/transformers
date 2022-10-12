@@ -26,12 +26,13 @@ from transformers import (
     AutoTokenizer,
     Speech2TextForConditionalGeneration,
     Wav2Vec2ForCTC,
+    WhisperForConditionalGeneration,
+    WhisperProcessor,
 )
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
 from transformers.pipelines.audio_utils import chunk_bytes_iter
 from transformers.pipelines.automatic_speech_recognition import chunk_iter
 from transformers.testing_utils import (
-    is_pipeline_test,
     is_torch_available,
     nested_simplify,
     require_pyctcdecode,
@@ -52,7 +53,6 @@ if is_torch_available():
 # from .test_pipelines_common import CustomInputPipelineCommonMixin
 
 
-@is_pipeline_test
 class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = {
         k: v
@@ -309,6 +309,52 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             data = f.read()
         output = asr(data)
         self.assertEqual(output, {"text": "Un uomo disse all'universo: \"Signore, io esisto."})
+
+    @slow
+    @require_torch
+    @require_torchaudio
+    def test_simple_whisper_asr(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny.en",
+            framework="pt",
+        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        filename = ds[0]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": " Mr. Quilter is the apostle of the middle classes, and we are glad to"})
+
+    @slow
+    @require_torch
+    @require_torchaudio
+    def test_simple_whisper_translation(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-large",
+            framework="pt",
+        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": " A man said to the universe, Sir, I exist."})
+
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
+        tokenizer = AutoTokenizer.from_pretrained("openai/whisper-large")
+        feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-large")
+
+        speech_recognizer_2 = AutomaticSpeechRecognitionPipeline(
+            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
+        output_2 = speech_recognizer_2(filename)
+        self.assertEqual(output, output_2)
+
+        processor = WhisperProcessor(feature_extractor, tokenizer)
+        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(task="transcribe", language="it")
+        speech_translator = AutomaticSpeechRecognitionPipeline(
+            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+        )
+        output_3 = speech_translator(filename)
+        self.assertEqual(output_3, {"text": " Un uomo ha detto allo universo, Sir, esiste."})
 
     @slow
     @require_torch

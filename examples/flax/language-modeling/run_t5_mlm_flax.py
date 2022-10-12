@@ -349,7 +349,7 @@ class FlaxDataCollatorForT5MLM:
         if batch["input_ids"].shape[-1] != self.input_length:
             raise ValueError(
                 f"`input_ids` are incorrectly preprocessed. `input_ids` length is {batch['input_ids'].shape[-1]}, but"
-                f" should be {self.target_length}."
+                f" should be {self.input_length}."
             )
 
         if batch["labels"].shape[-1] != self.target_length:

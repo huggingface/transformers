@@ -106,7 +106,7 @@ own regarding how code should be written :-)
    for a good example).
 2. The code should be fully understandable, even by a non-native English speaker. This means you should pick
    descriptive variable names and avoid abbreviations. As an example, `activation` is preferred to `act`.
-   One-letter variable names are strongly discouraged unless it's an index in a for loop. 
+   One-letter variable names are strongly discouraged unless it's an index in a for loop.
 3. More generally we prefer longer explicit code to short magical one.
 4. Avoid subclassing `nn.Sequential` in PyTorch but subclass `nn.Module` and write the forward pass, so that anyone
    using your code can quickly debug it by adding print statements or breaking points.
@@ -222,7 +222,7 @@ cd ..
 5. To port *brand_new_bert*, you will also need access to its original repository:
 
 ```bash
-git clone https://github.com/org_that_created_brand_new_bert_org/brand_new_bert.git 
+git clone https://github.com/org_that_created_brand_new_bert_org/brand_new_bert.git
 cd brand_new_bert
 pip install -e .
 ```
@@ -683,10 +683,11 @@ work left to be done should be a cakewalk 😊.
 At this point, you have successfully added a new model. However, it is very much possible that the model does not yet
 fully comply with the required design. To make sure, the implementation is fully compatible with 🤗 Transformers, all
 common tests should pass. The Cookiecutter should have automatically added a test file for your model, probably under
-the same `tests/test_modeling_brand_new_bert.py`. Run this test file to verify that all common tests pass:
+the same `tests/models/brand_new_bert/test_modeling_brand_new_bert.py`. Run this test file to verify that all common
+tests pass:
 
 ```bash
-pytest tests/test_modeling_brand_new_bert.py
+pytest tests/models/brand_new_bert/test_modeling_brand_new_bert.py
 ```
 
 Having fixed all common tests, it is now crucial to ensure that all the nice work you have done is well tested, so that
@@ -700,7 +701,7 @@ Cookiecutter, called `BrandNewBertModelIntegrationTests` and only has to be fill
 tests are passing, run
 
 ```bash
-RUN_SLOW=1 pytest -sv tests/test_modeling_brand_new_bert.py::BrandNewBertModelIntegrationTests
+RUN_SLOW=1 pytest -sv tests/models/brand_new_bert/test_modeling_brand_new_bert.py::BrandNewBertModelIntegrationTests
 ```
 
 <Tip>
@@ -758,7 +759,8 @@ contain a couple of hard-coded integration tests.
 **10. Run End-to-end integration tests**
 
 Having added the tokenizer, you should also add a couple of end-to-end integration tests using both the model and the
-tokenizer to `tests/test_modeling_brand_new_bert.py` in 🤗 Transformers. Such a test should show on a meaningful
+tokenizer to `tests/models/brand_new_bert/test_modeling_brand_new_bert.py` in 🤗 Transformers.
+Such a test should show on a meaningful
 text-to-text sample that the 🤗 Transformers implementation works as expected. A meaningful text-to-text sample can
 include *e.g.* a source-to-target-translation pair, an article-to-summary pair, a question-to-answer pair, etc… If none
 of the ported checkpoints has been fine-tuned on a downstream task it is enough to simply rely on the model tests. In a

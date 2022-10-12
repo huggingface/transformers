@@ -1,6 +1,5 @@
 name: "\U0001F41B Bug Report"
 description: Submit a bug report to help us improve transformers
-labels: [ "bug" ]
 body:
   - type: textarea
     id: system-info
