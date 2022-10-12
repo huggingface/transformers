@@ -144,7 +144,6 @@ class WhisperConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-
     ```"""
     model_type = "whisper"
     keys_to_ignore_at_inference = ["past_key_values"]
