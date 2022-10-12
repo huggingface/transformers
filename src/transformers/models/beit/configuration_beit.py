@@ -104,12 +104,12 @@ class BeitConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BeitModel, BeitConfig
+    >>> from transformers import BeitConfig, BeitModel
 
     >>> # Initializing a BEiT beit-base-patch16-224-pt22k style configuration
     >>> configuration = BeitConfig()
 
-    >>> # Initializing a model from the beit-base-patch16-224-pt22k style configuration
+    >>> # Initializing a model (with random weights) from the beit-base-patch16-224-pt22k style configuration
     >>> model = BeitModel(configuration)
 
     >>> # Accessing the model configuration
