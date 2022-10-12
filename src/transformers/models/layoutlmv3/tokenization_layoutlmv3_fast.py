@@ -18,7 +18,7 @@ and _encode_plus, in which the Rust tokenizer is used.
 """
 
 import json
-from typing import Dict, List, Optional, Tuple, Union, Any
+from typing import Dict, List, Optional, Tuple, Union
 
 from tokenizers import pre_tokenizers, processors
 
@@ -60,7 +60,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "microsoft/layoutlmv3-large": "https://huggingface.co/microsoft/layoutlmv3-large/raw/main/merges.txt",
     },
     "spm_file": {
-        "microsoft/layoutlmv3-base-chinese": "https://huggingface.co/microsoft/layoutlmv3-base-chinese/raw/main/sentencepiece.bpe.model",
+        "microsoft/layoutlmv3-base-chinese": (
+            "https://huggingface.co/microsoft/layoutlmv3-base-chinese/raw/main/sentencepiece.bpe.model"
+        ),
     },
 }
 

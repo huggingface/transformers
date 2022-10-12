@@ -31,10 +31,10 @@ from transformers import (
 )
 from transformers.models.layoutlmv3.tokenization_layoutlmv3 import LayoutLMv3Tokenizer
 from transformers.testing_utils import (
-    is_pt_tf_cross_test,
     get_tests_dir,
-    require_sentencepiece,
+    is_pt_tf_cross_test,
     require_pandas,
+    require_sentencepiece,
     require_tf,
     require_tokenizers,
     require_torch,

@@ -18,10 +18,10 @@ import json
 import os
 from functools import lru_cache
 from shutil import copyfile
-from typing import Dict, List, Optional, Tuple, Union, Any
-import sentencepiece as spm
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import regex as re
+import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...tokenization_utils_base import (
@@ -59,7 +59,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
     "spm_file": {
         "microsoft/layoutlmv3-base": None,
         "microsoft/layoutlmv3-large": None,
-        "microsoft/layoutlmv3-base-chinese": "https://huggingface.co/microsoft/layoutlmv3-base-chinese/raw/main/sentencepiece.bpe.model",
+        "microsoft/layoutlmv3-base-chinese": (
+            "https://huggingface.co/microsoft/layoutlmv3-base-chinese/raw/main/sentencepiece.bpe.model"
+        ),
     },
 }
 
@@ -379,7 +381,6 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         self.only_label_first_subword = only_label_first_subword
 
     @property
-    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.vocab_size
     def vocab_size(self):
         return len(self.sp_model) + self.fairseq_offset + 1 if self.use_spm else len(self.encoder)
 
@@ -440,7 +441,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer._tokenize
+    # Covert from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer._tokenize
     def _spm_tokenize(self, text: str) -> List[str]:
         """Tokenize a string."""
         return self.sp_model.encode(text, out_type=str)
@@ -471,7 +472,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         # Need to return unknown token if the SP model returned 0
         return spm_id + self.fairseq_offset if spm_id else self.unk_token_id
 
-    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer._convert_token_to_id
+    # Convert from transformers.models.roberta.tokenization_roberta.RobertaTokenizer._convert_token_to_id
     def _json_convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         if self.use_spm:
@@ -512,7 +513,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
         return text
 
-    # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer.convert_tokens_to_string
+    # Convert from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer.convert_tokens_to_string
     def _spm_convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
         return "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
@@ -552,7 +553,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
 
         return vocab_file, merge_file
 
-    # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer.save_vocabulary
+    # Convert from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer.save_vocabulary
     def _spm_save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
