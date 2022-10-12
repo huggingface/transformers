@@ -40,19 +40,24 @@ class FeatureExtractionPipeline(Pipeline):
             the associated CUDA device id.
     """
 
-    def _sanitize_parameters(self, truncation=None, **kwargs):
-        preprocess_params = {}
+    def _sanitize_parameters(self, truncation=None, tokenize_kwargs=None, **kwargs):
+        if tokenize_kwargs is None:
+            tokenize_kwargs = {}
+
         if truncation is not None:
-            preprocess_params["truncation"] = truncation
+            if "truncation" in tokenize_kwargs:
+                raise ValueError(
+                    "truncation parameter defined twice (given as keyword argument as well as in tokenize_kwargs)"
+                )
+            tokenize_kwargs["truncation"] = truncation
+
+        preprocess_params = tokenize_kwargs
+
         return preprocess_params, {}, {}
 
-    def preprocess(self, inputs, truncation=None) -> Dict[str, GenericTensor]:
+    def preprocess(self, inputs, **tokenize_kwargs) -> Dict[str, GenericTensor]:
         return_tensors = self.framework
-        if truncation is None:
-            kwargs = {}
-        else:
-            kwargs = {"truncation": truncation}
-        model_inputs = self.tokenizer(inputs, return_tensors=return_tensors, **kwargs)
+        model_inputs = self.tokenizer(inputs, return_tensors=return_tensors, **tokenize_kwargs)
         return model_inputs
 
     def _forward(self, model_inputs):

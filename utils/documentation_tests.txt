@@ -16,6 +16,7 @@ src/transformers/models/albert/modeling_albert.py
 src/transformers/models/albert/modeling_tf_albert.py
 src/transformers/models/bart/modeling_bart.py
 src/transformers/models/beit/modeling_beit.py
+src/transformers/models/bert/configuration_bert.py
 src/transformers/models/bert/modeling_bert.py
 src/transformers/models/bert/modeling_tf_bert.py
 src/transformers/models/bigbird_pegasus/modeling_bigbird_pegasus.py
@@ -48,6 +49,7 @@ src/transformers/models/layoutlm/modeling_tf_layoutlm.py
 src/transformers/models/layoutlmv2/modeling_layoutlmv2.py
 src/transformers/models/layoutlmv3/modeling_layoutlmv3.py
 src/transformers/models/layoutlmv3/modeling_tf_layoutlmv3.py
+src/transformers/models/lilt/modeling_lilt.py
 src/transformers/models/longformer/modeling_longformer.py
 src/transformers/models/longformer/modeling_tf_longformer.py
 src/transformers/models/longt5/modeling_longt5.py
