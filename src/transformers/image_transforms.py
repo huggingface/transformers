@@ -53,7 +53,7 @@ def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDim
             The channel dimension format to use.
 
     Returns:
-        image: A converted np.ndarray.
+        `np.ndarray`: The image with the channel dimension set to `channel_dim`.
     """
     if not isinstance(image, np.ndarray):
         raise ValueError(f"Input image must be of type np.ndarray, got {type(image)}")
@@ -91,7 +91,7 @@ def rescale(
             extractors.
 
     Returns:
-        image: A rescaled np.ndarray image.
+        `np.ndarray`: The rescaled image.
     """
     if not isinstance(image, np.ndarray):
         raise ValueError(f"Input image must be of type np.ndarray, got {type(image)}")
@@ -113,10 +113,13 @@ def to_pil_image(
 
     Args:
         image (`PIL.Image.Image` or `numpy.ndarray` or `torch.Tensor` or `tf.Tensor`):
-            The image to convert to the PIL Image format.
+            The image to convert to the `PIL.Image` format.
         do_rescale (`bool`, *optional*):
             Whether or not to apply the scaling factor (to make pixel values integers between 0 and 255). Will default
             to `True` if the image type is a floating type, `False` otherwise.
+
+    Returns:
+        `PIL.Image.Image`: The converted image.
     """
     if isinstance(image, PIL.Image.Image):
         return image
@@ -170,6 +173,9 @@ def get_resize_output_image_size(
             than `max_size` after being resized according to `size`, then the image is resized again so that the longer
             edge is equal to `max_size`. As a result, `size` might be overruled, i.e the smaller edge may be shorter
             than `size`. Only used if `default_to_square` is `False`.
+
+    Returns:
+        `tuple`: The target (height, width) dimension of the output image after resizing.
     """
     if isinstance(size, (tuple, list)):
         if len(size) == 2:
@@ -224,10 +230,11 @@ def resize(
         data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the output image. If `None`, will use the inferred format from the input.
         return_numpy (`bool`, *optional*, defaults to `True`):
-            Whether or not to return the resized image as a numpy array. If False a PIL.Image.Image object is returned.
+            Whether or not to return the resized image as a numpy array. If False a `PIL.Image.Image` object is
+            returned.
 
     Returns:
-        image: A resized np.ndarray.
+        `np.ndarray`: The resized image.
     """
     if not len(size) == 2:
         raise ValueError("size must have 2 elements")
