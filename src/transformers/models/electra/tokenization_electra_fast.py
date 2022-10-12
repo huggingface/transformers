@@ -74,7 +74,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "google/electra-large-discriminator": 512,
 }
 
-
 PRETRAINED_INIT_CONFIGURATION = {
     "google/electra-small-generator": {"do_lower_case": True},
     "google/electra-base-generator": {"do_lower_case": True},
@@ -84,7 +83,8 @@ PRETRAINED_INIT_CONFIGURATION = {
     "google/electra-large-discriminator": {"do_lower_case": True},
 }
 
-# Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast with Bert->Electra , BERT->ELECTRA , BertTokenizer->ElectraTokenizer
+
+# Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast with Bert->Electra , BERT->ELECTRA
 class ElectraTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" ELECTRA tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
@@ -120,7 +120,7 @@ class ElectraTokenizerFast(PreTrainedTokenizerFast):
             issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for `lowercase` (as in the original BERT).
+            value for `lowercase` (as in the original ELECTRA).
         wordpieces_prefix (`str`, *optional*, defaults to `"##"`):
             The prefix for subwords.
     """
@@ -201,8 +201,8 @@ class ElectraTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A ELECTRA sequence
-        pair mask has the following format:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A ELECTRA
+        sequence pair mask has the following format:
 
         ```
         0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
@@ -229,4 +229,3 @@ class ElectraTokenizerFast(PreTrainedTokenizerFast):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
-
