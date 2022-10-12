@@ -632,7 +632,7 @@ def filter_tests(output_file, filters):
         print("No test file found.")
         return
     with open(output_file, "r", encoding="utf-8") as f:
-        test_files = f.read().split(" ")
+        test_files = f.read().strip().split(" ")
 
     if len(test_files) == 0:
         print("No tests to filter.")
