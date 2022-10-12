@@ -111,9 +111,9 @@ def to_pil_image(
     needed.
 
     Args:
-        image (`PIL.Image.Image`, `numpy.ndarray`, `torch.Tensor`, `tf.Tensor`):
+        image (`PIL.Image.Image` or `numpy.ndarray` or `torch.Tensor` or `tf.Tensor`):
             The image to convert to the PIL Image format.
-        rescale (`bool`, *optional*):
+        do_rescale (`bool`, *optional*):
             Whether or not to apply the scaling factor (to make pixel values integers between 0 and 255). Will default
             to `True` if the image type is a floating type, `False` otherwise.
     """
@@ -159,8 +159,6 @@ def get_resize_output_image_size(
             If `size` is an int and `default_to_square` is `True`, then image will be resized to (size, size). If
             `size` is an int and `default_to_square` is `False`, then smaller edge of the image will be matched to this
             number. i.e, if height > width, then image will be rescaled to (size * height / width, size).
-        resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
-            The filter to user for resampling.
         default_to_square (`bool`, *optional*, defaults to `True`):
             How to convert `size` when it is a single int. If set to `True`, the `size` will be converted to a square
             (`size`,`size`). If set to `False`, will replicate
@@ -208,7 +206,7 @@ def get_resize_output_image_size(
 def resize(
     image,
     size: Tuple[int, int],
-    resample=PIL.Image.Resampling.BILINEAR,
+    resample=PIL.Image.BILINEAR,
     data_format: Optional[ChannelDimension] = None,
     return_numpy: bool = True,
 ) -> np.ndarray:

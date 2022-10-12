@@ -44,14 +44,14 @@ class GLPNImageProcessor(BaseImageProcessor):
         size_divisor (`int`, *optional*, defaults to 32):
             Set the class default for the `size_divisor` parameter. When `do_resize` is `True`, images are resized so
             their height and width are rounded down to the closest multiple of `size_divisor`.
-        resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
+        resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.BILINEAR`):
             Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
     """
 
     model_input_names = ["pixel_values"]
 
     def __init__(
-        self, do_resize=True, do_rescale=True, size_divisor=32, resample=PIL.Image.Resampling.BILINEAR, **kwargs
+        self, do_resize=True, do_rescale=True, size_divisor=32, resample=PIL.Image.BILINEAR, **kwargs
     ) -> None:
         self.do_resize = do_resize
         self.do_rescale = do_rescale
