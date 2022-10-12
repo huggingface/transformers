@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 from typing import TYPE_CHECKING, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
@@ -31,6 +32,7 @@ if is_vision_available():
         is_jax_tensor,
         is_tf_tensor,
         is_torch_tensor,
+        to_numpy_array,
     )
 
 
@@ -261,7 +263,7 @@ def resize(
 
 
 def normalize(
-    image,
+    image: np.ndarray,
     mean: Union[float, Iterable[float]],
     std: Union[float, Iterable[float]],
     data_format: Optional[ChannelDimension] = None,
@@ -281,8 +283,12 @@ def normalize(
         data_format (`ChannelDimension`, *optional*, defaults to `None`):
             The channel dimension format of the output image. If `None`, will use the inferred format from the input.
     """
-    if not isinstance(image, np.ndarray):
-        raise ValueError(f"Input image must be of type np.ndarray, got {type(image)}")
+    if isinstance(image, PIL.Image.Image):
+        warnings.warn("PIL will not be supported as input in the next release. Please use numpy arrays instead.")
+        # Convert PIL image to numpy array with the same logic as in the previous feature extractor normalize -
+        # casting to numpy array and dividing by 255.
+        image = to_numpy_array(image)
+        image = rescale(image, scale=1 / 255)
 
     input_data_format = infer_channel_dimension_format(image)
     channel_axis = get_channel_dimension_axis(image)

@@ -177,11 +177,6 @@ class ImageTransformsTester(unittest.TestCase):
     def test_normalize(self):
         image = np.random.randint(0, 256, (224, 224, 3)) / 255
 
-        # Test that exception is raised if inputs are incorrect
-        # Not a numpy array image
-        with self.assertRaises(ValueError):
-            normalize(5, 5, 5)
-
         # Number of mean values != number of channels
         with self.assertRaises(ValueError):
             normalize(image, mean=(0.5, 0.6), std=1)
