@@ -247,7 +247,7 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         ],
         lang2id=None,
         id2lang=None,
-        do_lowercase_and_remove_accent=True,
+        do_lowercase_and_remove_accent=True,  # Keep for backward-compatibility
         **kwargs
     ):
         super().__init__(
@@ -260,10 +260,12 @@ class FlaubertTokenizer(PreTrainedTokenizer):
             additional_special_tokens=additional_special_tokens,
             lang2id=lang2id,
             id2lang=id2lang,
-            do_lowercase_and_remove_accent=do_lowercase_and_remove_accent,
-            do_lowercase=do_lowercase,
             **kwargs,
         )
+
+        self.do_lowercase = do_lowercase
+        # always `False`
+        self.do_lowercase_and_remove_accent = False
 
         try:
             import sacremoses
@@ -281,7 +283,7 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         self.cache_moses_tokenizer = dict()
         self.lang_with_custom_tokenizer = set(["zh", "th", "ja"])
         # True for current supported model (v1.2.0), False for XLM-17 & 100
-        self.do_lowercase_and_remove_accent = False
+        self.do_lowercase = do_lowercase
         self.lang2id = lang2id
         self.id2lang = id2lang
         if lang2id is not None and id2lang is not None:
