@@ -1094,14 +1094,14 @@ class XCLIPVisionModel(XCLIPPreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/xclip-base-patch32")
         >>> model = XCLIPVisionModel.from_pretrained("microsoft/xclip-base-patch32")
 
-        >>> inputs = processor(videos=list(video), return_tensors="pt")
+        >>> pixel_values = processor(videos=list(video), return_tensors="pt").pixel_values
 
-        >>> outputs = model(**inputs)
+        >>> batch_size, num_frames, num_channels, height, width = pixel_values.shape
+        >>> pixel_values = pixel_values.reshape(-1, num_channels, height, width)
+
+        >>> outputs = model(pixel_values)
         >>> last_hidden_state = outputs.last_hidden_state
         ```"""
-        batch_size, num_frames, num_channels, height, width = pixel_values.shape
-        pixel_values = pixel_values.reshape(-1, num_channels, height, width)
-
         return self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
