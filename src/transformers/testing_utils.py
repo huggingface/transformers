@@ -88,8 +88,6 @@ from .utils import (
 )
 
 
-logger = transformers_logging.get_logger(__name__)
-
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
 DUMMY_UNKNOWN_IDENTIFIER = "julien-c/dummy-unknown"
 DUMMY_DIFF_TOKENIZER_IDENTIFIER = "julien-c/dummy-diff-tokenizer"
@@ -1662,7 +1660,7 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None):
                     return test_func_ref(*args, **kwargs)
 
                 except Exception as err:
-                    logger.error(f"Test failed with {err} at try {retry_count}/{max_attempts}.")
+                    print(f"Test failed with {err} at try {retry_count}/{max_attempts}.", file=sys.stderr)
                     if wait_before_retry is not None:
                         time.sleep(wait_before_retry)
                     retry_count += 1
