@@ -61,7 +61,7 @@ def whitespace_tokenize(text):
     return tokens
 
 
-# Copied from transformers.models.bert.tokenization_bert.BertTokenizer with BERT->MobileBERT
+# Copied from transformers.models.bert.tokenization_bert.BertTokenizer with BERT->MobileBERT, Bert->MobileBert
 class MobileBertTokenizer(PreTrainedTokenizer):
     r"""
     Construct a MobileBERT tokenizer. Based on WordPiece.
