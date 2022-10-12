@@ -275,6 +275,8 @@
         title: LayoutLM
       - local: model_doc/led
         title: LED
+      - local: model_doc/lilt
+        title: LiLT
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
@@ -449,6 +451,8 @@
         title: Wav2Vec2Phoneme
       - local: model_doc/wavlm
         title: WavLM
+      - local: model_doc/whisper
+        title: Whisper
       - local: model_doc/xls_r
         title: XLS-R
       - local: model_doc/xlsr_wav2vec2

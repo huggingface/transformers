@@ -23,7 +23,7 @@ from transformers import (
     T5Config,
     pipeline,
 )
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, slow, torch_device
+from transformers.testing_utils import require_tf, require_torch, slow, torch_device
 from transformers.tokenization_utils import TruncationStrategy
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
@@ -32,7 +32,6 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 
 
-@is_pipeline_test
 class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING

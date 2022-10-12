@@ -392,3 +392,7 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
             flattened_output = super(OnnxSeq2SeqConfigWithPast, self)._flatten_past_key_values_(
                 flattened_output, name, idx, t
             )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4

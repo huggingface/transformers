@@ -50,7 +50,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.23.0.dev0")
+check_min_version("4.24.0.dev0")
 
 require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
@@ -317,6 +317,8 @@ class DataCollatorCTCWithPadding:
         labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
 
         batch["labels"] = labels
+        if "attention_mask" in batch:
+            batch["attention_mask"] = batch["attention_mask"].to(torch.long)
 
         return batch
 
