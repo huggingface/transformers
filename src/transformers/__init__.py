@@ -800,6 +800,7 @@ else:
         "PhrasalConstraint",
     ]
     _import_structure["generation_beam_search"] = ["BeamScorer", "BeamSearchScorer", "ConstrainedBeamSearchScorer"]
+    _import_structure["generation_contrastive_search"] = ["ContrastiveDecodingOneStepFast"]
     _import_structure["generation_logits_process"] = [
         "ForcedBOSTokenLogitsProcessor",
         "ForcedEOSTokenLogitsProcessor",
@@ -3746,6 +3747,7 @@ if TYPE_CHECKING:
             PhrasalConstraint,
         )
         from .generation_beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
+        from .generation_contrastive_search import ContrastiveDecodingOneStepFast
         from .generation_logits_process import (
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,

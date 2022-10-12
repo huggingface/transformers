@@ -443,6 +443,8 @@ class GenerationMixin:
     The class exposes [`~generation_utils.GenerationMixin.generate`], which can be used for:
         - *greedy decoding* by calling [`~generation_utils.GenerationMixin.greedy_search`] if `num_beams=1` and
           `do_sample=False`.
+        - *contrastive search* by calling [`~generation_utils.GenerationMixin.contrastive_search`] if `penalty_alpha>0`
+          and `top_k>1`
         - *multinomial sampling* by calling [`~generation_utils.GenerationMixin.sample`] if `num_beams=1` and
           `do_sample=True`.
         - *beam-search decoding* by calling [`~generation_utils.GenerationMixin.beam_search`] if `num_beams>1` and
@@ -1767,7 +1769,9 @@ class GenerationMixin:
     ) -> Union[GreedySearchOutput, torch.LongTensor]:
         r"""
         Generates sequences of token ids for models with a language modeling head using **contrastive search** and can
-        be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+        be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models. The utils functions
+        [`ContrastiveDecodingOneStepFast`] is used in this function, which supports the batch generation and the cached
+        mechanism for speeding up decoding
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1806,10 +1810,11 @@ class GenerationMixin:
                 If model is an encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`~generation_utils.GreedySearchDecoderOnlyOutput`], [`~generation_utils.GreedySearchEncoderDecoderOutput`]
-            or `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
-            [`~generation_utils.GreedySearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
-            `return_dict_in_generate=True` or a [`~generation_utils.GreedySearchEncoderDecoderOutput`] if
+            [`~generation_utils.ContrastiveSearchDecoderOnlyOutput`],
+            [`~generation_utils.ContrastiveSearchEncoderDecoderOutput`] or `torch.LongTensor`: A `torch.LongTensor`
+            containing the generated tokens (default behaviour) or a
+            [`~generation_utils.ContrastiveSearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
+            `return_dict_in_generate=True` or a [`~generation_utils.ContrastiveSearchEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
 
         Examples:
@@ -1823,16 +1828,18 @@ class GenerationMixin:
         ...     MaxLengthCriteria,
         ... )
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2-large")
+        >>> model = AutoModelForCausalLM.from_pretrained("gpt2-large")
         >>> # set pad_token_id to eos_token_id because GPT2 does not have a PAD token
         >>> model.config.pad_token_id = model.config.eos_token_id
-        >>> input_prompt = "It might be possible to"
-        >>> input_ids = tokenizer(input_prompt, return_tensors="pt").input_ids
-        >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=20)])
-        >>> outputs = model.contrastive_search(input_ids, stopping_criteria=stopping_criteria)
+        >>> input_prompt = "DeepMind Company is"
+        >>> input_ids = tokenizer(input_prompt, return_tensors="pt")
+        >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=32)])
+        >>> outputs = model.contrastive_search(
+        ...     **input_ids, penalty_alpha=0.6, top_k=4, stopping_criteria=stopping_criteria
+        ... )
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ["It might be possible to get a better understanding of the nature of the problem, but it's not"]
+        ["DeepMind Company is a leader in artificial intelligence (AI). We have a long history of working with companies such as Google, Facebook, Amazon, and Microsoft to"]
         ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
