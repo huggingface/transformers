@@ -42,7 +42,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"mobilebert-uncased": 512}
 PRETRAINED_INIT_CONFIGURATION = {}
 
 
-# Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast with BERT->MobileBERT, Bert->MobileBert
+# Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast with BERT->MobileBERT,Bert->MobileBert
 class MobileBertTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" MobileBERT tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
