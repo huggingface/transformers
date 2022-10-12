@@ -39,6 +39,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("convbert", "TFConvBertModel"),
         ("convnext", "TFConvNextModel"),
         ("ctrl", "TFCTRLModel"),
+        ("cvt", "TFCvtModel"),
         ("data2vec-vision", "TFData2VecVisionModel"),
         ("deberta", "TFDebertaModel"),
         ("deberta-v2", "TFDebertaV2Model"),
@@ -184,6 +185,7 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image-classsification
         ("convnext", "TFConvNextForImageClassification"),
+        ("cvt", "TFCvtForImageClassification"),
         ("data2vec-vision", "TFData2VecVisionForImageClassification"),
         ("deit", ("TFDeiTForImageClassification", "TFDeiTForImageClassificationWithTeacher")),
         ("mobilevit", "TFMobileViTForImageClassification"),

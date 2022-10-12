@@ -275,6 +275,8 @@
         title: LayoutLM
       - local: model_doc/led
         title: LED
+      - local: model_doc/lilt
+        title: LiLT
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5

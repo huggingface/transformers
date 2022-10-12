@@ -257,6 +257,7 @@ _import_structure = {
     "models.layoutxlm": ["LayoutXLMProcessor"],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
     "models.levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig"],
+    "models.lilt": ["LILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LiltConfig"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
     "models.longt5": ["LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongT5Config"],
     "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
@@ -1821,6 +1822,16 @@ else:
             "RobertaPreTrainedModel",
         ]
     )
+    _import_structure["models.lilt"].extend(
+        [
+            "LILT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LiltForQuestionAnswering",
+            "LiltForSequenceClassification",
+            "LiltForTokenClassification",
+            "LiltModel",
+            "LiltPreTrainedModel",
+        ]
+    )
     _import_structure["models.roformer"].extend(
         [
             "ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2113,6 +2124,7 @@ else:
             "XLMProphetNetForCausalLM",
             "XLMProphetNetForConditionalGeneration",
             "XLMProphetNetModel",
+            "XLMProphetNetPreTrainedModel",
         ]
     )
     _import_structure["models.xlm_roberta"].extend(
@@ -2125,6 +2137,7 @@ else:
             "XLMRobertaForSequenceClassification",
             "XLMRobertaForTokenClassification",
             "XLMRobertaModel",
+            "XLMRobertaPreTrainedModel",
         ]
     )
     _import_structure["models.xlm_roberta_xl"].extend(
@@ -2354,6 +2367,14 @@ else:
             "TFCTRLLMHeadModel",
             "TFCTRLModel",
             "TFCTRLPreTrainedModel",
+        ]
+    )
+    _import_structure["models.cvt"].extend(
+        [
+            "TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFCvtForImageClassification",
+            "TFCvtModel",
+            "TFCvtPreTrainedModel",
         ]
     )
     _import_structure["models.data2vec"].extend(
@@ -3260,6 +3281,7 @@ if TYPE_CHECKING:
     from .models.layoutxlm import LayoutXLMProcessor
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
     from .models.levit import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, LevitConfig
+    from .models.lilt import LILT_PRETRAINED_CONFIG_ARCHIVE_MAP, LiltConfig
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
     from .models.longt5 import LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP, LongT5Config
     from .models.luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeTokenizer
@@ -4256,6 +4278,14 @@ if TYPE_CHECKING:
             LevitModel,
             LevitPreTrainedModel,
         )
+        from .models.lilt import (
+            LILT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LiltForQuestionAnswering,
+            LiltForSequenceClassification,
+            LiltForTokenClassification,
+            LiltModel,
+            LiltPreTrainedModel,
+        )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             LongformerForMaskedLM,
@@ -4795,6 +4825,7 @@ if TYPE_CHECKING:
             XLMProphetNetForCausalLM,
             XLMProphetNetForConditionalGeneration,
             XLMProphetNetModel,
+            XLMProphetNetPreTrainedModel,
         )
         from .models.xlm_roberta import (
             XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -4805,6 +4836,7 @@ if TYPE_CHECKING:
             XLMRobertaForSequenceClassification,
             XLMRobertaForTokenClassification,
             XLMRobertaModel,
+            XLMRobertaPreTrainedModel,
         )
         from .models.xlm_roberta_xl import (
             XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5019,6 +5051,12 @@ if TYPE_CHECKING:
             TFCTRLLMHeadModel,
             TFCTRLModel,
             TFCTRLPreTrainedModel,
+        )
+        from .models.cvt import (
+            TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFCvtForImageClassification,
+            TFCvtModel,
+            TFCvtPreTrainedModel,
         )
         from .models.data2vec import (
             TFData2VecVisionForImageClassification,

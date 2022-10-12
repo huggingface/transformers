@@ -19,10 +19,10 @@ import pickle
 import unittest
 
 from transformers import AutoTokenizer
+from transformers.models.bert.tokenization_bert import BertTokenizer
 from transformers.models.bert_japanese.tokenization_bert_japanese import (
     VOCAB_FILES_NAMES,
     BertJapaneseTokenizer,
-    BertTokenizer,
     CharacterTokenizer,
     JumanppTokenizer,
     MecabTokenizer,

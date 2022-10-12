@@ -1955,6 +1955,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
         >>> from transformers import AutoProcessor, TFGroupViTModel
+        >>> import tensorflow as tf
 
         >>> model = TFGroupViTModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
         >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
@@ -1968,7 +1969,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
 
         >>> outputs = model(**inputs)
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
-        >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
+        >>> probs = tf.math.softmax(logits_per_image, axis=1)  # we can take the softmax to get the label probabilities
         ```"""
 
         outputs = self.groupvit(

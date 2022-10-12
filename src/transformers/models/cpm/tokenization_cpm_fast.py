@@ -13,8 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes."""
+import os
+from shutil import copyfile
+from typing import List, Optional, Tuple
+
+from ...tokenization_utils_fast import AddedToken, PreTrainedTokenizerFast
 from ...utils import logging
-from ..xlnet.tokenization_xlnet_fast import XLNetTokenizerFast
 
 
 logger = logging.get_logger(__name__)
@@ -31,10 +35,26 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 
-class CpmTokenizerFast(XLNetTokenizerFast):
+class CpmTokenizerFast(PreTrainedTokenizerFast):
     """Runs pre-tokenization with Jieba segmentation tool. It is used in CPM models."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self,
+        vocab_file=None,
+        tokenizer_file=None,
+        do_lower_case=False,
+        remove_space=True,
+        keep_accents=False,
+        bos_token="<s>",
+        eos_token="</s>",
+        unk_token="<unk>",
+        sep_token="<sep>",
+        pad_token="<pad>",
+        cls_token="<cls>",
+        mask_token="<mask>",
+        additional_special_tokens=["<eop>", "<eod>"],
+        **kwargs
+    ):
         """
         Construct a CPM tokenizer. Based on [Jieba](https://pypi.org/project/jieba/) and
         [SentencePiece](https://github.com/google/sentencepiece).
@@ -96,7 +116,33 @@ class CpmTokenizerFast(XLNetTokenizerFast):
             sp_model (`SentencePieceProcessor`):
                 The *SentencePiece* processor that is used for every conversion (string, tokens and IDs).
         """
-        super().__init__(*args, **kwargs)
+        # Mask token behave like a normal word, i.e. include the space before it
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
+        super().__init__(
+            vocab_file=vocab_file,
+            tokenizer_file=tokenizer_file,
+            do_lower_case=do_lower_case,
+            remove_space=remove_space,
+            keep_accents=keep_accents,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs,
+        )
+
+        self._pad_token_type_id = 3
+        self.do_lower_case = do_lower_case
+        self.remove_space = remove_space
+        self.keep_accents = keep_accents
+        self.vocab_file = vocab_file
+        self.can_save_slow_tokenizer = False if not self.vocab_file else True
+
         try:
             import jieba
         except ModuleNotFoundError as error:
@@ -106,6 +152,83 @@ class CpmTokenizerFast(XLNetTokenizerFast):
             )
         self.jieba = jieba
         self.translator = str.maketrans(" \n", "\u2582\u2583")
+
+    # Copied from transformers.models.xlnet.tokenization_xlnet_fast.XLNetTokenizerFast.build_inputs_with_special_tokens
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. An XLNet sequence has the following format:
+
+        - single sequence: `X <sep> <cls>`
+        - pair of sequences: `A <sep> B <sep> <cls>`
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+        """
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+        if token_ids_1 is None:
+            return token_ids_0 + sep + cls
+        return token_ids_0 + sep + token_ids_1 + sep + cls
+
+    # Copied from transformers.models.xlnet.tokenization_xlnet_fast.XLNetTokenizerFast.create_token_type_ids_from_sequences
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. An XLNet
+        sequence pair mask has the following format:
+
+        ```
+        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+        | first sequence    | second sequence |
+        ```
+
+        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
+        """
+        sep = [self.sep_token_id]
+        cls_segment_id = [2]
+
+        if token_ids_1 is None:
+            return len(token_ids_0 + sep) * [0] + cls_segment_id
+        return len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1] + cls_segment_id
+
+    # Copied from transformers.models.xlnet.tokenization_xlnet_fast.XLNetTokenizerFast.save_vocabulary
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        if not self.can_save_slow_tokenizer:
+            raise ValueError(
+                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
+                "tokenizer."
+            )
+
+        if not os.path.isdir(save_directory):
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
+            return
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
+
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+            copyfile(self.vocab_file, out_vocab_file)
+
+        return (out_vocab_file,)
 
     def _batch_encode_plus(self, batch_text_or_text_pairs, *args, **kwargs):
         batch_text_or_text_pairs = [
