@@ -87,6 +87,18 @@ else:
         "FlaxBigBirdPreTrainedModel",
     ]
 
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_big_bird"] = [
+        "TFBigBirdForPreTraining",
+        "TFBigBirdModel",
+        "TFBigBirdPreTrainedModel",
+    ]
+
 if TYPE_CHECKING:
     from .configuration_big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig, BigBirdOnnxConfig
 
@@ -143,6 +155,18 @@ if TYPE_CHECKING:
             FlaxBigBirdForTokenClassification,
             FlaxBigBirdModel,
             FlaxBigBirdPreTrainedModel,
+        )
+
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modelling_tf_big_bird import (
+            TFBigBirdForPreTraining,
+            TFBigBirdModel,
+            TFBigBirdPreTrainedModel,
         )
 
 else:

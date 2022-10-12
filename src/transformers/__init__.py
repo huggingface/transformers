@@ -2298,6 +2298,13 @@ else:
             "TFBertPreTrainedModel",
         ]
     )
+    _import_structure["models.big_bird"].extend(
+        [
+            "TFBigBirdForPreTraining",
+            "TFBigBirdModel",
+            "TFBigBirdPreTrainedModel",
+        ]
+    )
     _import_structure["models.blenderbot"].extend(
         ["TFBlenderbotForConditionalGeneration", "TFBlenderbotModel", "TFBlenderbotPreTrainedModel"]
     )
@@ -4963,6 +4970,12 @@ if TYPE_CHECKING:
             TFBertModel,
             TFBertPreTrainedModel,
         )
+        from .models.big_bird import (
+            TFBigBirdModel,
+            TFBigBirdForPreTraining,
+            TFBigBirdPreTrainedModel,
+        )
+
         from .models.blenderbot import (
             TFBlenderbotForConditionalGeneration,
             TFBlenderbotModel,
