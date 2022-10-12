@@ -188,18 +188,18 @@ def call_fastpath(src, attention_mask, bert_layer):
     in_proj_bias = bert_layer.attention.self.in_proj_bias
     out_proj_weight = bert_layer.attention.output.dense.weight
     out_proj_bias = bert_layer.attention.output.dense.bias
-    linear1_weight = bert_layer.intermediate.dense.weight 
+    linear1_weight = bert_layer.intermediate.dense.weight
     linear1_bias = bert_layer.intermediate.dense.bias
     linear2_weight = bert_layer.output.dense.weight
-    linear2_bias = bert_layer.output.dense.bias 
-    norm1_eps = bert_layer.attention.output.LayerNorm.eps 
-    norm1_weight = bert_layer.attention.output.LayerNorm.weight 
-    norm1_bias = bert_layer.attention.output.LayerNorm.bias 
+    linear2_bias = bert_layer.output.dense.bias
+    norm1_eps = bert_layer.attention.output.LayerNorm.eps
+    norm1_weight = bert_layer.attention.output.LayerNorm.weight
+    norm1_bias = bert_layer.attention.output.LayerNorm.bias
     norm2_weight = bert_layer.output.LayerNorm.weight
     norm2_bias = bert_layer.output.LayerNorm.bias
 
     num_heads = bert_layer.attention.self.num_attention_heads
-    embed_dim = bert_layer.attention.self.all_head_size 
+    embed_dim = bert_layer.attention.self.all_head_size
 
     return torch._transformer_encoder_layer_fwd(
         src,
@@ -209,7 +209,7 @@ def call_fastpath(src, attention_mask, bert_layer):
         in_proj_bias,
         out_proj_weight,
         out_proj_bias,
-        True, # TODO use_gelu. make it not hardcoded
+        True,  # TODO use_gelu. make it not hardcoded
         False,  # norm_first, currently not supported
         norm1_eps,
         norm1_weight,
@@ -220,9 +220,10 @@ def call_fastpath(src, attention_mask, bert_layer):
         linear1_bias,
         linear2_weight,
         linear2_bias,
-        attention_mask, # TODO fix this 
+        attention_mask,  # TODO fix this
     )
-        
+
+
 class BertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -313,11 +314,11 @@ class BertSelfAttention(nn.Module):
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
-        self.is_decoder = config.is_decoder    
+        self.is_decoder = config.is_decoder
 
     def contiguify_qkv(self):
-        self.in_proj_weight = nn.Parameter(torch.cat([self.query.weight, self.key.weight, self.value.weight])) 
-        self.in_proj_bias = nn.Parameter(torch.cat([self.query.bias, self.key.bias, self.value.bias]))    
+        self.in_proj_weight = nn.Parameter(torch.cat([self.query.weight, self.key.weight, self.value.weight]))
+        self.in_proj_bias = nn.Parameter(torch.cat([self.query.bias, self.key.bias, self.value.bias]))
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -596,6 +597,7 @@ class BertLayer(nn.Module):
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
 
+
 class BertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -636,23 +638,26 @@ class BertEncoder(nn.Module):
 
             if self.use_fastpath:
                 if attention_mask is not None:
-                    # attention mask comes in with values 0 and -inf. we convert to torch.nn.TransformerEncoder style bool mask 
+                    # attention mask comes in with values 0 and -inf. we convert to torch.nn.TransformerEncoder style bool mask
                     # 0->false->keep this token -inf->true->mask this token
-                    attention_mask = attention_mask.bool() 
+                    attention_mask = attention_mask.bool()
                     attention_mask = torch.reshape(attention_mask, (attention_mask.shape[0], attention_mask.shape[-1]))
                     seqlen = attention_mask.shape[1]
                     lengths = torch.sum(~attention_mask, 1)
-                    if(not all([l == seqlen for l in lengths])):
+                    if not all([l == seqlen for l in lengths]):
                         hidden_states = torch._nested_tensor_from_mask(hidden_states, ~attention_mask)
                     attention_mask = None
-                
-                hidden_states = call_fastpath(src=hidden_states, attention_mask=attention_mask, bert_layer=layer_module)
+
+                hidden_states = call_fastpath(
+                    src=hidden_states, attention_mask=attention_mask, bert_layer=layer_module
+                )
             else:
                 if self.gradient_checkpointing and self.training:
 
                     if use_cache:
                         logger.warning(
-                            "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                            "`use_cache=True` is incompatible with gradient checkpointing. Setting"
+                            " `use_cache=False`..."
                         )
                         use_cache = False
 
@@ -688,9 +693,9 @@ class BertEncoder(nn.Module):
                     all_self_attentions = all_self_attentions + (layer_outputs[1],)
                     if self.config.add_cross_attention:
                         all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
-        
+
         if hidden_states.is_nested:
-            hidden_states = hidden_states.to_padded_tensor(0.)
+            hidden_states = hidden_states.to_padded_tensor(0.0)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
