@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from transformers import BertConfig, BertModel, GPT2Model, is_torch_available
+from transformers import BertConfig, GPT2Model, is_torch_available
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
