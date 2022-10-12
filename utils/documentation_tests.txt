@@ -14,6 +14,7 @@ docs/source/en/model_doc/encoder-decoder.mdx
 src/transformers/generation_utils.py
 src/transformers/models/albert/modeling_albert.py
 src/transformers/models/albert/modeling_tf_albert.py
+src/transformers/models/bart/configuration_bart.py
 src/transformers/models/bart/modeling_bart.py
 src/transformers/models/beit/modeling_beit.py
 src/transformers/models/bert/configuration_bert.py
