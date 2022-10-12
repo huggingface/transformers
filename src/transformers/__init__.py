@@ -257,6 +257,7 @@ _import_structure = {
     "models.layoutxlm": ["LayoutXLMProcessor"],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
     "models.levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig"],
+    "models.lilt": ["LILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LiltConfig"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
     "models.longt5": ["LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongT5Config"],
     "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
@@ -419,6 +420,7 @@ _import_structure = {
         "Conversation",
         "ConversationalPipeline",
         "CsvPipelineDataFormat",
+        "DepthEstimationPipeline",
         "DocumentQuestionAnsweringPipeline",
         "FeatureExtractionPipeline",
         "FillMaskPipeline",
@@ -858,6 +860,7 @@ else:
             "MODEL_FOR_CAUSAL_LM_MAPPING",
             "MODEL_FOR_CTC_MAPPING",
             "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
+            "MODEL_FOR_DEPTH_ESTIMATION_MAPPING",
             "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
             "MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING",
@@ -887,6 +890,7 @@ else:
             "AutoModelForCausalLM",
             "AutoModelForCTC",
             "AutoModelForDocumentQuestionAnswering",
+            "AutoModelForDepthEstimation",
             "AutoModelForImageClassification",
             "AutoModelForImageSegmentation",
             "AutoModelForInstanceSegmentation",
@@ -1819,6 +1823,16 @@ else:
             "RobertaForTokenClassification",
             "RobertaModel",
             "RobertaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.lilt"].extend(
+        [
+            "LILT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LiltForQuestionAnswering",
+            "LiltForSequenceClassification",
+            "LiltForTokenClassification",
+            "LiltModel",
+            "LiltPreTrainedModel",
         ]
     )
     _import_structure["models.roformer"].extend(
@@ -3270,6 +3284,7 @@ if TYPE_CHECKING:
     from .models.layoutxlm import LayoutXLMProcessor
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
     from .models.levit import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, LevitConfig
+    from .models.lilt import LILT_PRETRAINED_CONFIG_ARCHIVE_MAP, LiltConfig
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
     from .models.longt5 import LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP, LongT5Config
     from .models.luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeTokenizer
@@ -3407,6 +3422,7 @@ if TYPE_CHECKING:
         Conversation,
         ConversationalPipeline,
         CsvPipelineDataFormat,
+        DepthEstimationPipeline,
         DocumentQuestionAnsweringPipeline,
         FeatureExtractionPipeline,
         FillMaskPipeline,
@@ -3776,6 +3792,7 @@ if TYPE_CHECKING:
             MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
             MODEL_FOR_CTC_MAPPING,
+            MODEL_FOR_DEPTH_ESTIMATION_MAPPING,
             MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
@@ -3805,6 +3822,7 @@ if TYPE_CHECKING:
             AutoModelForAudioXVector,
             AutoModelForCausalLM,
             AutoModelForCTC,
+            AutoModelForDepthEstimation,
             AutoModelForDocumentQuestionAnswering,
             AutoModelForImageClassification,
             AutoModelForImageSegmentation,
@@ -4265,6 +4283,14 @@ if TYPE_CHECKING:
             LevitForImageClassificationWithTeacher,
             LevitModel,
             LevitPreTrainedModel,
+        )
+        from .models.lilt import (
+            LILT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LiltForQuestionAnswering,
+            LiltForSequenceClassification,
+            LiltForTokenClassification,
+            LiltModel,
+            LiltPreTrainedModel,
         )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,79 +12,36 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BERT model configuration"""
-from collections import OrderedDict
-from typing import Mapping
+""" LiLT configuration"""
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "bert-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/config.json",
-    "bert-large-uncased": "https://huggingface.co/bert-large-uncased/resolve/main/config.json",
-    "bert-base-cased": "https://huggingface.co/bert-base-cased/resolve/main/config.json",
-    "bert-large-cased": "https://huggingface.co/bert-large-cased/resolve/main/config.json",
-    "bert-base-multilingual-uncased": "https://huggingface.co/bert-base-multilingual-uncased/resolve/main/config.json",
-    "bert-base-multilingual-cased": "https://huggingface.co/bert-base-multilingual-cased/resolve/main/config.json",
-    "bert-base-chinese": "https://huggingface.co/bert-base-chinese/resolve/main/config.json",
-    "bert-base-german-cased": "https://huggingface.co/bert-base-german-cased/resolve/main/config.json",
-    "bert-large-uncased-whole-word-masking": (
-        "https://huggingface.co/bert-large-uncased-whole-word-masking/resolve/main/config.json"
+LILT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "SCUT-DLVCLab/lilt-roberta-en-base": (
+        "https://huggingface.co/SCUT-DLVCLab/lilt-roberta-en-base/resolve/main/config.json"
     ),
-    "bert-large-cased-whole-word-masking": (
-        "https://huggingface.co/bert-large-cased-whole-word-masking/resolve/main/config.json"
-    ),
-    "bert-large-uncased-whole-word-masking-finetuned-squad": (
-        "https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad/resolve/main/config.json"
-    ),
-    "bert-large-cased-whole-word-masking-finetuned-squad": (
-        "https://huggingface.co/bert-large-cased-whole-word-masking-finetuned-squad/resolve/main/config.json"
-    ),
-    "bert-base-cased-finetuned-mrpc": "https://huggingface.co/bert-base-cased-finetuned-mrpc/resolve/main/config.json",
-    "bert-base-german-dbmdz-cased": "https://huggingface.co/bert-base-german-dbmdz-cased/resolve/main/config.json",
-    "bert-base-german-dbmdz-uncased": "https://huggingface.co/bert-base-german-dbmdz-uncased/resolve/main/config.json",
-    "cl-tohoku/bert-base-japanese": "https://huggingface.co/cl-tohoku/bert-base-japanese/resolve/main/config.json",
-    "cl-tohoku/bert-base-japanese-whole-word-masking": (
-        "https://huggingface.co/cl-tohoku/bert-base-japanese-whole-word-masking/resolve/main/config.json"
-    ),
-    "cl-tohoku/bert-base-japanese-char": (
-        "https://huggingface.co/cl-tohoku/bert-base-japanese-char/resolve/main/config.json"
-    ),
-    "cl-tohoku/bert-base-japanese-char-whole-word-masking": (
-        "https://huggingface.co/cl-tohoku/bert-base-japanese-char-whole-word-masking/resolve/main/config.json"
-    ),
-    "TurkuNLP/bert-base-finnish-cased-v1": (
-        "https://huggingface.co/TurkuNLP/bert-base-finnish-cased-v1/resolve/main/config.json"
-    ),
-    "TurkuNLP/bert-base-finnish-uncased-v1": (
-        "https://huggingface.co/TurkuNLP/bert-base-finnish-uncased-v1/resolve/main/config.json"
-    ),
-    "wietsedv/bert-base-dutch-cased": "https://huggingface.co/wietsedv/bert-base-dutch-cased/resolve/main/config.json",
-    # See all BERT models at https://huggingface.co/models?filter=bert
 }
 
 
-class BertConfig(PretrainedConfig):
+class LiltConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`BertModel`] or a [`TFBertModel`]. It is used to
-    instantiate a BERT model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the BERT
-    [bert-base-uncased](https://huggingface.co/bert-base-uncased) architecture.
-
+    This is the configuration class to store the configuration of a [`LiltModel`]. It is used to instantiate a LiLT
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the LiLT
+    [SCUT-DLVCLab/lilt-roberta-en-base](https://huggingface.co/SCUT-DLVCLab/lilt-roberta-en-base) architecture.
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`BertModel`] or [`TFBertModel`].
+            Vocabulary size of the LiLT model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`LiltModel`].
         hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
+            Dimensionality of the encoder layers and the pooler layer. Should be a multiple of 24.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
@@ -103,7 +59,7 @@ class BertConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`BertModel`] or [`TFBertModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`LiltModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -119,22 +75,25 @@ class BertConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
+        channel_shrink_ratio (`int`, *optional*, defaults to 4):
+            The shrink ratio compared to the `hidden_size` for the channel dimension of the layout embeddings.
+        max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
+            The maximum value that the 2D position embedding might ever be used with. Typically set this to something
+            large just in case (e.g., 1024).
 
     Examples:
 
     ```python
-    >>> from transformers import BertConfig, BertModel
+    >>> from transformers import LiltConfig, LiltModel
 
-    >>> # Initializing a BERT bert-base-uncased style configuration
-    >>> configuration = BertConfig()
-
-    >>> # Initializing a model (with random weights) from the bert-base-uncased style configuration
-    >>> model = BertModel(configuration)
-
+    >>> # Initializing a LiLT SCUT-DLVCLab/lilt-roberta-en-base style configuration
+    >>> configuration = LiltConfig()
+    >>> # Randomly initializing a model from the SCUT-DLVCLab/lilt-roberta-en-base style configuration
+    >>> model = LiltModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "bert"
+    model_type = "lilt"
 
     def __init__(
         self,
@@ -154,6 +113,8 @@ class BertConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
+        channel_shrink_ratio=4,
+        max_2d_position_embeddings=1024,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -173,19 +134,5 @@ class BertConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
-
-
-class BertOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-                ("token_type_ids", dynamic_axis),
-            ]
-        )
+        self.channel_shrink_ratio = channel_shrink_ratio
+        self.max_2d_position_embeddings = max_2d_position_embeddings
