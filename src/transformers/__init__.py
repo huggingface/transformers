@@ -2303,6 +2303,7 @@ else:
             "TFBigBirdForPreTraining",
             "TFBigBirdModel",
             "TFBigBirdPreTrainedModel",
+            "TFBigBirdLayer",
         ]
     )
     _import_structure["models.blenderbot"].extend(
@@ -4974,6 +4975,7 @@ if TYPE_CHECKING:
             TFBigBirdModel,
             TFBigBirdForPreTraining,
             TFBigBirdPreTrainedModel,
+            TFBigBirdLayer,
         )
 
         from .models.blenderbot import (

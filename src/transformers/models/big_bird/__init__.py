@@ -97,6 +97,7 @@ else:
         "TFBigBirdForPreTraining",
         "TFBigBirdModel",
         "TFBigBirdPreTrainedModel",
+        "TFBigBirdLayer",
     ]
 
 if TYPE_CHECKING:
@@ -167,6 +168,7 @@ if TYPE_CHECKING:
             TFBigBirdForPreTraining,
             TFBigBirdModel,
             TFBigBirdPreTrainedModel,
+            TFBigBirdLayer,
         )
 
 else:
