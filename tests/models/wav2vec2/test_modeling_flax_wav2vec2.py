@@ -305,7 +305,7 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(outputs)
 
     @is_pt_flax_cross_test
-    @is_flaky
+    @is_flaky()
     def test_pt_flax_equivalence(self):
         super().test_pt_flax_equivalence()
 
