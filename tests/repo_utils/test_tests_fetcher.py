@@ -20,7 +20,6 @@ import unittest
 git_repo_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 sys.path.append(os.path.join(git_repo_path, "utils"))
 
-import tests_fetcher
 from tests_fetcher import clean_code  # noqa: E402
 
 
