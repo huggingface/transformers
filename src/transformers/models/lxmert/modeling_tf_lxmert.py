@@ -969,7 +969,7 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ):
+    ) -> Union[Tuple, TFLxmertModelOutput]:
         outputs = self.lxmert(
             input_ids,
             visual_feats,
