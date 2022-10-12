@@ -108,7 +108,6 @@ FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mt5", "FlaxMT5ForConditionalGeneration"),
         ("pegasus", "FlaxPegasusForConditionalGeneration"),
         ("t5", "FlaxT5ForConditionalGeneration"),
-        ("whisper", "FlaxWhisperForConditionalGeneration"),
     ]
 )
 
@@ -154,7 +153,6 @@ FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("mbart", "FlaxMBartForSequenceClassification"),
         ("roberta", "FlaxRobertaForSequenceClassification"),
         ("roformer", "FlaxRoFormerForSequenceClassification"),
-        ("whisper", "FlaxWhisperForSequenceClassification"),
         ("xlm-roberta", "FlaxXLMRobertaForSequenceClassification"),
     ]
 )
@@ -171,7 +169,6 @@ FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("mbart", "FlaxMBartForQuestionAnswering"),
         ("roberta", "FlaxRobertaForQuestionAnswering"),
         ("roformer", "FlaxRoFormerForQuestionAnswering"),
-        ("whisper", "FlaxWhisperForQuestionAnswering"),
         ("xlm-roberta", "FlaxXLMRobertaForQuestionAnswering"),
     ]
 )
@@ -213,6 +210,7 @@ FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
         ("speech-encoder-decoder", "FlaxSpeechEncoderDecoderModel"),
+        ("whisper", "FlaxWhisperForConditionalGeneration"),
     ]
 )
 

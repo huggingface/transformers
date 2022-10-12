@@ -20,25 +20,24 @@ import random
 from functools import partial
 from typing import Callable, Optional, Tuple
 
+import numpy as np
+
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict, unfreeze, freeze
+from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 from jax.random import PRNGKey
 
-from ...utils import add_start_docstrings, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
     FlaxCausalLMOutputWithCrossAttentions,
     FlaxSeq2SeqLMOutput,
     FlaxSeq2SeqModelOutput,
-    FlaxSeq2SeqQuestionAnsweringModelOutput,
-    FlaxSeq2SeqSequenceClassifierOutput,
 )
 from ...modeling_flax_utils import (
     ACT2FN,
@@ -47,15 +46,16 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
-from ...utils import logging
+from ...utils import add_start_docstrings, logging, replace_return_docstrings
 from .configuration_whisper import WhisperConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "brand-new-bert-base-cased"
 _CONFIG_FOR_DOC = "WhisperConfig"
-_TOKENIZER_FOR_DOC = "WhisperTokenizer"
+_CHECKPOINT_FOR_DOC = "openai/whisper-tiny"
+_PROCESSOR_FOR_DOC = "WhisperProcessor"
+_EXPECTED_OUTPUT_SHAPE = [1, 2, 512]
 
 WHISPER_START_DOCSTRING = r"""
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -93,21 +93,12 @@ WHISPER_START_DOCSTRING = r"""
 
 WHISPER_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`~WhisperTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
+        input_features (`jnp.ndarray` of shape `(batch_size, feature_size, sequence_length)`):
+            Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
+            loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
+            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
+            [`WhisperFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
+            tensor of type `jnp.ndarray`. See [`~WhisperFeatureExtractor.__call__`]
         decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -116,21 +107,56 @@ WHISPER_INPUTS_DOCSTRING = r"""
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            For translation and summarization training, `decoder_input_ids` should be provided. If no
-            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
-            for denoising pre-training following the paper.
+            Whisper uses the `decoder_start_token_id` as the starting token for `decoder_input_ids` generation. If
+            `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `past_key_values`).
         decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
 
             If you want to change padding behavior, you should modify to your needs. See diagram 1 in [the
             paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
-        position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-        decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
-            range `[0, config.max_position_embeddings - 1]`.
+        head_mask (`jnp.ndarray` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        decoder_head_mask (`jnp.ndarray` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        cross_attn_head_mask (`jnp.ndarray` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        encoder_outputs (`tuple(tuple(jnp.ndarray)`, *optional*):
+            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+        past_key_values (`tuple(tuple(jnp.ndarray))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(jnp.ndarray)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`. decoder_inputs_embeds (`jnp.ndarray` of shape
+            `(batch_size, target_sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
+            `decoder_input_ids` you can choose to directly pass an embedded representation. If `past_key_values` is
+            used, optionally only the last `decoder_inputs_embeds` have to be input (see `past_key_values`). This is
+            useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
+
+            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
+            of `inputs_embeds`.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -144,24 +170,18 @@ WHISPER_INPUTS_DOCSTRING = r"""
 
 WHISPER_ENCODE_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
+        input_features (`jnp.ndarray` of shape `(batch_size, feature_size, sequence_length)`):
+                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
+                obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
+                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+                `input_features`, the [`WhisperFeatureExtractor`] should be used for extracting the mel features,
+                padding and conversion into a tensor of type `jnp.ndarray`. See [`~WhisperFeatureExtractor.__call__`]
+        head_mask (`jnp.ndarray` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
 
-            Indices can be obtained using [`~WhisperTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
 
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -174,40 +194,51 @@ WHISPER_ENCODE_INPUTS_DOCSTRING = r"""
 
 WHISPER_DECODE_INPUTS_DOCSTRING = r"""
     Args:
-        decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`):
-            Indices of decoder input sequence tokens in the vocabulary.
+        input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
+                provide it.
 
-            Indices can be obtained using [`~WhisperTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+                Indices can be obtained using [`WhisperTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
 
-            [What are decoder input IDs?](../glossary#decoder-input-ids)
-
-            For translation and summarization training, `decoder_input_ids` should be provided. If no
-            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
-            for denoising pre-training following the paper.
-        encoder_outputs (`tuple(tuple(jnp.ndarray)`):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        encoder_attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+                [What are input IDs?](../glossary#input-ids)
+        attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
-            be used by default.
+        encoder_hidden_states (`jnp.ndarray` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of
+            the decoder.
+        head_mask (`jnp.ndarray` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
 
-            If you want to change padding behavior, you should modify to your needs. See diagram 1 in [the
-            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
-        decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
-            range `[0, config.max_position_embeddings - 1]`.
-        past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
-            Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
-            auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        cross_attn_head_mask (`jnp.ndarray` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in encoder to avoid performing cross-attention on
+            hidden heads. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        past_key_values (`tuple(tuple(jnp.ndarray))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(jnp.ndarray)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`jnp.ndarray` of shape
+            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
+            can choose to directly pass an embedded representation. This is useful if you want more control over how to
+            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -218,17 +249,18 @@ WHISPER_DECODE_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
+# Copied from transformers.models.bart.modeling_flax_bart.shift_tokens_right
 def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
     """
     Shift input ids one token to the right.
     """
-    shifted_input_ids = jnp.roll(input_ids, 1, axis=-1)
-    shifted_input_ids = shifted_input_ids.at[(..., 0)].set(decoder_start_token_id)
-    # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids = jnp.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
+    shifted_input_ids = np.zeros_like(input_ids)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1]
+    shifted_input_ids[:, 0] = decoder_start_token_id
 
+    shifted_input_ids = np.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
     return shifted_input_ids
-
 
 
 class FlaxWhisperAttention(nn.Module):
@@ -242,9 +274,10 @@ class FlaxWhisperAttention(nn.Module):
 
     def setup(self) -> None:
         self.head_dim = self.embed_dim // self.num_heads
-        assert (
-            self.head_dim * self.num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+        assert self.head_dim * self.num_heads == self.embed_dim, (
+            f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+            f" {self.num_heads})."
+        )
 
         dense = partial(
             nn.Dense,
@@ -407,7 +440,7 @@ class FlaxWhisperEncoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=self.config.encoder_attention_heads,
             dropout=self.config.attention_dropout,
-            dtype=self.dtype
+            dtype=self.dtype,
         )
         self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype)
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
@@ -459,7 +492,8 @@ class FlaxWhisperEncoderLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxWhisperEncoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.encoder_layers)
+            FlaxWhisperEncoderLayer(self.config, name=str(i), dtype=self.dtype)
+            for i in range(self.config.encoder_layers)
         ]
         self.layerdrop = self.config.encoder_layerdrop
 
@@ -600,7 +634,8 @@ class FlaxWhisperDecoderLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxWhisperDecoderLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.decoder_layers)
+            FlaxWhisperDecoderLayer(self.config, name=str(i), dtype=self.dtype)
+            for i in range(self.config.decoder_layers)
         ]
         self.layerdrop = self.config.decoder_layerdrop
 
@@ -946,7 +981,7 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        random_params =  self.module.init(
+        random_params = self.module.init(
             rngs,
             input_ids,
             attention_mask,
@@ -1255,7 +1290,7 @@ class FlaxWhisperModel(FlaxWhisperPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxWhisperModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
+    FlaxWhisperModel, _PROCESSOR_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
 )
 
 
@@ -1558,192 +1593,3 @@ overwrite_call_docstring(
 append_replace_return_docstrings(
     FlaxWhisperForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
 )
-
-
-class FlaxWhisperForSequenceClassificationModule(nn.Module):
-    config: WhisperConfig
-    dtype: jnp.dtype = jnp.float32
-    num_labels: Optional[int] = None
-
-    def setup(self):
-        self.model = FlaxWhisperModule(config=self.config, dtype=self.dtype)
-        self.classification_head = FlaxWhisperClassificationHead(
-            config=self.config,
-            inner_dim=self.config.d_model,
-            num_classes=self.num_labels if self.num_labels is not None else self.config.num_labels,
-            pooler_dropout=self.config.classifier_dropout,
-        )
-
-    def _get_encoder_module(self):
-        return self.model.encoder
-
-    def _get_decoder_module(self):
-        return self.model.decoder
-
-    def __call__(
-        self,
-        input_ids,
-        attention_mask,
-        decoder_input_ids,
-        decoder_attention_mask,
-        position_ids,
-        decoder_position_ids,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-        deterministic: bool = True,
-    ):
-        outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            position_ids=position_ids,
-            decoder_position_ids=decoder_position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            deterministic=deterministic,
-        )
-
-        hidden_states = outputs[0]  # last hidden state
-
-        eos_mask = jnp.where(input_ids == self.config.eos_token_id, 1, 0)
-
-        # The first condition is necessary to overcome jax._src.errors.ConcretizationTypeError during JIT compilation
-        if type(eos_mask) != jax.interpreters.partial_eval.DynamicJaxprTracer:
-            if len(jnp.unique(eos_mask.sum(1))) > 1:
-                raise ValueError("All examples must have the same number of <eos> tokens.")
-
-            if any(eos_mask.sum(1) == 0):
-                raise ValueError("There are missing <eos> tokens in input_ids")
-
-            # Ensure to keep 1 only for the last <eos> token for each example
-            eos_mask_noised = eos_mask + jnp.arange(eos_mask.shape[1]) * 1e-6
-            eos_mask = jnp.where(eos_mask_noised == eos_mask_noised.max(1).reshape(-1, 1), 1, 0)
-
-        sentence_representation = jnp.einsum("ijk, ij -> ijk", hidden_states, eos_mask).sum(1)
-        logits = self.classification_head(sentence_representation, deterministic=deterministic)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return output
-
-        return FlaxSeq2SeqSequenceClassifierOutput(
-            logits=logits,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    Whisper model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE
-    tasks.
-    """,
-    WHISPER_START_DOCSTRING,
-)
-class FlaxWhisperForSequenceClassification(FlaxWhisperPreTrainedModel):
-    module_class = FlaxWhisperForSequenceClassificationModule
-    dtype = jnp.float32
-
-
-append_call_sample_docstring(
-    FlaxWhisperForSequenceClassification,
-    _TOKENIZER_FOR_DOC,
-    _CHECKPOINT_FOR_DOC,
-    FlaxSeq2SeqSequenceClassifierOutput,
-    _CONFIG_FOR_DOC,
-)
-
-
-class FlaxWhisperForQuestionAnsweringModule(nn.Module):
-    config: WhisperConfig
-    dtype: jnp.dtype = jnp.float32
-    num_labels = 2
-
-    def setup(self):
-        self.model = FlaxWhisperModule(config=self.config, dtype=self.dtype)
-        self.qa_outputs = nn.Dense(
-            self.num_labels, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
-        )
-
-    def _get_encoder_module(self):
-        return self.model.encoder
-
-    def _get_decoder_module(self):
-        return self.model.decoder
-
-    def __call__(
-        self,
-        input_ids,
-        attention_mask,
-        decoder_input_ids,
-        decoder_attention_mask,
-        position_ids,
-        decoder_position_ids,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-        deterministic: bool = True,
-    ):
-        outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            position_ids=position_ids,
-            decoder_position_ids=decoder_position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            deterministic=deterministic,
-        )
-
-        sequence_output = outputs[0]
-
-        logits = self.qa_outputs(sequence_output)
-        start_logits, end_logits = jnp.split(logits, logits.shape[-1], axis=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[1:]
-            return output
-
-        return FlaxSeq2SeqQuestionAnsweringModelOutput(
-            start_logits=start_logits,
-            end_logits=end_logits,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    WHISPER Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    WHISPER_START_DOCSTRING,
-)
-class FlaxWhisperForQuestionAnswering(FlaxWhisperPreTrainedModel):
-    module_class = FlaxWhisperForQuestionAnsweringModule
-    dtype = jnp.float32
-
-
-append_call_sample_docstring(
-    FlaxWhisperForQuestionAnswering,
-    _TOKENIZER_FOR_DOC,
-    _CHECKPOINT_FOR_DOC,
-    FlaxSeq2SeqQuestionAnsweringModelOutput,
-    _CONFIG_FOR_DOC,
-)
-

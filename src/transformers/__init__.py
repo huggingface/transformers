@@ -2893,8 +2893,6 @@ else:
     _import_structure["models.whisper"].extend(
         [
             "FlaxWhisperForConditionalGeneration",
-            "FlaxWhisperForQuestionAnswering",
-            "FlaxWhisperForSequenceClassification",
             "FlaxWhisperModel",
             "FlaxWhisperPreTrainedModel",
         ]
@@ -5569,13 +5567,7 @@ if TYPE_CHECKING:
         )
 
         # Flax model imports
-        from .models.whisper import (
-            FlaxWhisperForConditionalGeneration,
-            FlaxWhisperForQuestionAnswering,
-            FlaxWhisperForSequenceClassification,
-            FlaxWhisperModel,
-            FlaxWhisperPreTrainedModel,
-        )
+        from .models.whisper import FlaxWhisperForConditionalGeneration, FlaxWhisperModel, FlaxWhisperPreTrainedModel
         from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
         from .models.xlm_roberta import (
             FlaxXLMRobertaForMaskedLM,

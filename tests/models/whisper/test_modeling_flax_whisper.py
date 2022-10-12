@@ -16,12 +16,8 @@
 
 import unittest
 
-from transformers import (
-    is_flax_available,
-    WhisperConfig,
-    WhisperTokenizer,
-)
-from transformers.testing_utils import require_sentencepiece, require_flax, require_tokenizers, slow
+from transformers import WhisperConfig, WhisperTokenizer, is_flax_available
+from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
@@ -29,13 +25,9 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 if is_flax_available():
     import numpy as np
+
     import jax.numpy as jnp
-    from transformers import (
-        FlaxWhisperForConditionalGeneration,
-        FlaxWhisperForQuestionAnswering,
-        FlaxWhisperForSequenceClassification,
-        FlaxWhisperModel,
-    )
+    from transformers import FlaxWhisperForConditionalGeneration, FlaxWhisperModel
 
 
 @require_flax
@@ -206,7 +198,13 @@ def prepare_whisper_inputs_dict(
     if attention_mask is None:
         attention_mask = np.not_equal(input_ids, config.pad_token_id).astype(np.int8)
     if decoder_attention_mask is None:
-        decoder_attention_mask = np.concatenate([np.ones(decoder_input_ids[:, :1].shape, dtype=np.int8), np.not_equal(decoder_input_ids[:, 1:], config.pad_token_id).astype(np.int8)], axis=-1)
+        decoder_attention_mask = np.concatenate(
+            [
+                np.ones(decoder_input_ids[:, :1].shape, dtype=np.int8),
+                np.not_equal(decoder_input_ids[:, 1:], config.pad_token_id).astype(np.int8),
+            ],
+            axis=-1,
+        )
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -219,11 +217,10 @@ def prepare_whisper_inputs_dict(
 class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            FlaxWhisperForConditionalGeneration, 
-            FlaxWhisperForQuestionAnswering,
-            FlaxWhisperForSequenceClassification,
+            FlaxWhisperForConditionalGeneration,
             FlaxWhisperModel,
-        ) if is_flax_available()
+        )
+        if is_flax_available()
         else ()
     )
     all_generative_model_classes = (FlaxWhisperForConditionalGeneration,) if is_flax_available() else ()
@@ -277,7 +274,7 @@ TOLERANCE = 1e-4
 @require_flax
 class FlaxWhisperModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
-        model = FlaxWhisperModel.from_pretrained('brand-new-bert-base-cased')
+        model = FlaxWhisperModel.from_pretrained("brand-new-bert-base-cased")
         # change to intended input here
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -292,7 +289,7 @@ class FlaxWhisperModelIntegrationTest(unittest.TestCase):
         _assert_tensors_equal(output[:, :3, :3], expected_slice, atol=TOLERANCE)
 
     def test_inference_with_head(self):
-        model = FlaxWhisperForConditionalGeneration.from_pretrained('brand-new-bert-base-cased')
+        model = FlaxWhisperForConditionalGeneration.from_pretrained("brand-new-bert-base-cased")
         # change to intended input here
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -307,8 +304,8 @@ class FlaxWhisperModelIntegrationTest(unittest.TestCase):
         _assert_tensors_equal(output[:, :3, :3], expected_slice, atol=TOLERANCE)
 
     def test_seq_to_seq_generation(self):
-        hf = FlaxWhisperForConditionalGeneration.from_pretrained('brand-new-bert-base-cased')
-        tok = WhisperTokenizer.from_pretrained('brand-new-bert-base-cased')
+        hf = FlaxWhisperForConditionalGeneration.from_pretrained("brand-new-bert-base-cased")
+        tok = WhisperTokenizer.from_pretrained("brand-new-bert-base-cased")
 
         batch_input = [
             # string 1,
