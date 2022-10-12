@@ -83,6 +83,7 @@ from . import (
     layoutxlm,
     led,
     levit,
+    lilt,
     longformer,
     longt5,
     luke,
