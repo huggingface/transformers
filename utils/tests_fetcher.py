@@ -640,7 +640,11 @@ def filter_tests(output_file, filters):
     if test_files == ["tests"]:
         test_files = [os.path.join("tests", f) for f in os.listdir("tests") if f not in ["__init__.py"] + filters]
     else:
-        test_files = [f for f in test_files if f.split(os.path.sep)[1] not in filters]
+        try:
+            test_files = [f for f in test_files if f.split(os.path.sep)[1] not in filters]
+        except Exception:
+            print(test_files)
+            raise
 
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(" ".join(test_files))
