@@ -142,12 +142,12 @@ class SwitchTransformersTokenizationTest(TokenizerTesterMixin, unittest.TestCase
         )
 
     @cached_property
-    def switchtransformers_base_tokenizer(self):
-        return SwitchTransformersTokenizer.from_pretrained("switchtransformers-base")
+    def switch_transformers_base_tokenizer(self):
+        return SwitchTransformersTokenizer.from_pretrained("switch_transformers-base")
 
     @cached_property
-    def switchtransformers_base_tokenizer_fast(self):
-        return SwitchTransformersTokenizerFast.from_pretrained("switchtransformers-base")
+    def switch_transformers_base_tokenizer_fast(self):
+        return SwitchTransformersTokenizerFast.from_pretrained("switch_transformers-base")
 
     def get_tokenizer(self, **kwargs) -> SwitchTransformersTokenizer:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, pad_token=None, **kwargs)
@@ -178,13 +178,13 @@ class SwitchTransformersTokenizationTest(TokenizerTesterMixin, unittest.TestCase
         self.assertListEqual(ids, rust_ids)
 
     def test_eos_treatment(self):
-        tokenizer = self.switchtransformers_base_tokenizer
+        tokenizer = self.switch_transformers_base_tokenizer
         batch_with_eos_added = tokenizer(["hi</s>", "I went to the gym</s>", "</s>"])
         batch_without_eos_added = tokenizer(["hi", "I went to the gym", ""])
         self.assertListEqual(batch_with_eos_added["input_ids"], batch_without_eos_added["input_ids"])
 
     def test_prepare_batch(self):
-        tokenizer = self.switchtransformers_base_tokenizer
+        tokenizer = self.switch_transformers_base_tokenizer
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
         expected_src_tokens = [71, 307, 8986, 21, 4505, 1635, 1707, 5, tokenizer.eos_token_id]
         batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
@@ -201,7 +201,7 @@ class SwitchTransformersTokenizationTest(TokenizerTesterMixin, unittest.TestCase
         self.assertEqual((2, 9), batch.attention_mask.shape)
 
     def test_empty_target_text(self):
-        tokenizer = self.switchtransformers_base_tokenizer
+        tokenizer = self.switch_transformers_base_tokenizer
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
         batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
         # check if input_ids are returned and no decoder_input_ids
@@ -211,7 +211,7 @@ class SwitchTransformersTokenizationTest(TokenizerTesterMixin, unittest.TestCase
         self.assertNotIn("decoder_attention_mask", batch)
 
     def test_max_length(self):
-        tokenizer = self.switchtransformers_base_tokenizer
+        tokenizer = self.switch_transformers_base_tokenizer
         tgt_text = [
             "Summary of the text.",
             "Another summary.",
@@ -222,7 +222,7 @@ class SwitchTransformersTokenizationTest(TokenizerTesterMixin, unittest.TestCase
         self.assertEqual(32, targets["input_ids"].shape[1])
 
     def test_outputs_not_longer_than_maxlen(self):
-        tokenizer = self.switchtransformers_base_tokenizer
+        tokenizer = self.switch_transformers_base_tokenizer
 
         batch = tokenizer(
             ["I am a small frog" * 1000, "I am a small frog"], padding=True, truncation=True, return_tensors=FRAMEWORK
@@ -234,7 +234,7 @@ class SwitchTransformersTokenizationTest(TokenizerTesterMixin, unittest.TestCase
         self.assertEqual(batch.input_ids.shape, (2, 512))
 
     def test_eos_in_input(self):
-        tokenizer = self.switchtransformers_base_tokenizer
+        tokenizer = self.switch_transformers_base_tokenizer
         src_text = ["A long paragraph for summarization. </s>"]
         tgt_text = ["Summary of the text. </s>"]
         expected_src_tokens = [71, 307, 8986, 21, 4505, 1635, 1707, 5, 1]
@@ -249,10 +249,10 @@ class SwitchTransformersTokenizationTest(TokenizerTesterMixin, unittest.TestCase
         src_text_1 = ["A first paragraph for summarization."]
         src_text_2 = ["A second paragraph for summarization."]
 
-        fast_token_type_ids = self.switchtransformers_base_tokenizer_fast(
+        fast_token_type_ids = self.switch_transformers_base_tokenizer_fast(
             src_text_1, src_text_2, add_special_tokens=True, return_token_type_ids=True
         ).token_type_ids
-        slow_token_type_ids = self.switchtransformers_base_tokenizer(
+        slow_token_type_ids = self.switch_transformers_base_tokenizer(
             src_text_1, src_text_2, add_special_tokens=True, return_token_type_ids=True
         ).token_type_ids
 
@@ -264,13 +264,13 @@ class SwitchTransformersTokenizationTest(TokenizerTesterMixin, unittest.TestCase
         tgt_ids = [0, 1960, 19, 2, 1245, 239, 1]
         tgt_text = "<pad> Today is<unk> nice day</s>"
 
-        fast_ids = self.switchtransformers_base_tokenizer_fast(src_text, add_special_tokens=False).input_ids
-        slow_ids = self.switchtransformers_base_tokenizer(src_text, add_special_tokens=False).input_ids
+        fast_ids = self.switch_transformers_base_tokenizer_fast(src_text, add_special_tokens=False).input_ids
+        slow_ids = self.switch_transformers_base_tokenizer(src_text, add_special_tokens=False).input_ids
         self.assertEqual(tgt_ids, fast_ids)
         self.assertEqual(tgt_ids, slow_ids)
 
-        fast_text = self.switchtransformers_base_tokenizer_fast.decode(fast_ids)
-        slow_text = self.switchtransformers_base_tokenizer.decode(fast_ids)
+        fast_text = self.switch_transformers_base_tokenizer_fast.decode(fast_ids)
+        slow_text = self.switch_transformers_base_tokenizer.decode(fast_ids)
         self.assertEqual(tgt_text, fast_text)
         self.assertEqual(tgt_text, slow_text)
 
@@ -382,6 +382,6 @@ class SwitchTransformersTokenizationTest(TokenizerTesterMixin, unittest.TestCase
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="switchtransformers-base",
+            model_name="switch_transformers-base",
             revision="5a7ff2d8f5117c194c7e32ec1ccbf04642cca99b",
         )

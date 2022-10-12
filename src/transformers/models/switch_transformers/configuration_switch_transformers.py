@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" SwitchTransformers model configuration"""
+""" Switch Transformers model configuration"""
 from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
@@ -22,9 +22,9 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SWITCHTRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ybelkada/switchtransformers-base": (
-        "https://huggingface.co/ybelkada/switchtransformers-base/resolve/main/config.json"
+SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "ybelkada/switch_transformers-base": (
+        "https://huggingface.co/ybelkada/switch_transformers-base/resolve/main/config.json"
     ),
 }
 
@@ -35,7 +35,7 @@ class SwitchTransformersConfig(PretrainedConfig):
     [`FlaxSwitchTransformersModel`]. It is used to instantiate a SwitchTransformers model according to the specified
     arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
     configuration to that of the SwitchTransformers
-    [ybelkada/switchtransformers-base](https://huggingface.co/ybelkada/switchtransformers-base) architecture.
+    [ybelkada/switch_transformers-base](https://huggingface.co/ybelkada/switch_transformers-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -94,7 +94,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
     """
-    model_type = "switchtransformers"
+    model_type = "switch_transformers"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 

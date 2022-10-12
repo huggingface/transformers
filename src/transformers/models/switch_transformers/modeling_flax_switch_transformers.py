@@ -45,12 +45,12 @@ from ...modeling_flax_utils import (
     overwrite_call_docstring,
 )
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from .configuration_switchtransformers import SwitchTransformersConfig
+from .configuration_switch_transformers import SwitchTransformersConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "ybelkada/switchtransformers-base"
+_CHECKPOINT_FOR_DOC = "ybelkada/switch_transformers-base"
 _CONFIG_FOR_DOC = "SwitchTransformersConfig"
 _TOKENIZER_FOR_DOC = "SwitchTransformersTokenizer"
 
@@ -817,17 +817,17 @@ class FlaxSwitchTransformersStack(nn.Module):
         )
 
 
-SWITCHTRANSFORMERS_ENCODE_INPUTS_DOCSTRING = r"""
+SWITCH_TRANSFORMERS_ENCODE_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. SWITCHTRANSFORMERS is a model with relative position
+            Indices of input sequence tokens in the vocabulary. SWITCH_TRANSFORMERS is a model with relative position
             embeddings so you should be able to pad the inputs on both the right and the left.
 
             Indices can be obtained using [`SwitchTransformersTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
-            To know more on how to prepare `input_ids` for pretraining take a look a [SWITCHTRANSFORMERS
-            Training](./switchtransformers#training).
+            To know more on how to prepare `input_ids` for pretraining take a look a [SWITCH_TRANSFORMERS
+            Training](./switch_transformers#training).
         attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -845,7 +845,7 @@ SWITCHTRANSFORMERS_ENCODE_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-SWITCHTRANSFORMERS_DECODE_INPUTS_DOCSTRING = r"""
+SWITCH_TRANSFORMERS_DECODE_INPUTS_DOCSTRING = r"""
     Args:
         decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -887,10 +887,10 @@ SWITCHTRANSFORMERS_DECODE_INPUTS_DOCSTRING = r"""
 """
 
 
-SWITCHTRANSFORMERS_INPUTS_DOCSTRING = r"""
+SWITCH_TRANSFORMERS_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. SWITCHTRANSFORMERS is a model with relative position
+            Indices of input sequence tokens in the vocabulary. SWITCH_TRANSFORMERS is a model with relative position
             embeddings so you should be able to pad the inputs on both the right and the left.
 
             Indices can be obtained using [`SwitchTransformersTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -898,8 +898,8 @@ SWITCHTRANSFORMERS_INPUTS_DOCSTRING = r"""
 
             [What are input IDs?](../glossary#input-ids)
 
-            To know more on how to prepare `input_ids` for pretraining take a look a [SWITCHTRANSFORMERS
-            Training](./switchtransformers#training).
+            To know more on how to prepare `input_ids` for pretraining take a look a [SWITCH_TRANSFORMERS
+            Training](./switch_transformers#training).
         attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -915,12 +915,12 @@ SWITCHTRANSFORMERS_INPUTS_DOCSTRING = r"""
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            SWITCHTRANSFORMERS uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If
+            SWITCH_TRANSFORMERS uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If
             `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
             `past_key_values`).
 
-            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [SWITCHTRANSFORMERS
-            Training](./switchtransformers#training).
+            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [SWITCH_TRANSFORMERS
+            Training](./switch_transformers#training).
         decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
@@ -1006,7 +1006,7 @@ class FlaxSwitchTransformersPreTrainedModel(FlaxPreTrainedModel):
         else:
             return random_params
 
-    @add_start_docstrings_to_model_forward(SWITCHTRANSFORMERS_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(SWITCH_TRANSFORMERS_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids: jnp.ndarray,
@@ -1092,7 +1092,7 @@ class FlaxSwitchTransformersPreTrainedModel(FlaxPreTrainedModel):
         )
         return unfreeze(init_variables["cache"])
 
-    @add_start_docstrings(SWITCHTRANSFORMERS_ENCODE_INPUTS_DOCSTRING)
+    @add_start_docstrings(SWITCH_TRANSFORMERS_ENCODE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=FlaxBaseModelOutput, config_class=SwitchTransformersConfig)
     def encode(
         self,
@@ -1113,8 +1113,8 @@ class FlaxSwitchTransformersPreTrainedModel(FlaxPreTrainedModel):
         ```python
         >>> from transformers import SwitchTransformersTokenizer, FlaxSwitchTransformersForConditionalGeneration
 
-        >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switchtransformers-base")
-        >>> model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained("ybelkada/switchtransformers-base")
+        >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switch_transformers-base")
+        >>> model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained("ybelkada/switch_transformers-base")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, return_tensors="np")
@@ -1150,7 +1150,7 @@ class FlaxSwitchTransformersPreTrainedModel(FlaxPreTrainedModel):
             method=_encoder_forward,
         )
 
-    @add_start_docstrings(SWITCHTRANSFORMERS_DECODE_INPUTS_DOCSTRING)
+    @add_start_docstrings(SWITCH_TRANSFORMERS_DECODE_INPUTS_DOCSTRING)
     @replace_return_docstrings(
         output_type=FlaxBaseModelOutputWithPastAndCrossAttentions, config_class=SwitchTransformersConfig
     )
@@ -1177,8 +1177,8 @@ class FlaxSwitchTransformersPreTrainedModel(FlaxPreTrainedModel):
         >>> from transformers import SwitchTransformersTokenizer, FlaxSwitchTransformersForConditionalGeneration
         >>> import jax.numpy as jnp
 
-        >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switchtransformers-base")
-        >>> model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained("ybelkada/switchtransformers-base")
+        >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switch_transformers-base")
+        >>> model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained("ybelkada/switch_transformers-base")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, return_tensors="np")
@@ -1256,8 +1256,8 @@ class FlaxSwitchTransformersPreTrainedModel(FlaxPreTrainedModel):
         return outputs
 
 
-SWITCHTRANSFORMERS_START_DOCSTRING = r"""
-    The SWITCHTRANSFORMERS model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text
+SWITCH_TRANSFORMERS_START_DOCSTRING = r"""
+    The SWITCH_TRANSFORMERS model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text
     Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan
     Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a
     text-to-text denoising generative setting.
@@ -1297,8 +1297,8 @@ SWITCHTRANSFORMERS_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare SWITCHTRANSFORMERS Model transformer outputting raw hidden-stateswithout any specific head on top.",
-    SWITCHTRANSFORMERS_START_DOCSTRING,
+    "The bare SWITCH_TRANSFORMERS Model transformer outputting raw hidden-stateswithout any specific head on top.",
+    SWITCH_TRANSFORMERS_START_DOCSTRING,
 )
 # Copied from transformers.models.t5.modeling_flax_t5.FlaxT5Module with T5->SwitchTransformers
 class FlaxSwitchTransformersModule(nn.Module):
@@ -1398,7 +1398,7 @@ append_call_sample_docstring(
     FlaxSwitchTransformersModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
 )
 
-FLAX_SWITCHTRANSFORMERS_MODEL_DOCSTRING = """
+FLAX_SWITCH_TRANSFORMERS_MODEL_DOCSTRING = """
     Returns:
 
     Example:
@@ -1406,8 +1406,8 @@ FLAX_SWITCHTRANSFORMERS_MODEL_DOCSTRING = """
     ```python
     >>> from transformers import SwitchTransformersTokenizer, FlaxSwitchTransformersModel
 
-    >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switchtransformers-base")
-    >>> model = FlaxSwitchTransformersModel.from_pretrained("ybelkada/switchtransformers-base")
+    >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switch_transformers-base")
+    >>> model = FlaxSwitchTransformersModel.from_pretrained("ybelkada/switch_transformers-base")
 
     >>> input_ids = tokenizer(
     ...     "Studies have been shown that owning a dog is good for you", return_tensors="np"
@@ -1426,7 +1426,7 @@ FLAX_SWITCHTRANSFORMERS_MODEL_DOCSTRING = """
 
 
 overwrite_call_docstring(
-    FlaxSwitchTransformersModel, SWITCHTRANSFORMERS_INPUTS_DOCSTRING + FLAX_SWITCHTRANSFORMERS_MODEL_DOCSTRING
+    FlaxSwitchTransformersModel, SWITCH_TRANSFORMERS_INPUTS_DOCSTRING + FLAX_SWITCH_TRANSFORMERS_MODEL_DOCSTRING
 )
 append_replace_return_docstrings(
     FlaxSwitchTransformersModel, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
@@ -1434,9 +1434,9 @@ append_replace_return_docstrings(
 
 
 @add_start_docstrings(
-    "The bare SWITCHTRANSFORMERS Model transformer outputting encoder's raw hidden-states without any specific head on"
+    "The bare SWITCH_TRANSFORMERS Model transformer outputting encoder's raw hidden-states without any specific head on"
     " top.",
-    SWITCHTRANSFORMERS_START_DOCSTRING,
+    SWITCH_TRANSFORMERS_START_DOCSTRING,
 )
 # Copied from transformers.models.t5.modeling_flax_t5.FlaxT5EncoderModule with T5->SwitchTransformers
 class FlaxSwitchTransformersEncoderModule(nn.Module):
@@ -1488,7 +1488,7 @@ class FlaxSwitchTransformersEncoderModule(nn.Module):
 class FlaxSwitchTransformersEncoderModel(FlaxSwitchTransformersPreTrainedModel):
     module_class = FlaxSwitchTransformersEncoderModule
 
-    @add_start_docstrings_to_model_forward(SWITCHTRANSFORMERS_ENCODE_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(SWITCH_TRANSFORMERS_ENCODE_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids: jnp.ndarray,
@@ -1526,7 +1526,7 @@ class FlaxSwitchTransformersEncoderModel(FlaxSwitchTransformersPreTrainedModel):
 
 
 @add_start_docstrings(
-    """SWITCHTRANSFORMERS Model with a `language modeling` head on top.""", SWITCHTRANSFORMERS_START_DOCSTRING
+    """SWITCH_TRANSFORMERS Model with a `language modeling` head on top.""", SWITCH_TRANSFORMERS_START_DOCSTRING
 )
 # Copied from transformers.models.t5.modeling_flax_t5.FlaxT5ForConditionalGenerationModule with T5->SwitchTransformers
 class FlaxSwitchTransformersForConditionalGenerationModule(nn.Module):
@@ -1641,7 +1641,7 @@ class FlaxSwitchTransformersForConditionalGenerationModule(nn.Module):
 class FlaxSwitchTransformersForConditionalGeneration(FlaxSwitchTransformersPreTrainedModel):
     module_class = FlaxSwitchTransformersForConditionalGenerationModule
 
-    @add_start_docstrings(SWITCHTRANSFORMERS_DECODE_INPUTS_DOCSTRING)
+    @add_start_docstrings(SWITCH_TRANSFORMERS_DECODE_INPUTS_DOCSTRING)
     @replace_return_docstrings(
         output_type=FlaxCausalLMOutputWithCrossAttentions, config_class=SwitchTransformersConfig
     )
@@ -1668,8 +1668,8 @@ class FlaxSwitchTransformersForConditionalGeneration(FlaxSwitchTransformersPreTr
         >>> from transformers import SwitchTransformersTokenizer, FlaxSwitchTransformersForConditionalGeneration
         >>> import jax.numpy as jnp
 
-        >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switchtransformers-base")
-        >>> model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained("ybelkada/switchtransformers-base")
+        >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switch_transformers-base")
+        >>> model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained("ybelkada/switch_transformers-base")
 
         >>> text = "summarize: My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, return_tensors="np")
@@ -1808,7 +1808,7 @@ class FlaxSwitchTransformersForConditionalGeneration(FlaxSwitchTransformersPreTr
         return model_kwargs
 
 
-FLAX_SWITCHTRANSFORMERS_CONDITIONAL_GENERATION_DOCSTRING = """
+FLAX_SWITCH_TRANSFORMERS_CONDITIONAL_GENERATION_DOCSTRING = """
     Returns:
 
     Example:
@@ -1816,8 +1816,8 @@ FLAX_SWITCHTRANSFORMERS_CONDITIONAL_GENERATION_DOCSTRING = """
     ```python
     >>> from transformers import SwitchTransformersTokenizer, FlaxSwitchTransformersForConditionalGeneration
 
-    >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switchtransformers-base")
-    >>> model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained("ybelkada/switchtransformers-base")
+    >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switch_transformers-base")
+    >>> model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained("ybelkada/switch_transformers-base")
 
     >>> ARTICLE_TO_SUMMARIZE = "summarize: My friends are cool but they eat too many carbs."
     >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], return_tensors="np")
@@ -1831,7 +1831,7 @@ FLAX_SWITCHTRANSFORMERS_CONDITIONAL_GENERATION_DOCSTRING = """
 
 overwrite_call_docstring(
     FlaxSwitchTransformersForConditionalGeneration,
-    SWITCHTRANSFORMERS_INPUTS_DOCSTRING + FLAX_SWITCHTRANSFORMERS_CONDITIONAL_GENERATION_DOCSTRING,
+    SWITCH_TRANSFORMERS_INPUTS_DOCSTRING + FLAX_SWITCH_TRANSFORMERS_CONDITIONAL_GENERATION_DOCSTRING,
 )
 append_replace_return_docstrings(
     FlaxSwitchTransformersForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC

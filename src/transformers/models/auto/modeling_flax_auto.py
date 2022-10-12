@@ -49,7 +49,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("pegasus", "FlaxPegasusModel"),
         ("roberta", "FlaxRobertaModel"),
         ("roformer", "FlaxRoFormerModel"),
-        ("switchtransformers", "FlaxSwitchTransformersModel"),
+        ("switch_transformers", "FlaxSwitchTransformersModel"),
         ("t5", "FlaxT5Model"),
         ("vision-text-dual-encoder", "FlaxVisionTextDualEncoderModel"),
         ("vit", "FlaxViTModel"),
@@ -72,7 +72,7 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("mt5", "FlaxMT5ForConditionalGeneration"),
         ("roberta", "FlaxRobertaForMaskedLM"),
         ("roformer", "FlaxRoFormerForMaskedLM"),
-        ("switchtransformers", "FlaxSwitchTransformersForConditionalGeneration"),
+        ("switch_transformers", "FlaxSwitchTransformersForConditionalGeneration"),
         ("t5", "FlaxT5ForConditionalGeneration"),
         ("wav2vec2", "FlaxWav2Vec2ForPreTraining"),
         ("xlm-roberta", "FlaxXLMRobertaForMaskedLM"),
@@ -107,7 +107,7 @@ FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mbart", "FlaxMBartForConditionalGeneration"),
         ("mt5", "FlaxMT5ForConditionalGeneration"),
         ("pegasus", "FlaxPegasusForConditionalGeneration"),
-        ("switchtransformers", "FlaxSwitchTransformersForConditionalGeneration"),
+        ("switch_transformers", "FlaxSwitchTransformersForConditionalGeneration"),
         ("t5", "FlaxT5ForConditionalGeneration"),
     ]
 )

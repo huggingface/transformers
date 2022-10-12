@@ -31,7 +31,7 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_du
     model = SwitchTransformersForConditionalGeneration(config)
 
     # Load weights from tf checkpoint
-    # load_tf_weights_in_switchtransformers(model, config, tf_checkpoint_path)
+    # load_tf_weights_in_switch_transformers(model, config, tf_checkpoint_path)
 
     # Save pytorch-model
     print(f"Save PyTorch model to {pytorch_dump_path}")

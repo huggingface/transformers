@@ -334,7 +334,7 @@ _import_structure = {
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
     "models.swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
     "models.swinv2": ["SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swinv2Config"],
-    "models.switchtransformers": ["SWITCHTRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwitchTransformersConfig"],
+    "models.switch_transformers": ["SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwitchTransformersConfig"],
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
     "models.tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig", "TapasTokenizer"],
     "models.tapex": ["TapexTokenizer"],
@@ -544,7 +544,7 @@ else:
     _import_structure["models.rembert"].append("RemBertTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
-    _import_structure["models.switchtransformers"].append("SwitchTransformersTokenizer")
+    _import_structure["models.switch_transformers"].append("SwitchTransformersTokenizer")
     _import_structure["models.xglm"].append("XGLMTokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizer")
@@ -613,7 +613,7 @@ else:
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
-    _import_structure["models.switchtransformers"].append("SwitchTransformersTokenizerFast")
+    _import_structure["models.switch_transformers"].append("SwitchTransformersTokenizerFast")
     _import_structure["models.t5"].append("T5TokenizerFast")
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
@@ -1951,9 +1951,9 @@ else:
             "load_tf_weights_in_t5",
         ]
     )
-    _import_structure["models.switchtransformers"].extend(
+    _import_structure["models.switch_transformers"].extend(
         [
-            "SWITCHTRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SwitchTransformersEncoderModel",
             "SwitchTransformersForConditionalGeneration",
             "SwitchTransformersModel",
@@ -3074,7 +3074,7 @@ else:
     _import_structure["models.t5"].extend(
         ["FlaxT5EncoderModel", "FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"]
     )
-    _import_structure["models.switchtransformers"].extend(
+    _import_structure["models.switch_transformers"].extend(
         [
             "FlaxSwitchTransformersEncoderModel",
             "FlaxSwitchTransformersForConditionalGeneration",
@@ -3371,7 +3371,7 @@ if TYPE_CHECKING:
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
     from .models.swinv2 import SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Swinv2Config
-    from .models.switchtransformers import SWITCHTRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP, SwitchTransformersConfig
+    from .models.switch_transformers import SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP, SwitchTransformersConfig
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
     from .models.tapex import TapexTokenizer
@@ -3562,7 +3562,7 @@ if TYPE_CHECKING:
         from .models.reformer import ReformerTokenizer
         from .models.rembert import RemBertTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
-        from .models.switchtransformers import SwitchTransformersTokenizer
+        from .models.switch_transformers import SwitchTransformersTokenizer
         from .models.t5 import T5Tokenizer
         from .models.xglm import XGLMTokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
@@ -3625,7 +3625,7 @@ if TYPE_CHECKING:
         from .models.roformer import RoFormerTokenizerFast
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
-        from .models.switchtransformers import SwitchTransformersTokenizerFast
+        from .models.switch_transformers import SwitchTransformersTokenizerFast
         from .models.t5 import T5TokenizerFast
         from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
@@ -4688,8 +4688,8 @@ if TYPE_CHECKING:
             Swinv2Model,
             Swinv2PreTrainedModel,
         )
-        from .models.switchtransformers import (
-            SWITCHTRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
+        from .models.switch_transformers import (
+            SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
             SwitchTransformersEncoderModel,
             SwitchTransformersForConditionalGeneration,
             SwitchTransformersModel,
@@ -5605,7 +5605,7 @@ if TYPE_CHECKING:
             FlaxRoFormerPreTrainedModel,
         )
         from .models.speech_encoder_decoder import FlaxSpeechEncoderDecoderModel
-        from .models.switchtransformers import (
+        from .models.switch_transformers import (
             FlaxSwitchTransformersEncoderModel,
             FlaxSwitchTransformersForConditionalGeneration,
             FlaxSwitchTransformersModel,

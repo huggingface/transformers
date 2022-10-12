@@ -34,10 +34,10 @@ if is_torch_available():
         SwitchTransformersForConditionalGeneration,
         SwitchTransformersModel,
     )
-    from transformers.models.switchtransformers.modeling_switchtransformers import (
-        SWITCHTRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
+    from transformers.models.switch_transformers.modeling_switch_transformers import (
+        SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
-    from transformers.models.switchtransformers.router import (
+    from transformers.models.switch_transformers.router import (
         ExpertsChooseMaskedRouter,
         TokensChooseMaskedRouter,
         load_balancing_loss_func,
@@ -95,7 +95,7 @@ class SwitchTransformersModelTester:
         self.decoder_layers = decoder_layers
 
     def get_large_model_config(self):
-        return SwitchTransformersConfig.from_pretrained("switchtransformers-base")
+        return SwitchTransformersConfig.from_pretrained("switch_transformers-base")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -124,7 +124,7 @@ class SwitchTransformersModelTester:
 
     def get_pipeline_config(self):
         return SwitchTransformersConfig(
-            vocab_size=166,  # switchtransformers forces 100 extra tokens
+            vocab_size=166,  # switch_transformers forces 100 extra tokens
             d_model=self.hidden_size,
             d_ff=self.d_ff,
             d_kv=self.hidden_size // self.num_attention_heads,
@@ -480,7 +480,7 @@ class SwitchTransformersModelTester:
                     )
                 )
 
-    def check_resize_embeddings_switchtransformers_v1_1(
+    def check_resize_embeddings_switch_transformers_v1_1(
         self,
         config,
     ):
@@ -530,7 +530,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     test_resize_embeddings = True
     test_model_parallel = True
     is_encoder_decoder = True
-    # The small SWITCHTRANSFORMERS model needs higher percentages for CPU/MP tests
+    # The small SWITCH_TRANSFORMERS model needs higher percentages for CPU/MP tests
     model_split_percents = [0.8, 0.9]
 
     def setUp(self):
@@ -621,11 +621,11 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 
     def test_v1_1_resize_embeddings(self):
         config = self.model_tester.prepare_config_and_inputs()[0]
-        self.model_tester.check_resize_embeddings_switchtransformers_v1_1(config)
+        self.model_tester.check_resize_embeddings_switch_transformers_v1_1(config)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SWITCHTRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = SwitchTransformersModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -637,7 +637,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
             torch.onnx.export(
                 model,
                 (config_and_inputs[1], config_and_inputs[3], config_and_inputs[2]),
-                f"{tmpdirname}/switchtransformers_test.onnx",
+                f"{tmpdirname}/switch_transformers_test.onnx",
                 export_params=True,
                 opset_version=9,
                 input_names=["input_ids", "decoder_input_ids"],
@@ -659,7 +659,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 
         for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
             head_masks = {name: mask}
-            # Explicitly pass decoder_head_mask as it is required from SWITCHTRANSFORMERS model when head_mask specified
+            # Explicitly pass decoder_head_mask as it is required from SWITCH_TRANSFORMERS model when head_mask specified
             if name == "head_mask":
                 head_masks["decoder_head_mask"] = torch.ones(
                     config.num_decoder_layers, config.num_heads, device=torch_device
@@ -726,7 +726,7 @@ class SwitchTransformersEncoderOnlyModelTester:
         self.is_training = is_training
 
     def get_large_model_config(self):
-        return SwitchTransformersConfig.from_pretrained("switchtransformers-base")
+        return SwitchTransformersConfig.from_pretrained("switch_transformers-base")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)

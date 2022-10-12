@@ -4855,7 +4855,7 @@ class Swinv2PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-SWITCHTRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST = None
+SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class SwitchTransformersEncoderModel(metaclass=DummyObject):

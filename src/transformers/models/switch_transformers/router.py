@@ -19,7 +19,7 @@ import torch
 import torch.nn as nn
 
 
-# from transformers.models.switchtransformers.configuration_switchtransformers import SwitchTransformersConfig
+# from transformers.models.switch_transformers.configuration_switch_transformers import SwitchTransformersConfig
 
 
 # Output classes

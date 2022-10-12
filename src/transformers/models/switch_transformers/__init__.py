@@ -30,8 +30,8 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_switchtransformers": [
-        "SWITCHTRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP",
+    "configuration_switch_transformers": [
+        "SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SwitchTransformersConfig",
         "SwitchTransformersOnnxConfig",
     ]
@@ -43,7 +43,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_switchtransformers"] = ["SwitchTransformersTokenizer"]
+    _import_structure["tokenization_switch_transformers"] = ["SwitchTransformersTokenizer"]
 
 try:
     if not is_tokenizers_available():
@@ -51,7 +51,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_switchtransformers_fast"] = ["SwitchTransformersTokenizerFast"]
+    _import_structure["tokenization_switch_transformers_fast"] = ["SwitchTransformersTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -59,8 +59,8 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_switchtransformers"] = [
-        "SWITCHTRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST",
+    _import_structure["modeling_switch_transformers"] = [
+        "SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SwitchTransformersEncoderModel",
         "SwitchTransformersForConditionalGeneration",
         "SwitchTransformersModel",
@@ -74,7 +74,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_flax_switchtransformers"] = [
+    _import_structure["modeling_flax_switch_transformers"] = [
         "FlaxSwitchTransformersEncoderModel",
         "FlaxSwitchTransformersForConditionalGeneration",
         "FlaxSwitchTransformersModel",
@@ -83,8 +83,8 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_switchtransformers import (
-        SWITCHTRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    from .configuration_switch_transformers import (
+        SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SwitchTransformersConfig,
         SwitchTransformersOnnxConfig,
     )
@@ -95,7 +95,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_switchtransformers import SwitchTransformersTokenizer
+        from .tokenization_switch_transformers import SwitchTransformersTokenizer
 
     try:
         if not is_tokenizers_available():
@@ -103,7 +103,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_switchtransformers_fast import SwitchTransformersTokenizerFast
+        from .tokenization_switch_transformers_fast import SwitchTransformersTokenizerFast
 
     try:
         if not is_torch_available():
@@ -111,8 +111,8 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_switchtransformers import (
-            SWITCHTRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
+        from .modeling_switch_transformers import (
+            SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
             SwitchTransformersEncoderModel,
             SwitchTransformersForConditionalGeneration,
             SwitchTransformersModel,
@@ -125,7 +125,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_flax_switchtransformers import (
+        from .modeling_flax_switch_transformers import (
             FlaxSwitchTransformersEncoderModel,
             FlaxSwitchTransformersForConditionalGeneration,
             FlaxSwitchTransformersModel,

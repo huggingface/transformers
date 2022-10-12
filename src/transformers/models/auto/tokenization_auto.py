@@ -242,7 +242,7 @@ else:
                 ("SqueezeBertTokenizer", "SqueezeBertTokenizerFast" if is_tokenizers_available() else None),
             ),
             (
-                "switchtransformers",
+                "switch_transformers",
                 (
                     "SwitchTransformersTokenizer" if is_sentencepiece_available() else None,
                     "SwitchTransformersTokenizerFast" if is_tokenizers_available() else None,

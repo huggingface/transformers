@@ -53,7 +53,7 @@ if is_flax_available():
         SwitchTransformersTokenizer,
     )
     from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
-    from transformers.models.switchtransformers.modeling_flax_switchtransformers import (
+    from transformers.models.switch_transformers.modeling_flax_switch_transformers import (
         FlaxSwitchTransformersEncoderModel,
         FlaxSwitchTransformersForConditionalGeneration,
         FlaxSwitchTransformersModel,
@@ -773,18 +773,18 @@ class FlaxSwitchTransformersModelIntegrationTests(unittest.TestCase):
     def test_small_integration_test(self):
         """
         For comparision run:
-        >>> import switchtransformers  # pip install switchtransformers==0.7.1
-        >>> from switchtransformers.data.sentencepiece_vocabulary import SentencePieceVocabulary
+        >>> import switch_transformers  # pip install switch_transformers==0.7.1
+        >>> from switch_transformers.data.sentencepiece_vocabulary import SentencePieceVocabulary
 
-        >>> path_to_mtf_small_switchtransformers_checkpoint = '<fill_in>'
+        >>> path_to_mtf_small_switch_transformers_checkpoint = '<fill_in>'
         >>> path_to_mtf_small_spm_model_path = '<fill_in>'
-        >>> switchtransformers_model = switchtransformers.models.MtfModel(model_dir=path_to_mtf_small_switchtransformers_checkpoint, batch_size=1, tpu=None)
+        >>> switch_transformers_model = switch_transformers.models.MtfModel(model_dir=path_to_mtf_small_switch_transformers_checkpoint, batch_size=1, tpu=None)
         >>> vocab = SentencePieceVocabulary(path_to_mtf_small_spm_model_path, extra_ids=100)
-        >>> score = switchtransformers_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
+        >>> score = switch_transformers_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained("ybelkada/switchtransformers-base")
-        tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switchtransformers-base")
+        model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained("ybelkada/switch_transformers-base")
+        tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switch_transformers-base")
 
         input_ids = tokenizer("Hello there", return_tensors="np").input_ids
         labels = tokenizer("Hi I am", return_tensors="np").input_ids
@@ -803,18 +803,18 @@ class FlaxSwitchTransformersModelIntegrationTests(unittest.TestCase):
     def test_small_v1_1_integration_test(self):
         """
         For comparision run:
-        >>> import switchtransformers  # pip install switchtransformers==0.7.1
-        >>> from switchtransformers.data.sentencepiece_vocabulary import SentencePieceVocabulary
+        >>> import switch_transformers  # pip install switch_transformers==0.7.1
+        >>> from switch_transformers.data.sentencepiece_vocabulary import SentencePieceVocabulary
 
-        >>> path_to_mtf_small_switchtransformers_v1_1_checkpoint = '<fill_in>'
+        >>> path_to_mtf_small_switch_transformers_v1_1_checkpoint = '<fill_in>'
         >>> path_to_mtf_small_spm_model_path = '<fill_in>'
-        >>> switchtransformers_model = switchtransformers.models.MtfModel(model_dir=path_to_mtf_small_switchtransformers_v1_1_checkpoint, batch_size=1, tpu=None)
+        >>> switch_transformers_model = switch_transformers.models.MtfModel(model_dir=path_to_mtf_small_switch_transformers_v1_1_checkpoint, batch_size=1, tpu=None)
         >>> vocab = SentencePieceVocabulary(path_to_mtf_small_spm_model_path, extra_ids=100)
-        >>> score = switchtransformers_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
+        >>> score = switch_transformers_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained("google/switchtransformers-v1_1-small")
-        tokenizer = SwitchTransformersTokenizer.from_pretrained("google/switchtransformers-v1_1-small")
+        model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained("google/switch_transformers-v1_1-small")
+        tokenizer = SwitchTransformersTokenizer.from_pretrained("google/switch_transformers-v1_1-small")
 
         input_ids = tokenizer("Hello there", return_tensors="np").input_ids
         labels = tokenizer("Hi I am", return_tensors="np").input_ids
@@ -830,21 +830,21 @@ class FlaxSwitchTransformersModelIntegrationTests(unittest.TestCase):
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
-    def test_small_byswitchtransformers_integration_test(self):
+    def test_small_byswitch_transformers_integration_test(self):
         """
         For comparision run:
-        >>> import switchtransformers  # pip install switchtransformers==0.9.1
+        >>> import switch_transformers  # pip install switch_transformers==0.9.1
 
-        >>> path_to_byswitchtransformers_small_checkpoint = '<fill_in>'
-        >>> switchtransformers_model = switchtransformers.models.MtfModel(model_dir=path_to_tf_checkpoint, batch_size=1, tpu=None)
-        >>> vocab = switchtransformers.data.ByteVocabulary()
-        >>> score = switchtransformers_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
+        >>> path_to_byswitch_transformers_small_checkpoint = '<fill_in>'
+        >>> switch_transformers_model = switch_transformers.models.MtfModel(model_dir=path_to_tf_checkpoint, batch_size=1, tpu=None)
+        >>> vocab = switch_transformers.data.ByteVocabulary()
+        >>> score = switch_transformers_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
         model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained(
-            "google/byybelkada/switchtransformers-base"
+            "google/byybelkada/switch_transformers-base"
         )
-        tokenizer = BySwitchTransformersTokenizer.from_pretrained("google/byybelkada/switchtransformers-base")
+        tokenizer = BySwitchTransformersTokenizer.from_pretrained("google/byybelkada/switch_transformers-base")
 
         input_ids = tokenizer("Hello there", return_tensors="np").input_ids
         labels = tokenizer("Hi I am", return_tensors="np").input_ids
@@ -861,11 +861,11 @@ class FlaxSwitchTransformersModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_small_generation(self):
-        model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained("ybelkada/switchtransformers-base")
+        model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained("ybelkada/switch_transformers-base")
         model.config.max_length = 8
         model.config.num_beams = 1
         model.config.do_sample = False
-        tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switchtransformers-base")
+        tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switch_transformers-base")
 
         input_ids = tokenizer("summarize: Hello there", return_tensors="np").input_ids
 
@@ -876,8 +876,8 @@ class FlaxSwitchTransformersModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_summarization(self):
-        model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained("switchtransformers-base")
-        tok = SwitchTransformersTokenizer.from_pretrained("switchtransformers-base")
+        model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained("switch_transformers-base")
+        tok = SwitchTransformersTokenizer.from_pretrained("switch_transformers-base")
 
         FRANCE_ARTICLE = (  # @noqa
             "Marseille, France (CNN)The French prosecutor leading an investigation into the crash of Germanwings"

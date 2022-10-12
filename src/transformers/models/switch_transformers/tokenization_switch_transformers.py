@@ -33,24 +33,24 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "ybelkada/switchtransformers-base": (
-            "https://huggingface.co/ybelkada/switchtransformers-base/resolve/main/spiece.model"
+        "ybelkada/switch_transformers-base": (
+            "https://huggingface.co/ybelkada/switch_transformers-base/resolve/main/spiece.model"
         ),
-        "switchtransformers-base": "https://huggingface.co/switchtransformers-base/resolve/main/spiece.model",
-        "switchtransformers-large": "https://huggingface.co/switchtransformers-large/resolve/main/spiece.model",
-        "switchtransformers-3b": "https://huggingface.co/switchtransformers-3b/resolve/main/spiece.model",
-        "switchtransformers-11b": "https://huggingface.co/switchtransformers-11b/resolve/main/spiece.model",
+        "switch_transformers-base": "https://huggingface.co/switch_transformers-base/resolve/main/spiece.model",
+        "switch_transformers-large": "https://huggingface.co/switch_transformers-large/resolve/main/spiece.model",
+        "switch_transformers-3b": "https://huggingface.co/switch_transformers-3b/resolve/main/spiece.model",
+        "switch_transformers-11b": "https://huggingface.co/switch_transformers-11b/resolve/main/spiece.model",
     }
 }
 
 
 # TODO(PVP) - this should be removed in Transformers v5
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "ybelkada/switchtransformers-base": 512,
-    "switchtransformers-base": 512,
-    "switchtransformers-large": 512,
-    "switchtransformers-3b": 512,
-    "switchtransformers-11b": 512,
+    "ybelkada/switch_transformers-base": 512,
+    "switch_transformers-base": 512,
+    "switch_transformers-large": 512,
+    "switch_transformers-3b": 512,
+    "switch_transformers-11b": 512,
 }
 
 
@@ -85,7 +85,7 @@ class SwitchTransformersTokenizer(PreTrainedTokenizer):
             accessible as "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1. Extra tokens are
             indexed from the end of the vocabulary up to beginning ("<extra_id_0>" is the last token in the vocabulary
             like in SwitchTransformers preprocessing see
-            [here](https://github.com/google-research/text-to-text-transfer-transformer/blob/9fd7b14a769417be33bc6c850f9598764913c833/switchtransformers/data/preprocessors.py#L2117)).
+            [here](https://github.com/google-research/text-to-text-transfer-transformer/blob/9fd7b14a769417be33bc6c850f9598764913c833/switch_transformers/data/preprocessors.py#L2117)).
         additional_special_tokens (`List[str]`, *optional*):
             Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
@@ -157,7 +157,7 @@ class SwitchTransformersTokenizer(PreTrainedTokenizer):
         self.sp_model.Load(vocab_file)
 
     @staticmethod
-    def _eventually_correct_switchtransformers_max_length(
+    def _eventually_correct_switch_transformers_max_length(
         pretrained_model_name_or_path, max_model_length, init_max_model_length
     ):
         if pretrained_model_name_or_path in SwitchTransformersTokenizer.max_model_input_sizes:

@@ -43,7 +43,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_switchtransformers import SwitchTransformersConfig
+from .configuration_switch_transformers import SwitchTransformersConfig
 from .router import ExpertsChooseMaskedRouter, TokensChooseMaskedRouter, TokensChooseScatterRouter
 
 
@@ -51,15 +51,15 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "SwitchTransformersConfig"
 _TOKENIZER_FOR_DOC = "SwitchTransformersTokenizer"
-_CHECKPOINT_FOR_DOC = "ybelkada/switchtransformers-base"
+_CHECKPOINT_FOR_DOC = "ybelkada/switch_transformers-base"
 
 ####################################################
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
-SWITCHTRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ybelkada/switchtransformers-base",
-    # See all SwitchTransformers models at https://huggingface.co/models?filter=switchtransformers
+SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "ybelkada/switch_transformers-base",
+    # See all SwitchTransformers models at https://huggingface.co/models?filter=switch_transformers
 ]
 
 
@@ -952,9 +952,9 @@ class SwitchTransformersStack(nn.Module):
         )
 
 
-SWITCHTRANSFORMERS_START_DOCSTRING = r"""
+SWITCH_TRANSFORMERS_START_DOCSTRING = r"""
 
-    The SWITCHTRANSFORMERS model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text
+    The SWITCH_TRANSFORMERS model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text
     Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan
     Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a
     text-to-text denoising generative setting.
@@ -973,10 +973,10 @@ SWITCHTRANSFORMERS_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-SWITCHTRANSFORMERS_INPUTS_DOCSTRING = r"""
+SWITCH_TRANSFORMERS_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. SWITCHTRANSFORMERS is a model with relative position
+            Indices of input sequence tokens in the vocabulary. SWITCH_TRANSFORMERS is a model with relative position
             embeddings so you should be able to pad the inputs on both the right and the left.
 
             Indices can be obtained using [`SwitchTransformersTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -984,8 +984,8 @@ SWITCHTRANSFORMERS_INPUTS_DOCSTRING = r"""
 
             [What are input IDs?](../glossary#input-ids)
 
-            To know more on how to prepare `input_ids` for pretraining take a look a [SWITCHTRANSFORMERS
-            Training](./switchtransformers#training).
+            To know more on how to prepare `input_ids` for pretraining take a look a [SWITCH_TRANSFORMERS
+            Training](./switch_transformers#training).
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1001,12 +1001,12 @@ SWITCHTRANSFORMERS_INPUTS_DOCSTRING = r"""
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            SWITCHTRANSFORMERS uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If
+            SWITCH_TRANSFORMERS uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If
             `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
             `past_key_values`).
 
-            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [SWITCHTRANSFORMERS
-            Training](./switchtransformers#training).
+            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [SWITCH_TRANSFORMERS
+            Training](./switch_transformers#training).
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
@@ -1068,17 +1068,17 @@ SWITCHTRANSFORMERS_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-SWITCHTRANSFORMERS_ENCODER_INPUTS_DOCSTRING = r"""
+SWITCH_TRANSFORMERS_ENCODER_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. SWITCHTRANSFORMERS is a model with relative position
+            Indices of input sequence tokens in the vocabulary. SWITCH_TRANSFORMERS is a model with relative position
             embeddings so you should be able to pad the inputs on both the right and the left.
 
             Indices can be obtained using [`SwitchTransformersTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
-            To know more on how to prepare `input_ids` for pretraining take a look a [SWITCHTRANSFORMERS
-            Training](./switchtransformers#training).
+            To know more on how to prepare `input_ids` for pretraining take a look a [SWITCH_TRANSFORMERS
+            Training](./switch_transformers#training).
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1116,8 +1116,8 @@ num_heads)`.
 
 
 @add_start_docstrings(
-    "The bare SWITCHTRANSFORMERS Model transformer outputting raw hidden-states without any specific head on top.",
-    SWITCHTRANSFORMERS_START_DOCSTRING,
+    "The bare SWITCH_TRANSFORMERS Model transformer outputting raw hidden-states without any specific head on top.",
+    SWITCH_TRANSFORMERS_START_DOCSTRING,
 )
 class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
@@ -1173,7 +1173,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(SWITCHTRANSFORMERS_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(SWITCH_TRANSFORMERS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1201,8 +1201,8 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         ```python
         >>> from transformers import SwitchTransformersTokenizer, SwitchTransformersModel
 
-        >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switchtransformers-base")
-        >>> model = SwitchTransformersModel.from_pretrained("ybelkada/switchtransformers-base")
+        >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switch_transformers-base")
+        >>> model = SwitchTransformersModel.from_pretrained("ybelkada/switch_transformers-base")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
@@ -1289,7 +1289,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
 
 
 @add_start_docstrings(
-    """SWITCHTRANSFORMERS Model with a `language modeling` head on top.""", SWITCHTRANSFORMERS_START_DOCSTRING
+    """SWITCH_TRANSFORMERS Model with a `language modeling` head on top.""", SWITCH_TRANSFORMERS_START_DOCSTRING
 )
 class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
@@ -1348,7 +1348,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
     def get_decoder(self):
         return self.decoder
 
-    @add_start_docstrings_to_model_forward(SWITCHTRANSFORMERS_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(SWITCH_TRANSFORMERS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1382,8 +1382,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         ```python
         >>> from transformers import SwitchTransformersTokenizer, SwitchTransformersForConditionalGeneration
 
-        >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switchtransformers-base")
-        >>> model = SwitchTransformersForConditionalGeneration.from_pretrained("ybelkada/switchtransformers-base")
+        >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switch_transformers-base")
+        >>> model = SwitchTransformersForConditionalGeneration.from_pretrained("ybelkada/switch_transformers-base")
 
         >>> # training
         >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
@@ -1558,9 +1558,9 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
 
 @add_start_docstrings(
-    "The bare SWITCHTRANSFORMERS Model transformer outputting encoder's raw hidden-states without any specific head on"
+    "The bare SWITCH_TRANSFORMERS Model transformer outputting encoder's raw hidden-states without any specific head on"
     " top.",
-    SWITCHTRANSFORMERS_START_DOCSTRING,
+    SWITCH_TRANSFORMERS_START_DOCSTRING,
 )
 class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
     authorized_missing_keys = [
@@ -1601,7 +1601,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.block[layer].layer[0].SelfAttention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(SWITCHTRANSFORMERS_ENCODER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(SWITCH_TRANSFORMERS_ENCODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1621,8 +1621,8 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         ```python
         >>> from transformers import SwitchTransformersTokenizer, SwitchTransformersEncoderModel
 
-        >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switchtransformers-base")
-        >>> model = SwitchTransformersEncoderModel.from_pretrained("ybelkada/switchtransformers-base")
+        >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switch_transformers-base")
+        >>> model = SwitchTransformersEncoderModel.from_pretrained("ybelkada/switch_transformers-base")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1
