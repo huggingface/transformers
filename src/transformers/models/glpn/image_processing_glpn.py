@@ -38,14 +38,14 @@ class GLPNImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
             dimensions, rounding them down to the closest multiple of `size_divisor`.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_rescale` parameter. Controls whether or not to apply the scaling factor
-            (to make pixel values floats between 0. and 1.).
         size_divisor (`int`, *optional*, defaults to 32):
             Set the class default for the `size_divisor` parameter. When `do_resize` is `True`, images are resized so
             their height and width are rounded down to the closest multiple of `size_divisor`.
         resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BILINEAR`):
             Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Set the class default for the `do_rescale` parameter. Controls whether or not to apply the scaling factor
+            (to make pixel values floats between 0. and 1.).
     """
 
     model_input_names = ["pixel_values"]
@@ -53,9 +53,9 @@ class GLPNImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        do_rescale: bool = True,
         size_divisor: int = 32,
         resample=PIL.Image.BILINEAR,
+        do_rescale: bool = True,
         **kwargs
     ) -> None:
         self.do_resize = do_resize
@@ -116,9 +116,9 @@ class GLPNImageProcessor(BaseImageProcessor):
         self,
         images: Union["PIL.Image.Image", TensorType, List["PIL.Image.Image"], List[TensorType]],
         do_resize: Optional[bool] = None,
-        do_rescale: Optional[bool] = None,
         size_divisor: Optional[int] = None,
         resample=None,
+        do_rescale: Optional[bool] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         **kwargs
@@ -131,14 +131,14 @@ class GLPNImageProcessor(BaseImageProcessor):
                 The image or images to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the input such that the (height, width) dimensions are a multiple of `size_divisor`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.).
             size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
                 When `do_resize` is `True`, images are resized so their height and width are rounded down to the
                 closest multiple of `size_divisor`.
             resample (`PIL.Image` resampling filter, *optional*, defaults to `self.resample`):
                 PIL.Image resampling filter to use if resizing the image e.g. PIL.Image.BILINEAR. Only has an effect if
                 `do_resize` is set to `True`.
+            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+                Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.).
             return_tensors (`str`, *optional*):
                 The type of tensors to return. Can be one of:
                     - `None`: Return a list of `np.ndarray`.
