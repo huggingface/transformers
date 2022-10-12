@@ -44,14 +44,19 @@ class GLPNImageProcessor(BaseImageProcessor):
         size_divisor (`int`, *optional*, defaults to 32):
             Set the class default for the `size_divisor` parameter. When `do_resize` is `True`, images are resized so
             their height and width are rounded down to the closest multiple of `size_divisor`.
-        resample (`PIL.Image.Resampling`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
+        resample (`PIL.Image` resampling filter, *optional*, defaults to `PIL.Image.BILINEAR`):
             Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
     """
 
     model_input_names = ["pixel_values"]
 
     def __init__(
-        self, do_resize=True, do_rescale=True, size_divisor=32, resample=PIL.Image.Resampling.BILINEAR, **kwargs
+        self,
+        do_resize: bool = True,
+        do_rescale: bool = True,
+        size_divisor: int = 32,
+        resample=PIL.Image.BILINEAR,
+        **kwargs
     ) -> None:
         self.do_resize = do_resize
         self.do_rescale = do_rescale
@@ -60,12 +65,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
 
     def resize(
-        self,
-        image: np.ndarray,
-        size_divisor: int,
-        resample: PIL.Image.Resampling,
-        data_format: Optional[ChannelDimension] = None,
-        **kwargs
+        self, image: np.ndarray, size_divisor: int, resample, data_format: Optional[ChannelDimension] = None, **kwargs
     ) -> np.ndarray:
         """
         Resize the image, rounding the (height, width) dimensions down to the closest multiple of size_divisor.
@@ -78,8 +78,8 @@ class GLPNImageProcessor(BaseImageProcessor):
             size_divisor (`int`):
                 The image is resized so its height and width are rounded down to the closest multiple of
                 `size_divisor`.
-            resample (`PIL.Image.Resampling`):
-                Resampling filter to use when resizing the image.
+            resample:
+                PIL.Image resampling filter to use when resizing the image e.g. PIL.Image.BILINEAR.
             data_format (`ChannelDimension`, *optional*):
                 The channel dimension format for the output image. If `None`, the channel dimension format of the input
                 image is used. Can be one of:
@@ -94,7 +94,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         return image
 
     def rescale(
-        self, image: np.ndarray, scale: Union[int, float], data_format: Optional[ChannelDimension] = None, **kwargs
+        self, image: np.ndarray, scale: float, data_format: Optional[ChannelDimension] = None, **kwargs
     ) -> np.ndarray:
         """
         Rescale the image by the given scaling factor `scale`.
@@ -102,7 +102,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 The image to rescale.
-            scale (`int` or `float`):
+            scale (`float`):
                 The scaling factor to rescale pixel values by.
             data_format (`ChannelDimension`, *optional*):
                 The channel dimension format for the output image. If `None`, the channel dimension format of the input
@@ -115,10 +115,10 @@ class GLPNImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: Union["PIL.Image.Image", TensorType, List["PIL.Image.Image"], List[TensorType]],
-        do_resize: bool = None,
-        do_rescale: bool = None,
-        size_divisor: int = None,
-        resample: PIL.Image.Resampling = None,
+        do_resize: Optional[bool] = None,
+        do_rescale: Optional[bool] = None,
+        size_divisor: Optional[int] = None,
+        resample=None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         **kwargs
@@ -136,9 +136,9 @@ class GLPNImageProcessor(BaseImageProcessor):
             size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
                 When `do_resize` is `True`, images are resized so their height and width are rounded down to the
                 closest multiple of `size_divisor`.
-            resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PIL.Image.Resampling`,
-                Only has an effect if `do_resize` is set to `True`.
+            resample (`PIL.Image` resampling filter, *optional*, defaults to `self.resample`):
+                PIL.Image resampling filter to use if resizing the image e.g. PIL.Image.BILINEAR. Only has an effect if
+                `do_resize` is set to `True`.
             return_tensors (`str`, *optional*):
                 The type of tensors to return. Can be one of:
                     - `None`: Return a list of `np.ndarray`.
