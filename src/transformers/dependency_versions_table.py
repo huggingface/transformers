@@ -8,7 +8,7 @@ deps = {
     "codecarbon": "codecarbon==1.2.0",
     "cookiecutter": "cookiecutter==1.7.3",
     "dataclasses": "dataclasses",
-    "datasets": "datasets!=2.5.0",
+    "datasets": "datasets @ git+https://github.com/huggingface/datasets@main#egg=datasets",
     "decord": "decord==0.6.0",
     "deepspeed": "deepspeed>=0.6.5",
     "dill": "dill<0.3.5",

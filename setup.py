@@ -102,7 +102,7 @@ _deps = [
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
-    "datasets!=2.5.0",
+    "datasets @ git+https://github.com/huggingface/datasets@main#egg=datasets",
     "decord==0.6.0",
     "deepspeed>=0.6.5",
     "dill<0.3.5",
