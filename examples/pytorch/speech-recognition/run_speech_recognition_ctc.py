@@ -669,7 +669,7 @@ def main():
         )
 
         def is_audio_in_length_range(length):
-            return length > min_input_length and length < max_input_length
+            return min_input_length < length < max_input_length
 
         # filter training data that is shorter than min_input_length or longer than
         # max_input_length
@@ -683,7 +683,7 @@ def main():
         # filter evaluation data that is shorter than min_eval_input_length or longer than
         # max_eval_input_length
         def is_eval_audio_in_length_range(length):
-            return length > min_eval_input_length and length < max_eval_input_length
+            return min_eval_input_length < length < max_eval_input_length
 
         if training_args.do_eval:
             vectorized_datasets["eval"] = vectorized_datasets["eval"].filter(
