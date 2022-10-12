@@ -76,6 +76,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         self.nb_max_frames = self.n_samples // hop_length
         self.sampling_rate = sampling_rate
         self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=feature_size)
+        self.return_attention_mask = False  # pad inputs to max length with silence token (zero) and no attention mask
 
     def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
         # Initialize the weights
@@ -301,7 +302,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             max_length=max_length if max_length else self.n_samples,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=False,
             **kwargs,
         )
         # make sure list is in array format
