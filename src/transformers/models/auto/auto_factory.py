@@ -556,10 +556,13 @@ def getattribute_from_module(module, attr):
     # object at the top level.
     transformers_module = importlib.import_module("transformers")
 
-    if transformers_module == module:
-        raise ValueError(f"Could not find {attr} in neither {module} nor {transformers_module}!")
-
-    return getattribute_from_module(transformers_module, attr)
+    if module != transformers_module:
+        try:
+            return getattribute_from_module(transformers_module, attr)
+        except ValueError:
+            raise ValueError(f"Could not find {attr} neither {module} in nor in {transformers_module}!")
+    else:
+        raise ValueError(f"Could not find {attr} in {transformers_module}!")
 
 
 class _LazyAutoMapping(OrderedDict):
