@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-# Copyright 2022 The HuggingFace Team. All rights reserved.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,74 +17,64 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_available, is_torch_available
+# rely on isort to merge the imports
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_tokenizers_available
 
 
 _import_structure = {
     "configuration_whisper": ["WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP", "WhisperConfig"],
-    "feature_extraction_whisper": ["WhisperFeatureExtractor"],
-    "processing_whisper": ["WhisperProcessor"],
     "tokenization_whisper": ["WhisperTokenizer"],
 }
 
-
 try:
-    if not is_torch_available():
+    if not is_tokenizers_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_whisper"] = [
-        "WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "WhisperForConditionalGeneration",
-        "WhisperModel",
-        "WhisperPreTrainedModel",
-    ]
+    _import_structure["tokenization_whisper_fast"] = ["WhisperTokenizerFast"]
 
 try:
-    if not is_tf_available():
+    if not is_flax_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_tf_whisper"] = [
-        "TF_WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TFWhisperForConditionalGeneration",
-        "TFWhisperModel",
-        "TFWhisperPreTrainedModel",
+    _import_structure["modeling_flax_whisper"] = [
+        "FlaxWhisperForConditionalGeneration",
+        "FlaxWhisperForQuestionAnswering",
+        "FlaxWhisperForSequenceClassification",
+        "FlaxWhisperModel",
+        "FlaxWhisperPreTrainedModel",
     ]
+
 
 if TYPE_CHECKING:
     from .configuration_whisper import WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP, WhisperConfig
-    from .feature_extraction_whisper import WhisperFeatureExtractor
-    from .processing_whisper import WhisperProcessor
     from .tokenization_whisper import WhisperTokenizer
 
     try:
-        if not is_torch_available():
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_whisper_fast import WhisperTokenizerFast
+
+    try:
+        if not is_flax_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
     else:
         from .modeling_whisper import (
-            WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            WhisperForConditionalGeneration,
-            WhisperModel,
-            WhisperPreTrainedModel,
+            FlaxWhisperForConditionalGeneration,
+            FlaxWhisperForQuestionAnswering,
+            FlaxWhisperForSequenceClassification,
+            FlaxWhisperModel,
+            FlaxWhisperPreTrainedModel,
         )
 
-    try:
-        if not is_tf_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_tf_whisper import (
-            TF_WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFWhisperForConditionalGeneration,
-            TFWhisperModel,
-            TFWhisperPreTrainedModel,
-        )
 
 else:
     import sys

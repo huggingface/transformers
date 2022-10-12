@@ -2890,6 +2890,16 @@ else:
 
     # Flax models structure
 
+    _import_structure["models.whisper"].extend(
+        [
+            "FlaxWhisperForConditionalGeneration",
+            "FlaxWhisperForQuestionAnswering",
+            "FlaxWhisperForSequenceClassification",
+            "FlaxWhisperModel",
+            "FlaxWhisperPreTrainedModel",
+        ]
+    )
+
     _import_structure["models.bart"].extend(
         [
             "FlaxBartDecoderPreTrainedModel",
@@ -5399,8 +5409,6 @@ if TYPE_CHECKING:
             FlaxTopPLogitsWarper,
         )
         from .modeling_flax_utils import FlaxPreTrainedModel
-
-        # Flax model imports
         from .models.albert import (
             FlaxAlbertForMaskedLM,
             FlaxAlbertForMultipleChoice,
@@ -5558,6 +5566,15 @@ if TYPE_CHECKING:
             FlaxWav2Vec2ForPreTraining,
             FlaxWav2Vec2Model,
             FlaxWav2Vec2PreTrainedModel,
+        )
+
+        # Flax model imports
+        from .models.whisper import (
+            FlaxWhisperForConditionalGeneration,
+            FlaxWhisperForQuestionAnswering,
+            FlaxWhisperForSequenceClassification,
+            FlaxWhisperModel,
+            FlaxWhisperPreTrainedModel,
         )
         from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
         from .models.xlm_roberta import (
