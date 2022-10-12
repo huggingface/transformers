@@ -557,7 +557,7 @@ def getattribute_from_module(module, attr):
     transformers_module = importlib.import_module("transformers")
 
     if transformers_module == module:
-        return None
+        raise ValueError(f"Could not find {attr} in neither {module} nor {transformers_module}!")
 
     return getattribute_from_module(transformers_module, attr)
 
