@@ -560,7 +560,7 @@ def getattribute_from_module(module, attr):
         try:
             return getattribute_from_module(transformers_module, attr)
         except ValueError:
-            raise ValueError(f"Could not find {attr} neither {module} in nor in {transformers_module}!")
+            raise ValueError(f"Could not find {attr} neither in {module} nor in {transformers_module}!")
     else:
         raise ValueError(f"Could not find {attr} in {transformers_module}!")
 
