@@ -21,7 +21,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_donut_swin": ["DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "DonutSwinConfig"],
+    "configuration_donut_swin": ["DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "DonutSwinConfig", "DonutSwinOnnxConfig"],
     "processing_donut": ["DonutProcessor"],
 }
 
@@ -47,7 +47,11 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_donut_swin import DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, DonutSwinConfig
+    from .configuration_donut_swin import (
+        DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DonutSwinConfig,
+        DonutSwinOnnxConfig,
+    )
     from .processing_donut import DonutProcessor
 
     try:

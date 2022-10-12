@@ -192,6 +192,7 @@ PYTORCH_EXPORT_MODELS = {
     ("convnext", "facebook/convnext-tiny-224"),
     ("detr", "facebook/detr-resnet-50"),
     ("distilbert", "distilbert-base-cased"),
+    ("donut-swin", "naver-clova-ix/donut-base"),
     ("electra", "google/electra-base-generator"),
     ("resnet", "microsoft/resnet-50"),
     ("roberta", "roberta-base"),

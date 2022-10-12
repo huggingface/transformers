@@ -13,10 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Donut Swin Transformer model configuration"""
+from collections import OrderedDict
+from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
+from ...onnx.utils import compute_effective_axis_dimension
 from ...utils import logging
 
+
+if TYPE_CHECKING:
+    from ...feature_extraction_utils import FeatureExtractionMixin
+    from ...utils import TensorType
 
 logger = logging.get_logger(__name__)
 
@@ -138,3 +146,61 @@ class DonutSwinConfig(PretrainedConfig):
         # we set the hidden_size attribute in order to make Swin work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
+
+
+class DonutSwinOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4
+
+    @property
+    def default_onnx_opset(self) -> int:
+        return 16
+
+    def generate_dummy_inputs(
+        self,
+        processor: "FeatureExtractionMixin",
+        batch_size: int = -1,
+        seq_length: int = -1,
+        is_pair: bool = False,
+        framework: Optional["TensorType"] = None,
+        num_channels: int = 3,
+        image_width: int = 40,
+        image_height: int = 40,
+    ) -> Mapping[str, Any]:
+        """
+        Generate inputs to provide to the ONNX exporter for the specific framework
+
+        Args:
+            processor ([`ProcessorMixin`]):
+                The processor associated with this model configuration.
+            batch_size (`int`, *optional*, defaults to -1):
+                The batch size to export the model for (-1 means dynamic axis).
+            seq_length (`int`, *optional*, defaults to -1):
+                The sequence length to export the model for (-1 means dynamic axis).
+            is_pair (`bool`, *optional*, defaults to `False`):
+                Indicate if the input is a pair (sentence 1, sentence 2).
+            framework (`TensorType`, *optional*, defaults to `None`):
+                The framework (PyTorch or TensorFlow) that the processor will generate tensors for.
+            num_channels (`int`, *optional*, defaults to 3):
+                The number of channels of the generated images.
+            image_width (`int`, *optional*, defaults to 40):
+                The width of the generated images.
+            image_height (`int`, *optional*, defaults to 40):
+                The height of the generated images.
+
+        Returns:
+            Mapping[str, Any]: holding the kwargs to provide to the model's forward function
+        """
+
+        batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
+        dummy_input = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
+        return dict(processor(images=dummy_input, return_tensors=framework))
