@@ -262,7 +262,7 @@ class DebertaTokenizerFast(PreTrainedTokenizerFast):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2_fast._batch_encode_plus
+    # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast._batch_encode_plus
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
         is_split_into_words = kwargs.get("is_split_into_words", False)
         assert self.add_prefix_space or not is_split_into_words, (
@@ -272,7 +272,7 @@ class DebertaTokenizerFast(PreTrainedTokenizerFast):
 
         return super()._batch_encode_plus(*args, **kwargs)
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2_fast._encode_plus
+    # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast._encode_plus
     def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
         is_split_into_words = kwargs.get("is_split_into_words", False)
 
@@ -283,12 +283,12 @@ class DebertaTokenizerFast(PreTrainedTokenizerFast):
 
         return super()._encode_plus(*args, **kwargs)
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2_fast.save_vocabulary
+    # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2_fast._build_conversation_input_ids
+    # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast._build_conversation_input_ids
     def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         """This corresponds to DialoGPT variants of models."""
         input_ids = []
