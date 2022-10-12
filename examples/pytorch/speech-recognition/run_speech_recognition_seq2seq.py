@@ -210,31 +210,26 @@ class DataCollatorSpeechSeq2SeqWithPadding:
     model_input_name: str
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
-        # split inputs and labels since they have to be of different lenghts and need
-        # different padding methods
+        # split inputs and labels since they have to be of different lenghts and need different padding methods
+        # first treat the audio inputs by padding to max length
         input_features = [{self.model_input_name: feature[self.model_input_name]} for feature in features]
-
         batch = self.processor.feature_extractor.pad(input_features, return_tensors="pt")
 
-        if (batch.attention_mask == 1).all():
-            # models that pad all input features to max length do not require an attention mask
-            batch.pop("attention_mask")
-
+        # now handle the target labels
         for feature in features:
-            # append eos token if not added in previous tokenization step
+            # if bos token is appended in previous tokenization step,
+            # cut bos token here as it's append later anyways
+            if feature["labels"][0] == self.decoder_start_token_id:
+                feature["labels"] = feature["labels"][1:]
+            # if eos token if not added in previous tokenization step append here as it's not appended later
             if feature["labels"][-1] != self.eos_token_id and self.eos_token_id is not None:
-                feature["labels"] = feature["labels"] + [self.eos_token_id]
+                feature["labels"].append(self.eos_token_id)
 
         label_features = [{"input_ids": feature["labels"]} for feature in features]
         labels_batch = self.processor.tokenizer.pad(label_features, return_tensors="pt")
 
         # replace padding with -100 to ignore loss correctly
         labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
-
-        # if bos token is appended in previous tokenization step,
-        # cut bos token here as it's append later anyways
-        if (labels[:, 0] == self.decoder_start_token_id).all().cpu().item():
-            labels = labels[:, 1:]
 
         batch["labels"] = labels
 
