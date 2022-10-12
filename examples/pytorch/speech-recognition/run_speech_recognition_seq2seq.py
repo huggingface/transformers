@@ -95,7 +95,7 @@ class ModelArguments:
         },
     )
     freeze_feature_encoder: bool = field(
-        default=True, metadata={"help": "Whether to freeze the feature encoder layers of the model."}
+        default=False, metadata={"help": "Whether to freeze the feature encoder layers of the model."}
     )
 
 
@@ -194,23 +194,38 @@ class DataCollatorSpeechSeq2SeqWithPadding:
     """
     Data collator that will dynamically pad the inputs received.
     Args:
-        processor ([`Wav2Vec2Processor`])
+        processor ([`WhisperProcessor`])
             The processor used for processing the data.
         decoder_start_token_id (`int`)
             The begin-of-sentence of the decoder.
+        eos_token_id (`int`)
+            The end-of-sentence of the model.
+        model_input_name (`str`)
+            Name of the pre-processed audio inputs expected by the model.
     """
 
     processor: Any
     decoder_start_token_id: int
+    eos_token_id: int
+    model_input_name: str
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
-        # split inputs and labels since they have to be of different lengths and need
+        # split inputs and labels since they have to be of different lenghts and need
         # different padding methods
-        input_features = [{"input_values": feature["input_values"]} for feature in features]
-        label_features = [{"input_ids": feature["labels"]} for feature in features]
+        input_features = [{self.model_input_name: feature[self.model_input_name]} for feature in features]
 
         batch = self.processor.feature_extractor.pad(input_features, return_tensors="pt")
 
+        if (batch.attention_mask == 1).all():
+            # models that pad all input features to max length do not require an attention mask
+            batch.pop("attention_mask")
+
+        for feature in features:
+            # append eos token if not added in previous tokenization step
+            if feature["labels"][-1] != self.eos_token_id and self.eos_token_id is not None:
+                feature["labels"] = feature["labels"] + [self.eos_token_id]
+
+        label_features = [{"input_ids": feature["labels"]} for feature in features]
         labels_batch = self.processor.tokenizer.pad(label_features, return_tensors="pt")
 
         # replace padding with -100 to ignore loss correctly
@@ -388,8 +403,8 @@ def main():
         sample = batch[audio_column_name]
         inputs = feature_extractor(sample["array"], sampling_rate=sample["sampling_rate"])
         # process audio length
-        batch[model_input_name] = inputs.input_values[0]
-        batch["input_length"] = len(batch["input_values"])
+        batch[model_input_name] = inputs.get(model_input_name)[0]
+        batch["input_length"] = len(inputs.get(model_input_name)[0])
 
         # process targets
         input_str = batch[text_column_name].lower() if do_lower_case else batch[text_column_name]
@@ -452,7 +467,10 @@ def main():
 
     # 10. Define data collator
     data_collator = DataCollatorSpeechSeq2SeqWithPadding(
-        processor=processor, decoder_start_token_id=model.config.decoder_start_token_id
+        processor=processor,
+        decoder_start_token_id=model.config.decoder_start_token_id,
+        eos_token_id=model.config.eos_token_id,
+        model_input_name=model_input_name,
     )
 
     # 11. Initialize Trainer
