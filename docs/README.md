@@ -90,7 +90,7 @@ the filename without the extension in the [`_toctree.yml`](https://github.com/hu
 
 It helps to keep the old links working when renaming the section header and/or moving sections from one document to another. This is because the old links are likely to be used in Issues, Forums, and Social media and it'd make for a much more superior user experience if users reading those months later could still easily navigate to the originally intended information.
 
-Therefore we simply keep a little map of moved sections at the end of the document where the original section was. The key is to preserve the original anchor.
+Therefore, we simply keep a little map of moved sections at the end of the document where the original section was. The key is to preserve the original anchor.
 
 So if you renamed a section from: "Section A" to "Section B", then you can add at the end of the file:
 
@@ -354,7 +354,7 @@ The docstring should give a minimal, clear example of how the respective model
 is to be used in inference and also include the expected (ideally sensible)
 output.
 Often, readers will try out the example before even going through the function 
-or class definitions. Therefore it is of utmost importance that the example 
+or class definitions. Therefore, it is of utmost importance that the example 
 works as expected.
 
 ## Docstring testing
