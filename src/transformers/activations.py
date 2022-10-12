@@ -15,6 +15,7 @@
 import math
 
 import torch
+from collections.abc import Callable
 from packaging import version
 from torch import Tensor, nn
 
@@ -158,7 +159,7 @@ ACT2FN = {
 }
 
 
-def get_activation(activation_string):
+def get_activation(activation_string: str) ->  Callable:
     if activation_string in ACT2FN:
         return ACT2FN[activation_string]
     else:
