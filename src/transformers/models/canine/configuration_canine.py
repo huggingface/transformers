@@ -78,16 +78,17 @@ class CanineConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CanineConfig, CanineModel
+    >>> from transformers import CanineModel, CanineConfig
 
     >>> # Initializing a CANINE google/canine-s style configuration
     >>> configuration = CanineConfig()
 
-    >>> # Initializing a model (with random weights) from the google/canine-s style configuration
+    >>> # Initializing a model from the google/canine-s style configuration
     >>> model = CanineModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
+
 
 
     ```"""

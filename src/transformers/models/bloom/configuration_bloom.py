@@ -93,16 +93,18 @@ class BloomConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BloomConfig, BloomModel
+    >>> from transformers import BloomModel, BloomConfig
 
     >>> # Initializing a Bloom configuration
     >>> configuration = BloomConfig()
 
-    >>> # Initializing a model (with random weights) from the configuration
+    >>> # Initializing a model from the configuration
     >>> model = BloomModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
+
+
 
     ```"""
 

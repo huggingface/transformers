@@ -65,16 +65,19 @@ class CTRLConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import CTRLConfig, CTRLModel
+    >>> from transformers import CTRLModel, CTRLConfig
 
     >>> # Initializing a CTRL configuration
     >>> configuration = CTRLConfig()
 
-    >>> # Initializing a model (with random weights) from the configuration
+    >>> # Initializing a model from the configuration
     >>> model = CTRLModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
+
+
+
     ```"""
 
     model_type = "ctrl"
