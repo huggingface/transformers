@@ -65,7 +65,7 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         pad_to_multiple_of: int = None,
         return_token_type_ids: bool = True,
         return_attention_mask: bool = True,
-        use_fast_bert_tokenizer: bool = False,
+        use_fast_bert_tokenizer: bool = True,
     ):
         super().__init__()
         if use_fast_bert_tokenizer:
