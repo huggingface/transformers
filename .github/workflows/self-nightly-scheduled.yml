@@ -9,8 +9,9 @@ name: Self-hosted runner (nightly)
 on:
   repository_dispatch:
 # Disable temporarily until the test suite can be run under 12 hours.
-#  schedule:
-#    - cron: "0 16 * * *"
+# Re-enable to run on Past CI runners (because ONNX tests take too long) for upcoming torch 1.13
+  schedule:
+    - cron: "0 2 * * *"
 
 env:
   HF_HOME: /mnt/cache
@@ -33,7 +34,9 @@ jobs:
           fetch-depth: 2
 
       - name: Check Runner Status
-        run: python utils/check_self_hosted_runner.py --target_runners single-gpu-scheduled-ci-runner-docker,multi-gpu-scheduled-ci-runner-docker --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+        # Temporarily running on Past CI runners
+        # run: python utils/check_self_hosted_runner.py --target_runners single-gpu-scheduled-ci-runner-docker,multi-gpu-scheduled-ci-runner-docker --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+        run: python utils/check_self_hosted_runner.py --target_runners single-gpu-past-ci-runner-docker,multi-gpu-past-ci-runner-docker --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
 
   check_runners:
     name: Check Runners
@@ -41,7 +44,9 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    # Temporarily running on Past CI runners
+    # runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
     container:
       image: huggingface/transformers-all-latest-torch-nightly-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -56,7 +61,9 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    # Temporarily running on Past CI runners
+    # runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
     container:
       image: huggingface/transformers-all-latest-torch-nightly-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -92,7 +99,9 @@ jobs:
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
         machine_type: [single-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    # Temporarily running on Past CI runners
+    # runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
     container:
       image: huggingface/transformers-all-latest-torch-nightly-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -145,7 +154,9 @@ jobs:
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
         machine_type: [multi-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    # Temporarily running on Past CI runners
+    # runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
     container:
       image: huggingface/transformers-all-latest-torch-nightly-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -197,7 +208,9 @@ jobs:
       fail-fast: false
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    # Temporarily running on Past CI runners
+    # runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
     needs: setup
     container:
       image: huggingface/transformers-pytorch-deepspeed-nightly-gpu
