@@ -77,6 +77,9 @@ class EsmTokenizer(PreTrainedTokenizer):
     def get_vocab_size(self, with_added_tokens=False):
         return len(self._id_to_token)
 
+    def get_vocab(self):
+        return {token: i for i, token in enumerate(self.all_tokens)}
+
     def token_to_id(self, token: str) -> int:
         return self._token_to_id.get(token, self._token_to_id.get(self.unk_token))
 
