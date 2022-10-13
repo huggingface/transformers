@@ -426,8 +426,8 @@ class TFEsmAttention(Layer):
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->Esm
 class TFEsmIntermediate(tf.keras.layers.Layer):
-    def __init__(self, config: EsmConfig, name=None, **kwargs):
-        super().__init__(name=name, **kwargs)
+    def __init__(self, config: EsmConfig, **kwargs):
+        super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
@@ -629,8 +629,8 @@ class TFEsmEncoder(Layer):
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->Esm
 class TFEsmPooler(Layer):
-    def __init__(self, config: EsmConfig, name=None, **kwargs):
-        super().__init__(name=name, **kwargs)
+    def __init__(self, config: EsmConfig, **kwargs):
+        super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
             units=config.hidden_size,
@@ -735,7 +735,6 @@ class TFEsmMainLayer(Layer):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
     supports_gradient_checkpointing = False
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.__init__ with Bert->Esm
     def __init__(self, config, add_pooling_layer=True, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
 
