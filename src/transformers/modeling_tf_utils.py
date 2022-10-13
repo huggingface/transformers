@@ -707,7 +707,7 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
     model_keys = set()
     model_layer_map = dict()
     for i, k in enumerate(model.weights):
-        if "model." in k.name:
+        if "model." in k.name or len(k.name.split("/")) == 1:
             layer_name = k.name
         else:
             layer_name = "/".join(k.name.split("/")[1:])
@@ -2160,8 +2160,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 with h5py.File(os.path.join(save_directory, shard_file), mode="w") as shard_file:
                     layers = []
                     for layer in sorted(shard, key=lambda x: x.name):
-                        if "model." in layer.name:
+                        if "model." in layer.name or len(layer.name.split("/")) == 1: 
                             layer_name = layer.name
+                            print(layer_name)
                         else:
                             layer_name = "/".join(layer.name.split("/")[1:])
                         param_dset = shard_file.create_dataset(
