@@ -14,12 +14,15 @@ specific language governing permissions and limitations under the License.
 
 <Youtube id="ajPx5LwJD-I"/>
 
-Question answering tasks return an answer given a question. There are two common forms of question answering:
+Question answering tasks return an answer given a question. If you've ever asked a virtual assistant like Alexa, Siri or Google what the weather is, then you've used a question answering model before. There are two common types of question answering:
 
 - Extractive: extract the answer from the given context.
 - Abstractive: generate an answer from the context that correctly answers the question.
 
-This guide will show you how to fine-tune [DistilBERT](https://huggingface.co/distilbert-base-uncased) on the [SQuAD](https://huggingface.co/datasets/squad) dataset for extractive question answering.
+This guide will show you how to:
+
+1. Finetune [DistilBERT](https://huggingface.co/distilbert-base-uncased) on the [SQuAD](https://huggingface.co/datasets/squad) dataset for extractive question answering.
+2. Use your finetuned model for inference.
 
 <Tip>
 
@@ -27,14 +30,34 @@ See the question answering [task page](https://huggingface.co/tasks/question-ans
 
 </Tip>
 
+Before you begin, make sure you have all the necessary libraries installed:
+
+```bash
+pip install transformers datasets evaluate
+```
+
+We encourage you to login to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to login:
+
+```py
+>>> from huggingface_hub import notebook_login
+
+>>> notebook_login()
+```
+
 ## Load SQuAD dataset
 
-Load the SQuAD dataset from the 🤗 Datasets library:
+Start by loading a smaller subset of the SQuAD dataset from the 🤗 Datasets library. This'll give you a chance to experiment and make sure everythings works before spending more time training on the full dataset.
 
 ```py
 >>> from datasets import load_dataset
 
->>> squad = load_dataset("squad")
+>>> squad = load_dataset("squad", split="train[:5000]")
+```
+
+Split the dataset's `train` split into a train and test set with the [`~Dataset.train_test_split`] method:
+
+```py
+>>> squad = squad.train_test_split(test_size=0.2)
 ```
 
 Then take a look at an example:
@@ -49,13 +72,17 @@ Then take a look at an example:
 }
 ```
 
-The `answers` field is a dictionary containing the starting position of the answer and the `text` of the answer.
+There are several important fields here:
+
+- The `answers` field contains the starting location of the answer token and the actual answer text.
+- A `context` field provides background information from which the model needs to extract the answer.
+- A `question` field contains the question a model should answer.
 
 ## Preprocess
 
 <Youtube id="qgaM0weJHpA"/>
 
-Load the DistilBERT tokenizer to process the `question` and `context` fields:
+The next step is to load a DistilBERT tokenizer to process the `question` and `context` fields:
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -63,15 +90,15 @@ Load the DistilBERT tokenizer to process the `question` and `context` fields:
 >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 ```
 
-There are a few preprocessing steps particular to question answering that you should be aware of:
+There are a few preprocessing steps particular to question answering you should be aware of:
 
-1. Some examples in a dataset may have a very long `context` that exceeds the maximum input length of the model. Truncate only the `context` by setting `truncation="only_second"`.
+1. Some examples in a dataset may have a very long `context` that exceeds the maximum input length of the model. To deal with longer sequences, truncate only the `context` by setting `truncation="only_second"`.
 2. Next, map the start and end positions of the answer to the original `context` by setting
    `return_offset_mapping=True`.
-3. With the mapping in hand, you can find the start and end tokens of the answer. Use the [`sequence_ids`](https://huggingface.co/docs/tokenizers/python/latest/api/reference.html#tokenizers.Encoding.sequence_ids) method to
+3. With the mapping in hand, now you can find the start and end tokens of the answer. Use the [`~tokenizers.Encoding.sequence_ids`] method to
    find which part of the offset corresponds to the `question` and which corresponds to the `context`.
 
-Here is how you can create a function to truncate and map the start and end tokens of the answer to the `context`:
+Here is how you can create a function to truncate and map the start and end tokens of the `answer` to the `context`:
 
 ```py
 >>> def preprocess_function(examples):
@@ -126,13 +153,13 @@ Here is how you can create a function to truncate and map the start and end toke
 ...     return inputs
 ```
 
-Use 🤗 Datasets [`~datasets.Dataset.map`] function to apply the preprocessing function over the entire dataset. You can speed up the `map` function by setting `batched=True` to process multiple elements of the dataset at once. Remove the columns you don't need:
+To apply the preprocessing function over the entire dataset, use 🤗 Datasets [`~datasets.Dataset.map`] function. You can speed up the `map` function by setting `batched=True` to process multiple elements of the dataset at once. Remove any columns you don't need:
 
 ```py
 >>> tokenized_squad = squad.map(preprocess_function, batched=True, remove_columns=squad["train"].column_names)
 ```
 
-Use [`DefaultDataCollator`] to create a batch of examples. Unlike other data collators in 🤗 Transformers, the `DefaultDataCollator` does not apply additional preprocessing such as padding.
+Now create a batch of examples using [`DefaultDataCollator`]. Unlike other data collators in 🤗 Transformers, the [`DefaultDataCollator`] does not apply any additional preprocessing such as padding.
 
 <frameworkcontent>
 <pt>
@@ -155,7 +182,7 @@ Use [`DefaultDataCollator`] to create a batch of examples. Unlike other data col
 
 <frameworkcontent>
 <pt>
-Load DistilBERT with [`AutoModelForQuestionAnswering`]:
+You're ready to start training your model now! Load DistilBERT with [`AutoModelForQuestionAnswering`]:
 
 ```py
 >>> from transformers import AutoModelForQuestionAnswering, TrainingArguments, Trainer
@@ -165,32 +192,33 @@ Load DistilBERT with [`AutoModelForQuestionAnswering`]:
 
 <Tip>
 
-If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#finetune-with-trainer)!
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
 
 </Tip>
 
 At this point, only three steps remain:
 
-1. Define your training hyperparameters in [`TrainingArguments`].
+1. Define your training hyperparameters in [`TrainingArguments`]. The only required parameter is `output_dir` which specifies where to save your model. You'll push this model to the Hub by setting `push_to_hub=True` (you need to be signed in to Hugging Face to upload your model).
 2. Pass the training arguments to [`Trainer`] along with the model, dataset, tokenizer, and data collator.
-3. Call [`~Trainer.train`] to fine-tune your model.
+3. Call [`~Trainer.train`] to finetune your model.
 
 ```py
 >>> training_args = TrainingArguments(
-...     output_dir="./results",
+...     output_dir="my_awesome_qa_model",
 ...     evaluation_strategy="epoch",
 ...     learning_rate=2e-5,
 ...     per_device_train_batch_size=16,
 ...     per_device_eval_batch_size=16,
 ...     num_train_epochs=3,
 ...     weight_decay=0.01,
+...     push_to_hub=True,
 ... )
 
 >>> trainer = Trainer(
 ...     model=model,
 ...     args=training_args,
 ...     train_dataset=tokenized_squad["train"],
-...     eval_dataset=tokenized_squad["validation"],
+...     eval_dataset=tokenized_squad["test"],
 ...     tokenizer=tokenizer,
 ...     data_collator=data_collator,
 ... )
@@ -199,31 +227,12 @@ At this point, only three steps remain:
 ```
 </pt>
 <tf>
-To fine-tune a model in TensorFlow, start by converting your datasets to the `tf.data.Dataset` format with [`~TFPreTrainedModel.prepare_tf_dataset`].
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_squad["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_validation_set = model.prepare_tf_dataset(
-...     tokenized_squad["validation"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
 <Tip>
 
-If you aren't familiar with fine-tuning a model with Keras, take a look at the basic tutorial [here](training#finetune-with-keras)!
+If you aren't familiar with finetuning a model with Keras, take a look at the basic tutorial [here](../training#train-a-tensorflow-model-with-keras)!
 
 </Tip>
-
-Set up an optimizer function, learning rate schedule, and some training hyperparameters:
+To finetune a model in TensorFlow, start by setting up an optimizer function, learning rate schedule, and some training hyperparameters:
 
 ```py
 >>> from transformers import create_optimizer
@@ -238,12 +247,30 @@ Set up an optimizer function, learning rate schedule, and some training hyperpar
 ... )
 ```
 
-Load DistilBERT with [`TFAutoModelForQuestionAnswering`]:
+Then you can load DistilBERT with [`TFAutoModelForQuestionAnswering`]:
 
 ```py
 >>> from transformers import TFAutoModelForQuestionAnswering
 
 >>> model = TFAutoModelForQuestionAnswering("distilbert-base-uncased")
+```
+
+Convert your datasets to the `tf.data.Dataset` format with [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
+
+```py
+>>> tf_train_set = model.prepare_tf_dataset(
+...     tokenized_squad["train"],
+...     shuffle=True,
+...     batch_size=16,
+...     collate_fn=data_collator,
+... )
+
+>>> tf_validation_set = model.prepare_tf_dataset(
+...     tokenized_squad["test"],
+...     shuffle=False,
+...     batch_size=16,
+...     collate_fn=data_collator,
+... )
 ```
 
 Configure the model for training with [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
@@ -254,21 +281,252 @@ Configure the model for training with [`compile`](https://keras.io/api/models/mo
 >>> model.compile(optimizer=optimizer)
 ```
 
-Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) to fine-tune the model:
+The last thing to setup before you start training is to provide a way to push your model to the Hub. This can be done by using [Keras callbacks](./main_classes/keras_callbacks). Set up the [`transformers.PushToHubCallback`]:
 
 ```py
->>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3)
+>>> from transformers.keras_callbacks import PushToHubCallback
+
+>>> callback = PushToHubCallback(
+...     output_dir="my_awesome_qa_model",
+...     tokenizer=tokenizer,
+... )
 ```
+
+Finally, you're ready to start training your model! Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) with your training and validation datasets, the number of epochs, and your callbacks to finetune the model:
+
+```py
+>>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3, callbacks=[callback])
+```
+Once training is completed, your model is automatically uploaded to the Hub so everyone can use it!
 </tf>
 </frameworkcontent>
 
 <Tip>
 
-For a more in-depth example of how to fine-tune a model for question answering, take a look at the corresponding
+For a more in-depth example of how to finetune a model for question answering, take a look at the corresponding
 [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb)
 or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb).
 
 </Tip>
+
+## Evaluate
+
+While including a metric during training is helpful for evaluating your model's performance, for question answering it'll be faster to evaluate the model after training because it can take a while.
+
+<Tip>
+
+The [`Trainer`] still calculates the evaluation loss during training so you're not completely in the dark about how your model is performing!
+
+</Tip>
+
+To evaluate your predictions, you'll need to map the predictions from the model to their original `context`. You'll need to preprocess the test set similar to how you preprocessed your train set before training. The difference is that you'll add:
+
+- The id of the example that generated the feature.
+- The offset which maps the token indices to their character positions in the `context`.
+
+Here's what the preprocessing function looks like:
+
+```py
+>>> pad_on_right = tokenizer.padding_side == "right"
+>>> max_length = 384
+>>> doc_stride = 128
+
+>>> def prepare_validation_features(examples):
+...     # Some of the questions have lots of whitespace on the left, which is not useful and will make the
+...     # truncation of the context fail (the tokenized question will take a lots of space). So we remove that
+...     # left whitespace
+...     examples["question"] = [q.lstrip() for q in examples["question"]]
+
+...     # Tokenize our examples with truncation and maybe padding, but keep the overflows using a stride. This results
+...     # in one example possible giving several features when a context is long, each of those features having a
+...     # context that overlaps a bit the context of the previous feature.
+...     tokenized_examples = tokenizer(
+...         examples["question" if pad_on_right else "context"],
+...         examples["context" if pad_on_right else "question"],
+...         truncation="only_second" if pad_on_right else "only_first",
+...         max_length=max_length,
+...         stride=doc_stride,
+...         return_overflowing_tokens=True,
+...         return_offsets_mapping=True,
+...         padding="max_length",
+...     )
+
+...     # Since one example might give us several features if it has a long context, we need a map from a feature to
+...     # its corresponding example. This key gives us just that.
+...     sample_mapping = tokenized_examples.pop("overflow_to_sample_mapping")
+
+...     # We keep the example_id that gave us this feature and we will store the offset mappings.
+...     tokenized_examples["example_id"] = []
+
+...     for i in range(len(tokenized_examples["input_ids"])):
+...         # Grab the sequence corresponding to that example (to know what is the context and what is the question).
+...         sequence_ids = tokenized_examples.sequence_ids(i)
+...         context_index = 1 if pad_on_right else 0
+
+...         # One example can give several spans, this is the index of the example containing this span of text.
+...         sample_index = sample_mapping[i]
+...         tokenized_examples["example_id"].append(examples["id"][sample_index])
+
+...         # Set to None the offset_mapping that are not part of the context so it's easy to determine if a token
+...         # position is part of the context or not.
+...         tokenized_examples["offset_mapping"][i] = [
+...             (o if sequence_ids[k] == context_index else None)
+...             for k, o in enumerate(tokenized_examples["offset_mapping"][i])
+...         ]
+
+...     return tokenized_examples
+```
+
+Then appply this preprocessing function to the test set:
+
+```py
+>>> validation_features = squad["test"].map(
+...     prepare_validation_features,
+...     batched=True,
+...     remove_columns=squad["test"].column_names
+... )
+```
+
+Get the predictions from your model:
+
+```py
+>>> raw_predictions = trainer.predict(validation_features)
+```
+
+The [`Trainer`] hides columns - `example_id` and `offset_mapping` - that aren't needed by the model so you'll need to set the format again to retrieve those columns:
+
+```py
+>>> validation_features.set_format(type=validation_features.format["type"], columns=list(validation_features.features.keys()))
+```
+
+Now create a map between the example indices and the corresponding feature indices:
+
+```py
+>>> import collections
+
+>>> examples = squad["test"]
+>>> features = validation_features
+
+>>> example_id_to_index = {k: i for i, k in enumerate(examples["id"])}
+>>> features_per_example = collections.defaultdict(list)
+>>> for i, feature in enumerate(features):
+...     features_per_example[example_id_to_index[feature["example_id"]]].append(i)
+```
+
+Next, create a postprocessing function that maps the predictions to the original `context`:
+
+```py
+from tqdm.auto import tqdm
+import numpy as np
+
+def postprocess_qa_predictions(examples, features, raw_predictions, n_best_size = 20, max_answer_length = 30):
+    all_start_logits, all_end_logits = raw_predictions
+    # Build a map example to its corresponding features.
+    example_id_to_index = {k: i for i, k in enumerate(examples["id"])}
+    features_per_example = collections.defaultdict(list)
+    for i, feature in enumerate(features):
+        features_per_example[example_id_to_index[feature["example_id"]]].append(i)
+
+    # The dictionaries we have to fill.
+    predictions = collections.OrderedDict()
+
+    # Logging.
+    print(f"Post-processing {len(examples)} example predictions split into {len(features)} features.")
+
+    # Let's loop over all the examples!
+    for example_index, example in enumerate(tqdm(examples)):
+        # Those are the indices of the features associated to the current example.
+        feature_indices = features_per_example[example_index]
+
+        min_null_score = None # Only used if squad_v2 is True.
+        valid_answers = []
+        
+        context = example["context"]
+        # Looping through all the features associated to the current example.
+        for feature_index in feature_indices:
+            # We grab the predictions of the model for this feature.
+            start_logits = all_start_logits[feature_index]
+            end_logits = all_end_logits[feature_index]
+            # This is what will allow us to map some the positions in our logits to span of texts in the original
+            # context.
+            offset_mapping = features[feature_index]["offset_mapping"]
+
+            # Update minimum null prediction.
+            cls_index = features[feature_index]["input_ids"].index(tokenizer.cls_token_id)
+            feature_null_score = start_logits[cls_index] + end_logits[cls_index]
+            if min_null_score is None or min_null_score < feature_null_score:
+                min_null_score = feature_null_score
+
+            # Go through all possibilities for the `n_best_size` greater start and end logits.
+            start_indexes = np.argsort(start_logits)[-1 : -n_best_size - 1 : -1].tolist()
+            end_indexes = np.argsort(end_logits)[-1 : -n_best_size - 1 : -1].tolist()
+            for start_index in start_indexes:
+                for end_index in end_indexes:
+                    # Don't consider out-of-scope answers, either because the indices are out of bounds or correspond
+                    # to part of the input_ids that are not in the context.
+                    if (
+                        start_index >= len(offset_mapping)
+                        or end_index >= len(offset_mapping)
+                        or offset_mapping[start_index] is None
+                        or offset_mapping[end_index] is None
+                    ):
+                        continue
+                    # Don't consider answers with a length that is either < 0 or > max_answer_length.
+                    if end_index < start_index or end_index - start_index + 1 > max_answer_length:
+                        continue
+
+                    start_char = offset_mapping[start_index][0]
+                    end_char = offset_mapping[end_index][1]
+                    valid_answers.append(
+                        {
+                            "score": start_logits[start_index] + end_logits[end_index],
+                            "text": context[start_char: end_char]
+                        }
+                    )
+        
+        if len(valid_answers) > 0:
+            best_answer = sorted(valid_answers, key=lambda x: x["score"], reverse=True)[0]
+        else:
+            # In the very rare edge case we have not a single non-null prediction, we create a fake prediction to avoid
+            # failure.
+            best_answer = {"text": "", "score": 0.0}
+        
+        # Let's pick our final answer: the best one or the null answer (only for squad_v2)
+        answer = best_answer["text"] if best_answer["score"] > min_null_score else ""
+        predictions[example["id"]] = answer
+
+    return predictions
+```
+
+Apply the function to the raw model predictions:
+
+```py
+>>> final_predictions = postprocess_qa_predictions(squad["test"], validation_features, raw_predictions.predictions)
+```
+
+Now load the [SQuAD](https://huggingface.co/spaces/evaluate-metric/squad) metric from the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library:
+
+```py
+>>> import evaluate
+
+>>> metric = evaluate.load("squad")
+```
+
+Format your predictions into the expected format and pass the predictions and labels to [`~evaluate.EvaluateModule.compute`] to calculate the SQuAD metric:
+
+```py
+>>> formatted_predictions = [{"id": k, "prediction_text": v} for k, v in final_predictions.items()]
+>>> references = [{"id": ex["id"], "answers": ex["answers"]} for ex in squad["test"]]
+
+>>> metric.compute(predictions=formatted_predictions, references=references)
+{'exact_match': 48.1, 'f1': 59.33825569392714}
+```
+
+Finally, share your model and evaluation metrics to the Hub with the [`~transformers.Trainer.push_to_hub`] method so everyone can use your model:
+
+```py
+>>> trainer.push_to_hub()
+``` 
 
 ## Inference
 
@@ -281,15 +539,30 @@ Come up with a question and some context you'd like the model to predict:
 >>> context = "BLOOM has 176 billion parameters and can generate text in 46 languages natural languages and 13 programming languages."
 ```
 
+The simplest way to try out your finetuned model for inference is to use it in a [`pipeline`]. Instantiate a `pipeline` for question answering with your model, and pass your text to it:
+
+```py
+>>> from transformers import pipeline
+
+>>> question_answerer = pipeline("question-answering", model="my_awesome_qa_model")
+>>> question_answerer(question=question, context=context)
+{'score': 0.2058267742395401,
+ 'start': 10,
+ 'end': 95,
+ 'answer': '176 billion parameters and can generate text in 46 languages natural languages and 13'}
+```
+
+You can also manually replicate the results of the [`pipeline`] if you'd like:
+
 <frameworkcontent>
 <pt>
-Tokenize the text and return PyTorch tensors (you can use the model you just finetuned or a pretrained model for question answering):
+Tokenize the text and return PyTorch tensors:
 
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased-distilled-squad")
->>> inputs = tokenizer(question, text, return_tensors="pt")
+>>> tokenizer = AutoTokenizer.from_pretrained("my_awesome_qa_model")
+>>> inputs = tokenizer(question, context, return_tensors="pt")
 ```
 
 Pass your inputs to the model and return the `logits`:
@@ -297,7 +570,7 @@ Pass your inputs to the model and return the `logits`:
 ```py
 >>> from transformers import AutoModelForQuestionAnswering
 
->>> model = AutoModelForQuestionAnswering.from_pretrained("distilbert-base-cased-distilled-squad")
+>>> model = AutoModelForQuestionAnswering.from_pretrained("my_awesome_qa_model")
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
 ```
@@ -314,16 +587,16 @@ Decode the predicted tokens to get the answer:
 ```py
 >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
 >>> tokenizer.decode(predict_answer_tokens)
-'13'
+'176 billion parameters and can generate text in 46 languages natural languages and 13'
 ```
 </pt>
 <tf>
-Tokenize the text and return TensorFlow tensors (you can use the model you just finetuned or a pretrained model for question answering):
+Tokenize the text and return TensorFlow tensors:
 
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased-distilled-squad")
+>>> tokenizer = AutoTokenizer.from_pretrained("my_awesome_qa_model")
 >>> inputs = tokenizer(question, text, return_tensors="tf")
 ```
 
@@ -332,7 +605,7 @@ Pass your inputs to the model and return the `logits`:
 ```py
 >>> from transformers import TFAutoModelForQuestionAnswering
 
->>> model = TFAutoModelForQuestionAnswering.from_pretrained("distilbert-base-cased-distilled-squad")
+>>> model = TFAutoModelForQuestionAnswering.from_pretrained("my_awesome_qa_model")
 >>> outputs = model(**inputs)
 ```
 
@@ -348,7 +621,7 @@ Decode the predicted tokens to get the answer:
 ```py
 >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
 >>> tokenizer.decode(predict_answer_tokens)
-'13'
+'176 billion parameters and can generate text in 46 languages natural languages and 13'
 ```
 </tf>
 </frameworkcontent>
