@@ -29,13 +29,16 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPastAndCrossAttentions,
     TFSeq2SeqLMOutput,
-    TFSeq2SeqModelOutput, TFBaseModelOutputWithPoolingAndCrossAttentions,
+    TFSeq2SeqModelOutput, TFBaseModelOutputWithPoolingAndCrossAttentions, TFMaskedLMOutput,
+    TFCausalLMOutputWithCrossAttentions, TFNextSentencePredictorOutput, TFSequenceClassifierOutput,
+    TFMultipleChoiceModelOutput, TFQuestionAnsweringModelOutput, TFTokenClassifierOutput,
 )
 from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, keras_serializable, unpack_inputs, \
-    get_initializer, TFModelInputType
+    get_initializer, TFModelInputType, TFMultipleChoiceLoss, TFMaskedLanguageModelingLoss, TFNextSentencePredictionLoss, \
+    TFSequenceClassificationLoss, TFTokenClassificationLoss, TFQuestionAnsweringLoss
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings, \
-    DUMMY_INPUTS, ModelOutput, add_code_sample_docstrings
+    DUMMY_INPUTS, ModelOutput, add_code_sample_docstrings, MULTIPLE_CHOICE_DUMMY_INPUTS
 from .configuration_big_bird import BigBirdConfig
 
 logger = logging.get_logger(__name__)
@@ -55,7 +58,7 @@ TF_BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST = [
 class TFBigBirdEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
-    # Copied from transformers.model.bert.modeling_tf_bert.TFBertEmbeddings.__init__
+    # Copied from transformers.model.bert.modeling_tf_bert.TFBigBirdEmbeddings.__init__
     def __init__(self, config: BigBirdConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -1144,7 +1147,7 @@ class TFBigBirdLayer(tf.keras.layers.Layer):
                 raise TypeError(f"{self} should be used as a decoder model if cross attention is added")
             self.cross_attention = TFBigBirdAttention(config, seed=seed)
         self.intermediate = TFBigBirdIntermediate(config)
-        self.bert_output = TFBigBirdOutput(config)
+        self.bigbird_output = TFBigBirdOutput(config)
 
     def call(
             self,
@@ -1215,7 +1218,7 @@ class TFBigBirdLayer(tf.keras.layers.Layer):
             present_key_value = present_key_value + cross_attn_present_key_value
 
         intermediate_output = self.intermediate(hidden_states=attention_output)
-        layer_output = self.bert_output(
+        layer_output = self.bigbird_output(
             hidden_states=intermediate_output, input_tensor=attention_output, training=training
         )
         outputs = (layer_output,) + outputs  # add attentions if we output them
@@ -1683,7 +1686,7 @@ class TFBigBirdMainLayer(tf.keras.layers.Layer):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
-# Copied from transformers.models.bert.modeling_tf_bert.BertPreTrainedModel with Bert -> BigBird
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPreTrainedModel with Bert -> BigBird
 class TFBigBirdPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1987,7 +1990,7 @@ class TFBigBirdPreTrainingLoss:
 
 @add_start_docstrings(
     """
-Bert Model with two heads on top as done during the pretraining:
+BigBird Model with two heads on top as done during the pretraining:
     a `masked language modeling` head and a `next sentence prediction (classification)` head.
     """,
     TF_BIG_BIRD_START_DOCSTRING,
@@ -2105,4 +2108,762 @@ class TFBigBirdForPreTraining(TFBigBirdPreTrainedModel, TFBigBirdPreTrainingLoss
             seq_relationship_logits=output.seq_relationship_logits,
             hidden_states=hs,
             attentions=attns,
+        )
+
+@add_start_docstrings("""BigBird Model with a `language modeling` head on top.""", TF_BIG_BIRD_START_DOCSTRING)
+class TFBigBirdForMaskedLM(TFBigBirdPreTrainedModel, TFMaskedLanguageModelingLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [
+        r"pooler",
+        r"cls.seq_relationship",
+        r"cls.predictions.decoder.weight",
+        r"nsp___cls",
+    ]
+
+    def __init__(self, config: BigBirdConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        if config.is_decoder:
+            logger.warning(
+                "If you want to use `TFBigBirdForMaskedLM` make sure `config.is_decoder=False` for "
+                "bi-directional self-attention."
+            )
+
+        self.bert = TFBigBirdMainLayer(config, add_pooling_layer=False, name="bert")
+        self.mlm = TFBigBirdMLMHead(config, input_embeddings=self.bert.embeddings, name="mlm___cls")
+
+    def get_lm_head(self) -> tf.keras.layers.Layer:
+        return self.mlm.predictions
+
+    def get_prefix_bias_name(self) -> str:
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(TF_BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TFMaskedLMOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output="'paris'",
+        expected_loss=0.88,
+    )
+    def call(
+        self,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
+    ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
+        r"""
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        """
+        outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+        sequence_output = outputs[0]
+        prediction_scores = self.mlm(sequence_output=sequence_output, training=training)
+        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=prediction_scores)
+
+        if not return_dict:
+            output = (prediction_scores,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFMaskedLMOutput(
+            loss=loss,
+            logits=prediction_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
+
+class TFBigBirdForCausalLM(TFBigBirdPreTrainedModel, TFCausalLanguageModelingLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [
+        r"pooler",
+        r"cls.seq_relationship",
+        r"cls.predictions.decoder.weight",
+        r"nsp___cls",
+    ]
+
+    def __init__(self, config: BigBirdConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        if not config.is_decoder:
+            logger.warning("If you want to use `TFBigBirdForCausalLM` as a standalone, add `is_decoder=True.`")
+
+        self.bert = TFBigBirdMainLayer(config, add_pooling_layer=False, name="bert")
+        self.mlm = TFBigBirdMLMHead(config, input_embeddings=self.bert.embeddings, name="mlm___cls")
+
+    def get_lm_head(self) -> tf.keras.layers.Layer:
+        return self.mlm.predictions
+
+    def get_prefix_bias_name(self) -> str:
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
+
+    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+        input_shape = input_ids.shape
+        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
+        if attention_mask is None:
+            attention_mask = tf.ones(input_shape)
+
+        # cut decoder_input_ids if past is used
+        if past is not None:
+            input_ids = input_ids[:, -1:]
+
+        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
+
+    @unpack_inputs
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TFCausalLMOutputWithCrossAttentions,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(
+        self,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
+        **kwargs,
+    ) -> Union[TFCausalLMOutputWithCrossAttentions, Tuple[tf.Tensor]]:
+        r"""
+        encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
+        encoder_attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
+            contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`). Set to `False` during training, `True` during generation
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the cross entropy classification loss. Indices should be in `[0, ...,
+            config.vocab_size - 1]`.
+        """
+        outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+        sequence_output = outputs[0]
+        logits = self.mlm(sequence_output=sequence_output, training=training)
+        loss = None
+
+        if labels is not None:
+            # shift labels to the left and cut last logit token
+            shifted_logits = logits[:, :-1]
+            labels = labels[:, 1:]
+            loss = self.hf_compute_loss(labels=labels, logits=shifted_logits)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFCausalLMOutputWithCrossAttentions(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
+        )
+
+    def serving_output(self, output: TFCausalLMOutputWithCrossAttentions) -> TFCausalLMOutputWithCrossAttentions:
+        output_cache = self.config.use_cache and self.config.is_decoder
+        pkv = tf.convert_to_tensor(output.past_key_values) if output_cache else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        cross_attns = tf.convert_to_tensor(output.cross_attentions) if output.cross_attentions is not None else None
+        if not (self.config.output_attentions and self.config.add_cross_attention):
+            cross_attns = None
+
+        return TFCausalLMOutputWithCrossAttentions(
+            logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns, cross_attentions=cross_attns
+        )
+
+    @staticmethod
+    def _reorder_cache(past, beam_idx):
+        reordered_past = ()
+        for layer_past in past:
+            reordered_past += (tuple(tf.gather(past_state, beam_idx, axis=0) for past_state in layer_past),)
+        return reordered_past
+
+
+@add_start_docstrings(
+    """BigBird Model with a `next sentence prediction (classification)` head on top.""",
+    TF_BIG_BIRD_START_DOCSTRING,
+)
+class TFBigBirdForNextSentencePrediction(TFBigBirdPreTrainedModel, TFNextSentencePredictionLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"mlm___cls", r"cls.predictions"]
+
+    def __init__(self, config: BigBirdConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.bert = TFBigBirdMainLayer(config, name="bert")
+        self.nsp = TFBigBirdNSPHead(config, name="nsp___cls")
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(TF_BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=TFNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
+    def call(
+        self,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        next_sentence_label: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
+    ) -> Union[TFNextSentencePredictorOutput, Tuple[tf.Tensor]]:
+        r"""
+        Return:
+
+        Examples:
+
+        ```python
+        >>> import tensorflow as tf
+        >>> from transformers import BigBirdTokenizer, TFBigBirdForNextSentencePrediction
+
+        >>> tokenizer = BigBirdTokenizer.from_pretrained("bert-base-uncased")
+        >>> model = TFBigBirdForNextSentencePrediction.from_pretrained("bert-base-uncased")
+
+        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+        >>> encoding = tokenizer(prompt, next_sentence, return_tensors="tf")
+
+        >>> logits = model(encoding["input_ids"], token_type_ids=encoding["token_type_ids"])[0]
+        >>> assert logits[0][0] < logits[0][1]  # the next sentence was random
+        ```"""
+        outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+        pooled_output = outputs[1]
+        seq_relationship_scores = self.nsp(pooled_output=pooled_output)
+        next_sentence_loss = (
+            None
+            if next_sentence_label is None
+            else self.hf_compute_loss(labels=next_sentence_label, logits=seq_relationship_scores)
+        )
+
+        if not return_dict:
+            output = (seq_relationship_scores,) + outputs[2:]
+            return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
+
+        return TFNextSentencePredictorOutput(
+            loss=next_sentence_loss,
+            logits=seq_relationship_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    def serving_output(self, output: TFNextSentencePredictorOutput) -> TFNextSentencePredictorOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFNextSentencePredictorOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
+
+@add_start_docstrings(
+    """
+    BigBird Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    output) e.g. for GLUE tasks.
+    """,
+    TF_BIG_BIRD_START_DOCSTRING,
+)
+class TFBigBirdForSequenceClassification(TFBigBirdPreTrainedModel, TFSequenceClassificationLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"mlm___cls", r"nsp___cls", r"cls.predictions", r"cls.seq_relationship"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
+
+    def __init__(self, config: BigBirdConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.num_labels = config.num_labels
+
+        self.bert = TFBigBirdMainLayer(config, name="bert")
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = tf.keras.layers.Dropout(rate=classifier_dropout)
+        self.classifier = tf.keras.layers.Dense(
+            units=config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="classifier",
+        )
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(TF_BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint="l-yohai/bigbird-roberta-base-mnli",
+        output_type=TFSequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output="'LABEL_1'",
+        expected_loss=0.01,
+    )
+    def call(
+        self,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
+    ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
+        r"""
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+        pooled_output = outputs[1]
+        pooled_output = self.dropout(inputs=pooled_output, training=training)
+        logits = self.classifier(inputs=pooled_output)
+        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFSequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
+
+@add_start_docstrings(
+    """
+    BigBird Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
+    """,
+    TF_BIG_BIRD_START_DOCSTRING,
+)
+class TFBigBirdForMultipleChoice(TFBigBirdPreTrainedModel, TFMultipleChoiceLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"mlm___cls", r"nsp___cls", r"cls.predictions", r"cls.seq_relationship"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
+
+    def __init__(self, config: BigBirdConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.bert = TFBigBirdMainLayer(config, name="bert")
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.classifier = tf.keras.layers.Dense(
+            units=1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+        )
+
+    @property
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        """
+        Dummy inputs to build the network.
+
+        Returns:
+            tf.Tensor with dummy inputs
+        """
+        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(TF_BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TFMultipleChoiceModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(
+        self,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
+    ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
+        r"""
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+            Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
+            where `num_choices` is the size of the second dimension of the input tensors. (See `input_ids` above)
+        """
+        if input_ids is not None:
+            num_choices = shape_list(input_ids)[1]
+            seq_length = shape_list(input_ids)[2]
+        else:
+            num_choices = shape_list(inputs_embeds)[1]
+            seq_length = shape_list(inputs_embeds)[2]
+
+        flat_input_ids = tf.reshape(tensor=input_ids, shape=(-1, seq_length)) if input_ids is not None else None
+        flat_attention_mask = (
+            tf.reshape(tensor=attention_mask, shape=(-1, seq_length)) if attention_mask is not None else None
+        )
+        flat_token_type_ids = (
+            tf.reshape(tensor=token_type_ids, shape=(-1, seq_length)) if token_type_ids is not None else None
+        )
+        flat_position_ids = (
+            tf.reshape(tensor=position_ids, shape=(-1, seq_length)) if position_ids is not None else None
+        )
+        flat_inputs_embeds = (
+            tf.reshape(tensor=inputs_embeds, shape=(-1, seq_length, shape_list(inputs_embeds)[3]))
+            if inputs_embeds is not None
+            else None
+        )
+        outputs = self.bert(
+            input_ids=flat_input_ids,
+            attention_mask=flat_attention_mask,
+            token_type_ids=flat_token_type_ids,
+            position_ids=flat_position_ids,
+            head_mask=head_mask,
+            inputs_embeds=flat_inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+        pooled_output = outputs[1]
+        pooled_output = self.dropout(inputs=pooled_output, training=training)
+        logits = self.classifier(inputs=pooled_output)
+        reshaped_logits = tf.reshape(tensor=logits, shape=(-1, num_choices))
+        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=reshaped_logits)
+
+        if not return_dict:
+            output = (reshaped_logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFMultipleChoiceModelOutput(
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None, None), tf.int64, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int64, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None, None), tf.int64, name="token_type_ids"),
+            }
+        ]
+    )
+    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFMultipleChoiceModelOutput:
+        output = self.call(input_ids=inputs)
+
+        return self.serving_output(output)
+
+    def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
+
+@add_start_docstrings(
+    """
+    BigBird Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
+    TF_BIG_BIRD_START_DOCSTRING,
+)
+class TFBigBirdForTokenClassification(TFBigBirdPreTrainedModel, TFTokenClassificationLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [
+        r"pooler",
+        r"mlm___cls",
+        r"nsp___cls",
+        r"cls.predictions",
+        r"cls.seq_relationship",
+    ]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
+
+    def __init__(self, config: BigBirdConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.num_labels = config.num_labels
+
+        self.bert = TFBigBirdMainLayer(config, add_pooling_layer=False, name="bert")
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = tf.keras.layers.Dropout(rate=classifier_dropout)
+        self.classifier = tf.keras.layers.Dense(
+            units=config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="classifier",
+        )
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(TF_BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint="vumichien/token-classification-bigbird-roberta-base-random",
+        output_type=TFTokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=(
+            "['LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', "
+            "'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1']"
+        ),
+        expected_loss=0.54,
+    )
+    def call(
+        self,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
+    ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
+        r"""
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+        """
+        outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+        sequence_output = outputs[0]
+        sequence_output = self.dropout(inputs=sequence_output, training=training)
+        logits = self.classifier(inputs=sequence_output)
+        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFTokenClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
+
+@add_start_docstrings(
+    """
+    BigBird Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
+    TF_BIG_BIRD_START_DOCSTRING,
+)
+class TFBigBirdForQuestionAnswering(TFBigBirdPreTrainedModel, TFQuestionAnsweringLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [
+        r"pooler",
+        r"mlm___cls",
+        r"nsp___cls",
+        r"cls.predictions",
+        r"cls.seq_relationship",
+    ]
+
+    def __init__(self, config: BigBirdConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.num_labels = config.num_labels
+
+        self.bert = TFBigBirdMainLayer(config, add_pooling_layer=False, name="bert")
+        self.qa_outputs = tf.keras.layers.Dense(
+            units=config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="qa_outputs",
+        )
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(TF_BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint="abhinavkulkarni/bigbird-roberta-base-finetuned-squad",
+        output_type=TFQuestionAnsweringModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output="80 °C (176 °F) or more",
+        expected_loss=7.63,
+    )
+    def call(
+        self,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
+    ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
+        r"""
+        start_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+        end_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+        """
+        outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+        sequence_output = outputs[0]
+        logits = self.qa_outputs(inputs=sequence_output)
+        start_logits, end_logits = tf.split(value=logits, num_or_size_splits=2, axis=-1)
+        start_logits = tf.squeeze(input=start_logits, axis=-1)
+        end_logits = tf.squeeze(input=end_logits, axis=-1)
+        loss = None
+
+        if start_positions is not None and end_positions is not None:
+            labels = {"start_position": start_positions}
+            labels["end_position"] = end_positions
+            loss = self.hf_compute_loss(labels=labels, logits=(start_logits, end_logits))
+
+        if not return_dict:
+            output = (start_logits, end_logits) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFQuestionAnsweringModelOutput(
+            loss=loss,
+            start_logits=start_logits,
+            end_logits=end_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFQuestionAnsweringModelOutput(
+            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
         )

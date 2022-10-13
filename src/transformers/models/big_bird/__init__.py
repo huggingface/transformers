@@ -94,10 +94,17 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_big_bird"] = [
+        "TFBigBirdForCausalLM",
+        "TFBigBirdForNextSentencePrediction",
+        "TFBigBirdForMaskedLM",
+        "TFBigBirdForMultipleChoice",
         "TFBigBirdForPreTraining",
+        "TFBigBirdForQuestionAnswering",
+        "TFBigBirdForSequenceClassification",
+        "TFBigBirdForTokenClassification",
+        "TFBigBirdLayer",
         "TFBigBirdModel",
         "TFBigBirdPreTrainedModel",
-        "TFBigBirdLayer",
     ]
 
 if TYPE_CHECKING:
@@ -165,10 +172,17 @@ if TYPE_CHECKING:
         pass
     else:
         from .modelling_tf_big_bird import (
+            TFBigBirdForCausalLM,
+            TFBigBirdForNextSentencePrediction,
+            TFBigBirdForMaskedLM,
+            TFBigBirdForMultipleChoice,
             TFBigBirdForPreTraining,
+            TFBigBirdForQuestionAnswering,
+            TFBigBirdForSequenceClassification,
+            TFBigBirdForTokenClassification,
+            TFBigBirdLayer,
             TFBigBirdModel,
             TFBigBirdPreTrainedModel,
-            TFBigBirdLayer,
         )
 
 else:

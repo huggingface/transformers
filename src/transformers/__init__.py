@@ -2300,10 +2300,17 @@ else:
     )
     _import_structure["models.big_bird"].extend(
         [
+            "TFBigBirdForCausalLM",
+            "TFBigBirdForNextSentencePrediction",
+            "TFBigBirdForMaskedLM",
+            "TFBigBirdForMultipleChoice",
             "TFBigBirdForPreTraining",
+            "TFBigBirdForQuestionAnswering",
+            "TFBigBirdForSequenceClassification",
+            "TFBigBirdForTokenClassification",
+            "TFBigBirdLayer",
             "TFBigBirdModel",
             "TFBigBirdPreTrainedModel",
-            "TFBigBirdLayer",
         ]
     )
     _import_structure["models.blenderbot"].extend(
@@ -4972,10 +4979,17 @@ if TYPE_CHECKING:
             TFBertPreTrainedModel,
         )
         from .models.big_bird import (
-            TFBigBirdModel,
+            TFBigBirdForCausalLM,
+            TFBigBirdForNextSentencePrediction,
+            TFBigBirdForMaskedLM,
+            TFBigBirdForMultipleChoice,
             TFBigBirdForPreTraining,
-            TFBigBirdPreTrainedModel,
+            TFBigBirdForQuestionAnswering,
+            TFBigBirdForSequenceClassification,
+            TFBigBirdForTokenClassification,
             TFBigBirdLayer,
+            TFBigBirdModel,
+            TFBigBirdPreTrainedModel,
         )
 
         from .models.blenderbot import (
