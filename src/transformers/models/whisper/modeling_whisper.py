@@ -20,6 +20,7 @@ import random
 from typing import Optional, Tuple
 
 import torch
+import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -45,7 +46,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "WhisperConfig"
 _CHECKPOINT_FOR_DOC = "openai/whisper-tiny"
-_PROCESSOR_FOR_DOC = "openai/whisper-tiny"
+_PROCESSOR_FOR_DOC = "WhisperProcessor"
 _EXPECTED_OUTPUT_SHAPE = [1, 2, 512]
 
 

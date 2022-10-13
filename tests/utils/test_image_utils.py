@@ -17,8 +17,10 @@ import unittest
 
 import datasets
 import numpy as np
+import pytest
 
 from transformers import is_torch_available, is_vision_available
+from transformers.image_utils import ChannelDimension
 from transformers.testing_utils import require_torch, require_vision
 
 
@@ -29,7 +31,7 @@ if is_vision_available():
     import PIL.Image
 
     from transformers import ImageFeatureExtractionMixin
-    from transformers.image_utils import load_image
+    from transformers.image_utils import get_image_size, infer_channel_dimension_format, load_image
 
 
 def get_random_image(height, width):
@@ -485,3 +487,51 @@ class LoadImageTester(unittest.TestCase):
             img_arr_with_exif_transpose.shape,
             (500, 333, 3),
         )
+
+
+class UtilFunctionTester(unittest.TestCase):
+    def test_get_image_size(self):
+        # Test we can infer the size and channel dimension of an image.
+        image = np.random.randint(0, 256, (32, 64, 3))
+        self.assertEqual(get_image_size(image), (32, 64))
+
+        image = np.random.randint(0, 256, (3, 32, 64))
+        self.assertEqual(get_image_size(image), (32, 64))
+
+        # Test the channel dimension can be overriden
+        image = np.random.randint(0, 256, (3, 32, 64))
+        self.assertEqual(get_image_size(image, channel_dim=ChannelDimension.LAST), (3, 32))
+
+    def test_infer_channel_dimension(self):
+        # Test we fail with invalid input
+        with pytest.raises(ValueError):
+            infer_channel_dimension_format(np.random.randint(0, 256, (10, 10)))
+
+        with pytest.raises(ValueError):
+            infer_channel_dimension_format(np.random.randint(0, 256, (10, 10, 10, 10, 10)))
+
+        # Test we fail if neither first not last dimension is of size 3 or 1
+        with pytest.raises(ValueError):
+            infer_channel_dimension_format(np.random.randint(0, 256, (10, 1, 50)))
+
+        # Test we correctly identify the channel dimension
+        image = np.random.randint(0, 256, (3, 4, 5))
+        inferred_dim = infer_channel_dimension_format(image)
+        self.assertEqual(inferred_dim, ChannelDimension.FIRST)
+
+        image = np.random.randint(0, 256, (1, 4, 5))
+        inferred_dim = infer_channel_dimension_format(image)
+        self.assertEqual(inferred_dim, ChannelDimension.FIRST)
+
+        image = np.random.randint(0, 256, (4, 5, 3))
+        inferred_dim = infer_channel_dimension_format(image)
+        self.assertEqual(inferred_dim, ChannelDimension.LAST)
+
+        image = np.random.randint(0, 256, (4, 5, 1))
+        inferred_dim = infer_channel_dimension_format(image)
+        self.assertEqual(inferred_dim, ChannelDimension.LAST)
+
+        # We can take a batched array of images and find the dimension
+        image = np.random.randint(0, 256, (1, 3, 4, 5))
+        inferred_dim = infer_channel_dimension_format(image)
+        self.assertEqual(inferred_dim, ChannelDimension.FIRST)
