@@ -497,7 +497,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
             direction: either "inputs" or "outputs", it specifies whether input_or_outputs is the input mapping or the
                 output mapping, this is important for axes naming.
             inverted_values_shape:
-                whether values have `past_sequence + sequence` as the 2nd axe or not. BLOOM for instance uses this.
+                If `True`, store values on dynamic axis 1, else on axis 2.
 
         """
         if direction not in ["inputs", "outputs"]:
