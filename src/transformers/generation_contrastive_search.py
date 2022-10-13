@@ -91,7 +91,7 @@ def ContrastiveDecodingOneStepFast(
     past_key_values = enlarge_past_key_values(past_key_values, beam_width)
 
     # build next attention mask
-    if 'attention_mask' in model_inputs:
+    if "attention_mask" in model_inputs:
         attention_mask = model_inputs["attention_mask"]  # [B, S]
         # decoder-only model need the full attention mask, not only the mask for the last token
         if is_encoder_decoder is False:
