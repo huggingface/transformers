@@ -99,6 +99,7 @@ src/transformers/models/van/modeling_van.py
 src/transformers/models/videomae/modeling_videomae.py
 src/transformers/models/vilt/modeling_vilt.py
 src/transformers/models/vision_encoder_decoder/modeling_vision_encoder_decoder.py
+src/transformers/models/vit/configuration_vit.py
 src/transformers/models/vit/modeling_vit.py
 src/transformers/models/vit/modeling_tf_vit.py
 src/transformers/models/vit_mae/modeling_vit_mae.py
