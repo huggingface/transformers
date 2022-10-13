@@ -331,6 +331,7 @@ Here's what the preprocessing function looks like:
 >>> max_length = 384
 >>> doc_stride = 128
 
+
 >>> def prepare_validation_features(examples):
 ...     # Some of the questions have lots of whitespace on the left, which is not useful and will make the
 ...     # truncation of the context fail (the tokenized question will take a lots of space). So we remove that
@@ -381,9 +382,7 @@ Then appply this preprocessing function to the test set:
 
 ```py
 >>> validation_features = squad["test"].map(
-...     prepare_validation_features,
-...     batched=True,
-...     remove_columns=squad["test"].column_names
+...     prepare_validation_features, batched=True, remove_columns=squad["test"].column_names
 ... )
 ```
 
@@ -396,7 +395,9 @@ Get the predictions from your model:
 The [`Trainer`] hides columns - `example_id` and `offset_mapping` - that aren't needed by the model so you'll need to set the format again to retrieve those columns:
 
 ```py
->>> validation_features.set_format(type=validation_features.format["type"], columns=list(validation_features.features.keys()))
+>>> validation_features.set_format(
+...     type=validation_features.format["type"], columns=list(validation_features.features.keys())
+... )
 ```
 
 Now create a map between the example indices and the corresponding feature indices:
@@ -419,7 +420,8 @@ Next, create a postprocessing function that maps the predictions to the original
 from tqdm.auto import tqdm
 import numpy as np
 
-def postprocess_qa_predictions(examples, features, raw_predictions, n_best_size = 20, max_answer_length = 30):
+
+def postprocess_qa_predictions(examples, features, raw_predictions, n_best_size=20, max_answer_length=30):
     all_start_logits, all_end_logits = raw_predictions
     # Build a map example to its corresponding features.
     example_id_to_index = {k: i for i, k in enumerate(examples["id"])}
@@ -438,9 +440,9 @@ def postprocess_qa_predictions(examples, features, raw_predictions, n_best_size 
         # Those are the indices of the features associated to the current example.
         feature_indices = features_per_example[example_index]
 
-        min_null_score = None # Only used if squad_v2 is True.
+        min_null_score = None  # Only used if squad_v2 is True.
         valid_answers = []
-        
+
         context = example["context"]
         # Looping through all the features associated to the current example.
         for feature_index in feature_indices:
@@ -480,17 +482,17 @@ def postprocess_qa_predictions(examples, features, raw_predictions, n_best_size 
                     valid_answers.append(
                         {
                             "score": start_logits[start_index] + end_logits[end_index],
-                            "text": context[start_char: end_char]
+                            "text": context[start_char:end_char],
                         }
                     )
-        
+
         if len(valid_answers) > 0:
             best_answer = sorted(valid_answers, key=lambda x: x["score"], reverse=True)[0]
         else:
             # In the very rare edge case we have not a single non-null prediction, we create a fake prediction to avoid
             # failure.
             best_answer = {"text": "", "score": 0.0}
-        
+
         # Let's pick our final answer: the best one or the null answer (only for squad_v2)
         answer = best_answer["text"] if best_answer["score"] > min_null_score else ""
         predictions[example["id"]] = answer
