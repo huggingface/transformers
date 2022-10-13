@@ -376,6 +376,9 @@ def main():
     if model_args.freeze_feature_encoder:
         model.freeze_feature_encoder()
 
+    if model_args.freeze_encoder:
+        model.freeze_encoder()
+
     # 6. Resample speech dataset if necessary
     dataset_sampling_rate = next(iter(raw_datasets.values())).features[data_args.audio_column_name].sampling_rate
     if dataset_sampling_rate != feature_extractor.sampling_rate:
