@@ -514,7 +514,7 @@ def main():
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
         metrics = trainer.evaluate(
-            metric_key_prefix="eval", max_length=model.config.max_length, num_beams=model.config.num_beams
+            metric_key_prefix="eval", max_length=training_args.generation_max_length, num_beams=training_args.generation_num_beams
         )
         max_eval_samples = (
             data_args.max_eval_samples if data_args.max_eval_samples is not None else len(vectorized_datasets["eval"])
