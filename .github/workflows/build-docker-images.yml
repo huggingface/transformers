@@ -43,6 +43,19 @@ jobs:
             REF=main
           push: true
           tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}
+      # Push CI images still need to be re-built daily
+      -
+        name: Build and push (for Push CI) in a daily basis
+        # This condition allows `schedule` events, or `push` events that trigger this workflow NOT via `workflow_call`.
+        # The later case is useful for manual image building for debugging purpose. Use another tag in this case!
+        if: inputs.image_postfix != '-push-ci'
+        uses: docker/build-push-action@v2
+        with:
+          context: ./docker/transformers-all-latest-gpu
+          build-args: |
+            REF=main
+          push: true
+          tags: huggingface/transformers-all-latest-gpu-push-ci
 
   latest-with-torch-nightly-docker:
     name: "Nightly PyTorch + Stable TensorFlow"
@@ -98,6 +111,19 @@ jobs:
             REF=main
           push: true
           tags: huggingface/transformers-pytorch-deepspeed-latest-gpu${{ inputs.image_postfix }}
+      # Push CI images still need to be re-built daily
+      -
+        name: Build and push (for Push CI) in a daily basis
+        # This condition allows `schedule` events, or `push` events that trigger this workflow NOT via `workflow_call`.
+        # The later case is useful for manual image building for debugging purpose. Use another tag in this case!
+        if: inputs.image_postfix != '-push-ci'
+        uses: docker/build-push-action@v2
+        with:
+          context: ./docker/transformers-pytorch-deepspeed-latest-gpu
+          build-args: |
+            REF=main
+          push: true
+          tags: huggingface/transformers-pytorch-deepspeed-latest-gpu-push-ci
 
   nightly-torch-deepspeed-docker:
     name: "Nightly PyTorch + DeepSpeed"
