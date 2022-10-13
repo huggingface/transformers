@@ -219,7 +219,8 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         batch = self.processor.feature_extractor.pad(input_features, return_tensors="pt")
 
         # TODO: remove once PR is merged
-        batch.pop("attention_mask")
+        if batch["attention_mask"].all() == 1:
+            batch.pop("attention_mask")
 
         # now handle the target labels
         for feature in features:
@@ -514,7 +515,9 @@ def main():
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
         metrics = trainer.evaluate(
-            metric_key_prefix="eval", max_length=training_args.generation_max_length, num_beams=training_args.generation_num_beams
+            metric_key_prefix="eval",
+            max_length=training_args.generation_max_length,
+            num_beams=training_args.generation_num_beams,
         )
         max_eval_samples = (
             data_args.max_eval_samples if data_args.max_eval_samples is not None else len(vectorized_datasets["eval"])
