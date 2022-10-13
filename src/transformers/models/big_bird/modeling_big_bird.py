@@ -3004,6 +3004,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
 
         config.num_labels = 2
         self.num_labels = config.num_labels
+        self.sep_token_id = config.sep_token_id
 
         self.bert = BigBirdModel(config, add_pooling_layer=add_pooling_layer)
         self.qa_classifier = BigBirdForQuestionAnsweringHead(config)
