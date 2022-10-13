@@ -79,7 +79,7 @@ TF_BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST = [
 class TFBigBirdEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
-    # Copied from transformers.model.bert.modeling_tf_bert.TFBigBirdEmbeddings.__init__
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings.__init__
     def __init__(self, config: BigBirdConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -151,10 +151,6 @@ class TFBigBirdEmbeddings(tf.keras.layers.Layer):
                 ),
             )
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
-
-        # end copy
-        if self.rescale_embeddings:
-            inputs_embeds = inputs_embeds * (self.hidden_size**0.5)
 
         input_shape = shape_list(inputs_embeds)[:-1]
 
@@ -270,6 +266,7 @@ class TFBigBirdSelfAttention(tf.keras.layers.Layer):
         attention_scores = tf.divide(attention_scores, dk)
 
         if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
             attention_scores = tf.add(attention_scores, attention_mask)
 
         # Normalize the attention scores to probabilities.
@@ -1156,24 +1153,22 @@ class TFBigBirdIntermediate(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = get_tf_activation(config.hidden_act)
-        else:
-            self.intermediate_act_fn = config.hidden_act
-
-    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
+    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
+        hidden_states = self.dropout(inputs=hidden_states, training=training)
+        hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert -> BigBird
 class TFBigBirdOutput(tf.keras.layers.Layer):
-    def __init__(self, config: BigBirdConfig, **kwargs):
+    def __init__(self, config: BertConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
@@ -1380,7 +1375,7 @@ class TFBigBirdEncoder(tf.keras.layers.Layer):
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert -> BigBird
 class TFBigBirdPooler(tf.keras.layers.Layer):
-    def __init__(self, config: BigBirdConfig, **kwargs):
+    def __init__(self, config: BertConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
@@ -1401,7 +1396,7 @@ class TFBigBirdPooler(tf.keras.layers.Layer):
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert -> BigBird
 class TFBigBirdPredictionHeadTransform(tf.keras.layers.Layer):
-    def __init__(self, config: BigBirdConfig, **kwargs):
+    def __init__(self, config: BertConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
@@ -1427,13 +1422,13 @@ class TFBigBirdPredictionHeadTransform(tf.keras.layers.Layer):
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert -> BigBird
 class TFBigBirdLMPredictionHead(tf.keras.layers.Layer):
-    def __init__(self, config: BigBirdConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
+    def __init__(self, config: BertConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
 
-        self.transform = TFBigBirdPredictionHeadTransform(config, name="transform")
+        self.transform = TFBertPredictionHeadTransform(config, name="transform")
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
@@ -1454,7 +1449,7 @@ class TFBigBirdLMPredictionHead(tf.keras.layers.Layer):
     def get_bias(self) -> Dict[str, tf.Variable]:
         return {"bias": self.bias}
 
-    def set_bias(self, value: tf.Variable) -> None:
+    def set_bias(self, value: tf.Variable):
         self.bias = value["bias"]
         self.vocab_size = shape_list(value["bias"])[0]
 
@@ -1755,7 +1750,7 @@ class TFBigBirdPreTrainedModel(TFPreTrainedModel):
     models.
     """
 
-    config_class = BigBirdConfig
+    config_class = BertConfig
     base_model_prefix = "bert"
 
     @property
@@ -1777,7 +1772,6 @@ class TFBigBirdPreTrainedModel(TFPreTrainedModel):
         return dummy
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.BERT_START_DOCSTRING with Bert -> BigBird
 TF_BIG_BIRD_START_DOCSTRING = r"""
 
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -1820,7 +1814,6 @@ TF_BIG_BIRD_START_DOCSTRING = r"""
             configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-# Copied from transformers.models.bert.modeling_tf_bert.BERT_INPUTS_DOCSTRING with Bert -> BigBird
 TF_BIG_BIRD_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
@@ -1878,10 +1871,10 @@ TF_BIG_BIRD_INPUTS_DOCSTRING = r"""
 
 
 @dataclass
-# Copied from transformers.models.bert.modeling_tf_bert.BertForPreTrainingOutput with Bert -> BigBird
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertForPreTrainingOutput with Bert -> BigBird
 class TFBigBirdForPreTrainingOutput(ModelOutput):
     """
-    Output type of [`TFBigBirdForPreTraining`].
+    Output type of [`TFBertForPreTraining`].
 
     Args:
         prediction_logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
