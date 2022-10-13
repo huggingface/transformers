@@ -118,9 +118,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                 },
             )
         else:
-            import ipdb
-
-            ipdb.set_trace()
             # Non CTC models cannot use chunk_length
             with self.assertRaises(ValueError) as v:
                 outputs = speech_recognizer(audio, chunk_length_s=10)
