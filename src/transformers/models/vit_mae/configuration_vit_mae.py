@@ -82,12 +82,12 @@ class ViTMAEConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import ViTMAEModel, ViTMAEConfig
+    >>> from transformers import ViTMAEConfig, ViTMAEModel
 
     >>> # Initializing a ViT MAE vit-mae-base style configuration
     >>> configuration = ViTMAEConfig()
 
-    >>> # Initializing a model from the vit-mae-base style configuration
+    >>> # Initializing a model (with random weights) from the vit-mae-base style configuration
     >>> model = ViTMAEModel(configuration)
 
     >>> # Accessing the model configuration
