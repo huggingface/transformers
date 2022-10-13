@@ -3004,6 +3004,7 @@ else:
             "FlaxDistilBertPreTrainedModel",
         ]
     )
+    _import_structure["models.donut"].extend(["FlaxDonutSwinModel", "FlaxDonutSwinPreTrainedModel"])
     _import_structure["models.electra"].extend(
         [
             "FlaxElectraForCausalLM",
@@ -5568,6 +5569,7 @@ if TYPE_CHECKING:
             FlaxDistilBertModel,
             FlaxDistilBertPreTrainedModel,
         )
+        from .models.donut import FlaxDonutSwinModel, FlaxDonutSwinPreTrainedModel
         from .models.electra import (
             FlaxElectraForCausalLM,
             FlaxElectraForMaskedLM,

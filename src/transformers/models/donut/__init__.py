@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_torch_available, is_vision_available
 
 
 _import_structure = {
@@ -45,6 +45,8 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["feature_extraction_donut"] = ["DonutFeatureExtractor"]
 
+if is_flax_available():
+    _import_structure["modeling_flax_donut_swin"] = ["FlaxDonutSwinModel", "FlaxDonutSwinPreTrainedModel"]
 
 if TYPE_CHECKING:
     from .configuration_donut_swin import DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, DonutSwinConfig
@@ -69,6 +71,17 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_donut import DonutFeatureExtractor
+
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_flax_donut_swin import (
+            FlaxDonutSwinModel,
+            FlaxDonutSwinPreTrainedModel,
+        )
 
 else:
     import sys
