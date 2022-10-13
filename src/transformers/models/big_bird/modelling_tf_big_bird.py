@@ -1168,7 +1168,7 @@ class TFBigBirdIntermediate(tf.keras.layers.Layer):
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert -> BigBird
 class TFBigBirdOutput(tf.keras.layers.Layer):
-    def __init__(self, config: BertConfig, **kwargs):
+    def __init__(self, config: BigBirdConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
@@ -1375,7 +1375,7 @@ class TFBigBirdEncoder(tf.keras.layers.Layer):
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert -> BigBird
 class TFBigBirdPooler(tf.keras.layers.Layer):
-    def __init__(self, config: BertConfig, **kwargs):
+    def __init__(self, config: BigBirdConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
@@ -1396,7 +1396,7 @@ class TFBigBirdPooler(tf.keras.layers.Layer):
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert -> BigBird
 class TFBigBirdPredictionHeadTransform(tf.keras.layers.Layer):
-    def __init__(self, config: BertConfig, **kwargs):
+    def __init__(self, config: BigBirdConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
@@ -1422,13 +1422,13 @@ class TFBigBirdPredictionHeadTransform(tf.keras.layers.Layer):
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert -> BigBird
 class TFBigBirdLMPredictionHead(tf.keras.layers.Layer):
-    def __init__(self, config: BertConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
+    def __init__(self, config: BigBirdConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
 
-        self.transform = TFBertPredictionHeadTransform(config, name="transform")
+        self.transform = TFBigBirdPredictionHeadTransform(config, name="transform")
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
@@ -1750,7 +1750,7 @@ class TFBigBirdPreTrainedModel(TFPreTrainedModel):
     models.
     """
 
-    config_class = BertConfig
+    config_class = BigBirdConfig
     base_model_prefix = "bert"
 
     @property
