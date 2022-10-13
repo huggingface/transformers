@@ -626,8 +626,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
                 padding and conversion into a tensor of type `torch.FloatTensor`. See
                 [`~WhisperFeatureExtractor.__call__`]
             attention_mask (`torch.Tensor`)`, *optional*):
-                Not actually used, pad_tokens are ignored by default.
-                The argument is preserved for compatibility.
+                Not actually used, pad_tokens are ignored by default. The argument is preserved for compatibility.
             head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
                 Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
 
