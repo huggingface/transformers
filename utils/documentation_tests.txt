@@ -96,6 +96,7 @@ src/transformers/models/speech_to_text/modeling_speech_to_text.py
 src/transformers/models/speech_to_text_2/modeling_speech_to_text_2.py
 src/transformers/models/segformer/modeling_tf_segformer.py
 src/transformers/models/swin/modeling_swin.py
+src/transformers/models/trajectory_transformer/configuration_trajectory_transformer.py
 src/transformers/models/trocr/modeling_trocr.py
 src/transformers/models/unispeech/modeling_unispeech.py
 src/transformers/models/unispeech_sat/modeling_unispeech_sat.py
