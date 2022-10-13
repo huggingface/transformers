@@ -486,7 +486,9 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 
         return common_inputs
 
-    def fill_with_past_key_values_(self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str, inverted_values_shape: bool = False):
+    def fill_with_past_key_values_(
+        self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str, inverted_values_shape: bool = False
+    ):
         """
         Fill the input_or_outputs mapping with past_key_values dynamic axes considering.
 
@@ -494,8 +496,8 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
             inputs_or_outputs: The mapping to fill.
             direction: either "inputs" or "outputs", it specifies whether input_or_outputs is the input mapping or the
                 output mapping, this is important for axes naming.
-            inverted_values_shape: whether values have `past_sequence + sequence` as the 2nd axe or not. BLOOM for instance uses
-                this.
+            inverted_values_shape:
+                whether values have `past_sequence + sequence` as the 2nd axe or not. BLOOM for instance uses this.
 
         """
         if direction not in ["inputs", "outputs"]:
