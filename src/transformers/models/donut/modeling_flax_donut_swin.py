@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Tuple, Union
+from typing import Iterable, Optional, Tuple, Union
 import math
 import collections.abc
 import numpy as np
@@ -146,8 +146,21 @@ def window_reverse(windows: jnp.ndarray, window_size: int, height: int, width: i
     windows = jnp.reshape(windows, (batch_size, height, width, -1))
     return windows
 
+class AdaptiveAveragePool1D(nn.Module):
+    output_size: Union[int, Iterable[int]]
 
-class DonutSwinPatchEmbeddings(nn.Module):
+    @nn.compact
+    def __call__(self, inputs):
+        output_size = (
+            (self.output_size,)
+            if isinstance(self.output_size, int)
+            else self.output_size
+        )
+        split = jnp.split(inputs, output_size[0], axis=1)
+        stack = jnp.stack(split, axis=1)
+        return jnp.mean(stack, axis=2)
+
+class FlaxDonutSwinPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -168,8 +181,9 @@ class DonutSwinPatchEmbeddings(nn.Module):
         self.num_patches = num_patches
         self.grid_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
 
-        self.projection = nn.Conv(hidden_size, kernel_size=patch_size, stride=patch_size)
-
+        self.projection = nn.Conv(hidden_size, kernel_size=patch_size, strides=patch_size)
+    
+    # TODO: Implement this function correctly
     def maybe_pad(self, pixel_values: jnp.ndarray, height: int, width: int):
         if width % self.patch_size[1] != 0:
             pad_values = (0, self.patch_size[1] - width % self.patch_size[1])
@@ -180,18 +194,18 @@ class DonutSwinPatchEmbeddings(nn.Module):
         return pixel_values
 
     def __call__(self, pixel_values: jnp.ndarray) -> Tuple[jnp.ndarray, Tuple[int]]:
-        _, num_channels, height, width = pixel_values.shape
+        _, height, width, num_channels = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
         # pad the input to be divisible by self.patch_size, if needed
         pixel_values = self.maybe_pad(pixel_values, height, width)
+        
         embeddings = self.projection(pixel_values)
-        _, _, height, width = embeddings.shape
-        output_dimensions = (height, width)
-        batch_size, _, _, channels = embeddings.shape
-        return jnp.reshape(embeddings, (batch_size, -1, channels)), output_dimensions
+        batch_size, height, width, channels = embeddings.shape
+        
+        return jnp.reshape(embeddings, (batch_size, -1, channels)), (height, width)
 
 
 class DonutSwinEmbeddings(nn.Module):
@@ -203,7 +217,7 @@ class DonutSwinEmbeddings(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.patch_embeddings = DonutSwinPatchEmbeddings(self.config, dtype=self.dtype)
+        self.patch_embeddings = FlaxDonutSwinPatchEmbeddings(self.config, dtype=self.dtype)
         num_patches = self.patch_embeddings.num_patches
         self.patch_grid = self.patch_embeddings.grid_size
         if self.use_mask_token:
@@ -220,7 +234,7 @@ class DonutSwinEmbeddings(nn.Module):
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(
-        self, pixel_values: jnp.ndarray, bool_masked_pos: Optional[jnp.ndarray] = None
+        self, pixel_values: jnp.ndarray, bool_masked_pos: Optional[jnp.ndarray] = None, deterministic:bool=True
     ) -> Tuple[jnp.ndarray]:
         embeddings, output_dimensions = self.patch_embeddings(pixel_values)
         embeddings = self.norm(embeddings)
@@ -235,7 +249,7 @@ class DonutSwinEmbeddings(nn.Module):
         if self.position_embeddings is not None:
             embeddings = embeddings + self.position_embeddings.astype(self.dtype)
 
-        embeddings = self.dropout(embeddings)
+        embeddings = self.dropout(embeddings, deterministic=deterministic)
 
         return embeddings, output_dimensions
 
@@ -253,21 +267,21 @@ class DonutSwinPatchMerging(nn.Module):
         norm_layer (`nn.Module`, *optional*, defaults to `nn.LayerNorm`):
             Normalization layer class.
     """
-    config: DonutSwinConfig
     input_resolution: Tuple[int]
+    layer_norm_eps: float
     dim: int
     norm_layer: nn.Module = nn.LayerNorm
     dtype: jnp.dtype = jnp.float32
     
     def setup(self) -> None:
         self.reduction = nn.Dense(2 * self.dim, use_bias=False)
-        self.norm = self.norm_layer(self.config.layer_norm_eps)
+        self.norm = self.norm_layer(self.layer_norm_eps)
 
     def maybe_pad(self, input_feature, height, width):
         should_pad = (height % 2 == 1) or (width % 2 == 1)
         if should_pad:
-            pad_values = (0, 0, 0, width % 2, 0, height % 2)
-            input_feature = jax.lax.pad(input_feature, 0, pad_values)
+            pad_config = [(0, 0, 0), (width % 2, 0, 0), (0, height % 2, 0), (0, 0, 0)]
+            input_feature = jax.lax.pad(input_feature, 0., pad_config)
 
         return input_feature
 
@@ -344,6 +358,7 @@ def relative_position_index_init(window_size: Tuple[int, int]) -> jnp.ndarray:
 class FlaxDonutSwinRelativePositionBias(nn.Module):
     config: DonutSwinConfig
     window_size: Tuple[int, int]
+    num_attention_heads: int
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
@@ -351,7 +366,7 @@ class FlaxDonutSwinRelativePositionBias(nn.Module):
         self.relative_position_bias_table = self.param(
             "relative_position_bias_table",
             nn.initializers.zeros,
-            (num_relative_distance, self.config.num_attention_heads),
+            (num_relative_distance, self.num_attention_heads),
         )  # 2*Wh-1 * 2*Ww-1, nH
         # cls to token & token 2 cls & cls to cls
 
@@ -379,7 +394,7 @@ class FlaxDonutSwinSelfAttention(nn.Module):
         self.window_size = (
             self.config.window_size if isinstance(self.config.window_size, collections.abc.Iterable) else (self.config.window_size, self.config.window_size)
         )
-        self.relative_position_bias = FlaxDonutSwinRelativePositionBias(self.config, self.window_size, dtype=self.dtype)
+        self.relative_position_bias = FlaxDonutSwinRelativePositionBias(self.config, self.window_size, self.num_attention_heads, dtype=self.dtype)
         self.query = nn.Dense(self.all_head_size, use_bias=self.config.qkv_bias)
         self.key = nn.Dense(self.all_head_size, use_bias=self.config.qkv_bias)
         self.value = nn.Dense(self.all_head_size, use_bias=self.config.qkv_bias)
@@ -390,21 +405,18 @@ class FlaxDonutSwinSelfAttention(nn.Module):
         self,
         hidden_states: jnp.ndarray,
         attention_mask: Optional[jnp.ndarray] = None,
-        head_mask: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = False,
         deterministic: bool = True
     ) -> Tuple[jnp.ndarray]:
-        head_dim = self.config.hidden_size // self.config.num_attention_heads
-
-        query_states = self.query(hidden_states).reshape(
-            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
-        )
-        value_states = self.value(hidden_states).reshape(
-            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
-        )
-        key_states = self.key(hidden_states).reshape(
-            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
-        )
+        query_states = jnp.reshape(self.query(hidden_states), (
+            hidden_states.shape[:2] + (self.num_attention_heads, self.attention_head_size)
+        ))
+        value_states = jnp.reshape(self.value(hidden_states), (
+            hidden_states.shape[:2] + (self.num_attention_heads, self.attention_head_size)
+        ))
+        key_states = jnp.reshape(self.key(hidden_states), (
+            hidden_states.shape[:2] + (self.num_attention_heads, self.attention_head_size)
+        ))
         dropout_rng = None
         if not deterministic and self.config.attention_probs_dropout_prob > 0.0:
             dropout_rng = self.make_rng("dropout")
@@ -419,7 +431,7 @@ class FlaxDonutSwinSelfAttention(nn.Module):
         attn_weights = dot_product_attention_weights(
             query_states,
             key_states,
-            attention_bias=attention_bias,
+            bias=attention_bias,
             dropout_rng=dropout_rng,
             dropout_rate=self.config.attention_probs_dropout_prob,
             broadcast_dropout=True,
@@ -427,9 +439,6 @@ class FlaxDonutSwinSelfAttention(nn.Module):
             dtype=self.dtype,
             precision=None,
         )
-
-        if head_mask is not None:
-            attn_weights = jnp.einsum("...hqk,h->...hqk", attn_weights, head_mask)
 
         attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
         attn_output = attn_output.reshape(attn_output.shape[:2] + (-1,))
@@ -471,10 +480,9 @@ class FlaxDonutSwinAttention(nn.Module):
         self,
         hidden_states: jnp.ndarray,
         attention_mask: Optional[jnp.ndarray] = None,
-        head_mask: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[jnp.ndarray]:
-        self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
+        self_outputs = self.self(hidden_states, attention_mask, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -575,20 +583,20 @@ class FlaxDonutSwinLayer(nn.Module):
     def maybe_pad(self, hidden_states:jnp.ndarray, height: int, width:int):
         pad_right = (self.window_size - width % self.window_size) % self.window_size
         pad_bottom = (self.window_size - height % self.window_size) % self.window_size
-        pad_values = (0, 0, 0, pad_right, 0, pad_bottom)
-        hidden_states = jax.lax.pad(hidden_states, 0, pad_values)
-        return hidden_states, pad_values
+        pad_config = [(0, 0, 0), (0, pad_right, 0), (0, pad_bottom, 0), (0, 0, 0)]
+        hidden_states = jax.lax.pad(hidden_states, 0., pad_config)
+        return hidden_states, pad_config
 
     def __call__(
         self,
         hidden_states: jnp.ndarray,
         input_dimensions: Tuple[int, int],
-        head_mask: Optional[jnp.ndarray] = None,
+        deterministic: Optional[bool] = True,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         self.set_shift_and_window_size(input_dimensions)
         height, width = input_dimensions
-        batch_size, _, channels = hidden_states.size()
+        batch_size, _, channels = hidden_states.shape
         shortcut = hidden_states
 
         hidden_states = self.layernorm_before(hidden_states)
@@ -609,7 +617,7 @@ class FlaxDonutSwinLayer(nn.Module):
         attn_mask = self.get_attn_mask(height_pad, width_pad, dtype=hidden_states.dtype)
 
         attention_outputs = self.attention(
-            hidden_states_windows, attn_mask, head_mask, output_attentions=output_attentions
+            hidden_states_windows, attn_mask, output_attentions=output_attentions
         )
 
         attention_output = attention_outputs[0]
@@ -629,7 +637,7 @@ class FlaxDonutSwinLayer(nn.Module):
 
         attention_windows = jnp.reshape(attention_windows, (batch_size, height * width, channels))
 
-        hidden_states = shortcut + self.drop_path(attention_windows)
+        hidden_states = shortcut + self.drop_path(attention_windows, deterministic=deterministic)
 
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
@@ -645,7 +653,7 @@ class FlaxDonutSwinStage(nn.Module):
     input_resolution: Tuple[int, int]
     depth: int
     num_heads: int
-    downsample: DonutSwinPatchMerging
+    downsample_module: DonutSwinPatchMerging
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
@@ -662,32 +670,26 @@ class FlaxDonutSwinStage(nn.Module):
             ]
 
         # patch merging layer
-        if self.downsample is not None:
-            self.downsample = self.downsample(self.input_resolution, dim=self.dim, norm_layer=nn.LayerNorm)
-        else:
-            self.downsample = None
+        self.downsample = None
+        if self.downsample_module is not None:
+            self.downsample = self.downsample_module(self.input_resolution, self.config.layer_norm_eps, dim=self.dim, norm_layer=nn.LayerNorm)
 
     def __call__(
         self,
         hidden_states: jnp.ndarray,
         input_dimensions: Tuple[int, int],
-        head_mask: Optional[jnp.ndarray] = None,
         determinstic: Optional[bool] = True,
         output_attentions: Optional[bool] = False
     ) -> Tuple[jnp.ndarray]:
         height, width = input_dimensions
         for i, layer_module in enumerate(self.blocks):
-
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
-
+            layer_outputs = layer_module(hidden_states, input_dimensions, determinstic, output_attentions)
             hidden_states = layer_outputs[0]
 
-        if self.downsample is not None:
+        if self.downsample_module is not None:
             height_downsampled, width_downsampled = (height + 1) // 2, (width + 1) // 2
             output_dimensions = (height, width, height_downsampled, width_downsampled)
-            hidden_states = self.downsample(layer_outputs[0], input_dimensions)
+            hidden_states = self.downsample_module(layer_outputs[0], input_dimensions)
         else:
             output_dimensions = (height, width, height, width)
 
@@ -716,8 +718,7 @@ class DonutSwinEncoder(nn.Module):
                     input_resolution=(self.grid_size[0] // (2**i_layer), self.grid_size[1] // (2**i_layer)),
                     depth=self.config.depths[i_layer],
                     num_heads=self.config.num_heads[i_layer],
-                    drop_path=dpr[sum(self.config.depths[:i_layer]): sum(self.config.depths[: i_layer + 1])],
-                    downsample=DonutSwinPatchMerging if (i_layer < self.num_layers - 1) else None,
+                    downsample_module=DonutSwinPatchMerging if (i_layer < self.num_layers - 1) else None,
                 )
                 for i_layer in range(self.num_layers)]
 
@@ -725,7 +726,7 @@ class DonutSwinEncoder(nn.Module):
         self,
         hidden_states: jnp.ndarray,
         input_dimensions: Tuple[int, int],
-        head_mask: Optional[jnp.ndarray] = None,
+        deterministic: bool = True,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
@@ -744,8 +745,7 @@ class DonutSwinEncoder(nn.Module):
             all_reshaped_hidden_states += (reshaped_hidden_state,)
 
         for i, layer_module in enumerate(self.layers):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-            layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(hidden_states, input_dimensions, deterministic, output_attentions)
 
             hidden_states = layer_outputs[0]
             output_dimensions = layer_outputs[1]
@@ -774,6 +774,122 @@ class DonutSwinEncoder(nn.Module):
             reshaped_hidden_states=all_reshaped_hidden_states,
         )
 
+SWIN_START_DOCSTRING = r"""
+
+    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
+
+    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
+    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
+    general usage and behavior.
+
+    Finally, this model supports inherent JAX features such as:
+
+    - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
+    - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
+    - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
+    - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
+
+    Parameters:
+        config ([`DonutSwinConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
+        dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
+            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on GPUs) and
+            `jax.numpy.bfloat16` (on TPUs).
+
+            This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
+            specified all the computation will be performed with the given `dtype`.
+
+            **Note that this only specifies the dtype of the computation and does not influence the dtype of model
+            parameters.**
+
+            If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
+            [`~FlaxPreTrainedModel.to_bf16`].
+"""
+
+SWIN_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`jnp.ndarray` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
+            [`AutoFeatureExtractor.__call__`] for details.
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+class FlaxDonutSwinModule(nn.Module):
+    config: DonutSwinConfig
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    add_pooling_layer:bool=True
+    use_mask_token:bool=False
+
+    def setup(self):
+        self.num_layers = len(self.config.depths)
+        self.num_features = int(self.config.embed_dim * 2 ** (self.num_layers - 1))
+
+        self.embeddings = DonutSwinEmbeddings(self.config, use_mask_token=self.use_mask_token)
+        self.encoder = DonutSwinEncoder(self.config, self.embeddings.patch_grid)
+
+        self.pooler = AdaptiveAveragePool1D(1) if self.add_pooling_layer else None
+
+
+    @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
+    def __call__(   
+        self,
+        pixel_values: Optional[jnp.ndarray] = None,
+        bool_masked_pos: Optional[jnp.ndarray] = None,
+        deterministic: Optional[bool] = True,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None
+    ) -> Union[Tuple, DonutSwinModelOutput]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        embedding_output, input_dimensions = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos, deterministic=deterministic)
+
+        encoder_outputs = self.encoder(
+            embedding_output,
+            input_dimensions,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        sequence_output = encoder_outputs[0]
+
+        pooled_output = None
+        if self.pooler is not None:
+            # TODO: change this code to jax
+            pooled_output = self.pooler(sequence_output.transpose(1, 2))
+            pooled_output = pooled_output.flatten()
+
+        if not return_dict:
+            output = (sequence_output, pooled_output) + encoder_outputs[1:]
+
+            return output
+
+        return DonutSwinModelOutput(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+            reshaped_hidden_states=encoder_outputs.reshaped_hidden_states,
+        )
 
 # Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->DonutSwin
 class FlaxDonutSwinPreTrainedModel(FlaxPreTrainedModel):
@@ -825,144 +941,9 @@ class FlaxDonutSwinPreTrainedModel(FlaxPreTrainedModel):
             return random_params
 
 
-SWIN_START_DOCSTRING = r"""
-
-    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
-
-    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
-    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
-    general usage and behavior.
-
-    Finally, this model supports inherent JAX features such as:
-
-    - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
-    - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
-    - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
-    - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
-
-    Parameters:
-        config ([`DonutSwinConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
-        dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
-            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on GPUs) and
-            `jax.numpy.bfloat16` (on TPUs).
-
-            This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
-            specified all the computation will be performed with the given `dtype`.
-
-            **Note that this only specifies the dtype of the computation and does not influence the dtype of model
-            parameters.**
-
-            If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
-            [`~FlaxPreTrainedModel.to_bf16`].
-"""
-
-SWIN_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`jnp.ndarray` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
-        head_mask (`jnp.ndarray` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 @add_start_docstrings(
     "The bare Donut Swin Model transformer outputting raw hidden-states without any specific head on top.",
     SWIN_START_DOCSTRING,
 )
 class FlaxDonutSwinModel(FlaxDonutSwinPreTrainedModel):
-    def __init__(self, config: DonutSwinConfig, add_pooling_layer:bool=True, use_mask_token:bool=False):
-        super().__init__(config)
-        self.config = config
-        self.num_layers = len(config.depths)
-        self.num_features = int(config.embed_dim * 2 ** (self.num_layers - 1))
-
-        self.embeddings = DonutSwinEmbeddings(config, use_mask_token=use_mask_token)
-        self.encoder = DonutSwinEncoder(config, self.embeddings.patch_grid)
-
-        #TODO: implement adaptive_avg_pool_1d for flax
-        self.pooler = nn.avg_pool(1) if add_pooling_layer else None
-
-
-    def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
-
-    @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
-    # @add_code_sample_docstrings(
-    #     processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-    #     checkpoint=_CHECKPOINT_FOR_DOC,
-    #     output_type=DonutSwinModelOutput,
-    #     config_class=_CONFIG_FOR_DOC,
-    #     modality="vision",
-    #     expected_output=_EXPECTED_OUTPUT_SHAPE,
-    # )
-    def forward(
-        self,
-        pixel_values: Optional[jnp.ndarray] = None,
-        bool_masked_pos: Optional[jnp.ndarray] = None,
-        head_mask: Optional[jnp.ndarray] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, DonutSwinModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, len(self.config.depths))
-
-        embedding_output, input_dimensions = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
-
-        encoder_outputs = self.encoder(
-            embedding_output,
-            input_dimensions,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = encoder_outputs[0]
-
-        pooled_output = None
-        if self.pooler is not None:
-            pooled_output = self.pooler(sequence_output.transpose(1, 2))
-            pooled_output = torch.flatten(pooled_output, 1)
-
-        if not return_dict:
-            output = (sequence_output, pooled_output) + encoder_outputs[1:]
-
-            return output
-
-        return DonutSwinModelOutput(
-            last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-            reshaped_hidden_states=encoder_outputs.reshaped_hidden_states,
-        )
+    module_class = FlaxDonutSwinModule
