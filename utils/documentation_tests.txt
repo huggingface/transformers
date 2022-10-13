@@ -81,6 +81,7 @@ src/transformers/models/regnet/modeling_regnet.py
 src/transformers/models/regnet/modeling_tf_regnet.py
 src/transformers/models/resnet/modeling_resnet.py
 src/transformers/models/resnet/modeling_tf_resnet.py
+src/transformers/models/roberta/configuration_roberta.py
 src/transformers/models/roberta/modeling_roberta.py
 src/transformers/models/roberta/modeling_tf_roberta.py
 src/transformers/models/segformer/modeling_segformer.py
