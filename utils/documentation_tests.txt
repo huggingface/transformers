@@ -27,6 +27,7 @@ src/transformers/models/bigbird_pegasus/modeling_bigbird_pegasus.py
 src/transformers/models/big_bird/modeling_big_bird.py
 src/transformers/models/blenderbot/configuration_blenderbot.py
 src/transformers/models/blenderbot/modeling_blenderbot.py
+src/transformers/models/blenderbot_small/configuration_blenderbot_small.py
 src/transformers/models/blenderbot_small/modeling_blenderbot_small.py
 src/transformers/models/bloom/configuration_bloom.py
 src/transformers/models/canine/configuration_canine.py
