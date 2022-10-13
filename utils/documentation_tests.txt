@@ -30,6 +30,7 @@ src/transformers/models/blenderbot_small/modeling_blenderbot_small.py
 src/transformers/models/bloom/configuration_bloom.py
 src/transformers/models/conditional_detr/modeling_conditional_detr.py
 src/transformers/models/convnext/modeling_convnext.py
+src/transformers/models/ctrl/configuration_ctrl.py
 src/transformers/models/ctrl/modeling_ctrl.py
 src/transformers/models/cvt/modeling_cvt.py
 src/transformers/models/data2vec/modeling_data2vec_audio.py
