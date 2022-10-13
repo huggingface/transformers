@@ -52,6 +52,9 @@ class SwitchTransformersConfig(PretrainedConfig):
             num_heads`.
         d_ff (`int`, *optional*, defaults to 2048):
             Size of the intermediate feed forward layer in each `SwitchTransformersBlock`.
+        expert_capacity (`int`, *optional*, defaults to 1):
+            Number of tokens that can be stored in each expert. If set to 1, the model will behave like a regular
+            Transformer.
         num_encoder_layers (`int`, *optional*, defaults to 12):
             Number of dense hidden layers in the Transformer encoder layer.
         num_sparse_encoder_layers (`int`, *optional*, defaults to 6):
@@ -64,6 +67,8 @@ class SwitchTransformersConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_experts (`int`, *optional*, defaults to 8):
             Number of experts for each SwitchTransformer layer.
+        router_type (`str`, *optional*, defaults to `tokens_masked`):
+            Router type - choice between `tokens_masked` and `tokens_scatter`, `experts_masked`.
         router_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the router.
         router_jitter_noise (`float`, *optional*, defaults to 0.1):
@@ -110,6 +115,8 @@ class SwitchTransformersConfig(PretrainedConfig):
         num_sparse_decoder_layers=6,
         num_heads=8,
         num_experts=8,
+        expert_capacity=1,
+        router_type="tokens_masked",
         router_bias=False,
         router_jitter_noise=0.01,
         router_dtype="float32",
@@ -142,18 +149,20 @@ class SwitchTransformersConfig(PretrainedConfig):
 
         # This tells us, each how many encoder layer we'll have to set a sparse layer.
         if self.num_sparse_encoder_layers > 0:
-            self.encoder_sparse_step = self.num_encoder_layer % self.num_sparse_encoder_layers
+            self.encoder_sparse_step = self.num_encoder_layers // self.num_sparse_encoder_layers
         else:
-            self.encoder_sparse_step = self.num_encoder_layer  # HACK: this will create 0 sparse layers
+            self.encoder_sparse_step = self.num_encoder_layers  # HACK: this will create 0 sparse layers
 
         # This tells us, each how many encoder layer we'll have to set a sparse layer.
         if self.num_sparse_decoder_layers > 0:
-            self.decoder_sparse_step = self.num_decoder_layer % self.num_sparse_decoder_layers
+            self.decoder_sparse_step = self.num_decoder_layers // self.num_sparse_decoder_layers
         else:
-            self.decoder_sparse_step = self.num_decoder_layer  # HACK: this will create 0 sparse layers
+            self.decoder_sparse_step = self.num_decoder_layers  # HACK: this will create 0 sparse layers
 
         self.num_heads = num_heads
+        self.router_type = router_type
         self.num_experts = num_experts
+        self.expert_capacity = expert_capacity
         self.router_bias = router_bias
         self.router_jitter_noise = router_jitter_noise
         self.router_dtype = router_dtype

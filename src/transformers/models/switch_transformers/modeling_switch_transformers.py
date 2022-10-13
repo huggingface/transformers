@@ -44,7 +44,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_switch_transformers import SwitchTransformersConfig
-from .router import ExpertsChooseMaskedRouter, TokensChooseMaskedRouter, TokensChooseScatterRouter
+from .router import ExpertsChooseMaskedRouter, RouterMask, TokensChooseMaskedRouter
 
 
 logger = logging.get_logger(__name__)
@@ -153,6 +153,30 @@ class SwitchTransformersLayerFF(nn.Module):
         return hidden_states
 
 
+class SwitchTransformersExpert(nn.Module):
+    def __init__(self, config: SwitchTransformersConfig):
+        super().__init__()
+        self.weights = nn.ModuleDict(
+            {
+                "expert_{}".format(i): nn.Linear(config.d_model, config.d_model, bias=False)
+                for i in range(config.num_experts)
+            }
+        )
+
+    def forward(self, hidden_states, indices):
+        r"""
+        Args:
+            hidden_states (`torch.FloatTensor`, **required**):
+                Input to the layer of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            indices (:obj:`torch.LongTensor`, **required**):
+                Indices of the experts of shape :obj:`(batch_size, )` to use for each input in the batch.
+        """
+        for i in range(len(self.weights)):
+            expert_indices = (indices[:, :, i, :] == 1).squeeze(-1)
+            hidden_states[expert_indices] = self.weights["expert_{}".format(i)](hidden_states[expert_indices])
+        return hidden_states
+
+
 class SwitchTransformersSparseMLP(nn.Module):
     r"""
     Implementation of the Switch Transformers Sparse MLP module
@@ -166,7 +190,9 @@ class SwitchTransformersSparseMLP(nn.Module):
         self.router = self._get_router(config)
 
         # Step 2: Get the experts
-        self.experts = None  # TODO: figure out how this is done in t5x...
+        self.experts = SwitchTransformersExpert(config)
+
+        self.expert_capacity = config.expert_capacity
 
     def _get_router(self, config):
         r"""
@@ -178,8 +204,9 @@ class SwitchTransformersSparseMLP(nn.Module):
         """
         if config.router_type.lower() == "tokens_masked":
             return TokensChooseMaskedRouter(config)
-        elif config.router_type.lower() == "tokens_scatter":
-            return TokensChooseScatterRouter(config)
+        # TODO: completely remove the scatter implementations
+        # elif config.router_type.lower() == "tokens_scatter":
+        #     return TokensChooseScatterRouter(config)
         elif config.router_type.lower() == "experts_masked":
             return ExpertsChooseMaskedRouter(config)
         else:
@@ -189,7 +216,12 @@ class SwitchTransformersSparseMLP(nn.Module):
             )
 
     def forward(self, hidden_states):
-        pass
+        expert_indices = self.router(hidden_states, expert_capacity=self.expert_capacity)
+        if not isinstance(expert_indices, RouterMask):
+            raise NotImplementedError("Only MaskedRouter is supported for now")
+        masked_indices = expert_indices.dispatch_mask
+        hidden_states = self.experts(hidden_states, masked_indices)
+        return hidden_states
 
 
 # Copied from transformers.models.t5.modeling_t5.T5Attention with T5->SwitchTransformers
@@ -709,12 +741,14 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-class SwitchTransformersStack(nn.Module):
-    def __init__(self, config, embed_tokens=None, sparse_step=1):
+class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
+    def __init__(self, config, embed_tokens=None):
         super().__init__(config)
 
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
+
+        sparse_step = config.decoder_sparse_step if self.is_decoder else config.encoder_sparse_step
 
         # TODO: change this, actually you can have a block full of sparse layers...
         self.block = nn.ModuleList(
@@ -954,10 +988,10 @@ class SwitchTransformersStack(nn.Module):
 
 SWITCH_TRANSFORMERS_START_DOCSTRING = r"""
 
-    The SWITCH_TRANSFORMERS model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text
-    Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan
-    Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a
-    text-to-text denoising generative setting.
+    The SWITCH_TRANSFORMERS model was proposed in [Exploring the Limits of Transfer Learning with a Unified
+    Text-to-Text Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine
+    Lee, Sharan Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer
+    pre-trained in a text-to-text denoising generative setting.
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1136,13 +1170,13 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = SwitchTransformersStack(encoder_config, self.shared, encoder_config.encoder_sparse_step)
+        self.encoder = SwitchTransformersStack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = SwitchTransformersStack(decoder_config, self.shared, decoder_config.decoder_sparse_step)
+        self.decoder = SwitchTransformersStack(decoder_config, self.shared)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1310,6 +1344,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
+        encoder_config.num_layers = config.num_encoder_layers
         encoder_config.is_encoder_decoder = False
         self.encoder = SwitchTransformersStack(encoder_config, self.shared)
 
@@ -1558,8 +1593,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
 
 @add_start_docstrings(
-    "The bare SWITCH_TRANSFORMERS Model transformer outputting encoder's raw hidden-states without any specific head on"
-    " top.",
+    "The bare SWITCH_TRANSFORMERS Model transformer outputting encoder's raw hidden-states without any specific head"
+    " on top.",
     SWITCH_TRANSFORMERS_START_DOCSTRING,
 )
 class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):

@@ -39,6 +39,7 @@ PRIVATE_MODELS = [
     "LongT5Stack",
     "RealmBertModel",
     "T5Stack",
+    "SwitchTransformersStack",
     "TFDPRSpanPredictor",
 ]
 

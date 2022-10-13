@@ -41,12 +41,12 @@ def convert_switch_transformersx_checkpoint_to_flax(
         switch_transformersx_attention_out = switch_transformersx_model["target"]["encoder"][layer_name]["attention"][
             "out"
         ]["kernel"]
-        switch_transformersx_attention_query = switch_transformersx_model["target"]["encoder"][layer_name]["attention"][
-            "query"
-        ]["kernel"]
-        switch_transformersx_attention_value = switch_transformersx_model["target"]["encoder"][layer_name]["attention"][
-            "value"
-        ]["kernel"]
+        switch_transformersx_attention_query = switch_transformersx_model["target"]["encoder"][layer_name][
+            "attention"
+        ]["query"]["kernel"]
+        switch_transformersx_attention_value = switch_transformersx_model["target"]["encoder"][layer_name][
+            "attention"
+        ]["value"]["kernel"]
 
         # Layer Normalization
         switch_transformersx_attention_layer_norm = switch_transformersx_model["target"]["encoder"][layer_name][
@@ -65,7 +65,9 @@ def convert_switch_transformersx_checkpoint_to_flax(
                 "kernel"
             ]
 
-        switch_transformersx_mlp_wo = switch_transformersx_model["target"]["encoder"][layer_name]["mlp"]["wo"]["kernel"]
+        switch_transformersx_mlp_wo = switch_transformersx_model["target"]["encoder"][layer_name]["mlp"]["wo"][
+            "kernel"
+        ]
 
         # Layer Normalization
         switch_transformersx_mlp_layer_norm = switch_transformersx_model["target"]["encoder"][layer_name][
@@ -176,7 +178,9 @@ def convert_switch_transformersx_checkpoint_to_flax(
                 "kernel"
             ]
 
-        switch_transformersx_mlp_wo = switch_transformersx_model["target"]["decoder"][layer_name]["mlp"]["wo"]["kernel"]
+        switch_transformersx_mlp_wo = switch_transformersx_model["target"]["decoder"][layer_name]["mlp"]["wo"][
+            "kernel"
+        ]
 
         # Layer Normalization
         tx5_mlp_layer_norm = switch_transformersx_model["target"]["decoder"][layer_name]["pre_mlp_layer_norm"]["scale"]
@@ -266,7 +270,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--switch_transformersx_checkpoint_path", default=None, type=str, required=True, help="Path the TX5 checkpoint."
+        "--switch_transformersx_checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path the TX5 checkpoint.",
     )
     parser.add_argument(
         "--config_name", default=None, type=str, required=True, help="Config name of SwitchTransformers model."

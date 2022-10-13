@@ -80,8 +80,8 @@ class RouterIndices:
             A tensor of size [`num_groups`, `tokens_per_group`, `num_selected_experts`, 2] dispatch indices indicating,
             for each token, its preferred expert and its priority in that expert's buffer.
         combine_weights (`torch.Tensor`):
-            A tensor of size [num_groups, tokens_per_group, num_selected_experts] combine weights used for scaling
-            expert outputs with the router's dispatch probability/confidence.
+            A tensor of size [`num_groups`, `tokens_per_group`, `num_selected_experts`] combine weights used for
+            scaling expert outputs with the router's dispatch probability/confidence.
         auxiliary_loss (`float`):
             Load balancing loss for router.
         router_z_loss (`float`):
@@ -91,6 +91,11 @@ class RouterIndices:
     combine_weights: torch.Tensor
     auxiliary_loss: float
     router_z_loss: float = 0.0
+
+    def to(self, device):
+        return replace(
+            self, dispatch_mask=self.dispatch_indices.to(device), combine_array=self.combine_weights.to(device)
+        )
 
 
 @dataclass
@@ -114,6 +119,9 @@ class RouterMask:
     combine_array: torch.Tensor
     auxiliary_loss: float
     router_z_loss: float = 0.0
+
+    def to(self, device):
+        return replace(self, dispatch_mask=self.dispatch_mask.to(device), combine_array=self.combine_array.to(device))
 
 
 # Router loss

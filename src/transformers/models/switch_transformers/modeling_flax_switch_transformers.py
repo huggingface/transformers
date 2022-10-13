@@ -1257,10 +1257,10 @@ class FlaxSwitchTransformersPreTrainedModel(FlaxPreTrainedModel):
 
 
 SWITCH_TRANSFORMERS_START_DOCSTRING = r"""
-    The SWITCH_TRANSFORMERS model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text
-    Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan
-    Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a
-    text-to-text denoising generative setting.
+    The SWITCH_TRANSFORMERS model was proposed in [Exploring the Limits of Transfer Learning with a Unified
+    Text-to-Text Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine
+    Lee, Sharan Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer
+    pre-trained in a text-to-text denoising generative setting.
 
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1434,8 +1434,8 @@ append_replace_return_docstrings(
 
 
 @add_start_docstrings(
-    "The bare SWITCH_TRANSFORMERS Model transformer outputting encoder's raw hidden-states without any specific head on"
-    " top.",
+    "The bare SWITCH_TRANSFORMERS Model transformer outputting encoder's raw hidden-states without any specific head"
+    " on top.",
     SWITCH_TRANSFORMERS_START_DOCSTRING,
 )
 # Copied from transformers.models.t5.modeling_flax_t5.FlaxT5EncoderModule with T5->SwitchTransformers
