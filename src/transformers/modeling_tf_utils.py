@@ -2160,7 +2160,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 with h5py.File(os.path.join(save_directory, shard_file), mode="w") as shard_file:
                     layers = []
                     for layer in sorted(shard, key=lambda x: x.name):
-                        if "model." in layer.name or len(layer.name.split("/")) == 1: 
+                        if "model." in layer.name or len(layer.name.split("/")) == 1:
                             layer_name = layer.name
                             print(layer_name)
                         else:
@@ -2170,7 +2170,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         )
                         param_dset[:] = layer.numpy()
                         layers.append(layer_name.encode("utf8"))
-                    save_attributes_to_hdf5_group(shard_file,"layer_names",layers)
+                    save_attributes_to_hdf5_group(shard_file, "layer_names", layers)
 
         if push_to_hub:
             self._upload_modified_files(

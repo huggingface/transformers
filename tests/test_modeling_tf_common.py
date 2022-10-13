@@ -76,12 +76,12 @@ if is_tf_available():
         TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         BertConfig,
+        RagRetriever,
         TFAutoModel,
         TFAutoModelForSequenceClassification,
         TFBertModel,
-        TFSharedEmbeddings,
         TFRagModel,
-        RagRetriever
+        TFSharedEmbeddings,
     )
     from transformers.generation_tf_utils import (
         TFBeamSampleDecoderOnlyOutput,
@@ -2067,16 +2067,15 @@ class UtilsFunctionsTest(unittest.TestCase):
 
     @slow
     def test_special_layer_name_shardind(self):
-        retriever =RagRetriever.from_pretrained("facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True)
-        model = TFRagModel.from_pretrained("facebook/rag-token-nq", retriever = retriever)
-        
+        retriever = RagRetriever.from_pretrained("facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True)
+        model = TFRagModel.from_pretrained("facebook/rag-token-nq", retriever=retriever)
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             for max_size in ["150kB", "150kiB", "200kB", "200kiB"]:
                 model.save_pretrained(tmp_dir, max_shard_size=max_size)
-                ref_model = TFRagModel.from_pretrained(tmp_dir, retriever = retriever)
+                ref_model = TFRagModel.from_pretrained(tmp_dir, retriever=retriever)
                 for p1, p2 in zip(model.weights, ref_model.weights):
                     assert np.allclose(p1.numpy(), p2.numpy())
-
 
     def test_checkpoint_sharding_local(self):
         model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
