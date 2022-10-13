@@ -741,7 +741,7 @@ class TFSegformerDecodeHead(TFSegformerPreTrainedModel):
         self.linear_fuse = tf.keras.layers.Conv2D(
             filters=config.decoder_hidden_size, kernel_size=1, use_bias=False, name="linear_fuse"
         )
-        self.batch_norm = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.1, name="batch_norm")
+        self.batch_norm = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="batch_norm")
         self.activation = tf.keras.layers.Activation("relu")
 
         self.dropout = tf.keras.layers.Dropout(config.classifier_dropout_prob)

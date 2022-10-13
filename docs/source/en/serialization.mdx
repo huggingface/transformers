@@ -96,6 +96,7 @@ Ready-made configurations include the following architectures:
 - SqueezeBERT
 - Swin Transformer
 - T5
+- Vision Encoder decoder
 - ViT
 - XLM
 - XLM-RoBERTa
@@ -291,6 +292,13 @@ earlier. This is expected since the fine-tuned model has a sequence classificati
 The features that have a `with-past` suffix (like `causal-lm-with-past`) correspond to
 model classes with precomputed hidden states (key and values in the attention blocks)
 that can be used for fast autoregressive decoding.
+
+</Tip>
+
+<Tip>
+
+For `VisionEncoderDecoder` type models, the encoder and decoder parts are
+exported separately as two ONNX files named `encoder_model.onnx` and `decoder_model.onnx` respectively.
 
 </Tip>
 

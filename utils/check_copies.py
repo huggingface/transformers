@@ -70,6 +70,14 @@ LOCALIZED_READMES = {
             " {paper_authors}.{supplements}"
         ),
     },
+    "README_es.md": {
+        "start_prompt": "🤗 Transformers actualmente proporciona las siguientes arquitecturas",
+        "end_prompt": "1. ¿Quieres aportar un nuevo modelo?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
 }
 
 

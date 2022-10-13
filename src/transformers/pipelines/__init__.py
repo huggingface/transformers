@@ -32,6 +32,7 @@ from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
+from ..models.auto.modeling_auto import AutoModelForDepthEstimation
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..tokenization_utils_fast import PreTrainedTokenizerFast
@@ -51,6 +52,7 @@ from .base import (
     infer_framework_load_model,
 )
 from .conversational import Conversation, ConversationalPipeline
+from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
@@ -343,6 +345,13 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForZeroShotObjectDetection,) if is_torch_available() else (),
         "default": {"model": {"pt": ("google/owlvit-base-patch32", "17740e1")}},
         "type": "multimodal",
+    },
+    "depth-estimation": {
+        "impl": DepthEstimationPipeline,
+        "tf": (),
+        "pt": (AutoModelForDepthEstimation,) if is_torch_available() else (),
+        "default": {"model": {"pt": ("Intel/dpt-large", "e93beec")}},
+        "type": "image",
     },
 }
 
