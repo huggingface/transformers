@@ -95,7 +95,7 @@ class BlenderbotConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BlenderbotModel, BlenderbotConfig
+    >>> from transformers import BlenderbotConfig, BlenderbotModel
 
     >>> # Initializing a Blenderbot facebook/blenderbot-3B style configuration
     >>> configuration = BlenderbotConfig()
