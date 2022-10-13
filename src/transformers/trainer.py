@@ -1877,6 +1877,23 @@ class Trainer:
         self.log(metrics)
         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
 
+        run_dir = self._get_output_dir(trial)
+
+        output_dir = os.path.join(run_dir, checkpoint_folder)
+        checkpoints_sorted = self._sorted_checkpoints(use_mtime=True, output_dir=output_dir)
+
+        # Delete the last checkpoint when save_total_limit=1 if it's different from the best checkpoint.
+        if self.state.best_model_checkpoint is not None and self.state.args.save_total_limit == 1:
+            for checkpoint in checkpoints_sorted:
+                if checkpoint != self.state.best_model_checkpoint:
+                    logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
+                    shutil.rmtree(checkpoint)
+
+        self.control = self.callback_handler.on_train_end(args, self.state, self.control)
+
+        return TrainOutput(self.state.global_step, train_loss, metrics)
+
+    def _get_output_dir(self, trial):
         if self.hp_search_backend is not None and trial is not None:
             if self.hp_search_backend == HPSearchBackend.OPTUNA:
                 run_id = trial.number
@@ -1894,20 +1911,7 @@ class Trainer:
             run_dir = os.path.join(self.args.output_dir, run_name)
         else:
             run_dir = self.args.output_dir
-
-        output_dir = os.path.join(run_dir, checkpoint_folder)
-        checkpoints_sorted = self._sorted_checkpoints(use_mtime=True, output_dir=output_dir)
-
-        # Delete the last checkpoint when save_total_limit=1 if it's different from the best checkpoint.
-        if self.state.best_model_checkpoint is not None and self.state.args.save_total_limit == 1:
-            for checkpoint in checkpoints_sorted:
-                if checkpoint != self.state.best_model_checkpoint:
-                    logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
-                    shutil.rmtree(checkpoint)
-
-        self.control = self.callback_handler.on_train_end(args, self.state, self.control)
-
-        return TrainOutput(self.state.global_step, train_loss, metrics)
+        return run_dir
 
     def _load_from_checkpoint(self, resume_from_checkpoint, model=None):
 
