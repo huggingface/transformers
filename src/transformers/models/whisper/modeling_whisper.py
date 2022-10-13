@@ -609,6 +609,11 @@ class WhisperEncoder(WhisperPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def _freeze_parameters(self):
+        for param in self.parameters():
+            param.requires_grad = False
+        self._requires_grad = False
+
     def forward(
         self,
         input_features,
@@ -991,6 +996,13 @@ class WhisperModel(WhisperPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
+    def freeze_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the Whisper encoder so that its parameters will
+        not be updated during training.
+        """
+        self.encoder._freeze_parameters()
+
     @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_PROCESSOR_FOR_DOC,
@@ -1108,6 +1120,13 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.proj_out = new_embeddings
+
+    def freeze_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the Whisper encoder so that its parameters will
+        not be updated during training.
+        """
+        self.model.encoder._freeze_parameters()
 
     @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)

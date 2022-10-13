@@ -22,12 +22,16 @@ src/transformers/models/beit/modeling_beit.py
 src/transformers/models/bert/configuration_bert.py
 src/transformers/models/bert/modeling_bert.py
 src/transformers/models/bert/modeling_tf_bert.py
+src/transformers/models/bert_generation/configuration_bert_generation.py
 src/transformers/models/bigbird_pegasus/modeling_bigbird_pegasus.py
 src/transformers/models/big_bird/modeling_big_bird.py
 src/transformers/models/blenderbot/modeling_blenderbot.py
 src/transformers/models/blenderbot_small/modeling_blenderbot_small.py
+src/transformers/models/bloom/configuration_bloom.py
+src/transformers/models/canine/configuration_canine.py
 src/transformers/models/conditional_detr/modeling_conditional_detr.py
 src/transformers/models/convnext/modeling_convnext.py
+src/transformers/models/ctrl/configuration_ctrl.py
 src/transformers/models/ctrl/modeling_ctrl.py
 src/transformers/models/cvt/modeling_cvt.py
 src/transformers/models/data2vec/modeling_data2vec_audio.py
@@ -35,6 +39,7 @@ src/transformers/models/data2vec/modeling_data2vec_vision.py
 src/transformers/models/deberta/modeling_deberta.py
 src/transformers/models/deberta_v2/modeling_deberta_v2.py
 src/transformers/models/deformable_detr/modeling_deformable_detr.py
+src/transformers/models/deit/configuration_deit.py
 src/transformers/models/deit/modeling_deit.py
 src/transformers/models/deit/modeling_tf_deit.py
 src/transformers/models/detr/modeling_detr.py
@@ -48,6 +53,7 @@ src/transformers/models/gptj/modeling_gptj.py
 src/transformers/models/groupvit/modeling_groupvit.py
 src/transformers/models/groupvit/modeling_tf_groupvit.py
 src/transformers/models/hubert/modeling_hubert.py
+src/transformers/models/imagegpt/configuration_imagegpt.py
 src/transformers/models/layoutlm/modeling_layoutlm.py
 src/transformers/models/layoutlm/modeling_tf_layoutlm.py
 src/transformers/models/layoutlmv2/modeling_layoutlmv2.py
@@ -60,6 +66,7 @@ src/transformers/models/longt5/modeling_longt5.py
 src/transformers/models/marian/modeling_marian.py
 src/transformers/models/markuplm/modeling_markuplm.py
 src/transformers/models/mbart/modeling_mbart.py
+src/transformers/models/mobilebert/configuration_mobilebert.py
 src/transformers/models/mobilebert/modeling_mobilebert.py
 src/transformers/models/mobilebert/modeling_tf_mobilebert.py
 src/transformers/models/mobilevit/modeling_mobilevit.py
@@ -71,11 +78,13 @@ src/transformers/models/pegasus/modeling_pegasus.py
 src/transformers/models/perceiver/modeling_perceiver.py
 src/transformers/models/plbart/modeling_plbart.py
 src/transformers/models/poolformer/modeling_poolformer.py
+src/transformers/models/reformer/configuration_reformer.py
 src/transformers/models/reformer/modeling_reformer.py
 src/transformers/models/regnet/modeling_regnet.py
 src/transformers/models/regnet/modeling_tf_regnet.py
 src/transformers/models/resnet/modeling_resnet.py
 src/transformers/models/resnet/modeling_tf_resnet.py
+src/transformers/models/roberta/configuration_roberta.py
 src/transformers/models/roberta/modeling_roberta.py
 src/transformers/models/roberta/modeling_tf_roberta.py
 src/transformers/models/segformer/modeling_segformer.py
@@ -93,9 +102,11 @@ src/transformers/models/van/modeling_van.py
 src/transformers/models/videomae/modeling_videomae.py
 src/transformers/models/vilt/modeling_vilt.py
 src/transformers/models/vision_encoder_decoder/modeling_vision_encoder_decoder.py
+src/transformers/models/vit/configuration_vit.py
 src/transformers/models/vit/modeling_vit.py
 src/transformers/models/vit/modeling_tf_vit.py
 src/transformers/models/vit_mae/modeling_vit_mae.py
+src/transformers/models/vit_mae/configuration_vit_mae.py
 src/transformers/models/vit_msn/modeling_vit_msn.py
 src/transformers/models/wav2vec2/modeling_wav2vec2.py
 src/transformers/models/wav2vec2/tokenization_wav2vec2.py
@@ -108,3 +119,4 @@ src/transformers/models/whisper/modeling_tf_whisper.py
 src/transformers/models/yolos/configuration_yolos.py
 src/transformers/models/yolos/modeling_yolos.py
 src/transformers/models/x_clip/modeling_x_clip.py
+src/transformers/models/yoso/configuration_yoso.py
