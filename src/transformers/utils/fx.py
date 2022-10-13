@@ -104,6 +104,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "blenderbot-small",
     "bloom",
     "clip",
+    "convnext",
     "deberta",
     "deberta-v2",
     "distilbert",
@@ -125,6 +126,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "opt",
     "pegasus",
     "plbart",
+    "resnet",
     "roberta",
     "speech_to_text",
     "speech_to_text_2",
@@ -133,6 +135,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "trocr",
     "vit",
     "xglm",
+    "wav2vec2",
     #    "xlnet",
 ]
 
@@ -743,7 +746,7 @@ class HFTracer(Tracer):
                 elif hasattr(model.config, "encoder"):
                     image_size = model.config.encoder.image_size
                 else:
-                    raise AttributeError('Could not find the "image_size" field in the model config')
+                    image_size = (_generate_random_int(), _generate_random_int())
 
             # If no num_channels is in the config, use some arbitrary value.
             num_channels = getattr(model.config, "num_channels", 3)
@@ -859,11 +862,12 @@ class HFTracer(Tracer):
 
         return rv
 
+    # Replaced by .getattr from PyTorch 1.13
     def _module_getattr(self, attr, attr_val, parameter_proxy_cache):
         if getattr(self, "_disable_module_getattr", False):
             return attr_val
         else:
-            # return super()._module_getattr(attr, attr_val, parameter_proxy_cache)
+
             def maybe_get_proxy_for_attr(attr_val, collection_to_search, parameter_proxy_cache):
                 for n, p in collection_to_search:
                     if attr_val is p:
@@ -895,6 +899,10 @@ class HFTracer(Tracer):
                     return maybe_buffer_proxy
 
             return attr_val
+
+    # Needed for PyTorch 1.13+
+    def getattr(self, attr: str, attr_val: Any, parameter_proxy_cache: Dict[str, Any]):
+        return self._module_getattr(attr, attr_val, parameter_proxy_cache)
 
     def call_module(self, m, forward, args, kwargs):
         self.orig_forward = forward

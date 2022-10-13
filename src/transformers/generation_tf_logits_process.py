@@ -504,3 +504,84 @@ class TFForcedEOSTokenLogitsProcessor(TFLogitsProcessor):
                     axis=-1,
                 )
         return scores
+
+
+class TFSuppressTokensAtBeginLogitsProcessor(TFLogitsProcessor):
+    r"""
+    [`TFSuppressTokensAtBeginLogitsProcessor`] suppresses a list of tokens as soon as the `generate` function starts
+    generating using `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` at not
+    sampled at the begining of the generation.
+    """
+
+    def __init__(self, begin_suppress_tokens, begin_index):
+        self.begin_suppress_tokens = list(begin_suppress_tokens)
+        self.begin_index = begin_index
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        scores = tf.cond(
+            tf.equal(cur_len, self.begin_index),
+            lambda: tf.tensor_scatter_nd_update(
+                scores,
+                indices=[[i, token] for i in range(scores.shape[0]) for token in self.begin_suppress_tokens],
+                updates=[-float("inf") for _ in range(scores.shape[0] * len(self.begin_suppress_tokens))],
+            ),
+            lambda: scores,
+        )
+        return scores
+
+
+class TFSuppressTokensLogitsProcessor(TFLogitsProcessor):
+    r"""This processor can be used to suppress a list of tokens. The processor will set their log probs to `-inf` so that they
+    are not sampled."""
+
+    def __init__(self, suppress_tokens):
+        self.suppress_tokens = list(suppress_tokens)
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        scores = tf.tensor_scatter_nd_update(
+            scores,
+            indices=[[i, token] for i in range(scores.shape[0]) for token in self.suppress_tokens],
+            updates=[-float("inf") for _ in range(scores.shape[0] * len(self.suppress_tokens))],
+        )
+        return scores
+
+
+class TFForceTokensLogitsProcessor(TFLogitsProcessor):
+    r"""This processor can be used to force a list of tokens. The processor will set their log probs to `0` and all
+    other tokens to `-inf` so that they are sampled at their corresponding index."""
+
+    def __init__(self, force_token_map):
+        force_token_map = dict(force_token_map)
+        # Converts the dictionary of format {index: token} containing the tokens to be forced to an array, where the
+        # index of the array corresponds to the index of the token to be forced, for XLA compatibility.
+        # Indexes without forced tokens will have an negative value.
+        force_token_array = np.ones((max(force_token_map.keys()) + 1), dtype=np.int32) * -1
+        for index, token in force_token_map.items():
+            force_token_array[index] = token
+        self.force_token_array = tf.convert_to_tensor(force_token_array, dtype=tf.int32)
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        def _force_token(generation_idx):
+            batch_size = scores.shape[0]
+            current_token = self.force_token_array[generation_idx]
+
+            new_scores = tf.ones_like(scores, dtype=scores.dtype) * -float("inf")
+            indices = tf.stack((tf.range(batch_size), tf.tile([current_token], [batch_size])), axis=1)
+            updates = tf.zeros((batch_size,), dtype=scores.dtype)
+            new_scores = tf.tensor_scatter_nd_update(new_scores, indices, updates)
+            return new_scores
+
+        scores = tf.cond(
+            tf.greater_equal(cur_len, tf.shape(self.force_token_array)[0]),
+            # If the current length is geq than the length of force_token_array, the processor does nothing.
+            lambda: tf.identity(scores),
+            # Otherwise, it may force a certain token.
+            lambda: tf.cond(
+                tf.greater_equal(self.force_token_array[cur_len], 0),
+                # Only valid (positive) tokens are forced
+                lambda: _force_token(cur_len),
+                # Otherwise, the processor does nothing.
+                lambda: scores,
+            ),
+        )
+        return scores

@@ -236,6 +236,19 @@ class TopKLogitsWarper(LogitsWarper):
 
 
 class TypicalLogitsWarper(LogitsWarper):
+    r"""
+    [`LogitsWarper`] that performs typical decoding. See [Typical Decoding for Natural Language
+    Generation](https://arxiv.org/abs/2202.00666) for more information.
+
+    Args:
+        mass (`float`):
+            Value of typical_p between 0 and 1 inclusive, defaults to 0.9.
+        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+            All filtered values will be set to this float value.
+        min_tokens_to_keep (`int`, *optional*, defaults to 1):
+            Minimum number of tokens that cannot be filtered.
+    """
+
     def __init__(self, mass: float = 0.9, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         mass = float(mass)
         if not (mass > 0 and mass < 1):
@@ -688,4 +701,50 @@ class LogitNormalization(LogitsProcessor, LogitsWarper):
 
     def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
         scores = scores.log_softmax(dim=-1)
+        return scores
+
+
+class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
+    r"""
+    [`SuppressTokensAtBeginLogitsProcessor`] supresses a list of tokens as soon as the `generate` function starts
+    generating using `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` at not
+    sampled at the begining of the generation.
+    """
+
+    def __init__(self, begin_suppress_tokens, begin_index):
+        self.begin_suppress_tokens = list(begin_suppress_tokens)
+        self.begin_index = begin_index
+
+    def __call__(self, input_ids, scores):
+        if input_ids.shape[1] == self.begin_index:
+            scores[:, self.begin_suppress_tokens] = -float("inf")
+
+        return scores
+
+
+class SuppressTokensLogitsProcessor(LogitsProcessor):
+    r"""This processor can be used to suppress a list of tokens. The processor will set their log probs to `-inf` so that they
+    are not sampled."""
+
+    def __init__(self, suppress_tokens):
+        self.suppress_tokens = list(suppress_tokens)
+
+    def __call__(self, input_ids, scores):
+        scores[:, self.suppress_tokens] = -float("inf")
+        return scores
+
+
+class ForceTokensLogitsProcessor(LogitsProcessor):
+    r"""This processor can be used to force a list of tokens. The processor will set their log probs to `inf` so that they
+    are sampled at their corresponding index."""
+
+    def __init__(self, force_token_map):
+        self.force_token_map = dict(force_token_map)
+
+    def __call__(self, input_ids, scores):
+        generation_idx = input_ids.shape[-1]
+        current_token = self.force_token_map.get(generation_idx, None)
+        if current_token is not None:
+            scores[:, :] = -float("inf")
+            scores[:, current_token] = 0
         return scores

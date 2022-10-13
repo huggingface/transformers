@@ -16,7 +16,6 @@
 
 
 import random
-from contextlib import nullcontext
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -41,6 +40,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
+    ContextManagers,
     add_code_sample_docstrings,
     add_end_docstrings,
     add_start_docstrings,
@@ -741,11 +741,20 @@ class TFBartEncoder(tf.keras.layers.Layer):
             # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
             # is used with a name ending in `/`, that name replaces the current name scope.
             # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
+            context = []
             if hasattr(self.embed_tokens, "load_weight_prefix"):
-                context_manager = tf.name_scope(self.embed_tokens.load_weight_prefix + "/")
-            else:
-                context_manager = nullcontext()
-            with context_manager:
+                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
+            with ContextManagers(context):
+                # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+                # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+                tf.debugging.assert_less(
+                    input_ids,
+                    tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
+                    message=(
+                        "input_ids must be smaller than the embedding layer's input dimension (got"
+                        f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
+                    ),
+                )
                 inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         embed_pos = self.embed_positions(input_shape)
@@ -935,11 +944,20 @@ class TFBartDecoder(tf.keras.layers.Layer):
             # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
             # is used with a name ending in `/`, that name replaces the current name scope.
             # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
+            context = []
             if hasattr(self.embed_tokens, "load_weight_prefix"):
-                context_manager = tf.name_scope(self.embed_tokens.load_weight_prefix + "/")
-            else:
-                context_manager = nullcontext()
-            with context_manager:
+                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
+            with ContextManagers(context):
+                # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+                # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+                tf.debugging.assert_less(
+                    input_ids,
+                    tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
+                    message=(
+                        "input_ids must be smaller than the embedding layer's input dimension (got"
+                        f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
+                    ),
+                )
                 inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         hidden_states = inputs_embeds
@@ -1033,7 +1051,12 @@ class TFBartMainLayer(tf.keras.layers.Layer):
     def __init__(self, config: BartConfig, load_weight_prefix=None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self.shared = tf.keras.layers.Embedding(config.vocab_size, config.d_model, name="model.shared")
+        self.shared = tf.keras.layers.Embedding(
+            input_dim=config.vocab_size,
+            output_dim=config.d_model,
+            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.init_std),
+            name="model.shared",
+        )
         # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
         self.shared.load_weight_prefix = "model.shared" if load_weight_prefix is None else load_weight_prefix
 
@@ -1263,7 +1286,6 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         self.bias_layer = BiasLayer(
             name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
-        self.final_logits_bias = self.bias_layer.bias  # alias to keep the same interface with PT
 
     def get_decoder(self):
         return self.model.decoder
@@ -1281,7 +1303,12 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         return {"final_logits_bias": self.bias_layer.bias}
 
     def set_bias(self, value):
-        self.bias_layer.bias = value["final_logits_bias"]
+        # Replaces the existing layers containing bias for correct (de)serialization.
+        vocab_size = value["final_logits_bias"].shape[-1]
+        self.bias_layer = BiasLayer(
+            name="final_logits_bias", shape=[1, vocab_size], initializer="zeros", trainable=False
+        )
+        self.bias_layer.bias.assign(value["final_logits_bias"])
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1349,8 +1376,6 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
             return_dict=return_dict,
             training=training,
         )
-        # TODO (joao): the line below is for models with tied embeddings. The previous TFBart had tied embeddings.
-        # The PT Bart does not have tied embeddings. Untie the weights while keeping loading retrocompatibility.
         lm_logits = tf.matmul(outputs[0], self.model.shared.weights, transpose_b=True)
         lm_logits = self.bias_layer(lm_logits)
         masked_lm_loss = None if labels is None else self.hf_compute_loss(labels, lm_logits)

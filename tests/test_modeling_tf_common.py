@@ -30,6 +30,7 @@ from typing import List, Tuple, get_type_hints
 from datasets import Dataset
 
 from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from huggingface_hub.file_download import http_get
 from requests.exceptions import HTTPError
 from transformers import is_tf_available, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
@@ -737,6 +738,23 @@ class TFModelTesterMixin:
                         dtype="float32",
                     ),
                 }
+            elif model_class.__name__ in ["TFWhisperModel", "TFWhisperForConditionalGeneration"]:
+                inputs = {
+                    "decoder_input_ids": tf.keras.Input(
+                        batch_shape=(2, max_input),
+                        name="decoder_input_ids",
+                        dtype="int32",
+                    ),
+                    "input_features": tf.keras.Input(
+                        batch_shape=(
+                            2,
+                            self.model_tester.num_mel_bins,
+                            self.model_tester.seq_length,
+                        ),
+                        name="input_features",
+                        dtype="float32",
+                    ),
+                }
             elif self.is_encoder_decoder:
                 inputs = {
                     "decoder_input_ids": tf.keras.Input(
@@ -758,7 +776,7 @@ class TFModelTesterMixin:
                     name="pixel_values",
                     dtype="float32",
                 )
-            elif model_class.__name__ in ["TFCLIPModel"]:
+            elif model_class.__name__ in ["TFCLIPModel", "TFGroupViTModel"]:
                 inputs = {
                     "input_ids": tf.keras.Input(batch_shape=(3, max_input), name="input_ids", dtype="int32"),
                     "pixel_values": tf.keras.Input(
@@ -1164,7 +1182,7 @@ class TFModelTesterMixin:
         for model_class in self.all_model_classes:
             for size in [config.vocab_size - 10, config.vocab_size + 10, None]:
                 # build the embeddings
-                model = model_class(config=config)
+                model = model_class(config=copy.deepcopy(config))  # `resize_token_embeddings` mutates `config`
                 old_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
                 old_bias = model.get_bias()
                 old_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
@@ -1204,6 +1222,74 @@ class TFModelTesterMixin:
                         if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
                             models_equal = False
                     self.assertTrue(models_equal)
+
+    # TODO (Joao): this test is not slow, but it's tagged as such to keep track of failures on the scheduled CI runs,
+    # while passing push CI. Fix the underlying issues and remove the tag.
+    @slow
+    def test_save_load_after_resize_token_embeddings(self):
+        if not self.test_resize_embeddings:
+            return
+        config, original_inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # create a model with resized (expended) embeddings
+            new_tokens_size = 10
+            old_total_size = config.vocab_size
+            new_total_size = old_total_size + new_tokens_size
+            model = model_class(config=copy.deepcopy(config))  # `resize_token_embeddings` mutates `config`
+            model(model.dummy_inputs)  # builds the embeddings layer
+            model.resize_token_embeddings(new_total_size)
+
+            # fetch the output for an input exclusively made of new members of the vocabulary
+            inputs_dict = copy.deepcopy(original_inputs_dict)
+            ids_feat_name = None
+            if "input_ids" in inputs_dict:
+                ids_feat_name = "input_ids"
+            elif "decoder_input_ids" in inputs_dict:
+                ids_feat_name = "decoder_input_ids"
+            else:
+                assert False, "No input ids feature found in the inputs dict"
+
+            new_vocab_input_ids = ids_tensor(inputs_dict[ids_feat_name].shape, new_tokens_size)
+            new_vocab_input_ids += old_total_size
+            inputs_dict[ids_feat_name] = new_vocab_input_ids
+            if "input_ids" in inputs_dict:
+                inputs_dict["input_ids"] = new_vocab_input_ids
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"] = new_vocab_input_ids
+            prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
+            outputs = model(**prepared_inputs)
+
+            # save and load the model
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, saved_model=False)
+                model = model_class.from_pretrained(tmpdirname)
+                restored_model_outputs = model(**prepared_inputs)
+
+                # check that the output for the restored model is the same
+                self.assert_outputs_same(restored_model_outputs, outputs)
+
+    @unittest.skipIf(
+        not is_tf_available() or len(tf.config.list_physical_devices("GPU")) == 0,
+        reason="This test always passes on CPU.",
+    )
+    def test_embeddings_out_of_bounds_raise_exception(self):
+        # TF embeddings layers don't raise an exception when an index is out of bounds on GPU, so we manually raise it.
+        # This test should only fail on GPU for models where we haven't added the safety check.
+        if not self.test_resize_embeddings:
+            return
+        config, original_inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            inputs_dict = copy.deepcopy(original_inputs_dict)
+            if "input_ids" in inputs_dict:
+                inputs_dict["input_ids"] = inputs_dict["input_ids"] * int(1e9)
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"] = inputs_dict["decoder_input_ids"] * int(1e9)
+            prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
+            with self.assertRaises(tf.errors.InvalidArgumentError):
+                model(**prepared_inputs)
 
     def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1870,6 +1956,24 @@ class UtilsFunctionsTest(unittest.TestCase):
             # This check we did call the fake head request
             mock_head.assert_called()
 
+    def test_load_from_one_file(self):
+        try:
+            tmp_file = tempfile.mktemp()
+            with open(tmp_file, "wb") as f:
+                http_get("https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/tf_model.h5", f)
+
+            config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+            _ = TFBertModel.from_pretrained(tmp_file, config=config)
+        finally:
+            os.remove(tmp_file)
+
+    def test_legacy_load_from_url(self):
+        # This test is for deprecated behavior and can be removed in v5
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+        _ = TFBertModel.from_pretrained(
+            "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/tf_model.h5", config=config
+        )
+
     # tests whether the unpack_inputs function behaves as expected
     def test_unpack_inputs(self):
         class DummyModel:
@@ -2125,6 +2229,46 @@ class UtilsFunctionsTest(unittest.TestCase):
 
                 for p1, p2 in zip(model.weights, new_model.weights):
                     self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
+    def test_save_pretrained_signatures(self):
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # Short custom TF signature function.
+        # `input_signature` is specific to BERT.
+        @tf.function(
+            input_signature=[
+                [
+                    tf.TensorSpec([None, None], tf.int32, name="input_ids"),
+                    tf.TensorSpec([None, None], tf.int32, name="token_type_ids"),
+                    tf.TensorSpec([None, None], tf.int32, name="attention_mask"),
+                ]
+            ]
+        )
+        def serving_fn(input):
+            return model(input)
+
+        # Using default signature (default behavior) overrides 'serving_default'
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, saved_model=True, signatures=None)
+            model_loaded = tf.keras.models.load_model(f"{tmp_dir}/saved_model/1")
+            self.assertTrue("serving_default" in list(model_loaded.signatures.keys()))
+
+        # Providing custom signature function
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, saved_model=True, signatures={"custom_signature": serving_fn})
+            model_loaded = tf.keras.models.load_model(f"{tmp_dir}/saved_model/1")
+            self.assertTrue("custom_signature" in list(model_loaded.signatures.keys()))
+
+        # Providing multiple custom signature function
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(
+                tmp_dir,
+                saved_model=True,
+                signatures={"custom_signature_1": serving_fn, "custom_signature_2": serving_fn},
+            )
+            model_loaded = tf.keras.models.load_model(f"{tmp_dir}/saved_model/1")
+            self.assertTrue("custom_signature_1" in list(model_loaded.signatures.keys()))
+            self.assertTrue("custom_signature_2" in list(model_loaded.signatures.keys()))
 
 
 @require_tf

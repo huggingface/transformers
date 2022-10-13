@@ -12,9 +12,6 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    import torch
-    from torch import nn
-
     from ..models.auto.modeling_auto import (
         MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
         MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
@@ -59,13 +56,15 @@ class ImageSegmentationPipeline(Pipeline):
 
     def _sanitize_parameters(self, **kwargs):
         postprocess_kwargs = {}
+        if "task" in kwargs:
+            postprocess_kwargs["task"] = kwargs["task"]
         if "threshold" in kwargs:
             postprocess_kwargs["threshold"] = kwargs["threshold"]
-        if "mask_threshold" in kwargs:
-            postprocess_kwargs["mask_threshold"] = kwargs["mask_threshold"]
+        if "overlap_mask_area_threshold" in kwargs:
+            postprocess_kwargs["overlap_mask_area_threshold"] = kwargs["overlap_mask_area_threshold"]
         return {}, {}, postprocess_kwargs
 
-    def __call__(self, *args, **kwargs) -> Union[Predictions, List[Prediction]]:
+    def __call__(self, images, **kwargs) -> Union[Predictions, List[Prediction]]:
         """
         Perform segmentation (detect masks & classes) in the image(s) passed as inputs.
 
@@ -79,30 +78,34 @@ class ImageSegmentationPipeline(Pipeline):
 
                 The pipeline accepts either a single image or a batch of images. Images in a batch must all be in the
                 same format: all as HTTP(S) links, all as local paths, or all as PIL images.
+            task (`str`, defaults to `semantic`):
+                Segmentation task to be performed, choose [`semantic`, `instance` and `panoptic`] depending on model
+                capabilities.
             threshold (`float`, *optional*, defaults to 0.9):
-                The probability necessary to make a prediction.
-            mask_threshold (`float`, *optional*, defaults to 0.5):
-                Threshold to use when turning the predicted masks into binary values.
+                Probability threshold to filter out predicted masks.
+            overlap_mask_area_threshold (`float`, *optional*, defaults to 0.5):
+                Mask overlap threshold to eliminate small, disconnected segments.
 
         Return:
             A dictionary or a list of dictionaries containing the result. If the input is a single image, will return a
             list of dictionaries, if the input is a list of several images, will return a list of list of dictionaries
             corresponding to each image.
 
-            The dictionaries contain the following keys:
+            The dictionaries contain the mask, label and score (where applicable) of each detected object and contains
+            the following keys:
 
             - **label** (`str`) -- The class label identified by the model.
-            - **mask** (`PIL.Image`) -- Pil Image with size (heigth, width) of the original image. Pixel values in the
-              image are in the range 0-255. 0 means the pixel is *not* part of the *label*, 255 means it definitely is.
+            - **mask** (`PIL.Image`) -- A binary mask of the detected object as a Pil Image of shape (width, height) of
+              the original image. Returns a mask filled with zeros if no object is found.
             - **score** (*optional* `float`) -- Optionally, when the model is capable of estimating a confidence of the
               "object" described by the label and the mask.
         """
 
-        return super().__call__(*args, **kwargs)
+        return super().__call__(images, **kwargs)
 
     def preprocess(self, image):
         image = load_image(image)
-        target_size = torch.IntTensor([[image.height, image.width]])
+        target_size = [(image.height, image.width)]
         inputs = self.feature_extractor(images=[image], return_tensors="pt")
         inputs["target_size"] = target_size
         return inputs
@@ -113,66 +116,65 @@ class ImageSegmentationPipeline(Pipeline):
         model_outputs["target_size"] = target_size
         return model_outputs
 
-    def postprocess(self, model_outputs, raw_image=False, threshold=0.9, mask_threshold=0.5):
-        if hasattr(self.feature_extractor, "post_process_panoptic_segmentation"):
+    def postprocess(self, model_outputs, task="semantic", threshold=0.9, overlap_mask_area_threshold=0.5):
+        if task == "instance" and hasattr(self.feature_extractor, "post_process_instance_segmentation"):
             outputs = self.feature_extractor.post_process_panoptic_segmentation(
-                model_outputs, object_mask_threshold=threshold
+                model_outputs,
+                threshold=threshold,
+                overlap_mask_area_threshold=overlap_mask_area_threshold,
+                target_sizes=model_outputs["target_size"],
             )[0]
+
             annotation = []
             segmentation = outputs["segmentation"]
-            for segment in outputs["segments"]:
-                mask = (segmentation == segment["id"]) * 255
-                mask = Image.fromarray(mask.numpy().astype(np.uint8), mode="L")
-                label = self.model.config.id2label[segment["label_id"]]
-                annotation.append({"mask": mask, "label": label, "score": None})
-        elif hasattr(self.feature_extractor, "post_process_segmentation"):
-            # Panoptic
-            raw_annotations = self.feature_extractor.post_process_segmentation(
-                model_outputs, model_outputs["target_size"], threshold=threshold, mask_threshold=0.5
-            )
-            raw_annotation = raw_annotations[0]
-            raw_annotation["masks"] *= 255  # [0,1] -> [0,255] black and white pixels
-            raw_annotation["scores"] = raw_annotation["scores"].tolist()
-            raw_annotation["labels"] = [self.model.config.id2label[label.item()] for label in raw_annotation["labels"]]
-            raw_annotation["masks"] = [
-                Image.fromarray(mask.numpy().astype(np.uint8), mode="L") for mask in raw_annotation["masks"]
-            ]
-            # {"scores": [...], ...} --> [{"score":x, ...}, ...]
-            keys = ["score", "label", "mask"]
-            annotation = [
-                dict(zip(keys, vals))
-                for vals in zip(raw_annotation["scores"], raw_annotation["labels"], raw_annotation["masks"])
-            ]
-        else:
-            # Default logits
-            logits = model_outputs.logits
-            logits = logits.softmax(dim=1)
-            if len(logits.shape) != 4:
-                raise ValueError(f"Logits don't have expected dimensions, expected [1, N, H, W], got {logits.shape}")
-            batch_size, num_labels, height, width = logits.shape
-            expected_num_labels = len(self.model.config.id2label)
-            if num_labels != expected_num_labels:
-                raise ValueError(
-                    f"Logits don't have expected dimensions, expected [1, {num_labels}, H, W], got {logits.shape}"
-                )
-            size = model_outputs["target_size"].squeeze(0).tolist()
-            logits_reshaped = nn.functional.interpolate(logits, size=size, mode="bilinear", align_corners=False)
-            classes = logits_reshaped.argmax(dim=1)[0]
+
+            if len(outputs["segments_info"]) == 0:
+                mask = Image.fromarray(np.zeros(segmentation.shape).astype(np.uint8), mode="L")
+                annotation.append({"mask": mask, "label": None, "score": 0.0})
+            else:
+                for segment in outputs["segments_info"]:
+                    mask = (segmentation == segment["id"]) * 255
+                    mask = Image.fromarray(mask.numpy().astype(np.uint8), mode="L")
+                    label = self.model.config.id2label[segment["label_id"]]
+                    score = segment["score"]
+                    annotation.append({"mask": mask, "label": label, "score": score})
+
+        elif task == "panoptic" and hasattr(self.feature_extractor, "post_process_panoptic_segmentation"):
+            outputs = self.feature_extractor.post_process_panoptic_segmentation(
+                model_outputs,
+                threshold=threshold,
+                overlap_mask_area_threshold=overlap_mask_area_threshold,
+                target_sizes=model_outputs["target_size"],
+            )[0]
+
             annotation = []
+            segmentation = outputs["segmentation"]
 
-            for label_id in range(num_labels):
-                label = self.model.config.id2label[label_id]
-                mask = classes == label_id
-                mask_sum = mask.sum()
+            if len(outputs["segments_info"]) == 0:
+                mask = Image.fromarray(np.zeros(segmentation.shape).astype(np.uint8), mode="L")
+                annotation.append({"mask": mask, "label": None, "score": 0.0})
+            else:
+                for segment in outputs["segments_info"]:
+                    mask = (segmentation == segment["id"]) * 255
+                    mask = Image.fromarray(mask.numpy().astype(np.uint8), mode="L")
+                    label = self.model.config.id2label[segment["label_id"]]
+                    score = segment["score"]
+                    annotation.append({"score": score, "label": label, "mask": mask})
 
-                # Remove empty masks.
-                if mask_sum == 0:
-                    continue
-                mask = Image.fromarray((mask * 255).numpy().astype(np.uint8), mode="L")
-                # Semantic segmentation does not output a global score for the mask
-                # so we don't attempt to compute one.
-                # XXX: We could send a mask with values between 0 and 255 instead
-                # of a pure mask to enable users to get the probabilities that
-                # are really outputted by the logits.
+        elif task == "semantic" and hasattr(self.feature_extractor, "post_process_semantic_segmentation"):
+            outputs = self.feature_extractor.post_process_semantic_segmentation(
+                model_outputs, target_sizes=model_outputs["target_size"]
+            )[0]
+
+            annotation = []
+            segmentation = outputs.numpy()
+            labels = np.unique(segmentation)
+
+            for label in labels:
+                mask = (segmentation == label) * 255
+                mask = Image.fromarray(mask, mode="L")
+                label = self.model.config.id2label[label]
                 annotation.append({"score": None, "label": label, "mask": mask})
+        else:
+            raise ValueError(f"task {task} is not supported for model {self.model}")
         return annotation

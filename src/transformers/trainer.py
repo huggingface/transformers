@@ -238,9 +238,10 @@ class Trainer:
             `torch.Generator` for the randomization that must be identical on all processes (and the Trainer will
             manually set the seed of this `generator` at each epoch) or have a `set_epoch()` method that internally
             sets the seed of the RNGs used.
-        eval_dataset (`torch.utils.data.Dataset`, *optional*):
+        eval_dataset (Union[`torch.utils.data.Dataset`, Dict[str, `torch.utils.data.Dataset`]), *optional*):
              The dataset to use for evaluation. If it is a [`~datasets.Dataset`], columns not accepted by the
-             `model.forward()` method are automatically removed.
+             `model.forward()` method are automatically removed. If it is a dictionary, it will evaluate on each
+             dataset prepending the dictionary key to the metric name.
         tokenizer ([`PreTrainedTokenizerBase`], *optional*):
             The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs the
             maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
@@ -638,14 +639,13 @@ class Trainer:
                 raise RuntimeError("Torchdynamo is not installed.")
             import torchdynamo
             from torchdynamo.optimizations import backends
-            from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
 
             def get_ctx():
                 # Normal
                 if args.torchdynamo == "eager":
                     return torchdynamo.optimize("eager")
                 elif args.torchdynamo == "nvfuser":
-                    return torchdynamo.optimize(aot_autograd_speedup_strategy)
+                    return torchdynamo.optimize("aot_nvfuser")
                 # TensorRT
                 if args.torchdynamo in ["fx2trt-fp16", "fx2trt"]:
                     if not is_torch_tensorrt_fx_available():
@@ -2041,7 +2041,15 @@ class Trainer:
 
         metrics = None
         if self.control.should_evaluate:
-            metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+            if isinstance(self.eval_dataset, dict):
+                for eval_dataset_name, eval_dataset in self.eval_dataset.items():
+                    metrics = self.evaluate(
+                        eval_dataset=eval_dataset,
+                        ignore_keys=ignore_keys_for_eval,
+                        metric_key_prefix=f"eval_{eval_dataset_name}",
+                    )
+            else:
+                metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
             self._report_to_hp_search(trial, self.state.global_step, metrics)
 
         if self.control.should_save:
@@ -3285,14 +3293,39 @@ class Trainer:
         self,
         language: Optional[str] = None,
         license: Optional[str] = None,
-        tags: Optional[str] = None,
+        tags: Union[str, List[str], None] = None,
         model_name: Optional[str] = None,
         finetuned_from: Optional[str] = None,
-        tasks: Optional[str] = None,
-        dataset_tags: Optional[Union[str, List[str]]] = None,
-        dataset: Optional[Union[str, List[str]]] = None,
-        dataset_args: Optional[Union[str, List[str]]] = None,
+        tasks: Union[str, List[str], None] = None,
+        dataset_tags: Union[str, List[str], None] = None,
+        dataset: Union[str, List[str], None] = None,
+        dataset_args: Union[str, List[str], None] = None,
     ):
+        """
+        Creates a draft of a model card using the information available to the `Trainer`.
+
+        Args:
+            language (`str`, *optional*):
+                The language of the model (if applicable)
+            license (`str`, *optional*):
+                The license of the model. Will default to the license of the pretrained model used, if the original
+                model given to the `Trainer` comes from a repo on the Hub.
+            tags (`str` or `List[str]`, *optional*):
+                Some tags to be included in the metadata of the model card.
+            model_name (`str`, *optional*):
+                The name of the model.
+            finetuned_from (`str`, *optional*):
+                The name of the model used to fine-tune this one (if applicable). Will default to the name of the repo
+                of the original model given to the `Trainer` (if it comes from the Hub).
+            tasks (`str` or `List[str]`, *optional*):
+                One or several task identifiers, to be included in the metadata of the model card.
+            dataset_tags (`str` or `List[str]`, *optional*):
+                One or several dataset tags, to be included in the metadata of the model card.
+            dataset (`str` or `List[str]`, *optional*):
+                One or several dataset identifiers, to be included in the metadata of the model card.
+            dataset_args (`str` or `List[str]`, *optional*):
+               One or several dataset arguments, to be included in the metadata of the model card.
+        """
         if not self.is_world_process_zero():
             return
 

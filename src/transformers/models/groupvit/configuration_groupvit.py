@@ -162,7 +162,7 @@ class GroupViTVisionConfig(PretrainedConfig):
             The number of layers in each encoder block.
         num_group_tokens (`List[int]`, *optional*, defaults to [64, 8, 0]):
             The number of group tokens for each stage.
-        num_output_groups (`List[int]`, *optional*, defaults to [64, 8, 0]):
+        num_output_groups (`List[int]`, *optional*, defaults to [64, 8, 8]):
             The number of output groups for each stage, 0 means no group.
         num_attention_heads (`int`, *optional*, defaults to 6):
             Number of attention heads for each attention layer in the Transformer encoder.
@@ -381,11 +381,17 @@ class GroupViTOnnxConfig(OnnxConfig):
     def generate_dummy_inputs(
         self,
         processor: "ProcessorMixin",
+        batch_size: int = -1,
+        seq_length: int = -1,
         framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
 
-        text_input_dict = super().generate_dummy_inputs(processor.tokenizer, framework=framework)
-        image_input_dict = super().generate_dummy_inputs(processor.feature_extractor, framework=framework)
+        text_input_dict = super().generate_dummy_inputs(
+            processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
+        )
+        image_input_dict = super().generate_dummy_inputs(
+            processor.feature_extractor, batch_size=batch_size, framework=framework
+        )
         return {**text_input_dict, **image_input_dict}
 
     @property
