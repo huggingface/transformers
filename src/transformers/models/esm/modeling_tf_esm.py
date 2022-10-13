@@ -14,12 +14,12 @@
 # limitations under the License.
 """ PyTorch ESM model."""
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
-import tensorflow as tf
 import numpy as np
-from tensorflow.keras.layers import Dense, Dropout, Embedding, Layer, LayerNormalization
+import tensorflow as tf
 from tensorflow.keras.activations import gelu
+from tensorflow.keras.layers import Dense, Dropout, Embedding, Layer, LayerNormalization
 
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_tf_outputs import (
@@ -28,18 +28,21 @@ from ...modeling_tf_outputs import (
     TFMaskedLMOutput,
     TFSequenceClassifierOutput,
     TFTokenClassifierOutput,
-
 )
-from ...modeling_tf_utils import (get_initializer, get_tf_activation, shape_list, unpack_inputs,     TFMaskedLanguageModelingLoss,
+from ...modeling_tf_utils import (
+    TFMaskedLanguageModelingLoss,
     TFModelInputType,
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
-    TFTokenClassificationLoss)
+    TFTokenClassificationLoss,
+    get_initializer,
+    get_tf_activation,
+    shape_list,
+    unpack_inputs,
+)
 from ...tf_utils import stable_softmax
 from ...utils import logging
 from .configuration_esm import EsmConfig
-
-# TODO 4: Add tf-pt model equivalence tests and push TF checkpoints
 
 
 logger = logging.get_logger(__name__)
@@ -48,7 +51,7 @@ _CHECKPOINT_FOR_DOC = "Rocketknight1/esm2_t6_8M_UR50D"
 _CONFIG_FOR_DOC = "EsmConfig"
 _TOKENIZER_FOR_DOC = "EsmTokenizer"
 
-ESM_PRETRAINED_MODEL_ARCHIVE_LIST = [
+TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Rocketknight1/esm2_t6_8M_UR50D",
     "Rocketknight1/esm2_t12_35M_UR50D",
     # This is not a complete list of all ESM models!
@@ -87,9 +90,12 @@ class TFRotaryEmbedding(Layer):
 
     def build(self, input_shape):
         super().build(input_shape)
-        self.inv_freq = self.add_weight("inv_freq", shape=(self.dim // 2,), dtype=tf.float32,
-                                        initializer=get_initializer(1.0))
-        self.inv_freq.assign(1.0 / (10000 ** (tf.range(start=0, limit=self.dim, delta=2, dtype=tf.float32) / self.dim)))
+        self.inv_freq = self.add_weight(
+            "inv_freq", shape=(self.dim // 2,), dtype=tf.float32, initializer=get_initializer(1.0)
+        )
+        self.inv_freq.assign(
+            1.0 / (10000 ** (tf.range(start=0, limit=self.dim, delta=2, dtype=tf.float32) / self.dim))
+        )
 
     def _compute_cos_sin(self, x, seq_dimension=2):
         seq_len = tf.shape(x)[seq_dimension]
@@ -116,8 +122,18 @@ class TFEsmEmbeddings(Layer):
 
     def __init__(self, config, name=None):
         super().__init__(name=name)
-        self.word_embeddings = Embedding(config.vocab_size, config.hidden_size, embeddings_initializer=get_initializer(config.initializer_range), name="word_embeddings")
-        self.position_embeddings = Embedding(config.max_position_embeddings, config.hidden_size, embeddings_initializer=get_initializer(config.initializer_range), name="position_embeddings")
+        self.word_embeddings = Embedding(
+            config.vocab_size,
+            config.hidden_size,
+            embeddings_initializer=get_initializer(config.initializer_range),
+            name="word_embeddings",
+        )
+        self.position_embeddings = Embedding(
+            config.max_position_embeddings,
+            config.hidden_size,
+            embeddings_initializer=get_initializer(config.initializer_range),
+            name="position_embeddings",
+        )
 
         if config.emb_layer_norm_before:
             self.layer_norm = LayerNormalization(epsilon=config.layer_norm_eps)
@@ -126,12 +142,13 @@ class TFEsmEmbeddings(Layer):
         # Matt: I think this line was copied incorrectly from BERT, disabling for now
         # self.dropout = Dropout(config.hidden_dropout_prob)
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        # TODO check values are copied correctly from the buffer
+
         self.position_ids = tf.range(config.max_position_embeddings)[None, :]
 
         self.padding_idx = config.pad_token_id
         self.token_dropout = config.token_dropout
         self.mask_token_id = config.mask_token_id
+        self.vocab_size = config.vocab_size
 
     def call(
         self, input_ids=None, attention_mask=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
@@ -144,6 +161,16 @@ class TFEsmEmbeddings(Layer):
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
         if inputs_embeds is None:
+            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+            tf.debugging.assert_less(
+                input_ids,
+                tf.cast(self.vocab_size, dtype=input_ids.dtype),
+                message=(
+                    "input_ids must be smaller than the embedding layer's input dimension (got"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                ),
+            )
             inputs_embeds = self.word_embeddings(input_ids)
 
         # Note that if we want to support ESM-1 (not 1b!) in future then we need to support an
@@ -209,9 +236,13 @@ class TFEsmSelfAttention(Layer):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = Dense(self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query")
+        self.query = Dense(
+            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
+        )
         self.key = Dense(self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key")
-        self.value = Dense(self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value")
+        self.value = Dense(
+            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
+        )
 
         self.dropout = Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = position_embedding_type or getattr(
@@ -220,7 +251,11 @@ class TFEsmSelfAttention(Layer):
         self.rotary_embeddings = None
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size, embeddings_initializer=get_initializer(config.initializer_range))
+            self.distance_embedding = Embedding(
+                2 * config.max_position_embeddings - 1,
+                self.attention_head_size,
+                embeddings_initializer=get_initializer(config.initializer_range),
+            )
         elif self.position_embedding_type == "rotary":
             self.rotary_embeddings = TFRotaryEmbedding(dim=self.attention_head_size, name="rotary_embeddings")
 
@@ -241,7 +276,6 @@ class TFEsmSelfAttention(Layer):
         past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
         output_attentions: Optional[bool] = False,
         training: bool = False,
-
     ) -> Tuple[tf.Tensor]:
 
         mixed_query_layer = self.query(hidden_states)
@@ -340,7 +374,9 @@ class TFEsmSelfAttention(Layer):
 class TFEsmSelfOutput(Layer):
     def __init__(self, config, name=None):
         super().__init__(name=name)
-        self.dense = Dense(config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense")
+        self.dense = Dense(
+            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        )
         self.dropout = Dropout(config.hidden_dropout_prob)
 
     def call(self, hidden_states, input_tensor, training=False):
@@ -381,7 +417,7 @@ class TFEsmAttention(Layer):
             encoder_attention_mask,
             past_key_value,
             output_attentions,
-            training
+            training,
         )
         attention_output = self.output_layer(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -412,7 +448,9 @@ class TFEsmIntermediate(tf.keras.layers.Layer):
 class TFEsmOutput(Layer):
     def __init__(self, config, name=None):
         super().__init__(name=name)
-        self.dense = Dense(config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense")
+        self.dense = Dense(
+            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        )
         self.dropout = Dropout(config.hidden_dropout_prob)
 
     def call(self, hidden_states, input_tensor, training=False):
@@ -543,7 +581,6 @@ class TFEsmEncoder(Layer):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
-
             layer_outputs = layer_module(
                 hidden_states,
                 attention_mask,
@@ -552,7 +589,7 @@ class TFEsmEncoder(Layer):
                 encoder_attention_mask,
                 past_key_value,
                 output_attentions,
-                training
+                training,
             )
 
             hidden_states = layer_outputs[0]
@@ -599,7 +636,7 @@ class TFEsmPooler(Layer):
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
-            name="dense"
+            name="dense",
         )
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
@@ -620,15 +657,6 @@ class TFEsmPreTrainedModel(TFPreTrainedModel):
     config_class = EsmConfig
     base_model_prefix = "esm"
 
-    def update_keys_to_ignore(self, config, del_keys_to_ignore):
-        """Remove some keys from ignore list"""
-        if not config.tie_word_embeddings:
-            # must make a new list, or the class variable gets modified!
-            self._keys_to_ignore_on_save = [k for k in self._keys_to_ignore_on_save if k not in del_keys_to_ignore]
-            self._keys_to_ignore_on_load_missing = [
-                k for k in self._keys_to_ignore_on_load_missing if k not in del_keys_to_ignore
-            ]
-
 
 ESM_START_DOCSTRING = r"""
 
@@ -636,9 +664,8 @@ ESM_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a Keras [Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass.
-    Use it as a regular Keras model and refer to the TF/Keras documentation for all matters related to general usage
-    and behavior.
+    This model is also a Keras [Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it as a
+    regular Keras model and refer to the TF/Keras documentation for all matters related to general usage and behavior.
 
     Parameters:
         config ([`EsmConfig`]): Model configuration class with all the parameters of the
@@ -729,7 +756,6 @@ class TFEsmMainLayer(Layer):
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
 
-    @unpack_inputs
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -884,12 +910,11 @@ class TFEsmMainLayer(Layer):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
+
 @add_start_docstrings(
     "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
     ESM_START_DOCSTRING,
 )
-
-
 class TFEsmModel(TFEsmPreTrainedModel):
     def __init__(self, config: EsmConfig, add_pooling_layer=True, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -957,6 +982,19 @@ class TFEsmModel(TFEsmPreTrainedModel):
         )
         return outputs
 
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
     def serving_output(
         self, output: TFBaseModelOutputWithPoolingAndCrossAttentions
     ) -> TFBaseModelOutputWithPoolingAndCrossAttentions:
@@ -978,11 +1016,9 @@ class TFEsmModel(TFEsmPreTrainedModel):
         )
 
 
-
 @add_start_docstrings("""ESM Model with a `language modeling` head on top.""", ESM_START_DOCSTRING)
 class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
-    _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
@@ -994,11 +1030,8 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
                 "bi-directional self-attention."
             )
 
-        self.esm = TFEsmMainLayer(config, name="esm")
+        self.esm = TFEsmMainLayer(config, add_pooling_layer=False, name="esm")
         self.lm_head = TFEsmLMHead(config, name="lm_head")
-
-        # The LM head weights require special treatment only when they are tied with the word embeddings
-        self.update_keys_to_ignore(config, ["lm_head.decoder.weight"])
 
     def get_output_embeddings(self):
         return self.lm_head.decoder
@@ -1006,6 +1039,10 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
+    def get_lm_head(self):
+        return self.lm_head
+
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1070,34 +1107,58 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
+    def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
 
 class TFEsmLMHead(Layer):
     """ESM Head for masked language modeling."""
 
     def __init__(self, config, name=None):
         super().__init__(name=name)
-        self.dense = Dense(config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense")
+        self.dense = Dense(
+            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        )
+
         self.layer_norm = LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
 
-        self.decoder = Dense(config.vocab_size, use_bias=False, kernel_initializer=get_initializer(config.initializer_range), name="decoder")
-        self.vocab_size = config.vocab_size
-
-    def build(self, input_shape):
-        super().build(input_shape)
+        self.decoder = Dense(
+            config.vocab_size,
+            use_bias=False,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="decoder",
+        )
         # Separate bias to match the PT model and allow weight cross-loading to work
-        self.bias = self.add_weight("bias", shape=(self.vocab_size,), initializer="zeros", trainable=True)
+        self.bias = self.add_weight("bias", shape=(config.vocab_size,), initializer="zeros", trainable=True)
 
-
+    def get_bias(self):
+        return {"bias": self.bias}
 
     def call(self, features):
         x = self.dense(features)
-        x = gelu(x, approximate=True)
+        x = gelu(x)
         x = self.layer_norm(x)
 
         # project back to size of vocabulary with bias
         x = self.decoder(x)
         x = x + self.bias
-
         return x
 
 
@@ -1116,9 +1177,10 @@ class TFEsmForSequenceClassification(TFEsmPreTrainedModel, TFSequenceClassificat
         self.num_labels = config.num_labels
         self.config = config
 
-        self.esm = TFEsmMainLayer(config, name="esm")
-        self.classifier = TFEsmClassificationHead(config)
+        self.esm = TFEsmMainLayer(config, add_pooling_layer=False, name="esm")
+        self.classifier = TFEsmClassificationHead(config, name="classifier")
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1210,10 +1272,11 @@ class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLos
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.esm = TFEsmMainLayer(config, name="esm")
+        self.esm = TFEsmMainLayer(config, add_pooling_layer=False, name="esm")
         self.dropout = Dropout(config.hidden_dropout_prob)
-        self.classifier = Dense( config.num_labels)
+        self.classifier = Dense(config.num_labels, name="classifier")
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1280,8 +1343,8 @@ class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLos
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None, None), tf.int64, name="attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
             }
         ]
     )
@@ -1294,11 +1357,21 @@ class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLos
 class TFEsmClassificationHead(Layer):
     """Head for sentence-level classification tasks."""
 
-    def __init__(self, config):
-        super().__init__()
-        self.dense = Dense(config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), activation="tanh")
+    def __init__(self, config, name=None):
+        super().__init__(name=name)
+        self.dense = Dense(
+            config.hidden_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            activation="tanh",
+            name="dense",
+        )
         self.dropout = Dropout(config.hidden_dropout_prob)
-        self.out_proj = Dense(config.num_labels, kernel_initializer=get_initializer(config.initializer_range), activation="linear")
+        self.out_proj = Dense(
+            config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            activation="linear",
+            name="out_proj",
+        )
 
     def call(self, features, training=False):
         x = features[:, 0, :]  # take <s> token (equiv. to [CLS])

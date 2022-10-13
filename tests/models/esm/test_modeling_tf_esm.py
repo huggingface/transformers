@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import RobertaConfig, is_tf_available
+from transformers import EsmConfig, is_tf_available
 from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
@@ -79,10 +79,11 @@ class TFEsmModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = RobertaConfig(
+        config = EsmConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
+            pad_token_id=1,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
@@ -120,9 +121,7 @@ class TFEsmModelTester:
             encoder_attention_mask,
         )
 
-    def create_and_check_model(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
+    def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
         model = TFEsmModel(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask}
         result = model(inputs)
@@ -165,18 +164,18 @@ class TFEsmModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_masked_lm(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFEsmForMaskedLM(config=config)
-        result = model([input_ids, input_mask, token_type_ids])
+        result = model([input_ids, input_mask])
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_for_token_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = TFEsmForTokenClassification(config=config)
-        inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+        inputs = {"input_ids": input_ids, "attention_mask": input_mask}
         result = model(inputs)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
@@ -185,7 +184,6 @@ class TFEsmModelTester:
         (
             config,
             input_ids,
-            token_type_ids,
             input_mask,
             sequence_labels,
             token_labels,
@@ -213,7 +211,7 @@ class TFEsmModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = TFEsmModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RobertaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=EsmConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -235,15 +233,9 @@ class TFEsmModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
-    def test_decoder_model_past_with_large_inputs(self):
-        """Similar to `test_causal_lm_model_past_with_large_inputs` but with cross-attention"""
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
-
 
     @slow
     def test_model_from_pretrained(self):
@@ -251,31 +243,45 @@ class TFEsmModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFEsmModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @unittest.skip("Protein models do not support embedding resizing.")
+    def test_resize_token_embeddings(self):
+        pass
+
+    @unittest.skip("Protein models do not support embedding resizing.")
+    def test_save_load_after_resize_token_embeddings(self):
+        pass
+
 
 @require_tf
-class TFRobertaModelIntegrationTest(unittest.TestCase):
+class TFEsmModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = TFEsmForMaskedLM.from_pretrained("roberta-base")
+        model = TFEsmForMaskedLM.from_pretrained("Rocketknight1/esm2_t6_8M_UR50D")
 
-        input_ids = tf.constant([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
-        expected_shape = [1, 11, 50265]
+        expected_shape = [1, 6, 33]
         self.assertEqual(list(output.numpy().shape), expected_shape)
         # compare the actual values for a slice.
         expected_slice = tf.constant(
-            [[[33.8802, -4.3103, 22.7761], [4.6539, -2.8098, 13.6253], [1.8228, -3.6898, 8.8600]]]
+            [[[15.0963, -6.6414, -1.1346], [-0.2209, -9.9633, 4.2082], [-1.6045, -10.0011, 1.5882]]]
         )
         self.assertTrue(numpy.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-4))
 
     @slow
     def test_inference_no_head(self):
-        model = TFEsmModel.from_pretrained("roberta-base")
+        model = TFEsmModel.from_pretrained("Rocketknight1/esm2_t6_8M_UR50D")
 
-        input_ids = tf.constant([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        input_ids = tf.constant([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
         output = model(input_ids)[0]
         # compare the actual values for a slice.
         expected_slice = tf.constant(
-            [[[-0.0231, 0.0782, 0.0074], [-0.1854, 0.0540, -0.0175], [0.0548, 0.0799, 0.1687]]]
+            [
+                [
+                    [0.144337, 0.541198, 0.32479298],
+                    [0.30328932, 0.00519154, 0.31089523],
+                    [0.32273883, -0.24992886, 0.34143737],
+                ]
+            ]
         )
         self.assertTrue(numpy.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-4))
