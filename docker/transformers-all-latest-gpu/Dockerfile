@@ -30,7 +30,22 @@ RUN echo torch=$VERSION
 # `torchvision` and `torchaudio` should be installed along with `torch`, especially for nightly build.
 # Currently, let's just use their latest releases (when `torch` is installed with a release version)
 # TODO: We might need to specify proper versions that work with a specific torch version (especially for past CI).
-RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA || python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
+# ----------------------------------------------------------------------------------------------------
+# Should be re-enabled later
+
+# RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA || python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
+
+# ----------------------------------------------------------------------------------------------------
+# Temporarily trick to install specific nightly version for torch 1.13 pre-release
+# Should be removed later
+
+RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA || echo "Nightly version"
+
+RUN [ "$PYTORCH" == "pre" ] && python3 -m pip install --no-cache-dir -U torch==1.13.0.dev20220914+cu113 --extra-index-url https://download.pytorch.org/whl/nightly/cu113 || echo "torch"
+RUN [ "$PYTORCH" == "pre" ] && python3 -m pip install --no-cache-dir -U torchvision==0.14.0.dev20220914+cu113 --extra-index-url https://download.pytorch.org/whl/nightly/cu113 || echo "torchvision"
+RUN [ "$PYTORCH" == "pre" ] && python3 -m pip install --no-cache-dir -U torchaudio==0.13.0.dev20220914+cu113 --extra-index-url https://download.pytorch.org/whl/nightly/cu113 || echo "torchaudio"
+
+# ----------------------------------------------------------------------------------------------------
 
 RUN python3 -m pip install --no-cache-dir -U tensorflow
 RUN python3 -m pip install --no-cache-dir -U tensorflow_probability

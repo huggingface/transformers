@@ -16,12 +16,21 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 # Install **nightly** release PyTorch (flag `--pre`)
 # (PyTorch must be installed before pre-compiling any DeepSpeed c++/cuda ops.)
 # (https://www.deepspeed.ai/tutorials/advanced-install/#pre-install-deepspeed-ops)
+
+# ----------------------------------------------------------------------------------------------------
+# Should be re-enabled later
+
 # RUN python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
 
-# To run for the upcoming torch 1.13
+# ----------------------------------------------------------------------------------------------------
+# Temporarily trick to install specific nightly version for torch 1.13 pre-release
+# Should be removed later
+
 RUN python3 -m pip install --no-cache-dir -U torch==1.13.0.dev20220914+cu113 --extra-index-url https://download.pytorch.org/whl/nightly/cu113
 RUN python3 -m pip install --no-cache-dir -U torchvision==0.14.0.dev20220914+cu113 --extra-index-url https://download.pytorch.org/whl/nightly/cu113
 RUN python3 -m pip install --no-cache-dir -U torchaudio==0.13.0.dev20220914+cu113 --extra-index-url https://download.pytorch.org/whl/nightly/cu113
+
+# ----------------------------------------------------------------------------------------------------
 
 RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
 
