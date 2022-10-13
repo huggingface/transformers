@@ -911,7 +911,7 @@ class TFEsmMainLayer(Layer):
 
 
 @add_start_docstrings(
-    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare ESM Model transformer outputting raw hidden-states without any specific head on top.",
     ESM_START_DOCSTRING,
 )
 class TFEsmModel(TFEsmPreTrainedModel):
