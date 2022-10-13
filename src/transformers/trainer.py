@@ -1898,6 +1898,7 @@ class Trainer:
         output_dir = os.path.join(run_dir, checkpoint_folder)
         checkpoints_sorted = self._sorted_checkpoints(use_mtime=True, output_dir=output_dir)
 
+        # Delete the last checkpoint when save_total_limit=1 if it's different from the best checkpoint.
         if self.state.best_model_checkpoint is not None and self.state.args.save_total_limit == 1:
             for checkpoint in checkpoints_sorted:
                 if checkpoint != self.state.best_model_checkpoint:
