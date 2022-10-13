@@ -92,9 +92,6 @@ class BigBirdConfig(PretrainedConfig):
 
     ```python
 
-
-
-
     ```
 
         >>> from transformers import BigBirdConfig, BigBirdModel
