@@ -106,6 +106,7 @@ src/transformers/models/vit/configuration_vit.py
 src/transformers/models/vit/modeling_vit.py
 src/transformers/models/vit/modeling_tf_vit.py
 src/transformers/models/vit_mae/modeling_vit_mae.py
+src/transformers/models/vit_mae/configuration_vit_mae.py
 src/transformers/models/vit_msn/modeling_vit_msn.py
 src/transformers/models/wav2vec2/modeling_wav2vec2.py
 src/transformers/models/wav2vec2/tokenization_wav2vec2.py
@@ -118,3 +119,4 @@ src/transformers/models/whisper/modeling_tf_whisper.py
 src/transformers/models/yolos/configuration_yolos.py
 src/transformers/models/yolos/modeling_yolos.py
 src/transformers/models/x_clip/modeling_x_clip.py
+src/transformers/models/yoso/configuration_yoso.py
