@@ -4980,9 +4980,9 @@ if TYPE_CHECKING:
         )
         from .models.big_bird import (
             TFBigBirdForCausalLM,
-            TFBigBirdForNextSentencePrediction,
             TFBigBirdForMaskedLM,
             TFBigBirdForMultipleChoice,
+            TFBigBirdForNextSentencePrediction,
             TFBigBirdForPreTraining,
             TFBigBirdForQuestionAnswering,
             TFBigBirdForSequenceClassification,
@@ -4991,7 +4991,6 @@ if TYPE_CHECKING:
             TFBigBirdModel,
             TFBigBirdPreTrainedModel,
         )
-
         from .models.blenderbot import (
             TFBlenderbotForConditionalGeneration,
             TFBlenderbotModel,

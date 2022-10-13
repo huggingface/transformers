@@ -15,31 +15,52 @@
 """TensorFlow 2.0 BigBird model."""
 
 import math
-import os
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union, Dict
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
 
-from ... import PretrainedConfig
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import (
-    TFBaseModelOutput,
     TFBaseModelOutputWithPastAndCrossAttentions,
-    TFSeq2SeqLMOutput,
-    TFSeq2SeqModelOutput, TFBaseModelOutputWithPoolingAndCrossAttentions, TFMaskedLMOutput,
-    TFCausalLMOutputWithCrossAttentions, TFNextSentencePredictorOutput, TFSequenceClassifierOutput,
-    TFMultipleChoiceModelOutput, TFQuestionAnsweringModelOutput, TFTokenClassifierOutput,
+    TFBaseModelOutputWithPoolingAndCrossAttentions,
+    TFCausalLMOutputWithCrossAttentions,
+    TFMaskedLMOutput,
+    TFMultipleChoiceModelOutput,
+    TFNextSentencePredictorOutput,
+    TFQuestionAnsweringModelOutput,
+    TFSequenceClassifierOutput,
+    TFTokenClassifierOutput,
 )
-from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, keras_serializable, unpack_inputs, \
-    get_initializer, TFModelInputType, TFMultipleChoiceLoss, TFMaskedLanguageModelingLoss, TFNextSentencePredictionLoss, \
-    TFSequenceClassificationLoss, TFTokenClassificationLoss, TFQuestionAnsweringLoss
+from ...modeling_tf_utils import (
+    TFCausalLanguageModelingLoss,
+    TFMaskedLanguageModelingLoss,
+    TFModelInputType,
+    TFMultipleChoiceLoss,
+    TFNextSentencePredictionLoss,
+    TFPreTrainedModel,
+    TFQuestionAnsweringLoss,
+    TFSequenceClassificationLoss,
+    TFTokenClassificationLoss,
+    get_initializer,
+    keras_serializable,
+    unpack_inputs,
+)
 from ...tf_utils import shape_list, stable_softmax
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings, \
-    DUMMY_INPUTS, ModelOutput, add_code_sample_docstrings, MULTIPLE_CHOICE_DUMMY_INPUTS
+from ...utils import (
+    DUMMY_INPUTS,
+    MULTIPLE_CHOICE_DUMMY_INPUTS,
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_big_bird import BigBirdConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -102,12 +123,12 @@ class TFBigBirdEmbeddings(tf.keras.layers.Layer):
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings.call
     def call(
         self,
-            input_ids: tf.Tensor = None,
-            position_ids: tf.Tensor = None,
-            token_type_ids: tf.Tensor = None,
-            inputs_embeds: tf.Tensor = None,
-            past_key_values_length=0,
-            training: bool = False,
+        input_ids: tf.Tensor = None,
+        position_ids: tf.Tensor = None,
+        token_type_ids: tf.Tensor = None,
+        inputs_embeds: tf.Tensor = None,
+        past_key_values_length=0,
+        training: bool = False,
     ) -> tf.Tensor:
         """
         Applies embedding based on inputs tensor.
@@ -323,7 +344,7 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
         to_blocked_mask: tf.Tensor,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[tf.Tensor, tf.Tensor]:
 
         batch_size, seqlen, _ = hidden_states.size()
         to_seq_length = from_seq_length = seqlen
@@ -361,28 +382,30 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
             output_attentions=output_attentions,
         )
 
+        return context_layer, attention_probs
+
     def bigbird_block_sparse_attention(
-            self,
-            query_layer,
-            key_layer,
-            value_layer,
-            band_mask,
-            from_mask,
-            to_mask,
-            from_blocked_mask,
-            to_blocked_mask,
-            n_heads,
-            n_rand_blocks,
-            attention_head_size,
-            from_block_size,
-            to_block_size,
-            batch_size,
-            from_seq_len,
-            to_seq_len,
-            seed,
-            plan_from_length,
-            plan_num_rand_blocks,
-            output_attentions,
+        self,
+        query_layer,
+        key_layer,
+        value_layer,
+        band_mask,
+        from_mask,
+        to_mask,
+        from_blocked_mask,
+        to_blocked_mask,
+        n_heads,
+        n_rand_blocks,
+        attention_head_size,
+        from_block_size,
+        to_block_size,
+        batch_size,
+        from_seq_len,
+        to_seq_len,
+        seed,
+        plan_from_length,
+        plan_num_rand_blocks,
+        output_attentions,
     ) -> Tuple[tf.Tensor, tf.Tensor]:
         if from_seq_len // from_block_size != to_seq_len // to_block_size:
             raise ValueError("Error the number of blocks needs to be same!")
@@ -414,305 +437,341 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
                 plan_num_rand_blocks=plan_num_rand_blocks,
             )
 
-            rand_attn = tf.Tensor(rand_attn)
-            rand_attn = tf.expand_dims(rand_attn, axis=0)
-            rand_attn = tf.concat([rand_attn for _ in range(batch_size)], axis=0)
+        rand_attn = tf.Tensor(rand_attn)
+        rand_attn = tf.expand_dims(rand_attn, axis=0)
+        rand_attn = tf.concat([rand_attn for _ in range(batch_size)], axis=0)
 
-            rand_mask = self._create_rand_mask_from_inputs(
-                from_blocked_mask, to_blocked_mask, rand_attn, n_heads, n_rand_blocks, batch_size, from_seq_len, from_block_size
-            )
+        rand_mask = self._create_rand_mask_from_inputs(
+            from_blocked_mask,
+            to_blocked_mask,
+            rand_attn,
+            n_heads,
+            n_rand_blocks,
+            batch_size,
+            from_seq_len,
+            from_block_size,
+        )
 
-            # Define shorthands
-            # b = batch_size
-            # n_heads = n_heads
-            # n_rand_blocks = n_rand_blocks
-            # attention_head_size = attention_head_size
-            # from_seq_len = from_seq_len
-            # to_seq_len = to_seq_len
-            # from_block_size = from_block_size
-            # to_block_size = to_block_size
+        blocked_query_matrix = tf.reshape(
+            query_layer, (-1, n_heads, from_seq_len // from_block_size, from_block_size, attention_head_size)
+        )
+        blocked_key_matrix = tf.reshape(
+            key_layer, (-1, n_heads, to_seq_len // to_block_size, to_block_size, attention_head_size)
+        )
+        blocked_value_matrix = tf.reshape(
+            value_layer, (-1, n_heads, to_seq_len // to_block_size, to_block_size, attention_head_size)
+        )
+        gathered_key = tf.reshape(
+            tf.gather(blocked_key_matrix, rand_attn, batch_dims=2, name="gather_key"),
+            (-1, n_heads, from_seq_len // from_block_size - 2, n_rand_blocks * to_block_size, attention_head_size),
+        )  # [b, h, to_seq_len//to_block_size-2, n_rand_blocks, to_block_size, -1]
+        gathered_value = tf.reshape(
+            tf.gather(blocked_value_matrix, rand_attn, batch_dims=2, name="gather_value"),
+            (-1, n_heads, from_seq_len // from_block_size - 2, n_rand_blocks * to_block_size, attention_head_size),
+        )  # [b, h, to_seq_len//to_block_size-2, n_rand_blocks, to_block_size, -1]
 
-            blocked_query_matrix = tf.reshape(query_layer, (-1, n_heads, from_seq_len // from_block_size, from_block_size, attention_head_size))
-            blocked_key_matrix = tf.reshape(key_layer, (-1, n_heads, to_seq_len // to_block_size, to_block_size, attention_head_size))
-            blocked_value_matrix = tf.reshape(value_layer, (-1, n_heads, to_seq_len // to_block_size, to_block_size, attention_head_size))
-            gathered_key = tf.reshape(
-                tf.gather(blocked_key_matrix, rand_attn, batch_dims=2, name="gather_key"),
-                (-1, n_heads, from_seq_len // from_block_size - 2, n_rand_blocks * to_block_size, attention_head_size))  # [b, h, to_seq_len//to_block_size-2, n_rand_blocks, to_block_size, -1]
-            gathered_value = tf.reshape(
-                tf.gather(
-                    blocked_value_matrix, rand_attn, batch_dims=2, name="gather_value"),
-                (-1, n_heads, from_seq_len // from_block_size - 2, n_rand_blocks * to_block_size, attention_head_size))  # [b, h, to_seq_len//to_block_size-2, n_rand_blocks, to_block_size, -1]
+        first_product = tf.einsum("BHQD,BHKD->BHQK", blocked_query_matrix[:, :, 0], key_layer)
+        # [b, h, from_block_size, -1] x [b, h, to_seq_len, -1] ==> [b, h, from_block_size, to_seq_len]
 
-            first_product = tf.einsum(
-                "BHQD,BHKD->BHQK", blocked_query_matrix[:, :, 0],
-                key_layer)
-            # [b, h, from_block_size, -1] x [b, h, to_seq_len, -1] ==> [b, h, from_block_size, to_seq_len]
+        first_product = tf.multiply(first_product, rsqrt_d)
+        first_product += (1.0 - to_mask) * attn_mask_penalty
+        first_attn_weights = tf.nn.softmax(first_product)  # [b, h, from_block_size, to_seq_len]
+        first_context_layer = tf.einsum("BHQK,BHKD->BHQD", first_attn_weights, value_layer)
+        # [b, h, from_block_size, to_seq_len] x [b, h, to_seq_len, -1] ==> [b, h, from_block_size, -1]
+        first_context_layer = tf.expand_dims(first_context_layer, 2)
 
-            first_product = tf.multiply(first_product, 1.0 / np.sqrt(attention_head_size))
-            first_product += (1.0 - to_mask) * -10000.0
-            first_attn_weights = tf.nn.softmax(first_product)  # [b, h, from_block_size, to_seq_len]
-            first_context_layer = tf.einsum(
-                "BHQK,BHKD->BHQD", first_attn_weights,
-                value_layer)
-            # [b, h, from_block_size, to_seq_len] x [b, h, to_seq_len, -1] ==> [b, h, from_block_size, -1]
-            first_context_layer = tf.expand_dims(first_context_layer, 2)
+        second_key_mat = tf.concat(
+            [
+                blocked_key_matrix[:, :, 0],
+                blocked_key_matrix[:, :, 1],
+                blocked_key_matrix[:, :, 2],
+                blocked_key_matrix[:, :, -1],
+                gathered_key[:, :, 0],
+            ],
+            2,
+        )  # [b, h, (4+n_rand_blocks)*to_block_size, -1]
+        second_value_mat = tf.concat(
+            [
+                blocked_value_matrix[:, :, 0],
+                blocked_value_matrix[:, :, 1],
+                blocked_value_matrix[:, :, 2],
+                blocked_value_matrix[:, :, -1],
+                gathered_value[:, :, 0],
+            ],
+            2,
+        )  # [b, h, (4+n_rand_blocks)*to_block_size, -1]
+        second_product = tf.einsum(
+            "BHQD,BHKD->BHQK", blocked_query_matrix[:, :, 1], second_key_mat
+        )  # [b, h, from_block_size, -1] x [b, h, (4+n_rand_blocks) * to_block_size, -1] ==> [b, h, from_block_size, (4+n_rand_blocks)*to_block_size]
+        second_seq_pad = tf.concat(
+            [
+                to_mask[:, :, :, : 3 * to_block_size],
+                to_mask[:, :, :, -to_block_size:],
+                tf.ones_like(rand_mask[:, :1, 0, :1]),
+            ],
+            3,
+        )
+        second_rand_pad = tf.concat(
+            [tf.ones_like(second_product[:, :, :, : 4 * to_block_size]), rand_mask[:, :, 0]], 3
+        )
+        second_product = tf.multiply(second_product, rsqrt_d)
+        second_product += (1.0 - tf.minimum(second_seq_pad, second_rand_pad)) * attn_mask_penalty
+        second_attn_weights = tf.nn.softmax(
+            second_product
+        )  # [b , h, from_block_size, (4+n_rand_blocks)*to_block_size]
+        second_context_layer = tf.einsum(
+            "BHQK,BHKD->BHQD", second_attn_weights, second_value_mat
+        )  # [b, h, from_block_size, (4+n_rand_blocks)*to_block_size] x [b, h, (4+n_rand_blocks)*to_block_size, -1] ==> [b, h, from_block_size, -1]
+        second_context_layer = tf.expand_dims(second_context_layer, 2)
 
-            second_key_mat = tf.concat([
-                blocked_key_matrix[:, :, 0], blocked_key_matrix[:, :, 1],
-                blocked_key_matrix[:, :, 2], blocked_key_matrix[:, :, -1],
-                gathered_key[:, :, 0]], 2)  # [b, h, (4+n_rand_blocks)*to_block_size, -1]
-            second_value_mat = tf.concat([
-                blocked_value_matrix[:, :, 0], blocked_value_matrix[:, :, 1],
-                blocked_value_matrix[:, :, 2], blocked_value_matrix[:, :, -1],
-                gathered_value[:, :, 0]], 2)  # [b, h, (4+n_rand_blocks)*to_block_size, -1]
-            second_product = tf.einsum(
-                "BHQD,BHKD->BHQK", blocked_query_matrix[:, :, 1], second_key_mat
-            )  # [b, h, from_block_size, -1] x [b, h, (4+n_rand_blocks) * to_block_size, -1] ==> [b, h, from_block_size, (4+n_rand_blocks)*to_block_size]
-            second_seq_pad = tf.concat([
-                to_mask[:, :, :, :3 * to_block_size], to_mask[:, :, :, -to_block_size:],
-                tf.ones_like(rand_mask[:, :1, 0, :1])], 3)
-            second_rand_pad = tf.concat(
-                [tf.ones_like(second_product[:, :, :, :4 * to_block_size]), rand_mask[:, :, 0]], 3)
-            second_product = tf.multiply(second_product, 1.0 / np.sqrt(attention_head_size))
-            second_product += (1.0 -
-                               tf.minimum(second_seq_pad, second_rand_pad)) * -10000.0
-            second_attn_weights = tf.nn.softmax(second_product)  # [b , h, from_block_size, (4+n_rand_blocks)*to_block_size]
-            second_context_layer = tf.einsum(
-                "BHQK,BHKD->BHQD", second_attn_weights, second_value_mat
-            )  # [b, h, from_block_size, (4+n_rand_blocks)*to_block_size] x [b, h, (4+n_rand_blocks)*to_block_size, -1] ==> [b, h, from_block_size, -1]
-            second_context_layer = tf.expand_dims(second_context_layer, 2)
+        exp_blocked_key_matrix = tf.concat(
+            [blocked_key_matrix[:, :, 1:-3], blocked_key_matrix[:, :, 2:-2], blocked_key_matrix[:, :, 3:-1]], 3
+        )  # [b, h, from_seq_len//from_block_size-4, 3*to_block_size, -1]
+        exp_blocked_value_matrix = tf.concat(
+            [blocked_value_matrix[:, :, 1:-3], blocked_value_matrix[:, :, 2:-2], blocked_value_matrix[:, :, 3:-1]],
+            3,
+        )  # [b, h, from_seq_len//from_block_size-4, 3*to_block_size, -1]
+        middle_query_matrix = blocked_query_matrix[:, :, 2:-2]
+        inner_band_product = tf.einsum(
+            "BHLQD,BHLKD->BHLQK", middle_query_matrix, exp_blocked_key_matrix
+        )  # [b, h, from_seq_len//from_block_size-4, from_block_size, -1] x [b, h, from_seq_len//from_block_size-4, 3*to_block_size, -1]
+        #     ==> [b, h, from_seq_len//from_block_size-4, from_block_size, 3*to_block_size]
+        inner_band_product = tf.multiply(inner_band_product, rsqrt_d)
+        rand_band_product = tf.einsum(
+            "BHLQD,BHLKD->BHLQK", middle_query_matrix, gathered_key[:, :, 1:-1]
+        )  # [b, h, from_seq_len//from_block_size-4, from_block_size, -1] x [b, h, from_seq_len//from_block_size-4, n_rand_blocks*to_block_size, -1]
+        #     ==> [b, h, from_seq_len//from_block_size-4, from_block_size, n_rand_blocks*to_block_size]
+        rand_band_product = tf.multiply(rand_band_product, rsqrt_d)
+        first_band_product = tf.einsum(
+            "BHLQD,BHKD->BHLQK", middle_query_matrix, blocked_key_matrix[:, :, 0]
+        )  # [b, h, from_seq_len//from_block_size-4, from_block_size, -1] x [b, h, to_block_size, -1] ==> [b, h, from_seq_len//from_block_size-4, from_block_size, to_block_size]
+        first_band_product = tf.multiply(first_band_product, rsqrt_d)
+        last_band_product = tf.einsum(
+            "BHLQD,BHKD->BHLQK", middle_query_matrix, blocked_key_matrix[:, :, -1]
+        )  # [b, h, from_seq_len//from_block_size-4, from_block_size, -1] x [b, h, to_block_size, -1] ==> [b, h, from_seq_len//from_block_size-4, from_block_size, to_block_size]
+        last_band_product = tf.multiply(last_band_product, rsqrt_d)
+        inner_band_product += (1.0 - band_mask) * attn_mask_penalty
+        first_band_product += (1.0 - tf.expand_dims(to_mask[:, :, :, :to_block_size], 3)) * attn_mask_penalty
+        last_band_product += (1.0 - tf.expand_dims(to_mask[:, :, :, -to_block_size:], 3)) * attn_mask_penalty
+        rand_band_product += (1.0 - rand_mask[:, :, 1:-1]) * attn_mask_penalty
+        band_product = tf.concat(
+            [first_band_product, inner_band_product, rand_band_product, last_band_product], -1
+        )  # [b, h, from_seq_len//from_block_size-4, from_block_size, (5+n_rand_blocks)*to_block_size]
+        attn_weights = tf.nn.softmax(
+            band_product
+        )  # [b, h, from_seq_len//from_block_size-4, from_block_size, (5+n_rand_blocks)*to_block_size]
+        context_layer = tf.einsum(
+            "BHLQK,BHLKD->BHLQD",
+            attn_weights[:, :, :, :, to_block_size : 4 * to_block_size],
+            exp_blocked_value_matrix,
+        )  # [b, h, from_seq_len//from_block_size-4, from_block_size, 3*to_block_size] x [b, h, from_seq_len//from_block_size-4, 3*to_block_size, -1]
+        #     ==> [b, h, from_seq_len//from_block_size-4, from_block_size, -1]
+        context_layer += tf.einsum(
+            "BHLQK,BHLKD->BHLQD",
+            attn_weights[:, :, :, :, 4 * to_block_size : -to_block_size],
+            gathered_value[:, :, 1:-1],
+        )  # [b, h, from_seq_len//from_block_size-4, from_block_size, n_rand_blocks*to_block_size] x [b, h, from_seq_len//from_block_size-4, n_rand_blocks*to_block_size, -1]
+        #     ==> [b, h, from_seq_len//from_block_size-4, from_block_size, -1]
+        context_layer += tf.einsum(
+            "BHLQK,BHKD->BHLQD", attn_weights[:, :, :, :, :to_block_size], blocked_value_matrix[:, :, 0]
+        )  # [b, h, from_seq_len//from_block_size-4, from_block_size, to_block_size] x [b, h, to_block_size, -1] ==> [b, h, from_seq_len//from_block_size-4, from_block_size, -1]
+        context_layer += tf.einsum(
+            "BHLQK,BHKD->BHLQD", attn_weights[:, :, :, :, -to_block_size:], blocked_value_matrix[:, :, -1]
+        )  # [b, h, from_seq_len//from_block_size-4, from_block_size, to_block_size] x [b, h, to_block_size, -1] ==> [b, h, from_seq_len//from_block_size-4, from_block_size, -1]
 
-            exp_blocked_key_matrix = tf.concat([
-                blocked_key_matrix[:, :, 1:-3], blocked_key_matrix[:, :, 2:-2],
-                blocked_key_matrix[:, :, 3:-1]], 3)  # [b, h, from_seq_len//from_block_size-4, 3*to_block_size, -1]
-            exp_blocked_value_matrix = tf.concat([
-                blocked_value_matrix[:, :, 1:-3], blocked_value_matrix[:, :, 2:-2],
-                blocked_value_matrix[:, :, 3:-1]], 3)  # [b, h, from_seq_len//from_block_size-4, 3*to_block_size, -1]
-            middle_query_matrix = blocked_query_matrix[:, :, 2:-2]
-            inner_band_product = tf.einsum(
-                "BHLQD,BHLKD->BHLQK", middle_query_matrix, exp_blocked_key_matrix
-            )  # [b, h, from_seq_len//from_block_size-4, from_block_size, -1] x [b, h, from_seq_len//from_block_size-4, 3*to_block_size, -1]
-            #     ==> [b, h, from_seq_len//from_block_size-4, from_block_size, 3*to_block_size]
-            inner_band_product = tf.multiply(inner_band_product, 1.0 / np.sqrt(attention_head_size))
-            rand_band_product = tf.einsum(
-                "BHLQD,BHLKD->BHLQK", middle_query_matrix, gathered_key[:, :, 1:-1]
-            )  # [b, h, from_seq_len//from_block_size-4, from_block_size, -1] x [b, h, from_seq_len//from_block_size-4, n_rand_blocks*to_block_size, -1]
-            #     ==> [b, h, from_seq_len//from_block_size-4, from_block_size, n_rand_blocks*to_block_size]
-            rand_band_product = tf.multiply(rand_band_product, 1.0 / np.sqrt(attention_head_size))
-            first_band_product = tf.einsum(
-                "BHLQD,BHKD->BHLQK", middle_query_matrix, blocked_key_matrix[:, :, 0]
-            )  # [b, h, from_seq_len//from_block_size-4, from_block_size, -1] x [b, h, to_block_size, -1] ==> [b, h, from_seq_len//from_block_size-4, from_block_size, to_block_size]
-            first_band_product = tf.multiply(first_band_product, 1.0 / np.sqrt(attention_head_size))
-            last_band_product = tf.einsum(
-                "BHLQD,BHKD->BHLQK", middle_query_matrix, blocked_key_matrix[:, :, -1]
-            )  # [b, h, from_seq_len//from_block_size-4, from_block_size, -1] x [b, h, to_block_size, -1] ==> [b, h, from_seq_len//from_block_size-4, from_block_size, to_block_size]
-            last_band_product = tf.multiply(last_band_product, 1.0 / np.sqrt(attention_head_size))
-            inner_band_product += (1.0 - band_mask) * -10000.0
-            first_band_product += (
-                                          1.0 - tf.expand_dims(to_mask[:, :, :, :to_block_size], 3)) * -10000.0
-            last_band_product += (
-                                         1.0 - tf.expand_dims(to_mask[:, :, :, -to_block_size:], 3)) * -10000.0
-            rand_band_product += (1.0 - rand_mask[:, :, 1:-1]) * -10000.0
-            band_product = tf.concat([
-                first_band_product, inner_band_product, rand_band_product,
-                last_band_product], -1)  # [b, h, from_seq_len//from_block_size-4, from_block_size, (5+n_rand_blocks)*to_block_size]
-            attn_weights = tf.nn.softmax(band_product)  # [b, h, from_seq_len//from_block_size-4, from_block_size, (5+n_rand_blocks)*to_block_size]
-            context_layer = tf.einsum(
-                "BHLQK,BHLKD->BHLQD", attn_weights[:, :, :, :, to_block_size:4 * to_block_size],
-                exp_blocked_value_matrix
-            )  # [b, h, from_seq_len//from_block_size-4, from_block_size, 3*to_block_size] x [b, h, from_seq_len//from_block_size-4, 3*to_block_size, -1]
-            #     ==> [b, h, from_seq_len//from_block_size-4, from_block_size, -1]
-            context_layer += tf.einsum(
-                "BHLQK,BHLKD->BHLQD", attn_weights[:, :, :, :, 4 * to_block_size:-to_block_size],
-                gathered_value[:, :, 1:-1]
-            )  # [b, h, from_seq_len//from_block_size-4, from_block_size, n_rand_blocks*to_block_size] x [b, h, from_seq_len//from_block_size-4, n_rand_blocks*to_block_size, -1]
-            #     ==> [b, h, from_seq_len//from_block_size-4, from_block_size, -1]
-            context_layer += tf.einsum(
-                "BHLQK,BHKD->BHLQD", attn_weights[:, :, :, :, :to_block_size],
-                blocked_value_matrix[:, :, 0]
-            )  # [b, h, from_seq_len//from_block_size-4, from_block_size, to_block_size] x [b, h, to_block_size, -1] ==> [b, h, from_seq_len//from_block_size-4, from_block_size, -1]
-            context_layer += tf.einsum(
-                "BHLQK,BHKD->BHLQD", attn_weights[:, :, :, :, -to_block_size:],
-                blocked_value_matrix[:, :, -1]
-            )  # [b, h, from_seq_len//from_block_size-4, from_block_size, to_block_size] x [b, h, to_block_size, -1] ==> [b, h, from_seq_len//from_block_size-4, from_block_size, -1]
+        second_last_key_mat = tf.concat(
+            [
+                blocked_key_matrix[:, :, 0],
+                blocked_key_matrix[:, :, -3],
+                blocked_key_matrix[:, :, -2],
+                blocked_key_matrix[:, :, -1],
+                gathered_key[:, :, -1],
+            ],
+            2,
+        )  # [b, h, (4+n_rand_blocks)*to_block_size, -1]
+        second_last_value_mat = tf.concat(
+            [
+                blocked_value_matrix[:, :, 0],
+                blocked_value_matrix[:, :, -3],
+                blocked_value_matrix[:, :, -2],
+                blocked_value_matrix[:, :, -1],
+                gathered_value[:, :, -1],
+            ],
+            2,
+        )  # [b, h, (4+n_rand_blocks)*to_block_size, -1]
+        second_last_product = tf.einsum(
+            "BHQD,BHKD->BHQK", blocked_query_matrix[:, :, -2], second_last_key_mat
+        )  # [b, h, from_block_size, -1] x [b, h, (4+n_rand_blocks)*to_block_size, -1] ==> [b, h, from_block_size, (4+n_rand_blocks)*to_block_size]
+        second_last_seq_pad = tf.concat(
+            [
+                to_mask[:, :, :, :to_block_size],
+                to_mask[:, :, :, -3 * to_block_size :],
+                tf.ones_like(rand_mask[:, :1, 0, :1]),
+            ],
+            3,
+        )
+        second_last_rand_pad = tf.concat(
+            [tf.ones_like(second_last_product[:, :, :, : 4 * to_block_size]), rand_mask[:, :, -1]], 3
+        )
+        second_last_product = tf.multiply(second_last_product, 1.0 / np.sqrt(attention_head_size))
+        second_last_product += (1.0 - tf.minimum(second_last_seq_pad, second_last_rand_pad)) * attn_mask_penalty
+        second_last_attn_weights = tf.nn.softmax(
+            second_last_product
+        )  # [b, h, from_block_size, (4+n_rand_blocks)*to_block_size]
+        second_last_context_layer = tf.einsum(
+            "BHQK,BHKD->BHQD", second_last_attn_weights, second_last_value_mat
+        )  # [b, h, from_block_size, (4+n_rand_blocks)*to_block_size] x [b, h, (4+n_rand_blocks)*to_block_size, -1] ==> [b, h, from_block_size, -1]
+        second_last_context_layer = tf.expand_dims(second_last_context_layer, 2)
 
-            second_last_key_mat = tf.concat([
-                blocked_key_matrix[:, :, 0], blocked_key_matrix[:, :, -3],
-                blocked_key_matrix[:, :, -2], blocked_key_matrix[:, :, -1],
-                gathered_key[:, :, -1]], 2)  # [b, h, (4+n_rand_blocks)*to_block_size, -1]
-            second_last_value_mat = tf.concat([
-                blocked_value_matrix[:, :, 0], blocked_value_matrix[:, :, -3],
-                blocked_value_matrix[:, :, -2], blocked_value_matrix[:, :, -1],
-                gathered_value[:, :, -1]], 2)  # [b, h, (4+n_rand_blocks)*to_block_size, -1]
-            second_last_product = tf.einsum(
-                "BHQD,BHKD->BHQK", blocked_query_matrix[:, :, -2], second_last_key_mat
-            )  # [b, h, from_block_size, -1] x [b, h, (4+n_rand_blocks)*to_block_size, -1] ==> [b, h, from_block_size, (4+n_rand_blocks)*to_block_size]
-            second_last_seq_pad = tf.concat([
-                to_mask[:, :, :, :to_block_size], to_mask[:, :, :, -3 * to_block_size:],
-                tf.ones_like(rand_mask[:, :1, 0, :1])], 3)
-            second_last_rand_pad = tf.concat(
-                [tf.ones_like(second_last_product[:, :, :, :4 * to_block_size]),
-                 rand_mask[:, :, -1]], 3)
-            second_last_product = tf.multiply(second_last_product, 1.0 / np.sqrt(attention_head_size))
-            second_last_product += (
-                                           1.0 - tf.minimum(second_last_seq_pad, second_last_rand_pad)) * -10000.0
-            second_last_attn_weights = tf.nn.softmax(
-                second_last_product)  # [b, h, from_block_size, (4+n_rand_blocks)*to_block_size]
-            second_last_context_layer = tf.einsum(
-                "BHQK,BHKD->BHQD", second_last_attn_weights, second_last_value_mat
-            )  # [b, h, from_block_size, (4+n_rand_blocks)*to_block_size] x [b, h, (4+n_rand_blocks)*to_block_size, -1] ==> [b, h, from_block_size, -1]
-            second_last_context_layer = tf.expand_dims(second_last_context_layer, 2)
+        last_product = tf.einsum(
+            "BHQD,BHKD->BHQK", blocked_query_matrix[:, :, -1], key_layer
+        )  # [b, h, from_block_size, -1] x [b, h, to_seq_len, -1] ==> [b, h, from_block_size, to_seq_len]
+        last_product = tf.multiply(last_product, 1.0 / np.sqrt(attention_head_size))
+        last_product += (1.0 - to_mask) * attn_mask_penalty
+        last_attn_weights = tf.nn.softmax(last_product)  # [b, h, from_block_size, to_seq_len]
+        last_context_layer = tf.einsum(
+            "BHQK,BHKD->BHQD", last_attn_weights, value_layer
+        )  # [b, h, from_block_size, to_seq_len] x [b, h, to_seq_len, -1] ==> [b, h, from_block_size, -1]
+        last_context_layer = tf.expand_dims(last_context_layer, 2)
 
-            last_product = tf.einsum(
-                "BHQD,BHKD->BHQK", blocked_query_matrix[:, :, -1],
-                key_layer)  # [b, h, from_block_size, -1] x [b, h, to_seq_len, -1] ==> [b, h, from_block_size, to_seq_len]
-            last_product = tf.multiply(last_product, 1.0 / np.sqrt(attention_head_size))
-            last_product += (1.0 - to_mask) * -10000.0
-            last_attn_weights = tf.nn.softmax(last_product)  # [b, h, from_block_size, to_seq_len]
-            last_context_layer = tf.einsum(
-                "BHQK,BHKD->BHQD", last_attn_weights,
-                value_layer)  # [b, h, from_block_size, to_seq_len] x [b, h, to_seq_len, -1] ==> [b, h, from_block_size, -1]
-            last_context_layer = tf.expand_dims(last_context_layer, 2)
+        context_layer = tf.concat(
+            [
+                first_context_layer,
+                second_context_layer,
+                context_layer,
+                second_last_context_layer,
+                last_context_layer,
+            ],
+            2,
+        )
+        context_layer = tf.reshape(context_layer, (-1, n_heads, from_seq_len, attention_head_size)) * from_mask
+        context_layer = tf.transpose(context_layer, (0, 2, 1, 3))
 
-            context_layer = tf.concat([
-                first_context_layer, second_context_layer, context_layer,
-                second_last_context_layer, last_context_layer
-            ], 2)
-            context_layer = tf.reshape(context_layer, (-1, n_heads, from_seq_len, attention_head_size)) * from_mask
-            context_layer = tf.transpose(context_layer, (0, 2, 1, 3))
+        # this is just for visualizing; forward pass doesn't depend on following code
+        attention_probs = tf.zeros(batch_size, n_heads, from_seq_len, to_seq_len)
 
-            # this is just for visualizing; forward pass doesn't depend on following code
-            attention_probs = tf.zeros(batch_size, n_heads, from_seq_len, to_seq_len)
+        if not output_attentions:
+            return context_layer, attention_probs
 
-            if not output_attentions:
-                return context_layer, attention_probs
+        # 1st query block
+        # corresponding to `first_context_layer`
+        attention_probs[:, :, :from_block_size, :] = first_attn_weights  # all keys global
 
-                # 1st query block
-                # corresponding to `first_context_layer`
-                attention_probs[:, :, :from_block_size, :] = first_attn_weights  # all keys global
+        # 2nd query block
+        # corresponding to `second_context_layer`
+        attention_probs[:, :, from_block_size : 2 * from_block_size, : 3 * to_block_size] = second_attn_weights[
+            :, :, :, : 3 * to_block_size
+        ]  # 1st three key blocks (global + sliding)
+        attention_probs[:, :, from_block_size : 2 * from_block_size, -to_block_size:] = second_attn_weights[
+            :, :, :, 3 * to_block_size : 4 * to_block_size
+        ]  # last key block (global)
+        # random keys
+        for p1, i1, w1 in zip(range(batch_size), rand_attn, second_attn_weights):
+            # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
+            for p2, i2, w2 in zip(range(n_heads), i1, w1):
+                # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
+                attn_probs_view = attention_probs.view(
+                    batch_size,
+                    n_heads,
+                    from_seq_len // from_block_size,
+                    from_block_size,
+                    to_seq_len // to_block_size,
+                    to_block_size,
+                )
+                right_slice = w2[:, 4 * to_block_size :]
+                attn_probs_view[p1, p2, 1, :, i2[0]] = right_slice.view(from_block_size, n_rand_blocks, to_block_size)
 
-                # 2nd query block
-                # corresponding to `second_context_layer`
-                attention_probs[:, :, from_block_size: 2 * from_block_size, : 3 * to_block_size] = second_attn_weights[
-                                                                                                   :, :, :,
-                                                                                                   : 3 * to_block_size
-                                                                                                   ]  # 1st three key blocks (global + sliding)
-                attention_probs[:, :, from_block_size: 2 * from_block_size, -to_block_size:] = second_attn_weights[
-                                                                                               :, :, :,
-                                                                                               3 * to_block_size: 4 * to_block_size
-                                                                                               ]  # last key block (global)
-                # random keys
-                for p1, i1, w1 in zip(range(bsz), rand_attn, second_attn_weights):
-                    # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
-                    for p2, i2, w2 in zip(range(n_heads), i1, w1):
-                        # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
-                        attn_probs_view = attention_probs.view(
-                            bsz,
-                            n_heads,
-                            from_seq_len // from_block_size,
-                            from_block_size,
-                            to_seq_len // to_block_size,
-                            to_block_size,
-                        )
-                        right_slice = w2[:, 4 * to_block_size:]
-                        attn_probs_view[p1, p2, 1, :, i2[0]] = right_slice.view(
-                            from_block_size, n_rand_blocks, to_block_size
-                        )
-
-                # Middle query blocks
-                # corresponding to `context_layer`
-                # sliding keys
-                for q_idx in range(from_seq_len // from_block_size - 4):
+        # Middle query blocks
+        # corresponding to `context_layer`
+        # sliding keys
+        for q_idx in range(from_seq_len // from_block_size - 4):
+            attn_probs_view = attention_probs.view(
+                batch_size,
+                n_heads,
+                from_seq_len // from_block_size,
+                from_block_size,
+                to_seq_len // to_block_size,
+                to_block_size,
+            )[:, :, 2:-2, :, 1:-1, :]
+            right_slice = attn_weights[:, :, q_idx, :, to_block_size : 4 * to_block_size]
+            attn_probs_view[:, :, q_idx, :, q_idx : q_idx + 3, :] = right_slice.view(
+                batch_size, n_heads, from_block_size, 3, to_block_size
+            )  # inner_band_product
+        # global keys (corresponding to 1st key block)
+        attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, :to_block_size] = attn_weights[
+            :, :, :, :, :to_block_size
+        ].view(
+            batch_size, n_heads, -1, to_block_size
+        )  # first_band_product
+        # global keys (corresponding to last key block)
+        attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, -to_block_size:] = attn_weights[
+            :, :, :, :, -to_block_size:
+        ].view(
+            batch_size, n_heads, -1, to_block_size
+        )  # last_band_product
+        # random keys
+        for p1, i1, w1 in zip(range(batch_size), rand_attn, attn_weights):
+            # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
+            for p2, i2, w2 in zip(range(n_heads), i1, w1):
+                # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
+                for q_idx in range(1, len(i2) - 1):
                     attn_probs_view = attention_probs.view(
-                        bsz,
+                        batch_size,
                         n_heads,
                         from_seq_len // from_block_size,
                         from_block_size,
                         to_seq_len // to_block_size,
                         to_block_size,
-                    )[:, :, 2:-2, :, 1:-1, :]
-                    right_slice = attn_weights[:, :, q_idx, :, to_block_size: 4 * to_block_size]
-                    attn_probs_view[:, :, q_idx, :, q_idx: q_idx + 3, :] = right_slice.view(
-                        bsz, n_heads, from_block_size, 3, to_block_size
-                    )  # inner_band_product
-                # global keys (corresponding to 1st key block)
-                attention_probs[:, :, 2 * from_block_size: -2 * from_block_size, :to_block_size] = attn_weights[
-                                                                                                   :, :, :, :,
-                                                                                                   :to_block_size
-                                                                                                   ].view(
-                    bsz, n_heads, -1, to_block_size
-                )  # first_band_product
-                # global keys (corresponding to last key block)
-                attention_probs[:, :, 2 * from_block_size: -2 * from_block_size, -to_block_size:] = attn_weights[
-                                                                                                    :, :, :, :,
-                                                                                                    -to_block_size:
-                                                                                                    ].view(
-                    bsz, n_heads, -1, to_block_size
-                )  # last_band_product
-                # random keys
-                for p1, i1, w1 in zip(range(bsz), rand_attn, attn_weights):
-                    # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
-                    for p2, i2, w2 in zip(range(n_heads), i1, w1):
-                        # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
-                        for q_idx in range(1, len(i2) - 1):
-                            attn_probs_view = attention_probs.view(
-                                bsz,
-                                n_heads,
-                                from_seq_len // from_block_size,
-                                from_block_size,
-                                to_seq_len // to_block_size,
-                                to_block_size,
-                            )
-                            right_slice = w2[q_idx - 1, :, 4 * to_block_size: -to_block_size]
-                            attn_probs_view[p1, p2, q_idx + 1, :, i2[q_idx]] = right_slice.view(
-                                from_block_size, n_rand_blocks, to_block_size
-                            )
+                    )
+                    right_slice = w2[q_idx - 1, :, 4 * to_block_size : -to_block_size]
+                    attn_probs_view[p1, p2, q_idx + 1, :, i2[q_idx]] = right_slice.view(
+                        from_block_size, n_rand_blocks, to_block_size
+                    )
 
-                # Second-last query block
-                # corresponding to `second_last_context_layer`
-                attention_probs[:, :, -2 * from_block_size: -from_block_size,
-                :to_block_size] = second_last_attn_weights[
-                                  :, :, :, :to_block_size
-                                  ]  # 1st key block (global)
-                attention_probs[
-                :, :, -2 * from_block_size: -from_block_size, -3 * to_block_size:
-                ] = second_last_attn_weights[
-                    :, :, :, to_block_size: 4 * to_block_size
-                    ]  # last three blocks (global + sliding)
-                # random keys
-                for p1, i1, w1 in zip(range(bsz), rand_attn, second_last_attn_weights):
-                    # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
-                    for p2, i2, w2 in zip(range(n_heads), i1, w1):
-                        # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
-                        attn_probs_view = attention_probs.view(
-                            bsz,
-                            n_heads,
-                            from_seq_len // from_block_size,
-                            from_block_size,
-                            to_seq_len // to_block_size,
-                            to_block_size,
-                        )
-                        right_slice = w2[:, 4 * to_block_size:]
-                        attn_probs_view[p1, p2, -2, :, i2[-1]] = right_slice.view(
-                            from_block_size, n_rand_blocks, to_block_size
-                        )
+        # Second-last query block
+        # corresponding to `second_last_context_layer`
+        attention_probs[:, :, -2 * from_block_size : -from_block_size, :to_block_size] = second_last_attn_weights[
+            :, :, :, :to_block_size
+        ]  # 1st key block (global)
+        attention_probs[
+            :, :, -2 * from_block_size : -from_block_size, -3 * to_block_size :
+        ] = second_last_attn_weights[
+            :, :, :, to_block_size : 4 * to_block_size
+        ]  # last three blocks (global + sliding)
+        # random keys
+        for p1, i1, w1 in zip(range(batch_size), rand_attn, second_last_attn_weights):
+            # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
+            for p2, i2, w2 in zip(range(n_heads), i1, w1):
+                # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
+                attn_probs_view = attention_probs.view(
+                    batch_size,
+                    n_heads,
+                    from_seq_len // from_block_size,
+                    from_block_size,
+                    to_seq_len // to_block_size,
+                    to_block_size,
+                )
+                right_slice = w2[:, 4 * to_block_size :]
+                attn_probs_view[p1, p2, -2, :, i2[-1]] = right_slice.view(
+                    from_block_size, n_rand_blocks, to_block_size
+                )
 
-                # last query block
-                # corresponding to `last_context_layer`
-                attention_probs[:, :, -from_block_size:, :] = last_attn_weights  # all keys global
+        # last query block
+        # corresponding to `last_context_layer`
+        attention_probs[:, :, -from_block_size:, :] = last_attn_weights  # all keys global
 
-            return context_layer, attention_probs
+        return context_layer, attention_probs
 
     @staticmethod
     def _get_single_block_row_attention(
-            block_id,
-            to_start_block_id,
-            to_end_block_id,
-            num_rand_blocks,
-            window_block_left=1,
-            window_block_right=1,
-            global_block_left=1,
-            global_block_right=1,
+        block_id,
+        to_start_block_id,
+        to_end_block_id,
+        num_rand_blocks,
+        window_block_left=1,
+        window_block_right=1,
+        global_block_left=1,
+        global_block_right=1,
     ):
         """
         For a single row block get random row attention.
@@ -894,7 +953,7 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
 
     @staticmethod
     def _bigbird_block_rand_mask(
-            from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, last_idx=-1
+        from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, last_idx=-1
     ):
         """
         Create adjacency list of random attention.
@@ -944,7 +1003,7 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
                     rand_attn[i - 1, :] = np.random.permutation(middle_seq[:start])[:r]
                 else:
                     rand_attn[i - 1, :] = np.random.permutation(
-                        np.concatenate((middle_seq[:start], middle_seq[end + 1: last]))
+                        np.concatenate((middle_seq[:start], middle_seq[end + 1 : last]))
                     )[:r]
         return rand_attn
 
@@ -958,13 +1017,12 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
             to_seq_length//to_block_size, to_block_size].
         Returns:
           float Tensor of shape [batch_size, 1, from_seq_length//from_block_size-4,
-                                 from_block_size,  3*to_block_size].
+                                 from_block_size, 3*to_block_size].
         """
         exp_blocked_to_pad = tf.concat(
-            [to_blocked_mask[:, 1:-3], to_blocked_mask[:, 2:-2],
-             to_blocked_mask[:, 3:-1]], 2)
-        band_mask = tf.einsum(
-            "BLQ,BLK->BLQK", from_blocked_mask[:, 2:-2], exp_blocked_to_pad)
+            [to_blocked_mask[:, 1:-3], to_blocked_mask[:, 2:-2], to_blocked_mask[:, 3:-1]], 2
+        )
+        band_mask = tf.einsum("BLQ,BLK->BLQK", from_blocked_mask[:, 2:-2], exp_blocked_to_pad)
         band_mask = tf.expand_dims(band_mask, 1)
         return band_mask
 
@@ -1048,22 +1106,22 @@ class TFBigBirdAttention(tf.keras.layers.Layer):
             self.self.eval()
 
     def call(
-            self,
-            hidden_states,
-            attention_mask=None,
-            head_mask=None,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            pask_key_value=None,
-            output_attentions=False,
-            band_mask=None,
-            from_mask=None,
-            to_mask=None,
-            from_blocked_mask=None,
-            to_blocked_mask=None,
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        pask_key_value=None,
+        output_attentions=False,
+        band_mask=None,
+        from_mask=None,
+        to_mask=None,
+        from_blocked_mask=None,
+        to_blocked_mask=None,
     ):
 
-        #type compatibility
+        # type compatibility
         if band_mask is not None:
             band_mask = tf.cast(band_mask, hidden_states.dtype)
         if from_mask is not None:
@@ -1088,8 +1146,9 @@ class TFBigBirdAttention(tf.keras.layers.Layer):
                 hidden_states, band_mask, from_mask, to_mask, from_blocked_mask, to_blocked_mask, output_attentions
             )
             attention_output = self.dense_output(self_outputs[0], hidden_states)
-            outputs = (attention_output,) + self_outputs[1:] # add attentions if we output them
+            outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
             return outputs
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->BigBird
 class TFBigBirdIntermediate(tf.keras.layers.Layer):
@@ -1097,8 +1156,7 @@ class TFBigBirdIntermediate(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range),
-            name="dense"
+            units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
         if isinstance(config.hidden_act, str):
@@ -1112,7 +1170,8 @@ class TFBigBirdIntermediate(tf.keras.layers.Layer):
 
         return hidden_states
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->BigBird
+
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert -> BigBird
 class TFBigBirdOutput(tf.keras.layers.Layer):
     def __init__(self, config: BigBirdConfig, **kwargs):
         super().__init__(**kwargs)
@@ -1135,8 +1194,8 @@ class TFBigBirdLayer(tf.keras.layers.Layer):
     def __init__(self, config: BigBirdConfig, seed=None, **kwargs):
         super().__init__(**kwargs)
 
-        self.config=config
-        self.attention_type=config.attention_type
+        self.config = config
+        self.attention_type = config.attention_type
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.attention = TFBigBirdAttention(config, seed=seed)
@@ -1150,19 +1209,19 @@ class TFBigBirdLayer(tf.keras.layers.Layer):
         self.bigbird_output = TFBigBirdOutput(config)
 
     def call(
-            self,
-            hidden_states: tf.Tensor,
-            attention_mask: tf.Tensor,
-            head_mask: tf.Tensor,
-            encoder_hidden_states: Optional[tf.Tensor],
-            encoder_attention_mask: Optional[tf.Tensor],
-            band_mask: Optional[tf.Tensor]=None,
-            from_mask: Optional[tf.Tensor]=None,
-            to_mask: Optional[tf.Tensor]=None,
-            blocked_encoder_mask: Optional[tf.Tensor]=None,
-            past_key_value: Optional[Tuple[tf.Tensor]]=None,
-            output_attentions: bool = False,
-            training: bool = False,
+        self,
+        hidden_states: tf.Tensor,
+        attention_mask: tf.Tensor,
+        head_mask: tf.Tensor,
+        encoder_hidden_states: Optional[tf.Tensor],
+        encoder_attention_mask: Optional[tf.Tensor],
+        band_mask: Optional[tf.Tensor] = None,
+        from_mask: Optional[tf.Tensor] = None,
+        to_mask: Optional[tf.Tensor] = None,
+        blocked_encoder_mask: Optional[tf.Tensor] = None,
+        past_key_value: Optional[Tuple[tf.Tensor]] = None,
+        output_attentions: bool = False,
+        training: bool = False,
     ) -> Tuple[tf.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
@@ -1307,10 +1366,7 @@ class TFBigBirdEncoder(tf.keras.layers.Layer):
 
         if not return_dict:
             return tuple(
-                v
-                for v in [
-                    hidden_states, all_hidden_states, all_attentions, all_cross_attentions
-                ] if v is not None
+                v for v in [hidden_states, all_hidden_states, all_attentions, all_cross_attentions] if v is not None
             )
 
         return TFBaseModelOutputWithPastAndCrossAttentions(
@@ -1320,6 +1376,7 @@ class TFBigBirdEncoder(tf.keras.layers.Layer):
             attentions=all_attentions,
             cross_attentions=all_cross_attentions,
         )
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert -> BigBird
 class TFBigBirdPooler(tf.keras.layers.Layer):
@@ -1642,7 +1699,7 @@ class TFBigBirdMainLayer(tf.keras.layers.Layer):
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
+        # attention_probs has shape batch_size x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         if head_mask is not None:
@@ -1677,6 +1734,10 @@ class TFBigBirdMainLayer(tf.keras.layers.Layer):
                 pooled_output,
             ) + encoder_outputs[1:]
 
+        if padding_len > 0:
+            # unpad `sequence_output` because the calling function is expecting a length == input_ids.size(1)
+            sequence_output = sequence_output[:, :-padding_len]
+
         return TFBaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
@@ -1685,6 +1746,7 @@ class TFBigBirdMainLayer(tf.keras.layers.Layer):
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
         )
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPreTrainedModel with Bert -> BigBird
 class TFBigBirdPreTrainedModel(TFPreTrainedModel):
@@ -1815,7 +1877,6 @@ TF_BIG_BIRD_INPUTS_DOCSTRING = r"""
 """
 
 
-
 @dataclass
 # Copied from transformers.models.bert.modeling_tf_bert.BertForPreTrainingOutput with Bert -> BigBird
 class TFBigBirdForPreTrainingOutput(ModelOutput):
@@ -1846,6 +1907,7 @@ class TFBigBirdForPreTrainingOutput(ModelOutput):
     seq_relationship_logits: tf.Tensor = None
     hidden_states: Optional[Union[Tuple[tf.Tensor], tf.Tensor]] = None
     attentions: Optional[Union[Tuple[tf.Tensor], tf.Tensor]] = None
+
 
 @add_start_docstrings(
     "The bare Big Bird Model transformer outputting raw hidden-states without any specific head on top.",
@@ -2109,6 +2171,7 @@ class TFBigBirdForPreTraining(TFBigBirdPreTrainedModel, TFBigBirdPreTrainingLoss
             hidden_states=hs,
             attentions=attns,
         )
+
 
 @add_start_docstrings("""BigBird Model with a `language modeling` head on top.""", TF_BIG_BIRD_START_DOCSTRING)
 class TFBigBirdForMaskedLM(TFBigBirdPreTrainedModel, TFMaskedLanguageModelingLoss):
@@ -2439,8 +2502,8 @@ class TFBigBirdForNextSentencePrediction(TFBigBirdPreTrainedModel, TFNextSentenc
 
 @add_start_docstrings(
     """
-    BigBird Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
-    output) e.g. for GLUE tasks.
+    BigBird Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
     """,
     TF_BIG_BIRD_START_DOCSTRING,
 )
@@ -2562,7 +2625,9 @@ class TFBigBirdForMultipleChoice(TFBigBirdPreTrainedModel, TFMultipleChoiceLoss)
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(TF_BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        TF_BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,

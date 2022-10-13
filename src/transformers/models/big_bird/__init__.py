@@ -173,9 +173,9 @@ if TYPE_CHECKING:
     else:
         from .modelling_tf_big_bird import (
             TFBigBirdForCausalLM,
-            TFBigBirdForNextSentencePrediction,
             TFBigBirdForMaskedLM,
             TFBigBirdForMultipleChoice,
+            TFBigBirdForNextSentencePrediction,
             TFBigBirdForPreTraining,
             TFBigBirdForQuestionAnswering,
             TFBigBirdForSequenceClassification,
