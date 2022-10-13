@@ -91,11 +91,11 @@ class EsmTokenizer(PreTrainedTokenizer):
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
-        if token_ids_1 is not None:
-            raise ValueError("Multiple input sentences are not supported!")
-        cls_: List[int] = [self.cls_token_id]
-        eos_: List[int] = [self.eos_token_id]
-        return cls_ + token_ids_0 + eos_
+        if token_ids_1 is None:
+            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
+        cls = [self.cls_token_id]
+        sep = [self.sep_token_id]
+        return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def save_vocabulary(self, save_directory, filename_prefix):
         vocab_file = os.path.join(save_directory, (filename_prefix + "-" if filename_prefix else "") + "vocab.txt")
