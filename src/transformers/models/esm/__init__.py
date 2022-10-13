@@ -47,7 +47,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_esm"] = [
-        "ESM_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFEsmForMaskedLM",
         "TFEsmForSequenceClassification",
         "TFEsmForTokenClassification",
@@ -82,7 +82,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_esm import (
-            ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFEsmForMaskedLM,
             TFEsmForSequenceClassification,
             TFEsmForTokenClassification,
