@@ -187,6 +187,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         preprocess_params = {}
         if "chunk_length_s" in kwargs:
             preprocess_params["chunk_length_s"] = kwargs["chunk_length_s"]
+            if self.type not in {"ctc", "ctc_with_lm"}:
+                raise ValueError(
+                    "`chunk_length_s` is only valid for CTC models, use other chunking options for other models"
+                )
         if "stride_length_s" in kwargs:
             preprocess_params["stride_length_s"] = kwargs["stride_length_s"]
 
@@ -195,6 +199,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             postprocess_params["decoder_kwargs"] = kwargs["decoder_kwargs"]
         if "return_timestamps" in kwargs:
             postprocess_params["return_timestamps"] = kwargs["return_timestamps"]
+
+            if self.type == "seq2seq":
+                raise ValueError("We cannot return_timestamps yet on non-ctc models !")
+            if postprocess_params["return_timestamps"] == "char" and self.type == "ctc_with_lm":
+                raise ValueError("CTC with LM cannot return `char` timestamps, only `words`")
 
         return preprocess_params, {}, postprocess_params
 
@@ -250,6 +259,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
 
         if chunk_length_s:
+
             if stride_length_s is None:
                 stride_length_s = chunk_length_s / 6
 
@@ -264,10 +274,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             stride_left = int(round(stride_length_s[0] * self.feature_extractor.sampling_rate / align_to) * align_to)
             stride_right = int(round(stride_length_s[1] * self.feature_extractor.sampling_rate / align_to) * align_to)
 
-            if self.type not in {"ctc", "ctc_with_lm"}:
-                raise ValueError(
-                    "`chunk_length_s` is only valid for CTC models, use other chunking options for other models"
-                )
             if chunk_len < stride_left + stride_right:
                 raise ValueError("Chunk length must be superior to stride length")
 
@@ -344,11 +350,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     def postprocess(self, model_outputs, decoder_kwargs: Optional[Dict] = None, return_timestamps=None):
         # Optional return types
         optional = {}
-
-        if return_timestamps and self.type == "seq2seq":
-            raise ValueError("We cannot return_timestamps yet on non-ctc models !")
-        if return_timestamps == "char" and self.type == "ctc_with_lm":
-            raise ValueError("CTC with LM cannot return `char` timestamps, only `words`")
 
         final_items = []
         key = "logits" if self.type == "ctc_with_lm" else "tokens"
