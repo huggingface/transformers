@@ -385,7 +385,6 @@ MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         # Do not add new models here, this class will be deprecated in the future.
         # Model for Image Segmentation mapping
         ("detr", "DetrForSegmentation"),
-        ("table-transformer", "TableTransformerForSegmentation"),
     ]
 )
 

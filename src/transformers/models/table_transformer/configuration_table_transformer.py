@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Facebook AI Research and The HuggingFace Inc. team. All rights reserved.
+# Copyright The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TABLE_TRANSFORMER model configuration"""
+""" Table Transformer model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -36,8 +36,8 @@ TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class TableTransformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TableTransformerModel`]. It is used to
-    instantiate a TABLE_TRANSFORMER model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the TABLE_TRANSFORMER
+    instantiate a Table Transformer model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the Table Transformer
     [microsoft/table-transformer-table-detection](https://huggingface.co/microsoft/table-transformer-table-detection)
     architecture.
 
@@ -117,7 +117,7 @@ class TableTransformerConfig(PretrainedConfig):
     ```python
     >>> from transformers import TableTransformerModel, TableTransformerConfig
 
-    >>> # Initializing a TABLE_TRANSFORMER microsoft/table-transformer-table-detection style configuration
+    >>> # Initializing a Table Transformer microsoft/table-transformer-table-detection style configuration
     >>> configuration = TableTransformerConfig()
 
     >>> # Initializing a model from the microsoft/table-transformer-table-detection style configuration
@@ -133,6 +133,7 @@ class TableTransformerConfig(PretrainedConfig):
         "num_attention_heads": "encoder_attention_heads",
     }
 
+    # Copied from transformers.models.detr.configuration_detr.DetrConfig.__init__
     def __init__(
         self,
         num_channels=3,

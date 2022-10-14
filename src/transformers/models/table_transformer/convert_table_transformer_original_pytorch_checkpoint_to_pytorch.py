@@ -12,25 +12,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert TABLE_TRANSFORMER checkpoints."""
+"""Convert Table Transformer checkpoints.
+
+URL: https://github.com/microsoft/table-transformer
+"""
 
 
 import argparse
-import json
 from collections import OrderedDict
 from pathlib import Path
 
 import torch
 from PIL import Image
+from torchvision.transforms import functional as F
 
-import requests
 from huggingface_hub import hf_hub_download
-from transformers import (
-    DetrFeatureExtractor,
-    TableTransformerConfig,
-    TableTransformerForObjectDetection,
-    TableTransformerForSegmentation,
-)
+from transformers import DetrConfig, DetrFeatureExtractor, DetrForObjectDetection
 from transformers.utils import logging
 
 
@@ -93,12 +90,14 @@ for i in range(6):
     rename_keys.append((f"transformer.decoder.layers.{i}.norm3.weight", f"decoder.layers.{i}.final_layer_norm.weight"))
     rename_keys.append((f"transformer.decoder.layers.{i}.norm3.bias", f"decoder.layers.{i}.final_layer_norm.bias"))
 
-# convolutional projection + query embeddings + layernorm of decoder + class and bounding box heads
+# convolutional projection + query embeddings + layernorm of encoder + layernorm of decoder + class and bounding box heads
 rename_keys.extend(
     [
         ("input_proj.weight", "input_projection.weight"),
         ("input_proj.bias", "input_projection.bias"),
         ("query_embed.weight", "query_position_embeddings.weight"),
+        ("transformer.encoder.norm.weight", "encoder.layernorm.weight"),
+        ("transformer.encoder.norm.bias", "encoder.layernorm.bias"),
         ("transformer.decoder.norm.weight", "decoder.layernorm.weight"),
         ("transformer.decoder.norm.bias", "decoder.layernorm.bias"),
         ("class_embed.weight", "class_labels_classifier.weight"),
@@ -130,10 +129,8 @@ def rename_backbone_keys(state_dict):
     return new_state_dict
 
 
-def read_in_q_k_v(state_dict, is_panoptic=False):
+def read_in_q_k_v(state_dict):
     prefix = ""
-    if is_panoptic:
-        prefix = "table_transformer."
 
     # first: transformer encoder
     for i in range(6):
@@ -173,114 +170,150 @@ def read_in_q_k_v(state_dict, is_panoptic=False):
         state_dict[f"decoder.layers.{i}.encoder_attn.v_proj.bias"] = in_proj_bias_cross_attn[-256:]
 
 
-# We will verify our results on an image of cute cats
-def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+def resize(image, checkpoint_url):
+    width, height = image.size
+    current_max_size = max(width, height)
+    target_max_size = 800 if "detection" in checkpoint_url else 1000
+    scale = target_max_size / current_max_size
+    resized_image = image.resize((int(round(scale * width)), int(round(scale * height))))
 
-    return im
+    return resized_image
+
+
+def normalize(image):
+    image = F.to_tensor(image)
+    image = F.normalize(image, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    return image
 
 
 @torch.no_grad()
-def convert_table_transformer_checkpoint(model_name, pytorch_dump_folder_path):
+def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub):
     """
-    Copy/paste/tweak model's weights to our TABLE_TRANSFORMER structure.
+    Copy/paste/tweak model's weights to our DETR structure.
     """
 
-    # load default config
-    config = TableTransformerConfig()
-    # set backbone and dilation attributes
-    if "resnet101" in model_name:
-        config.backbone = "resnet101"
-    if "dc5" in model_name:
-        config.dilation = True
-    is_panoptic = "panoptic" in model_name
-    if is_panoptic:
-        config.num_labels = 250
-    else:
-        config.num_labels = 91
-        repo_id = "huggingface/label-files"
-        filename = "coco-detection-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
-        id2label = {int(k): v for k, v in id2label.items()}
-        config.id2label = id2label
-        config.label2id = {v: k for k, v in id2label.items()}
+    logger.info("Converting model...")
 
-    # load feature extractor
-    format = "coco_panoptic" if is_panoptic else "coco_detection"
-    feature_extractor = DetrFeatureExtractor(format=format)
-
-    # prepare image
-    img = prepare_img()
-    encoding = feature_extractor(images=img, return_tensors="pt")
-    pixel_values = encoding["pixel_values"]
-
-    logger.info(f"Converting model {model_name}...")
-
-    # load original model from torch hub
-    table_transformer = torch.hub.load("facebookresearch/table_transformer", model_name, pretrained=True).eval()
-    state_dict = table_transformer.state_dict()
+    # load original state dict
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
     # rename keys
     for src, dest in rename_keys:
-        if is_panoptic:
-            src = "table_transformer." + src
         rename_key(state_dict, src, dest)
     state_dict = rename_backbone_keys(state_dict)
     # query, key and value matrices need special treatment
-    read_in_q_k_v(state_dict, is_panoptic=is_panoptic)
+    read_in_q_k_v(state_dict)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
-    prefix = "table_transformer.model." if is_panoptic else "model."
+    prefix = "model."
     for key in state_dict.copy().keys():
-        if is_panoptic:
-            if (
-                key.startswith("table_transformer")
-                and not key.startswith("class_labels_classifier")
-                and not key.startswith("bbox_predictor")
-            ):
-                val = state_dict.pop(key)
-                state_dict["table_transformer.model" + key[4:]] = val
-            elif "class_labels_classifier" in key or "bbox_predictor" in key:
-                val = state_dict.pop(key)
-                state_dict["table_transformer." + key] = val
-            elif key.startswith("bbox_attention") or key.startswith("mask_head"):
-                continue
-            else:
-                val = state_dict.pop(key)
-                state_dict[prefix + key] = val
-        else:
-            if not key.startswith("class_labels_classifier") and not key.startswith("bbox_predictor"):
-                val = state_dict.pop(key)
-                state_dict[prefix + key] = val
-    # finally, create HuggingFace model and load state dict
-    model = TableTransformerForSegmentation(config) if is_panoptic else TableTransformerForObjectDetection(config)
+        if not key.startswith("class_labels_classifier") and not key.startswith("bbox_predictor"):
+            val = state_dict.pop(key)
+            state_dict[prefix + key] = val
+    # create HuggingFace model and load state dict
+    config = DetrConfig(
+        backbone="resnet18",
+        normalize_before=True,
+        mask_loss_coefficient=1,
+        dice_loss_coefficient=1,
+        ce_loss_coefficient=1,
+        bbox_loss_coefficient=5,
+        giou_loss_coefficient=2,
+        eos_coefficient=0.4,
+        class_cost=1,
+        bbox_cost=5,
+        giou_cost=2,
+    )
+
+    if "detection" in checkpoint_url:
+        config.num_queries = 15
+        config.num_labels = 2
+        id2label = {0: "table", 1: "table rotated"}
+        config.id2label = id2label
+        config.label2id = {v: k for k, v in id2label.items()}
+    else:
+        config.num_queries = 125
+        config.num_labels = 6
+        id2label = {
+            0: "table",
+            1: "table column",
+            2: "table row",
+            3: "table column header",
+            4: "table projected row header",
+            5: "table spanning cell",
+        }
+        config.id2label = id2label
+        config.label2id = {v: k for k, v in id2label.items()}
+
+    feature_extractor = DetrFeatureExtractor(
+        format="coco_detection", max_size=800 if "detection" in checkpoint_url else 1000
+    )
+    model = DetrForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
-    # verify our conversion
-    original_outputs = table_transformer(pixel_values)
-    outputs = model(pixel_values)
-    assert torch.allclose(outputs.logits, original_outputs["pred_logits"], atol=1e-4)
-    assert torch.allclose(outputs.pred_boxes, original_outputs["pred_boxes"], atol=1e-4)
-    if is_panoptic:
-        assert torch.allclose(outputs.pred_masks, original_outputs["pred_masks"], atol=1e-4)
 
-    # Save model and feature extractor
-    logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    model.save_pretrained(pytorch_dump_folder_path)
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    # verify our conversion
+    filename = "example_pdf.png" if "detection" in checkpoint_url else "example_table.png"
+    file_path = hf_hub_download(repo_id="nielsr/example-pdf", repo_type="dataset", filename=filename)
+    image = Image.open(file_path).convert("RGB")
+    pixel_values = normalize(resize(image, checkpoint_url)).unsqueeze(0)
+
+    outputs = model(pixel_values)
+
+    if "detection" in checkpoint_url:
+        expected_shape = (1, 15, 3)
+        expected_logits = torch.tensor(
+            [[-6.7897, -16.9985, 6.7937], [-8.0186, -22.2192, 6.9677], [-7.3117, -21.0708, 7.4055]]
+        )
+        expected_boxes = torch.tensor([[0.4867, 0.1767, 0.6732], [0.6718, 0.4479, 0.3830], [0.4716, 0.1760, 0.6364]])
+
+    else:
+        expected_shape = (1, 125, 7)
+        expected_logits = torch.tensor(
+            [[-18.1430, -8.3214, 4.8274], [-18.4685, -7.1361, -4.2667], [-26.3693, -9.3429, -4.9962]]
+        )
+        expected_boxes = torch.tensor([[0.4983, 0.5595, 0.9440], [0.4916, 0.6315, 0.5954], [0.6108, 0.8637, 0.1135]])
+
+    assert outputs.logits.shape == expected_shape
+    assert torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
+    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4)
+    print("Looks ok!")
+
+    if pytorch_dump_folder_path is not None:
+        # Save model and feature extractor
+        logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
+        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+        model.save_pretrained(pytorch_dump_folder_path)
+        feature_extractor.save_pretrained(pytorch_dump_folder_path)
+
+    if push_to_hub:
+        # Push model to HF hub
+        logger.info("Pushing model to the hub...")
+        model_name = (
+            "nielsr/detr-table-detection"
+            if "detection" in checkpoint_url
+            else "nielsr/detr-table-structure-recognition"
+        )
+        model.push_to_hub(model_name)
+        feature_extractor.push_to_hub(model_name)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--model_name",
-        default="table_transformer_resnet50",
+        "--checkpoint_url",
+        default="https://pubtables1m.blob.core.windows.net/model/pubtables1m_detection_detr_r18.pth",
         type=str,
-        help="Name of the TABLE_TRANSFORMER model you'd like to convert.",
+        choices=[
+            "https://pubtables1m.blob.core.windows.net/model/pubtables1m_detection_detr_r18.pth",
+            "https://pubtables1m.blob.core.windows.net/model/pubtables1m_structure_detr_r18.pth",
+        ],
+        help="URL of the Table Transformer checkpoint you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
     )
+    parser.add_argument(
+        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+    )
     args = parser.parse_args()
-    convert_table_transformer_checkpoint(args.model_name, args.pytorch_dump_folder_path)
+    convert_table_transformer_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub)
