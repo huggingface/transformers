@@ -22,7 +22,7 @@ from .convert import export, validate_model_outputs
 from .features import FeaturesManager
 
 
-ENCODER_DECODER_MODELS = ["vision-encoder-decoder"]
+ENCODER_DECODER_MODELS = ["vision-encoder-decoder", "whisper"]
 
 
 def main():
@@ -65,6 +65,8 @@ def main():
     args = parser.parse_args()
     args.output = args.output if args.output.is_file() else args.output.joinpath("model.onnx")
 
+    use_past = True if "-with-past" in args.feature else False
+
     if not args.output.parent.exists():
         args.output.parent.mkdir(parents=True)
 
@@ -82,7 +84,7 @@ def main():
 
         encoder_onnx_config = onnx_config.get_encoder_config(encoder_model.config)
         decoder_onnx_config = onnx_config.get_decoder_config(
-            encoder_model.config, decoder_model.config, feature=args.feature
+            encoder_model.config, decoder_model.config, feature=args.feature, use_past=use_past
         )
 
         if args.opset is None:
@@ -117,7 +119,7 @@ def main():
 
         onnx_inputs, onnx_outputs = export(
             preprocessor,
-            decoder_model,
+            model,
             decoder_onnx_config,
             args.opset,
             args.output.parent.joinpath("decoder_model.onnx"),
@@ -126,7 +128,7 @@ def main():
         validate_model_outputs(
             decoder_onnx_config,
             preprocessor,
-            decoder_model,
+            model,
             args.output.parent.joinpath("decoder_model.onnx"),
             onnx_outputs,
             args.atol if args.atol else decoder_onnx_config.atol_for_validation,

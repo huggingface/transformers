@@ -17,9 +17,8 @@
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
-from transformers.onnx.config import OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
-
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
 from ...utils import logging
 
 
@@ -268,8 +267,8 @@ class WhisperDecoderOnnxConfig(OnnxSeq2SeqConfigWithPast):
         )
         batch, encoder_seq_length = dummy_input["input_ids"].shape
         encoder_hidden_states_shape = (batch, encoder_seq_length, self._config.encoder_hidden_size)
-        common_inputs["input_ids"] = dummy_input.pop("decoder_input_ids")
-        common_inputs["encoder_hidden_states"] = torch.zeros(encoder_hidden_states_shape)
+        common_inputs["decoder_input_ids"] = dummy_input.pop("decoder_input_ids")
+        common_inputs["encoder_outputs"] = (torch.zeros(encoder_hidden_states_shape), None, None)
 
         if "past_key_values" in dummy_input:
             common_inputs["past_key_values"] = dummy_input.pop("past_key_values")
@@ -280,15 +279,21 @@ class WhisperDecoderOnnxConfig(OnnxSeq2SeqConfigWithPast):
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
         common_outputs = super(OnnxConfigWithPast, self).outputs
         self.fill_with_past_key_values_(common_outputs, direction="outputs")
+
         return common_outputs
 
-    def fill_with_past_key_values_(self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str):
-        num_pkv_per_layer = 4
-        _, num_decoder_layers = self.num_layers
-        name = "past" if direction == "inputs" else "present"
-        decoder_sequence = "past_decoder_sequence" if direction == "inputs" else "past_decoder_sequence + sequence"
-        for i in range(num_decoder_layers * num_pkv_per_layer):
-            inputs_or_outputs[f"{name}_key_values_{i}"] = {0: "batch", 2: decoder_sequence}
+    def generate_dummy_inputs_onnxruntime(self, reference_model_inputs: Mapping[str, Any]) -> Mapping[str, Any]:
+        reference_model_inputs["input_ids"] = reference_model_inputs.pop("decoder_input_ids")
+        reference_model_inputs["encoder_hidden_states"] = reference_model_inputs.pop("encoder_outputs")[0]
+
+        return reference_model_inputs
+
+    @property
+    def values_override(self) -> Optional[Mapping[str, Any]]:
+        if hasattr(self._config, "use_cache"):
+            return {"use_cache": True}
+
+        return None
 
 
 class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
@@ -296,7 +301,7 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
     def inputs(self) -> None:
         pass
 
-    def get_encoder_config(self, encoder_config: PretrainedConfig) -> OnnxConfig:
+    def get_encoder_config(self, encoder_config: PretrainedConfig) -> WhisperEncoderOnnxConfig:
         r"""
         Returns ONNX encoder config for `Whisper` model.
 
@@ -315,7 +320,7 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
         decoder_config: PretrainedConfig,
         feature: str = "default",
         use_past: bool = False,
-    ) -> OnnxConfig:
+    ) -> WhisperDecoderOnnxConfig:
         r"""
         Returns ONNX decoder config for `Whisper` model.
 
@@ -327,10 +332,14 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
             feature (`str`, *optional*):
                 The type of feature to export the model with.
             use_past (bool, *optional*):
-                Leverages the precomputed key/values hiddenstates when True
+                Leverages the precomputed key/values hidden states when True
 
         Returns:
             [`WhisperDecoderOnnxConfig`]: An instance of the ONNX configuration object.
         """
         decoder_config.encoder_hidden_size = encoder_config.hidden_size
+
+        if "-with-past" in feature:
+            feature = feature.replace("-with-past", "")
+
         return WhisperDecoderOnnxConfig(decoder_config, feature, use_past=use_past)

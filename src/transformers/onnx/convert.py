@@ -404,9 +404,12 @@ def validate_model_outputs(
         else:
             ref_outputs_dict[name] = value
 
+    # Create onnxruntime inputs from the reference model inputs
+    reference_model_inputs_onnxruntime = config.generate_dummy_inputs_onnxruntime(reference_model_inputs)
+
     # We flatten potential collection of inputs (i.e. past_keys)
     onnx_inputs = {}
-    for name, value in reference_model_inputs.items():
+    for name, value in reference_model_inputs_onnxruntime.items():
         if isinstance(value, (list, tuple)):
             value = config.flatten_output_collection_property(name, value)
             onnx_inputs.update({tensor_name: pt_tensor.numpy() for tensor_name, pt_tensor in value.items()})

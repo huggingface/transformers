@@ -360,6 +360,19 @@ class OnnxConfig(ABC):
                 "Unable to generate dummy inputs for the model. Please provide a tokenizer or a preprocessor."
             )
 
+    def generate_dummy_inputs_onnxruntime(self, reference_model_inputs: Mapping[str, Any]) -> Mapping[str, Any]:
+        """
+        Generate inputs for onnxruntime using the reference model inputs.
+
+        Args:
+            reference_model_inputs: ([`Mapping[str, Tensor]`):
+                Reference inputs for the model.
+
+        Returns:
+            Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
+        """
+        return reference_model_inputs
+
     def patch_ops(self):
         for spec in self._patching_specs:
             custom_op = spec.custom_op if spec.op_wrapper is None else spec.op_wrapper(spec.custom_op)
