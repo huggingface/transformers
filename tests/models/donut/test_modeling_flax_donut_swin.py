@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections.abc
 import inspect
 import unittest
 
 import numpy as np
+import jax.numpy as jnp
 
 from transformers import DonutSwinConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
@@ -117,7 +119,7 @@ class FlaxDonutSwinModelTester(unittest.TestCase):
             encoder_stride=self.encoder_stride,
         )
     
-    def create_and_check_model(self, config, pixel_values, labels):
+    def create_and_check_model(self, config: DonutSwinConfig, pixel_values: np.ndarray, labels):
         model = FlaxDonutSwinModel(config=config)
         result = model(pixel_values)
 
@@ -153,7 +155,16 @@ class FlaxDonutSwinModelTest(FlaxModelTesterMixin, unittest.TestCase):
         self.config_tester = ConfigTester(self, config_class=DonutSwinConfig, embed_dim=37)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        self.create_and_test_config_common_properties()
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.check_config_arguments_init()
+    
+    def create_and_test_config_common_properties(self):
+        return
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -170,7 +181,7 @@ class FlaxDonutSwinModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-
+    
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -193,6 +204,140 @@ class FlaxDonutSwinModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
+
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            expected_num_attentions = len(self.model_tester.depths)
+            self.assertEqual(len(attentions), expected_num_attentions)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            window_size_squared = config.window_size**2
+            model = model_class(config)
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), expected_num_attentions)
+
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
+            )
+            out_len = len(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            if hasattr(self.model_tester, "num_hidden_states_types"):
+                added_hidden_states = self.model_tester.num_hidden_states_types
+            else:
+                # also another +1 for reshaped_hidden_states
+                added_hidden_states = 2
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self_attentions = outputs.attentions
+
+            self.assertEqual(len(self_attentions), expected_num_attentions)
+
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
+            )
+    
+    def check_hidden_states_output(self, inputs_dict, config, model_class, image_size):
+        model = model_class(config)
+
+        outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+        hidden_states = outputs.hidden_states
+
+        expected_num_layers = getattr(
+            self.model_tester, "expected_num_hidden_layers", len(self.model_tester.depths) + 1
+        )
+        self.assertEqual(len(hidden_states), expected_num_layers)
+
+        # DonutSwin has a different seq_length
+        patch_size = (
+            config.patch_size
+            if isinstance(config.patch_size, collections.abc.Iterable)
+            else (config.patch_size, config.patch_size)
+        )
+
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+
+        self.assertListEqual(
+            list(hidden_states[0].shape[-2:]),
+            [num_patches, self.model_tester.embed_dim],
+        )
+
+        reshaped_hidden_states = outputs.reshaped_hidden_states
+        self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
+
+        batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
+        reshaped_hidden_states = jnp.transpose(jnp.reshape(reshaped_hidden_states[0], (batch_size, num_channels, height * width)), (0, 2, 1))
+        
+        self.assertListEqual(
+            list(reshaped_hidden_states.shape[-2:]),
+            [num_patches, self.model_tester.embed_dim],
+        )
+
+    def test_hidden_states_output(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        image_size = (
+            self.model_tester.image_size
+            if isinstance(self.model_tester.image_size, collections.abc.Iterable)
+            else (self.model_tester.image_size, self.model_tester.image_size)
+        )
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            self.check_hidden_states_output(inputs_dict, config, model_class, image_size)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            self.check_hidden_states_output(inputs_dict, config, model_class, image_size)
+
+    def test_hidden_states_output_with_padding(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.patch_size = 3
+
+        image_size = (
+            self.model_tester.image_size
+            if isinstance(self.model_tester.image_size, collections.abc.Iterable)
+            else (self.model_tester.image_size, self.model_tester.image_size)
+        )
+        patch_size = (
+            config.patch_size
+            if isinstance(config.patch_size, collections.abc.Iterable)
+            else (config.patch_size, config.patch_size)
+        )
+
+        padded_height = image_size[0] + patch_size[0] - (image_size[0] % patch_size[0])
+        padded_width = image_size[1] + patch_size[1] - (image_size[1] % patch_size[1])
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+            self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
 
     @slow
     def test_model_from_pretrained(self):

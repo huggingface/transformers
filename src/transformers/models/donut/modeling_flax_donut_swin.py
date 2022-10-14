@@ -195,15 +195,21 @@ class FlaxDonutSwinPatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv(hidden_size, kernel_size=patch_size, strides=patch_size)
     
-    # TODO: Implement this function correctly
-    def maybe_pad(self, pixel_values: jnp.ndarray, height: int, width: int):
-        if width % self.patch_size[1] != 0:
-            pad_values = (0, self.patch_size[1] - width % self.patch_size[1])
-            pixel_values = jax.lax.pad(pixel_values, 0, pad_values)
+    # TODO: use pad_values everywhere and make 0. as a constant
+    def maybe_pad(self, pixel_values: jnp.ndarray, height: int, width: int) -> jnp.ndarray:
+        pad_values = [(0, 0, 0,), (0, 0, 0,), (0, 0, 0), (0, 0, 0)]
+
         if height % self.patch_size[0] != 0:
-            pad_values = (0, 0, 0, self.patch_size[0] - height % self.patch_size[0])
-            pixel_values = jax.lax.pad(pixel_values, 0, pad_values)
+            pad_values[1] = (0, self.patch_size[0] - (height % self.patch_size[0]), 0)
+
+        if width % self.patch_size[1] != 0:
+            pad_values[2] = (0, self.patch_size[1] - (width % self.patch_size[1]), 0)
+
+        if pad_values[2][1] != 0 or pad_values[3][1] != 0:
+            pixel_values = jax.lax.pad(pixel_values, 0., pad_values)
+
         return pixel_values
+
 
     def __call__(self, pixel_values: jnp.ndarray) -> Tuple[jnp.ndarray, Tuple[int]]:
         _, height, width, num_channels = pixel_values.shape
@@ -557,34 +563,29 @@ class FlaxDonutSwinLayer(nn.Module):
 
     def setup(self):
         
-        self.window_size = self.config.window_size
-        self.set_shift_and_window_size(self.input_resolution)
+        # if window size is larger than input resolution, we don't partition windows
+        self.window_size = min(self.input_resolution) if min(self.input_resolution) <= self.config.window_size else self.config.window_size
         self.layernorm_before = nn.LayerNorm(self.config.layer_norm_eps)
         self.attention = FlaxDonutSwinAttention(self.config, self.dim, self.num_heads)
         self.drop_path = FlaxDonutSwinDropPath(self.config.drop_path_rate) if self.config.drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(epsilon=self.config.layer_norm_eps)
         self.intermediate = FlaxDonutSwinIntermediate(self.config.mlp_ratio, self.dim, self.config.hidden_act, dtype=self.dtype)
         self.output = FlaxDonutSwinOutput(self.config.mlp_ratio, self.dim, self.config.hidden_dropout_prob, dtype=self.dtype)
+        
 
-    def set_shift_and_window_size(self, input_resolution: Tuple[int, int]):
-        if min(input_resolution) <= self.window_size:
-            # if window size is larger than input resolution, we don't partition windows
-            self.shift_size = 0
-            self.window_size = min(input_resolution)
-
-    def get_attn_mask(self, height:int, width:int, dtype:jnp.dtype) -> jnp.ndarray:
-        if self.shift_size > 0:
+    def get_attn_mask(self, height:int, width:int, shift_size:int, window_size:int, dtype:jnp.dtype) -> jnp.ndarray:
+        if shift_size > 0:
             # calculate attention mask for SW-MSA
             img_mask = np.zeros((1, height, width, 1), dtype=dtype)
             height_slices = (
-                slice(0, -self.window_size),
-                slice(-self.window_size, -self.shift_size),
-                slice(-self.shift_size, None),
+                slice(0, -window_size),
+                slice(-window_size, -shift_size),
+                slice(-shift_size, None),
             )
             width_slices = (
-                slice(0, -self.window_size),
-                slice(-self.window_size, -self.shift_size),
-                slice(-self.shift_size, None),
+                slice(0, -window_size),
+                slice(-window_size, -shift_size),
+                slice(-shift_size, None),
             )
             count = 0
             for height_slice in height_slices:
@@ -592,8 +593,8 @@ class FlaxDonutSwinLayer(nn.Module):
                     img_mask[:, height_slice, width_slice, :] = count
                     count += 1
 
-            mask_windows = window_partition_np(img_mask, self.window_size)
-            mask_windows = np.reshape(mask_windows, (-1, self.window_size * self.window_size))
+            mask_windows = window_partition_np(img_mask, window_size)
+            mask_windows = np.reshape(mask_windows, (-1, window_size * window_size))
             attn_mask = np.expand_dims(mask_windows, 1) - np.expand_dims(mask_windows, 2)
             attn_mask = np.select([attn_mask != 0, attn_mask == 0], [np.broadcast_to(float(-100.0), attn_mask.shape), np.broadcast_to(float(0.0), attn_mask.shape)])
             attn_mask = jnp.asarray(attn_mask, dtype=dtype)
@@ -601,9 +602,9 @@ class FlaxDonutSwinLayer(nn.Module):
             attn_mask = None
         return attn_mask
 
-    def maybe_pad(self, hidden_states:jnp.ndarray, height: int, width:int):
-        pad_right = (self.window_size - width % self.window_size) % self.window_size
-        pad_bottom = (self.window_size - height % self.window_size) % self.window_size
+    def maybe_pad(self, hidden_states:jnp.ndarray, height: int, width:int, window_size:int):
+        pad_right = (window_size - width % window_size) % window_size
+        pad_bottom = (window_size - height % window_size) % window_size
         pad_config = [(0, 0, 0), (0, pad_right, 0), (0, pad_bottom, 0), (0, 0, 0)]
         hidden_states = jax.lax.pad(hidden_states, 0., pad_config)
         return hidden_states, pad_config
@@ -615,27 +616,34 @@ class FlaxDonutSwinLayer(nn.Module):
         deterministic: Optional[bool] = True,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        self.set_shift_and_window_size(input_dimensions)
         height, width = input_dimensions
         batch_size, _, channels = hidden_states.shape
         shortcut = hidden_states
+        
+        input_resolution = min(height, width)
+        if input_resolution <= self.window_size:
+            shift_size = 0
+            window_size = input_resolution
+        else:
+            shift_size = self.shift_size
+            window_size = self.window_size
 
         hidden_states = self.layernorm_before(hidden_states)
         hidden_states = jnp.reshape(hidden_states, (batch_size, height, width, channels))
         # pad hidden_states to multiples of window size
-        hidden_states, pad_values = self.maybe_pad(hidden_states, height, width)
+        hidden_states, pad_values = self.maybe_pad(hidden_states, height, width, window_size)
 
         _, height_pad, width_pad, _ = hidden_states.shape
         # cyclic shift
-        if self.shift_size > 0:
-            shifted_hidden_states = jnp.roll(hidden_states, shift=(-self.shift_size, -self.shift_size), axis=(1, 2))
+        if shift_size > 0:
+            shifted_hidden_states = jnp.roll(hidden_states, shift=(-shift_size, -shift_size), axis=(1, 2))
         else:
             shifted_hidden_states = hidden_states
 
         # partition windows
-        hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
-        hidden_states_windows = jnp.reshape(hidden_states_windows, (-1, self.window_size * self.window_size, channels))
-        attn_mask = self.get_attn_mask(height_pad, width_pad, dtype=hidden_states.dtype)
+        hidden_states_windows = window_partition(shifted_hidden_states, window_size)
+        hidden_states_windows = jnp.reshape(hidden_states_windows, (-1, window_size * window_size, channels))
+        attn_mask = self.get_attn_mask(height_pad, width_pad, shift_size, window_size, dtype=hidden_states.dtype)
 
         attention_outputs = self.attention(
             hidden_states_windows, attn_mask, deterministic=deterministic, output_attentions=output_attentions
@@ -643,12 +651,12 @@ class FlaxDonutSwinLayer(nn.Module):
 
         attention_output = attention_outputs[0]
 
-        attention_windows = jnp.reshape(attention_output, (-1, self.window_size, self.window_size, channels))
-        shifted_windows = window_reverse(attention_windows, self.window_size, height_pad, width_pad)
+        attention_windows = jnp.reshape(attention_output, (-1, window_size, window_size, channels))
+        shifted_windows = window_reverse(attention_windows, window_size, height_pad, width_pad)
 
         # reverse cyclic shift
-        if self.shift_size > 0:
-            attention_windows = jnp.roll(shifted_windows, shift=(self.shift_size, self.shift_size), axis=(1, 2))
+        if shift_size > 0:
+            attention_windows = jnp.roll(shifted_windows, shift=(shift_size, shift_size), axis=(1, 2))
         else:
             attention_windows = shifted_windows
 
@@ -731,7 +739,6 @@ class DonutSwinEncoder(nn.Module):
 
     def setup(self):
         self.num_layers = len(self.config.depths)
-        dpr = [x.item() for x in jnp.linspace(0, self.config.drop_path_rate, sum(self.config.depths))]
         self.layers = [
                 FlaxDonutSwinStage(
                     config=self.config,
@@ -760,7 +767,7 @@ class DonutSwinEncoder(nn.Module):
         if output_hidden_states:
             batch_size, _, hidden_size = hidden_states.shape
             # rearrange b (h w) c -> b c h w
-            reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size)
+            reshaped_hidden_state = jnp.reshape(hidden_states, (batch_size, *input_dimensions, hidden_size))
             reshaped_hidden_state = jnp.transpose(reshaped_hidden_state, (0, 3, 1, 2))
             all_hidden_states += (hidden_states,)
             all_reshaped_hidden_states += (reshaped_hidden_state,)
@@ -961,6 +968,41 @@ class FlaxDonutSwinPreTrainedModel(FlaxPreTrainedModel):
             return freeze(unflatten_dict(params))
         else:
             return random_params
+    
+    @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
+    def __call__(
+        self,
+        pixel_values,
+        params: dict = None,
+        dropout_rng: jax.random.PRNGKey = None,
+        train: bool = False,
+        bool_masked_pos: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        return self.module.apply(
+            {"params": params or self.params},
+            jnp.array(pixel_values, dtype=jnp.float32),
+            bool_masked_pos,
+            not train,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
+            rngs=rngs,
+        )
 
 
 @add_start_docstrings(
