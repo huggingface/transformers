@@ -97,6 +97,37 @@ class EsmTokenizer(PreTrainedTokenizer):
         sep = [self.eos_token_id]  # No sep token in ESM vocabulary
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
+    def get_special_tokens_mask(
+        self, token_ids_0: List, token_ids_1: Optional[List] = None, already_has_special_tokens: bool = False
+    ) -> List[int]:
+        """
+        Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
+        special tokens using the tokenizer `prepare_for_model` or `encode_plus` methods.
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of ids of the first sequence.
+            token_ids_1 (`List[int]`, *optional*):
+                List of ids of the second sequence.
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not the token list is already formatted with special tokens for the model.
+
+        Returns:
+            A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+        """
+        if already_has_special_tokens:
+            if token_ids_1 is not None:
+                raise ValueError(
+                    "You should not supply a second sequence if the provided sequence of "
+                    "ids is already formatted with special tokens for the model."
+                )
+
+            return [1 if token in self.all_special_ids else 0 for token in token_ids_0]
+        mask = [1] + ([0] * len(token_ids_0)) + [1]
+        if token_ids_1 is not None:
+            mask += [0] * len(token_ids_1) + [1]
+        return mask
+
     def save_vocabulary(self, save_directory, filename_prefix):
         vocab_file = os.path.join(save_directory, (filename_prefix + "-" if filename_prefix else "") + "vocab.txt")
         with open(vocab_file, "w") as f:
