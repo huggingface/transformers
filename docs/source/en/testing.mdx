@@ -179,7 +179,7 @@ pytest -k "test and ada" tests/test_optimization.py
 ### Run documentation tests 
 
 In order to test whether the documentation examples are correct, you should checkt that the `doctests` are passing. 
-As an example, let's use [`WhisperModel.forward`'s docstring](https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/modeling_whisper.py#L1016-L1034): 
+As an example, let's use [`WhisperModel.forward`'s docstring](https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/modeling_whisper.py#L1017-L1035): 
 
 ```python 
 r"""
@@ -201,7 +201,6 @@ Example:
     >>> list(last_hidden_state.shape)
     [1, 2, 512]
     ```"""
-
 ```
 3 steps are required to debug the docstring examples : 
 1. In order to properly run the test, **an extra line has to be added** at the end of the docstring. This can be automatically done on any file using : 
