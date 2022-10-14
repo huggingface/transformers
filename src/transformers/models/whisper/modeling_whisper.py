@@ -996,6 +996,7 @@ class WhisperModel(WhisperPreTrainedModel):
         self.encoder._freeze_parameters()
 
     @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Seq2SeqModelOutput)
     def forward(
         self,
         input_features=None,
@@ -1014,7 +1015,7 @@ class WhisperModel(WhisperPreTrainedModel):
     ):
         r"""
         Returns:
-        
+
         Example:
          ```python
          >>> import torch
