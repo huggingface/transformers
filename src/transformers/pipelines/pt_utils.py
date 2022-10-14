@@ -83,6 +83,13 @@ class PipelineIterator(IterableDataset):
                     elif isinstance(element[0], np.ndarray):
                         loader_batched[k] = tuple(np.expand_dims(el[self._loader_batch_index], 0) for el in element)
                     continue
+
+                # SUPER HIGHLY specific to DeformableDETR.
+                if k in {"intermediate_hidden_states", "intermediate_reference_points"}:
+                    # This Tensor is [Decoder layers, batch_size, ..] for some reason.
+                    loader_batched[k] = element[:, self._loader_batch_index : self._loader_batch_index + 1]
+                    continue
+
                 if isinstance(element[self._loader_batch_index], torch.Tensor):
                     # Take correct batch data, but make it looked like batch_size=1
                     # For compatibility with other methods within transformers
