@@ -30,7 +30,7 @@ if is_tf_available():
 @require_sentencepiece
 @require_tokenizers
 class TFCamembertModelIntegrationTest(unittest.TestCase):
-    # @slow
+    @slow
     def test_output_embeds_base_model(self):
         model = TFCamembertModel.from_pretrained("jplu/tf-camembert-base")
 

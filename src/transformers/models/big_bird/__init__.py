@@ -171,7 +171,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modelling_tf_big_bird import (
+        from .modeling_tf_big_bird import (
             TFBigBirdForCausalLM,
             TFBigBirdForMaskedLM,
             TFBigBirdForMultipleChoice,

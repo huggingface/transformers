@@ -169,7 +169,6 @@ class TFBigBirdEmbeddings(tf.keras.layers.Layer):
 
 
 class TFBigBirdSelfAttention(tf.keras.layers.Layer):
-
     def __init__(self, config: BigBirdConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -1134,9 +1133,7 @@ class TFBigBirdAttention(tf.keras.layers.Layer):
             self_outputs = self.self(
                 input_ids, band_mask, from_mask, to_mask, from_blocked_mask, to_blocked_mask, output_attentions
             )
-        attention_output = self.dense_output(
-            hidden_states=self_outputs[0], input_ids=input_ids, training=training
-        )
+        attention_output = self.dense_output(hidden_states=self_outputs[0], input_ids=input_ids, training=training)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
