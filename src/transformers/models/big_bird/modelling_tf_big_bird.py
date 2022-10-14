@@ -1099,52 +1099,53 @@ class TFBigBirdAttention(tf.keras.layers.Layer):
         self.self = attn_weights
         self.attention_type = value
 
-        if not self.training:
-            self.self.eval()
-
     def call(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        pask_key_value=None,
-        output_attentions=False,
+        input_tensor: tf.Tensor,
+        attention_mask: tf.Tensor,
+        head_mask: tf.Tensor,
+        encoder_hidden_states: tf.Tensor,
+        encoder_attention_mask: tf.Tensor,
+        past_key_value: Tuple[tf.Tensor],
+        output_attentions: bool,
         band_mask=None,
         from_mask=None,
         to_mask=None,
         from_blocked_mask=None,
         to_blocked_mask=None,
+        training: bool=False,
     ):
 
         # type compatibility
         if band_mask is not None:
-            band_mask = tf.cast(band_mask, hidden_states.dtype)
+            band_mask = tf.cast(band_mask, input_tensor.dtype)
         if from_mask is not None:
-            from_mask = tf.cast(from_mask, hidden_states.dtype)
+            from_mask = tf.cast(from_mask, input_tensor.dtype)
         if to_mask is not None:
-            to_mask = tf.cast(to_mask, hidden_states.dtype)
+            to_mask = tf.cast(to_mask, input_tensor.dtype)
 
         if self.attention_type == "original_full":
             self_outputs = self.self(
-                hidden_states,
+                input_tensor,
                 attention_mask,
                 head_mask,
                 encoder_hidden_states,
                 encoder_attention_mask,
-                pask_key_value,
+                past_key_value,
                 output_attentions,
+                training=training,
             )
         else:
             if encoder_hidden_states is not None:
                 raise ValueError("BigBird cannot be used as a decoder when config.attention_type != 'original_full'")
             self_outputs = self.self(
-                hidden_states, band_mask, from_mask, to_mask, from_blocked_mask, to_blocked_mask, output_attentions
+                input_tensor, band_mask, from_mask, to_mask, from_blocked_mask, to_blocked_mask, output_attentions
             )
-            attention_output = self.dense_output(self_outputs[0], hidden_states)
-            outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-            return outputs
+        attention_output = self.dense_output(
+            hidden_states=self_outputs[0], input_tensor=input_tensor, training=training
+        )
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        return outputs
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->BigBird
@@ -1153,15 +1154,17 @@ class TFBigBirdIntermediate(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
+        if isinstance(config.hidden_act, str):
+            self.intermediate_act_fn = get_tf_activation(config.hidden_act)
+        else:
+            self.intermediate_act_fn = config.hidden_act
+
+    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
-        hidden_states = self.dropout(inputs=hidden_states, training=training)
-        hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
+        hidden_states = self.intermediate_act_fn(hidden_states)
 
         return hidden_states
 
@@ -1203,6 +1206,20 @@ class TFBigBirdLayer(tf.keras.layers.Layer):
         self.intermediate = TFBigBirdIntermediate(config)
         self.bigbird_output = TFBigBirdOutput(config)
 
+    def set_attention_type(self, value: str):
+        if value not in ["original_full", "block_sparse"]:
+            raise ValueError(
+                f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+            )
+        # attention type is already correctly set
+        if value == self.attention_type:
+            return
+        self.attention_type = value
+        self.attention.set_attention_type(value)
+
+        if self.add_cross_attention:
+            self.crossattention.set_attention_type(value)
+
     def call(
         self,
         hidden_states: tf.Tensor,
@@ -1228,7 +1245,7 @@ class TFBigBirdLayer(tf.keras.layers.Layer):
             encoder_attention_mask=None,
             past_key_value=self_attn_past_key_value,
             output_attentions=output_attentions,
-            and_mask=band_mask,
+            band_mask=band_mask,
             from_mask=from_mask,
             to_mask=to_mask,
             from_blocked_mask=blocked_encoder_mask,
@@ -1287,6 +1304,7 @@ class TFBigBirdLayer(tf.keras.layers.Layer):
 class TFBigBirdEncoder(tf.keras.layers.Layer):
     def __init__(self, config: BigBirdConfig, **kwargs):
         super().__init__(**kwargs)
+        self.attention_type = config.attention_type
         self.config = config
         self.layer = [TFBigBirdLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
 
@@ -1501,6 +1519,7 @@ class TFBigBirdMainLayer(tf.keras.layers.Layer):
 
         self.config = config
         self.is_decoder = config.is_decoder
+        self.attention_type = config.attention_type
 
         self.embeddings = TFBigBirdEmbeddings(config, name="embeddings")
         self.encoder = TFBigBirdEncoder(config, name="encoder")
@@ -1519,6 +1538,17 @@ class TFBigBirdMainLayer(tf.keras.layers.Layer):
         class PreTrainedModel
         """
         raise NotImplementedError
+
+    def set_attention_type(self, value: str):
+        if value not in ["original_full", "block_sparse"]:
+            raise ValueError(
+                f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+            )
+        # attention type is already correctly set
+        if value == self.attention_type:
+            return
+        self.attention_type = value
+        self.encoder.set_attention_type(value)
 
     @unpack_inputs
     def call(
@@ -1572,7 +1602,7 @@ class TFBigBirdMainLayer(tf.keras.layers.Layer):
         max_tokens_to_attend = (5 + 2 * self.config.num_random_blocks) * self.config.block_size
         if self.attention_type == "block_sparse" and seq_length <= max_tokens_to_attend:
             # change attention_type from block_sparse to original_full
-            sequence_length = input_ids.size(1) if input_ids is not None else inputs_embeds.size(1)
+            sequence_length = tf.size(input_ids) if input_ids is not None else tf.size(inputs_embeds)
             logger.warning(
                 "Attention type 'block_sparse' is not possible if sequence_length: "
                 f"{sequence_length} <= num global tokens: 2 * config.block_size "
@@ -1927,6 +1957,7 @@ class TFBigBirdModel(TFBigBirdPreTrainedModel):
         if value == self.attention_type:
             return
         self.attention_type = value
+        self.bigbird.set_attention_type(value)
         self.encoder.set_attention_type(value)
 
     @unpack_inputs
