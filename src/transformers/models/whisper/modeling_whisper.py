@@ -1013,7 +1013,9 @@ class WhisperModel(WhisperPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        Returns: Example:
+        Returns:
+        
+        Example:
          ```python
          >>> import torch
          >>> from transformers import WhisperModel, WhisperFeatureExtractor
