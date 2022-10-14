@@ -1144,8 +1144,13 @@ class TFEsmLMHead(Layer):
             kernel_initializer=get_initializer(config.initializer_range),
             name="decoder",
         )
+        self.vocab_size = config.vocab_size
+
+    def build(self, input_shape):
+        super().build(input_shape)
         # Separate bias to match the PT model and allow weight cross-loading to work
-        self.bias = self.add_weight("bias", shape=(config.vocab_size,), initializer="zeros", trainable=True)
+        # Put it in the build so it gets the right name when adding it as a weight
+        self.bias = self.add_weight("bias", shape=(self.vocab_size,), initializer="zeros", trainable=True)
 
     def get_bias(self):
         return {"bias": self.bias}
