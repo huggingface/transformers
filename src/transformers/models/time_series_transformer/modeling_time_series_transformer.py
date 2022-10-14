@@ -1626,16 +1626,16 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         >>> model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly")
 
         >>> # during training, one provides both past and future values
-        >>> with torch.no_grad():
-        ...     outputs = model(
-        ...         past_values=batch["past_values"],
-        ...         past_time_features=batch["past_time_features"],
-        ...         past_observed_mask=batch["past_observed_mask"],
-        ...         static_categorical_features=batch["static_categorical_features"],
-        ...         static_real_features=batch["static_real_features"],
-        ...         future_values=batch["future_values"],
-        ...         future_time_features=batch["future_time_features"],
-        ...     )
+        >>> # as well as possible additional features
+        >>> outputs = model(
+        ...     past_values=batch["past_values"],
+        ...     past_time_features=batch["past_time_features"],
+        ...     past_observed_mask=batch["past_observed_mask"],
+        ...     static_categorical_features=batch["static_categorical_features"],
+        ...     static_real_features=batch["static_real_features"],
+        ...     future_values=batch["future_values"],
+        ...     future_time_features=batch["future_time_features"],
+        ... )
 
         >>> last_hidden_state = outputs.last_hidden_state
         ```"""
