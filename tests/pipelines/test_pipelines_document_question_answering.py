@@ -208,19 +208,13 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         outputs = dqa_pipeline(image=image, question=question, top_k=2)
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
-            [
-                {"score": 0.9967, "answer": "1102/2019", "start": 22, "end": 22},
-                {"score": 0.996, "answer": "us-001", "start": 15, "end": 15},
-            ],
+           [{'score': 0.9974, 'answer': '1110212019', 'start': 23, 'end': 23}, {'score': 0.9948, 'answer': 'us-001', 'start': 16, 'end': 16}],
         )
 
         outputs = dqa_pipeline({"image": image, "question": question}, top_k=2)
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
-            [
-                {"score": 0.9967, "answer": "1102/2019", "start": 22, "end": 22},
-                {"score": 0.996, "answer": "us-001", "start": 15, "end": 15},
-            ],
+            [{'score': 0.9974, 'answer': '1110212019', 'start': 23, 'end': 23}, {'score': 0.9948, 'answer': 'us-001', 'start': 16, 'end': 16}],
         )
 
         outputs = dqa_pipeline(
@@ -228,13 +222,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
-            [
-                [
-                    {"score": 0.9967, "answer": "1102/2019", "start": 22, "end": 22},
-                    {"score": 0.996, "answer": "us-001", "start": 15, "end": 15},
-                ]
-            ]
-            * 2,
+            [[{'score': 0.9974, 'answer': '1110212019', 'start': 23, 'end': 23}, {'score': 0.9948, 'answer': 'us-001', 'start': 16, 'end': 16}], [{'score': 0.9974, 'answer': '1110212019', 'start': 23, 'end': 23}, {'score': 0.9948, 'answer': 'us-001', 'start': 16, 'end': 16}]]
         )
 
     @slow
@@ -319,10 +307,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         outputs = dqa_pipeline(image=image, question=question, top_k=2)
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
-            [
-                {"score": 0.9999, "answer": "us-001", "start": 15, "end": 15},
-                {"score": 0.9924, "answer": "us-001", "start": 15, "end": 15},
-            ],
+            [{'score': 0.9999, 'answer': 'us-001', 'start': 16, 'end': 16}, {'score': 0.9998, 'answer': 'us-001', 'start': 16, 'end': 16}],
         )
 
         outputs = dqa_pipeline(
@@ -330,13 +315,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
-            [
-                [
-                    {"score": 0.9999, "answer": "us-001", "start": 15, "end": 15},
-                    {"score": 0.9924, "answer": "us-001", "start": 15, "end": 15},
-                ]
-            ]
-            * 2,
+            [[{'score': 0.9999, 'answer': 'us-001', 'start': 16, 'end': 16}, {'score': 0.9998, 'answer': 'us-001', 'start': 16, 'end': 16}], [{'score': 0.9999, 'answer': 'us-001', 'start': 16, 'end': 16}, {'score': 0.9998, 'answer': 'us-001', 'start': 16, 'end': 16}]]
         )
 
         word_boxes = list(zip(*apply_tesseract(load_image(image), None, "")))
@@ -345,10 +324,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         outputs = dqa_pipeline({"image": None, "word_boxes": word_boxes, "question": question}, top_k=2)
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
-            [
-                {"score": 0.9999, "answer": "us-001", "start": 15, "end": 15},
-                {"score": 0.9924, "answer": "us-001", "start": 15, "end": 15},
-            ],
+            [{'score': 0.9999, 'answer': 'us-001', 'start': 16, 'end': 16}, {'score': 0.9998, 'answer': 'us-001', 'start': 16, 'end': 16}]
         )
 
     @slow
