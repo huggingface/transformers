@@ -287,9 +287,9 @@ def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_pat
         # Push model to HF hub
         logger.info("Pushing model to the hub...")
         model_name = (
-            "nielsr/detr-table-detection"
+            "microsoft/table-transformer-detection"
             if "detection" in checkpoint_url
-            else "nielsr/detr-table-structure-recognition"
+            else "microsoft/table-transformer-structure-recognition"
         )
         model.push_to_hub(model_name)
         feature_extractor.push_to_hub(model_name)

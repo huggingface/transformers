@@ -12,16 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch TABLE_TRANSFORMER model. """
+""" Testing suite for the PyTorch Table Transformer model. """
 
 
 import inspect
 import math
 import unittest
 
+from huggingface_hub import hf_hub_download
 from transformers import TableTransformerConfig, is_timm_available, is_vision_available
 from transformers.testing_utils import require_timm, require_vision, slow, torch_device
-from transformers.utils import cached_property
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -37,7 +37,7 @@ if is_timm_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DetrFeatureExtractor
+    from transformers import AutoFeatureExtractor
 
 
 class TableTransformerModelTester:
@@ -212,19 +212,19 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_table_transformer_object_detection_head_model(*config_and_inputs)
 
-    @unittest.skip(reason="TABLE_TRANSFORMER does not use inputs_embeds")
+    @unittest.skip(reason="Table Transformer does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="TABLE_TRANSFORMER does not have a get_input_embeddings method")
+    @unittest.skip(reason="Table Transformer does not have a get_input_embeddings method")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="TABLE_TRANSFORMER is not a generative model")
+    @unittest.skip(reason="Table Transformer is not a generative model")
     def test_generate_without_input_ids(self):
         pass
 
-    @unittest.skip(reason="TABLE_TRANSFORMER does not use token embeddings")
+    @unittest.skip(reason="Table Transformer does not use token embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
@@ -470,55 +470,29 @@ def prepare_img():
 @require_vision
 @slow
 class TableTransformerModelIntegrationTests(unittest.TestCase):
-    @cached_property
-    def default_feature_extractor(self):
-        return (
-            DetrFeatureExtractor.from_pretrained("microsoft/table-transformer-table-detection")
-            if is_vision_available()
-            else None
-        )
+    def test_table_detection(self):
+        feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/table-transformer-detection")
+        model = TableTransformerForObjectDetection.from_pretrained("microsoft/table-transformer-detection")
+        model.to(torch_device)
 
-    def test_inference_no_head(self):
-        model = TableTransformerModel.from_pretrained("microsoft/table-transformer-table-detection").to(torch_device)
+        file_path = hf_hub_download(repo_id="nielsr/example-pdf", repo_type="dataset", filename="example_pdf.png")
+        image = Image.open(file_path).convert("RGB")
+        inputs = feature_extractor(image, return_tensors="pt").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
-        image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-
+        # forward pass
         with torch.no_grad():
-            outputs = model(**encoding)
+            outputs = model(**inputs)
 
-        expected_shape = torch.Size((1, 100, 256))
-        assert outputs.last_hidden_state.shape == expected_shape
-        expected_slice = torch.tensor(
-            [[0.0616, -0.5146, -0.4032], [-0.7629, -0.4934, -1.7153], [-0.4768, -0.6403, -0.7826]]
-        ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        expected_shape = (1, 15, 3)
+        self.assertEqual(outputs.logits.shape, expected_shape)
 
-    def test_inference_object_detection_head(self):
-        model = TableTransformerForObjectDetection.from_pretrained("microsoft/table-transformer-table-detection").to(
-            torch_device
+        expected_logits = torch.tensor(
+            [[-6.7329, -16.9590, 6.7447], [-8.0038, -22.3071, 6.9288], [-7.2445, -20.9855, 7.3465]],
+            device=torch_device,
         )
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
 
-        feature_extractor = self.default_feature_extractor
-        image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-        pixel_values = encoding["pixel_values"].to(torch_device)
-        pixel_mask = encoding["pixel_mask"].to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(pixel_values, pixel_mask)
-
-        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels + 1))
-        self.assertEqual(outputs.logits.shape, expected_shape_logits)
-        expected_slice_logits = torch.tensor(
-            [[-19.1194, -0.0893, -11.0154], [-17.3640, -1.8035, -14.0219], [-20.0461, -0.5837, -11.1060]]
-        ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4))
-
-        expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
-        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        expected_slice_boxes = torch.tensor(
-            [[0.4433, 0.5302, 0.8853], [0.5494, 0.2517, 0.0529], [0.4998, 0.5360, 0.9956]]
-        ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
+        expected_boxes = torch.tensor(
+            [[0.4868, 0.1764, 0.6729], [0.6674, 0.4621, 0.3864], [0.4720, 0.1757, 0.6362]], device=torch_device
+        )
+        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-3))
