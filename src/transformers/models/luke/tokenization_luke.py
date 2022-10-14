@@ -205,6 +205,22 @@ class LukeTokenizer(PreTrainedTokenizer):
             Path to the vocabulary file.
         merges_file (`str`):
             Path to the merges file.
+        entity_vocab_file (`str`):
+            Path to the entity vocabulary file.
+        task (`str`, *optional*):
+            Task for which you want to prepare sequences. One of `"entity_classification"`,
+            `"entity_pair_classification"`, or `"entity_span_classification"`. If you specify this argument, the entity
+            sequence is automatically created based on the given entity span(s).
+        max_entity_length (`int`, *optional*, defaults to 32):
+            The maximum length of `entity_ids`.
+        max_mention_length (`int`, *optional*, defaults to 30):
+            The maximum number of tokens inside an entity span.
+        entity_token_1 (`str`, *optional*, defaults to `<ent>`):
+            The special token used to represent an entity span in a word token sequence. This token is only used when
+            `task` is set to `"entity_classification"` or `"entity_pair_classification"`.
+        entity_token_2 (`str`, *optional*, defaults to `<ent2>`):
+            The special token used to represent an entity span in a word token sequence. This token is only used when
+            `task` is set to `"entity_pair_classification"`.    
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
             [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
