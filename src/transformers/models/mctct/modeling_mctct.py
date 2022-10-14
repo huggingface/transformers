@@ -566,13 +566,13 @@ class MCTCTEncoder(MCTCTPreTrainedModel):
 
     def forward(
         self,
-        input_features,
-        attention_mask,
-        head_mask,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+        input_features: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[torch.bool] = None,
+        output_hidden_states: Optional[torch.bool] = None,
+        return_dict: Optional[torch.bool] = None,
+    ) -> Union[Tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -680,13 +680,13 @@ class MCTCTModel(MCTCTPreTrainedModel):
     )
     def forward(
         self,
-        input_features,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_features: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[torch.bool] = None,
+        output_hidden_states: Optional[torch.bool] = None,
+        return_dict: Optional[torch.bool] = None,
+    ) -> Union[Tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -751,14 +751,14 @@ class MCTCTForCTC(MCTCTPreTrainedModel):
     )
     def forward(
         self,
-        input_features,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
+        input_features: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[torch.bool] = None,
+        output_hidden_states: Optional[torch.bool] = None,
+        return_dict: Optional[torch.bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, BaseModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
