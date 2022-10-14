@@ -283,7 +283,10 @@ def convert_wav2vec2_conformer_checkpoint(
             [checkpoint_path], arg_overrides={"data": "/".join(dict_path.split("/")[:-1])}
         )
     else:
-        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path])
+        task_arg = argparse.Namespace(task="audio_pretraining")
+        task = fairseq.tasks.setup_task(task_arg)
+
+        model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([checkpoint_path], task=task)
 
     model = model[0].eval()
 
