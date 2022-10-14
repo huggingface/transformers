@@ -681,8 +681,8 @@ class MCTCTModel(MCTCTPreTrainedModel):
     def forward(
         self,
         input_features: torch.Tensor,
-        attention_mask: torch.Tensor,
-        head_mask: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -752,8 +752,8 @@ class MCTCTForCTC(MCTCTPreTrainedModel):
     def forward(
         self,
         input_features: torch.Tensor,
-        attention_mask: torch.Tensor,
-        head_mask: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
