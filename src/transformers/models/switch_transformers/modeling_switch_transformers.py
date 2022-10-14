@@ -152,44 +152,20 @@ class SwitchTransformersLayerFF(nn.Module):
         return hidden_states
 
 
-class SwitchTransformersMOExpertLayer(nn.Module):
-    def __init__(self, config: SwitchTransformersConfig, expert_class: nn.Module = SwitchTransformersDenseActDense):
-        super().__init__()
-        self.experts = nn.ModuleDict()
-
-        for idx in range(config.num_experts):
-            self.experts[f"expert_{idx}"] = expert_class(config)
-
-    def forward(self, hidden_states, indices):
-        r"""
-        Args:
-            hidden_states (`torch.FloatTensor`, **required**):
-                Input to the layer of shape `(batch_size, sequence_length, hidden_size)`.
-            indices (`torch.LongTensor`, **required**):
-                Indices of the experts of shape `(batch_size, )` to use for each input in the batch.
-        """
-        for idx, expert in enumerate(self.experts.values()):
-            # 1. Get the index of the tokens that are routed to the current expert
-            expert_indices = torch.eq(indices[:, :, idx, :], 1).squeeze(-1)
-            # 2. Update hidden states
-            hidden_states[expert_indices] = expert(hidden_states[expert_indices])
-        return hidden_states
-
-
 class SwitchTransformersSparseMLP(nn.Module):
     r"""
-    Implementation of the Switch Transformers Sparse MLP module We purposely create a `SwitchTransformersMOExpertLayer`
-    in order to give freedom to people if they want to change this layer (by changing the agregation for example).
-    TODO: Add a LOT of details here
+    Implementation of the Switch Transformers Sparse MLP module. TODO: Add a LOT of details here
     """
 
-    def __init__(self, config: SwitchTransformersConfig):
+    def __init__(self, config: SwitchTransformersConfig, expert_class: nn.Module = SwitchTransformersDenseActDense):
         super().__init__()
         # Step 1: Get the correct router
         self.router = self._get_router(config)
 
         # Step 2: Get the experts
-        self.experts = SwitchTransformersMOExpertLayer(config)
+        self.experts = nn.ModuleDict()
+        for idx in range(config.num_experts):
+            self.experts[f"expert_{idx}"] = expert_class(config)
 
         self.expert_capacity = config.expert_capacity
 
@@ -215,7 +191,12 @@ class SwitchTransformersSparseMLP(nn.Module):
     def forward(self, hidden_states):
         expert_indices = self.router(hidden_states, expert_capacity=self.expert_capacity)
         masked_indices = expert_indices.dispatch_mask
-        hidden_states = self.experts(hidden_states, masked_indices)
+
+        for idx, expert in enumerate(self.experts.values()):
+            # 1. Get the index of the tokens that are routed to the current expert
+            expert_indices = torch.eq(masked_indices[:, :, idx, :], 1).squeeze(-1)
+            # 2. Update hidden states
+            hidden_states[expert_indices] = expert(hidden_states[expert_indices])
         return hidden_states
 
 

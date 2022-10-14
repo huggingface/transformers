@@ -185,7 +185,8 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
 
 
 # Router classes
-# TODO not a big fan of 3 level of 
+# TODO not a big fan of 3 level of
+
 
 class Router(nn.Module):
     """
@@ -306,16 +307,16 @@ class Router(nn.Module):
     def _compute_routing_instructions(self, router_probs, padding_mask, expert_capacity):
         raise NotImplementedError(
             """
-                Computes masks for the top-k experts per token. This has to be implemented for each subclass of MaskedRouter
-                routers.
+                Computes masks for the top-k experts per token. This has to be implemented for each subclass of
+                MaskedRouter routers.
 
                 Args:
                     router_probs (`torch.Tensor`):
-                        Input router probabilities of shape [num_groups, tokens_per_group, num_experts] this corresponds to the
-                        probabilities used to determine the routing of tokens to the experts.
+                        Input router probabilities of shape [num_groups, tokens_per_group, num_experts] this
+                        corresponds to the probabilities used to determine the routing of tokens to the experts.
                     padding_mask (`torch.Tensor`):
-                        Padding mask tensor of shape [num_groups, tokens_per_group] a mask used to identify padding tokens that
-                        should be ignored by the router.
+                        Padding mask tensor of shape [num_groups, tokens_per_group] a mask used to identify padding
+                        tokens that should be ignored by the router.
                     expert_capacity (`int`):
                         Each group will send this many tokens to each expert.
 
@@ -505,14 +506,14 @@ class TokensChooseMaskedRouter(Router):
         # Shape: [num_groups, tokens_per_group, num_experts, expert_capacity].
         # token_priority = token_priority * (token_priority > 0)
 
-        # TODO can we improve the function name or use torch's? 
+        # TODO can we improve the function name or use torch's?
         # dispatch_mask = torch.nn.functional.one_hot(token_priority.long(), expert_capacity + 1)[..., 1:]
         dispatch_mask = _jax_one_hot(token_priority.long(), expert_capacity, axis=-1)
 
         # The combine array will be used for combining expert outputs, scaled by the
         # router probabilities. Shape: [num_groups, tokens_per_group, num_experts,
         # expert_capacity].
-        # TODO can we use more understandable code here? 
+        # TODO can we use more understandable code here?
         combine_array = torch.einsum("...te,...tec->...tec", router_probs, dispatch_mask)
         # combine_array = torch.einsum("...te,...te->...te", router_probs, dispatch_mask)
 
@@ -520,6 +521,7 @@ class TokensChooseMaskedRouter(Router):
         combine_array = combine_array.to(torch.float32)
 
         return RouterMask(dispatch_mask, combine_array, auxiliary_loss)
+
 
 # num_groups = 2
 # tokens_per_group = 4
