@@ -2372,6 +2372,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         # Step 1: Recurse over the modules of the model
+        # Step 2: Verify if the module `Fast` is present for that model
+        # Step 3: If yes, replace the `...Layer` module with the `...LayerFast` modules
+        # Step 4: If not, yield an error.
         def replace_to_fast(model):
             for name, module in model.named_children():
                 if len(list(module.children())) > 0:
@@ -2384,14 +2387,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return model
 
         self = replace_to_fast(self).eval()
-
-        # Step 2: Verify if the module `Fast` is present for that model
-
-        # Step 3: If yes, replace the `...Layer` module with the `...LayerFast` modules
-
-        # Step 4: If not, yield an error.
-
-        pass
 
     @classmethod
     def _load_pretrained_model(

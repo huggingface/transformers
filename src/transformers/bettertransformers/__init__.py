@@ -1,7 +1,7 @@
 from .bert import BertLayerFast
 
 
-FAST_LAYERS_MAPPING_DICT = {"BertLayer": BertLayerFast}
+FAST_LAYERS_MAPPING_DICT = {"BertLayer": BertLayerFast, "ElectraLayer": BertLayerFast}
 
 
 def is_module_fast(module_name):
