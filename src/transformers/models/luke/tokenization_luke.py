@@ -16,12 +16,14 @@
 
 import json
 import os
-from functools import lru_cache
 from collections.abc import Mapping
+from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
 
-import regex as re
 import numpy as np
+import itertools
+
+import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...tokenization_utils_base import (
@@ -148,6 +150,8 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             - **length** -- The length of the inputs (when `return_length=True`)
 
 """
+
+
 @lru_cache()
 # Copied from transformers.models.roberta.tokenization_roberta.bytes_to_unicode
 def bytes_to_unicode():
@@ -172,6 +176,7 @@ def bytes_to_unicode():
             n += 1
     cs = [chr(n) for n in cs]
     return dict(zip(bs, cs))
+
 
 # Copied from transformers.models.roberta.tokenization_roberta.get_pairs
 def get_pairs(word):
@@ -335,7 +340,7 @@ class LukeTokenizer(PreTrainedTokenizer):
 
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
-        
+
         with open(entity_vocab_file, encoding="utf-8") as entity_vocab_handle:
             self.entity_vocab = json.load(entity_vocab_handle)
         for entity_special_token in [entity_unk_token, entity_pad_token, entity_mask_token, entity_mask2_token]:
@@ -362,7 +367,7 @@ class LukeTokenizer(PreTrainedTokenizer):
                 " 'entity_span_classification'] only."
             )
 
-        self.max_mention_length = max_mention_length   
+        self.max_mention_length = max_mention_length
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
@@ -1646,7 +1651,7 @@ class LukeTokenizer(PreTrainedTokenizer):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
         text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
-        return text    
+        return text
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         vocab_file, merge_file = super().save_vocabulary(save_directory, filename_prefix)
