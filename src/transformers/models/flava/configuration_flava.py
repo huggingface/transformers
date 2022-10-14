@@ -16,7 +16,7 @@
 
 import copy
 import os
-from typing import Union, Any, Dict 
+from typing import Any, Union, Dict 
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -31,7 +31,7 @@ FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class FlavaImageConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FlavaImageModel`]. It is used to instantiate an
+    This is the configuration class (with random weights) to store the configuration of a [`FlavaImageModel`]. It is used to instantiate an
     FLAVA model according to the specified arguments, defining the model architecture.
 
     Instantiating a configuration with the defaults will yield a similar configuration to that of the FLAVA
