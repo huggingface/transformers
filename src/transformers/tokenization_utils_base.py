@@ -1670,6 +1670,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         init_configuration = {}
 
         is_local = os.path.isdir(pretrained_model_name_or_path)
+        single_file_id = None
         if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             if len(cls.vocab_files_names) > 1:
                 raise ValueError(
@@ -1684,6 +1685,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             file_id = list(cls.vocab_files_names.keys())[0]
 
             vocab_files[file_id] = pretrained_model_name_or_path
+            single_file_id = file_id
         else:
             # At this point pretrained_model_name_or_path is either a directory or a model identifier name
             additional_files_names = {
@@ -1726,10 +1728,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         for file_id, file_path in vocab_files.items():
             if file_path is None:
                 resolved_vocab_files[file_id] = None
-            elif os.path.isfile(file_path):
-                resolved_vocab_files[file_id] = file_path
-            elif is_remote_url(file_path):
-                resolved_vocab_files[file_id] = download_url(file_path, proxies=proxies)
+            elif single_file_id == file_id:
+                if os.path.isfile(file_path):
+                    resolved_vocab_files[file_id] = file_path
+                elif is_remote_url(file_path):
+                    resolved_vocab_files[file_id] = download_url(file_path, proxies=proxies)
             else:
                 resolved_vocab_files[file_id] = cached_file(
                     pretrained_model_name_or_path,
