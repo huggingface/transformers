@@ -109,18 +109,20 @@ class BigBirdPegasusConfig(PretrainedConfig):
     Example:
 
     ```python
-
-    ```
-
         >>> from transformers import BigBirdPegasusConfig, BigBirdPegasusModel
 
-        >>> # Initializing a BigBirdPegasus bigbird-pegasus-base style configuration >>> configuration =
-        BigBirdPegasusConfig()
+        >>> # Initializing a BigBirdPegasus bigbird-pegasus-base style configuration
 
-        >>> # Initializing a model (with random weights) from the bigbird-pegasus-base style configuration >>> model =
-        BigBirdPegasusModel(configuration)
+        >>> configuration = BigBirdPegasusConfig()
 
-        >>> # Accessing the model configuration >>> configuration = model.config
+        >>> # Initializing a model (with random weights) from the bigbird-pegasus-base style configuration
+
+        >>> model = BigBirdPegasusModel(configuration)
+
+        >>> # Accessing the model configuration
+
+        >>> configuration = model.config
+    ```
     """
     model_type = "bigbird_pegasus"
     keys_to_ignore_at_inference = ["past_key_values"]
