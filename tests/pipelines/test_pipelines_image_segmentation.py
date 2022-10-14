@@ -226,11 +226,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {
-                    "score": None,
-                    "label": "LABEL_0",
-                    "mask": "42d09072282a32da2ac77375a4c1280f"
-                },
+                {"score": None, "label": "LABEL_0", "mask": "42d09072282a32da2ac77375a4c1280f"},
                 {
                     "score": None,
                     "label": "LABEL_1",
