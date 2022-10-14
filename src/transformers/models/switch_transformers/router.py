@@ -67,7 +67,7 @@ def _jax_one_hot(tensor, num_classes, axis=-1, dtype=torch.bool):
     mask = (tensor >= 0) & (tensor < num_classes)
     out[mask, tensor[mask]] = 1
 
-    return out
+    return out.to(tensor.device)
 
 
 @dataclass
@@ -250,7 +250,8 @@ class Router(nn.Module):
             distrib_upper_bound = 1.0 + self.jitter_noise
 
             uniform_distrib = (
-                torch.rand(token_inputs.shape) * (distrib_lower_bound - distrib_upper_bound)
+                torch.rand(token_inputs.shape, device=token_inputs.device)
+                * (distrib_lower_bound - distrib_upper_bound)
             ) + distrib_upper_bound
 
             # Multiply the token inputs by the uniform distribution - adding some noise

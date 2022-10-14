@@ -725,14 +725,13 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         self.is_decoder = config.is_decoder
 
         sparse_step = config.decoder_sparse_step if self.is_decoder else config.encoder_sparse_step
-
-        # TODO: change this, actually you can have a block full of sparse layers...
+        config.num_layers = config.num_decoder_layers if self.is_decoder else config.num_layers
         self.block = nn.ModuleList()
         for i in range(config.num_layers):
+
+            is_sparse = (i % sparse_step == 0) if sparse_step > 0 else False
             self.block.append(
-                SwitchTransformersBlock(
-                    config, has_relative_attention_bias=bool(i == 0), is_sparse=(i % sparse_step == 0)
-                )
+                SwitchTransformersBlock(config, has_relative_attention_bias=bool(i == 0), is_sparse=is_sparse)
             )
 
         self.final_layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
@@ -1151,7 +1150,6 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
-        decoder_config.num_layers = config.num_decoder_layers
         self.decoder = SwitchTransformersStack(decoder_config, self.shared)
 
         # Initialize weights and apply final processing
@@ -1320,7 +1318,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.num_layers = config.num_encoder_layers
         encoder_config.is_encoder_decoder = False
         self.encoder = SwitchTransformersStack(encoder_config, self.shared)
 

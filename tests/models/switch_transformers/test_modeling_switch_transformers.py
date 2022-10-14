@@ -19,7 +19,7 @@ import tempfile
 import unittest
 
 from transformers import SwitchTransformersConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_tokenizers, require_torch, slow, torch_device
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -69,6 +69,7 @@ class SwitchTransformersModelTester:
         decoder_start_token_id=0,
         scope=None,
         decoder_layers=None,
+        sparse_step=1,
     ):
 
         self.parent = parent
@@ -93,6 +94,7 @@ class SwitchTransformersModelTester:
         self.decoder_start_token_id = decoder_start_token_id
         self.scope = None
         self.decoder_layers = decoder_layers
+        self.sparse_step = sparse_step
 
     def get_large_model_config(self):
         return SwitchTransformersConfig.from_pretrained("switch_transformers-base")
@@ -156,6 +158,7 @@ class SwitchTransformersModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
+            sparse_step=self.sparse_step,
         )
 
     def check_prepare_lm_labels_via_shift_left(
@@ -990,7 +993,7 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         self.assertAlmostEqual(output.router_z_loss.item(), 0.4789799, places=5)
 
         self.assertTrue(torch.allclose(output.dispatch_mask, expected_dispatch_mask))
-        self.assertTrue(torch.allclose(output.combine_array, expected_combine_array))
+        self.assertTrue(torch.allclose(output.combine_array, expected_combine_array, atol=1e-4))
 
     def test_equivalency_experts_chose_masked_router(self):
         r"""
@@ -1064,4 +1067,31 @@ class SwitchTransformerRouterTest(unittest.TestCase):
             ]
         )
 
-        self.assertTrue(torch.allclose(output.combine_array, expected_combined_array))
+        self.assertTrue(torch.allclose(output.combine_array, expected_combined_array, atol=1e-4))
+
+
+@require_torch
+@require_tokenizers
+class SwitchTransformerModelIntegrationTests(unittest.TestCase):
+    def test_small_logits(self):
+        pass
+
+    def test_large_logits(self):
+        pass
+
+    def test_small_logits_bf16(self):
+        pass
+
+    def test_small_batch_generate(self):
+        pass
+
+    def test_large_batch_generate(self):
+        pass
+
+    @slow
+    def test_summarization(self):
+        pass
+
+    @slow
+    def test_translation_en_to_de(self):
+        pass

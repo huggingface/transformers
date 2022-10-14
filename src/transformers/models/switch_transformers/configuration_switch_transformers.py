@@ -55,7 +55,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         expert_capacity (`int`, *optional*, defaults to 1):
             Number of tokens that can be stored in each expert. If set to 1, the model will behave like a regular
             Transformer.
-        num_encoder_layers (`int`, *optional*, defaults to 12):
+        num_layers (`int`, *optional*, defaults to 12):
             Number of dense hidden layers in the Transformer encoder layer.
         num_sparse_encoder_layers (`int`, *optional*, defaults to 6):
             Number of sparse (MoE) dense hidden layers in the Transformer encoder layer.
@@ -109,7 +109,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         d_model=512,
         d_kv=64,
         d_ff=2048,
-        num_encoder_layers=12,
+        num_layers=12,
         num_sparse_encoder_layers=6,
         num_decoder_layers=12,
         num_sparse_decoder_layers=6,
@@ -139,19 +139,20 @@ class SwitchTransformersConfig(PretrainedConfig):
         self.d_model = d_model
         self.d_kv = d_kv
         self.d_ff = d_ff
-        self.num_encoder_layers = num_encoder_layers
+
         self.num_sparse_encoder_layers = num_sparse_encoder_layers
 
+        self.num_layers = num_layers
         self.num_decoder_layers = (
-            num_decoder_layers if num_decoder_layers is not None else self.num_encoder_layers
+            num_decoder_layers if num_decoder_layers is not None else self.num_layers
         )  # default = symmetry
         self.num_sparse_decoder_layers = num_sparse_decoder_layers
 
         # This tells us, each how many encoder layer we'll have to set a sparse layer.
         if self.num_sparse_encoder_layers > 0:
-            self.encoder_sparse_step = self.num_encoder_layers // self.num_sparse_encoder_layers
+            self.encoder_sparse_step = self.num_layers // self.num_sparse_encoder_layers
         else:
-            self.encoder_sparse_step = self.num_encoder_layers  # HACK: this will create 0 sparse layers
+            self.encoder_sparse_step = self.num_layers  # HACK: this will create 0 sparse layers
 
         # This tells us, each how many encoder layer we'll have to set a sparse layer.
         if self.num_sparse_decoder_layers > 0:
