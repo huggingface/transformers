@@ -49,10 +49,10 @@ if is_timm_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "TableTransformerConfig"
-_CHECKPOINT_FOR_DOC = "microsoft/table-transformer-table-detection"
+_CHECKPOINT_FOR_DOC = "microsoft/table-transformer-detection"
 
 TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/table-transformer-table-detection",
+    "microsoft/table-transformer-detection",
     # See all Table Transformer models at https://huggingface.co/models?filter=table-transformer
 ]
 
@@ -1122,13 +1122,13 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The bare TABLE_TRANSFORMER Model (consisting of a backbone and encoder-decoder Transformer) outputting raw
+    The bare Table Transformer Model (consisting of a backbone and encoder-decoder Transformer) outputting raw
     hidden-states without any specific head on top.
     """,
     TABLE_TRANSFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.detr.modeling_detr.DetrModel with DETR->TABLE_TRANSFORMER,Detr->TableTransformer,facebook/detr-resnet-50->microsoft/table-transformer-table-detection
 class TableTransformerModel(TableTransformerPreTrainedModel):
+    # Copied from transformers.models.detr.modeling_detr.DetrModel.__init__ with Detr->TableTransformer
     def __init__(self, config: TableTransformerConfig):
         super().__init__(config)
 
@@ -1184,17 +1184,15 @@ class TableTransformerModel(TableTransformerPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import TableTransformerFeatureExtractor, TableTransformerModel
+        >>> from transformers import AutoFeatureExtractor, TableTransformerModel
+        >>> from huggingface_hub import hf_hub_download
         >>> from PIL import Image
-        >>> import requests
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> file_path = hf_hub_download(repo_id="nielsr/example-pdf", repo_type="dataset", filename="example_pdf.png")
+        >>> image = Image.open(file_path).convert("RGB")
 
-        >>> feature_extractor = TableTransformerFeatureExtractor.from_pretrained(
-        ...     "microsoft/table-transformer-table-detection"
-        ... )
-        >>> model = TableTransformerModel.from_pretrained("microsoft/table-transformer-table-detection")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/table-transformer-detection")
+        >>> model = TableTransformerModel.from_pretrained("microsoft/table-transformer-detection")
 
         >>> # prepare image for the model
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
@@ -1206,7 +1204,7 @@ class TableTransformerModel(TableTransformerPreTrainedModel):
         >>> # these are of shape (batch_size, num_queries, hidden_size)
         >>> last_hidden_states = outputs.last_hidden_state
         >>> list(last_hidden_states.shape)
-        [1, 100, 256]
+        [1, 15, 256]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1295,17 +1293,17 @@ class TableTransformerModel(TableTransformerPreTrainedModel):
 
 @add_start_docstrings(
     """
-    TABLE_TRANSFORMER Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on
+    Table Transformer Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on
     top, for tasks such as COCO detection.
     """,
     TABLE_TRANSFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.detr.modeling_detr.DetrForObjectDetection with DETR->TABLE_TRANSFORMER,Detr->TableTransformer,detr->table_transformer,facebook/detr-resnet-50->microsoft/table-transformer-table-detection
 class TableTransformerForObjectDetection(TableTransformerPreTrainedModel):
+    # Copied from transformers.models.detr.modeling_detr.DetrForObjectDetection.__init__ with Detr->TableTransformer
     def __init__(self, config: TableTransformerConfig):
         super().__init__(config)
 
-        # TABLE_TRANSFORMER encoder-decoder model
+        # DETR encoder-decoder model
         self.model = TableTransformerModel(config)
 
         # Object detection heads
@@ -1319,8 +1317,8 @@ class TableTransformerForObjectDetection(TableTransformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # taken from https://github.com/facebookresearch/table_transformer/blob/master/models/table_transformer.py
     @torch.jit.unused
+    # Copied from transformers.models.detr.modeling_detr.DetrForObjectDetection._set_aux_loss
     def _set_aux_loss(self, outputs_class, outputs_coord):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
@@ -1354,18 +1352,16 @@ class TableTransformerForObjectDetection(TableTransformerPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import TableTransformerFeatureExtractor, TableTransformerForObjectDetection
+        >>> from huggingface_hub import hf_hub_download
+        >>> from transformers import AutoFeatureExtractor, TableTransformerForObjectDetection
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> file_path = hf_hub_download(repo_id="nielsr/example-pdf", repo_type="dataset", filename="example_pdf.png")
+        >>> image = Image.open(file_path).convert("RGB")
 
-        >>> feature_extractor = TableTransformerFeatureExtractor.from_pretrained(
-        ...     "facebook/table_transformer-resnet-50"
-        ... )
-        >>> model = TableTransformerForObjectDetection.from_pretrained("facebook/table_transformer-resnet-50")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/table-transformer-detection")
+        >>> model = TableTransformerForObjectDetection.from_pretrained("microsoft/table-transformer-detection")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1382,11 +1378,7 @@ class TableTransformerForObjectDetection(TableTransformerPreTrainedModel):
         ...             f"Detected {model.config.id2label[label.item()]} with confidence "
         ...             f"{round(score.item(), 3)} at location {box}"
         ...         )
-        Detected remote with confidence 0.998 at location [40.16, 70.81, 175.55, 117.98]
-        Detected remote with confidence 0.996 at location [333.24, 72.55, 368.33, 187.66]
-        Detected couch with confidence 0.995 at location [-0.02, 1.15, 639.73, 473.76]
-        Detected cat with confidence 0.999 at location [13.24, 52.05, 314.02, 470.93]
-        Detected cat with confidence 0.999 at location [345.4, 23.85, 640.37, 368.72]
+        Detected table with confidence 1.0 at location [202.1, 210.59, 1119.22, 385.09]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
