@@ -186,7 +186,6 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
 
 # Router classes
 
-
 class Router(nn.Module):
     """
     Abstract base router class, defining router API and inner workings.
@@ -538,7 +537,6 @@ class TokensChooseMaskedRouter(MaskedRouter):
         combine_array = combine_array.to(torch.float32)
 
         return RouterMask(dispatch_mask, combine_array, auxiliary_loss)
-
 
 class ScatterRouter(Router):
     """
