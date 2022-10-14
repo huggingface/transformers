@@ -14,7 +14,7 @@
 # limitations under the License.
 """ Longformer configuration"""
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, List, Mapping, Optional, Union
+from typing import Union , Optional, Mapping,List,  Any, TYPE_CHECKING
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -45,7 +45,7 @@ LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class LongformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LongformerModel`] or a [`TFLongformerModel`]. It
+    This is the configuration class (with random weights)  to store the configuration of a [`LongformerModel`] or a [`TFLongformerModel`]. It
     is used to instantiate a Longformer model according to the specified arguments, defining the model architecture.
 
     This is the configuration class to store the configuration of a [`LongformerModel`]. It is used to instantiate an
