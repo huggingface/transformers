@@ -299,10 +299,6 @@ class WhisperDecoderOnnxConfig(OnnxSeq2SeqConfigWithPast):
 
         return None
 
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
 
 class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
@@ -339,7 +335,7 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 The decoder model's configuration to use when exporting to ONNX
             feature (`str`, *optional*, defaults to `default`):
                 The type of feature to export the model with.
-            use_past (bool, *optional*, defaults to `False`):
+            use_past (bool, *optional*):
                 Leverages the precomputed key/values hidden states when True
 
         Returns:
