@@ -97,12 +97,12 @@ class XLMRobertaConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import XLMRobertaModel, XLMRobertaConfig
+    >>> from transformers import XLMRobertaConfig, XLMRobertaModel
 
     >>> # Initializing a XLM-RoBERTa xlm-roberta-base style configuration
     >>> configuration = XLMRobertaConfig()
 
-    >>> # Initializing a model from the xlm-roberta-base style configuration
+    >>> # Initializing a model (with random weights) from the xlm-roberta-base style configuration
     >>> model = XLMRobertaModel(configuration)
 
     >>> # Accessing the model configuration
