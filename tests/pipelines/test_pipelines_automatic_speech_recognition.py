@@ -118,9 +118,15 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                 },
             )
         else:
+            # Non CTC models cannot use chunk_length
+            with self.assertRaises(ValueError) as v:
+                outputs = speech_recognizer(audio, chunk_length_s=10)
+            self.assertEqual(v.exception, "")
+
             # Non CTC models cannot use return_timestamps
-            with self.assertRaises(ValueError):
+            with self.assertRaises(ValueError) as v:
                 outputs = speech_recognizer(audio, return_timestamps="char")
+            self.assertEqual(v.exception, "")
 
     @require_torch
     @slow
@@ -138,6 +144,17 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
         self.assertEqual(output, {"text": "(Applaudissements)"})
+        with self.assertRaises(ValueError) as v:
+            _ = speech_recognizer(waveform, chunk_length_s=10)
+        self.assertEqual(
+            str(v.exception),
+            "`chunk_length_s` is only valid for CTC models, use other chunking options for other models",
+        )
+
+        # Non CTC models cannot use return_timestamps
+        with self.assertRaises(ValueError) as v:
+            _ = speech_recognizer(waveform, return_timestamps="char")
+        self.assertEqual(str(v.exception), "We cannot return_timestamps yet on non-ctc models !")
 
     @require_torch
     def test_small_model_pt_seq2seq(self):
