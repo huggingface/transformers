@@ -102,6 +102,7 @@ src/transformers/models/swin/modeling_swin.py
 src/transformers/models/swinv2/configuration_swinv2.py
 src/transformers/models/trajectory_transformer/configuration_trajectory_transformer.py
 src/transformers/models/trocr/modeling_trocr.py
+src/transformers/models/unispeech/configuration_unispeech.py
 src/transformers/models/unispeech/modeling_unispeech.py
 src/transformers/models/unispeech_sat/modeling_unispeech_sat.py
 src/transformers/models/van/modeling_van.py
