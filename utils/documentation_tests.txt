@@ -64,6 +64,7 @@ src/transformers/models/layoutlm/modeling_tf_layoutlm.py
 src/transformers/models/layoutlmv2/modeling_layoutlmv2.py
 src/transformers/models/layoutlmv3/modeling_layoutlmv3.py
 src/transformers/models/layoutlmv3/modeling_tf_layoutlmv3.py
+src/transformers/models/levit/configuration_levit.py
 src/transformers/models/lilt/modeling_lilt.py
 src/transformers/models/longformer/modeling_longformer.py
 src/transformers/models/longformer/modeling_tf_longformer.py
