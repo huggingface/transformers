@@ -92,9 +92,9 @@ class EsmTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         if token_ids_1 is None:
-            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
+            return [self.cls_token_id] + token_ids_0 + [self.eos_token_id]
         cls = [self.cls_token_id]
-        sep = [self.sep_token_id]
+        sep = [self.eos_token_id]  # No sep token in ESM vocabulary
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def save_vocabulary(self, save_directory, filename_prefix):
