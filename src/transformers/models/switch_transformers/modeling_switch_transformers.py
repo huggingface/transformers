@@ -93,7 +93,6 @@ class SwitchTransformersLayerNorm(nn.Module):
 ALL_LAYERNORM_LAYERS.append(SwitchTransformersLayerNorm)
 
 
-# TODO: this has to be changed with the experts
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->SwitchTransformers
 class SwitchTransformersDenseActDense(nn.Module):
     def __init__(self, config: SwitchTransformersConfig):
@@ -139,7 +138,7 @@ class SwitchTransformersLayerFF(nn.Module):
         super().__init__()
         # TODO: check the comments above
         self.is_sparse = is_sparse
-        if self.is_sparse:
+        if not self.is_sparse:
             self.mlp = SwitchTransformersDenseActDense(config)
         else:
             self.mlp = SwitchTransformersSparseMLP(config)
@@ -153,15 +152,13 @@ class SwitchTransformersLayerFF(nn.Module):
         return hidden_states
 
 
-class SwitchTransformersExpert(nn.Module):
-    def __init__(self, config: SwitchTransformersConfig):
+class SwitchTransformersMOExpertLayer(nn.Module):
+    def __init__(self, config: SwitchTransformersConfig, expert_class:nn.Module = SwitchTransformersDenseActDense):
         super().__init__()
-        self.weights = nn.ModuleDict(
-            {
-                "expert_{}".format(i): nn.Linear(config.d_model, config.d_model, bias=False)
-                for i in range(config.num_experts)
-            }
-        )
+        self.experts = nn.ModuleDict()
+        
+        for idx in range(config.num_experts):
+            self.experts[f"expert_{idx}"] = expert_class(config)
 
     def forward(self, hidden_states, indices):
         r"""
@@ -171,16 +168,19 @@ class SwitchTransformersExpert(nn.Module):
             indices (:obj:`torch.LongTensor`, **required**):
                 Indices of the experts of shape :obj:`(batch_size, )` to use for each input in the batch.
         """
-        for i in range(len(self.weights)):
-            expert_indices = (indices[:, :, i, :] == 1).squeeze(-1)
-            hidden_states[expert_indices] = self.weights["expert_{}".format(i)](hidden_states[expert_indices])
+        for idx, expert in enumerate(self.experts.values()):
+            # 1. Get the index of the tokens that are routed to the current expert
+            expert_indices = torch.eq(indices[:, :, idx, :], 1).squeeze(-1)
+            # 2. Update hidden states 
+            hidden_states[expert_indices] = expert(hidden_states[expert_indices])
         return hidden_states
 
 
 class SwitchTransformersSparseMLP(nn.Module):
     r"""
     Implementation of the Switch Transformers Sparse MLP module
-
+    We purposely create a `SwitchTransformersMOExpertLayer` in order to give freedom to people if they want to 
+    change this layer (by changing the agregation for example).
     TODO: Add a LOT of details here
     """
 
@@ -190,7 +190,7 @@ class SwitchTransformersSparseMLP(nn.Module):
         self.router = self._get_router(config)
 
         # Step 2: Get the experts
-        self.experts = SwitchTransformersExpert(config)
+        self.experts = SwitchTransformersMOExpertLayer(config)
 
         self.expert_capacity = config.expert_capacity
 
@@ -202,23 +202,19 @@ class SwitchTransformersSparseMLP(nn.Module):
         In total the list of supported Routers are the following:
 
         """
+        # TODO, use a ALL_ROUTER_TYPE map instead of havind all the ifs? then just if None raise error. 
         if config.router_type.lower() == "tokens_masked":
             return TokensChooseMaskedRouter(config)
-        # TODO: completely remove the scatter implementations
-        # elif config.router_type.lower() == "tokens_scatter":
-        #     return TokensChooseScatterRouter(config)
         elif config.router_type.lower() == "experts_masked":
             return ExpertsChooseMaskedRouter(config)
         else:
             raise NotImplementedError(
-                f"{config.router_type.lower()} not implemented ! Please chose a router among [tokens_masked,"
-                " tokens_scatter, experts_masked]"
+                f"{config.router_type.lower()} not implemented ! Please chose a router in `{"tokens_masked",
+                " "experts_masked"}"
             )
 
     def forward(self, hidden_states):
         expert_indices = self.router(hidden_states, expert_capacity=self.expert_capacity)
-        if not isinstance(expert_indices, RouterMask):
-            raise NotImplementedError("Only MaskedRouter is supported for now")
         masked_indices = expert_indices.dispatch_mask
         hidden_states = self.experts(hidden_states, masked_indices)
         return hidden_states
@@ -751,14 +747,14 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         sparse_step = config.decoder_sparse_step if self.is_decoder else config.encoder_sparse_step
 
         # TODO: change this, actually you can have a block full of sparse layers...
-        self.block = nn.ModuleList(
-            [
+        self.block = nn.ModuleList()
+        for i in range(config.num_layers) :
+            self.block.append(
                 SwitchTransformersBlock(
                     config, has_relative_attention_bias=bool(i == 0), is_sparse=(i % sparse_step == 0)
                 )
-                for i in range(config.num_layers)
-            ]
-        )
+            )
+
         self.final_layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
