@@ -68,7 +68,7 @@ class ResNetConfig(PretrainedConfig):
 
     >>> # Initializing a model (with random weights) from the resnet-50 style configuration
     >>> model = ResNetModel(configuration)
-    
+
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
