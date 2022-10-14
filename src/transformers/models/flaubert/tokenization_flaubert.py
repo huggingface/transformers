@@ -213,8 +213,6 @@ class FlaubertTokenizer(PreTrainedTokenizer):
             Dictionary mapping languages string identifiers to their IDs.
         id2lang (`Dict[int, str]`, *optional*):
             Dictionary mapping language IDs to their string identifiers.
-        do_lowercase_and_remove_accent (`bool`, *optional*, defaults to `True`):
-            Whether to lowercase and remove accents when tokenizing.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -247,9 +245,20 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         ],
         lang2id=None,
         id2lang=None,
-        do_lowercase_and_remove_accent=True,  # Keep for backward-compatibility
         **kwargs
     ):
+
+        do_lowercase_and_remove_accent = kwargs.pop("do_lowercase_and_remove_accent", None)
+        if do_lowercase_and_remove_accent is not None:
+            logger.warning(
+                "`do_lowercase_and_remove_accent` is passed as a keyword argument, but this won't do anything."
+                " `FlaubertTokenizer` will always set it to `False`."
+            )
+        # always `False`
+        self.do_lowercase_and_remove_accent = False
+
+        self.do_lowercase = do_lowercase
+
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
@@ -262,10 +271,6 @@ class FlaubertTokenizer(PreTrainedTokenizer):
             id2lang=id2lang,
             **kwargs,
         )
-
-        self.do_lowercase = do_lowercase
-        # always `False`
-        self.do_lowercase_and_remove_accent = False
 
         try:
             import sacremoses
