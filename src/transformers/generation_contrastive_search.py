@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The Google AI Language Team Authors, Facebook AI Research authors and The HuggingFace Inc. team.
-# Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2022 University of Cambridge, Tencent AI Lab, DeepMind and The University of Hong Kong Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+This file contains the utils functions for the contrastive search, which will be called in `generation_utils`
+"""
 
 from typing import Tuple
 
@@ -23,11 +25,6 @@ from .utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-
-"""
-This file contains the utils functions for the contrastive search, which will be called in `generation_utils`
-"""
 
 
 def ranking_fast(
