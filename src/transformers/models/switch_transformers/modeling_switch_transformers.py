@@ -44,7 +44,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_switch_transformers import SwitchTransformersConfig
-from .router import ExpertsChooseMaskedRouter, RouterMask, TokensChooseMaskedRouter
+from .router import ExpertsChooseMaskedRouter, TokensChooseMaskedRouter
 
 
 logger = logging.get_logger(__name__)
@@ -164,9 +164,9 @@ class SwitchTransformersMOExpertLayer(nn.Module):
         r"""
         Args:
             hidden_states (`torch.FloatTensor`, **required**):
-                Input to the layer of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-            indices (:obj:`torch.LongTensor`, **required**):
-                Indices of the experts of shape :obj:`(batch_size, )` to use for each input in the batch.
+                Input to the layer of shape `(batch_size, sequence_length, hidden_size)`.
+            indices (`torch.LongTensor`, **required**):
+                Indices of the experts of shape `(batch_size, )` to use for each input in the batch.
         """
         for idx, expert in enumerate(self.experts.values()):
             # 1. Get the index of the tokens that are routed to the current expert
@@ -178,9 +178,8 @@ class SwitchTransformersMOExpertLayer(nn.Module):
 
 class SwitchTransformersSparseMLP(nn.Module):
     r"""
-    Implementation of the Switch Transformers Sparse MLP module
-    We purposely create a `SwitchTransformersMOExpertLayer` in order to give freedom to people if they want to
-    change this layer (by changing the agregation for example).
+    Implementation of the Switch Transformers Sparse MLP module We purposely create a `SwitchTransformersMOExpertLayer`
+    in order to give freedom to people if they want to change this layer (by changing the agregation for example).
     TODO: Add a LOT of details here
     """
 
