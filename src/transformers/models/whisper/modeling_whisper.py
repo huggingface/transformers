@@ -1019,7 +1019,7 @@ class WhisperModel(WhisperPreTrainedModel):
         Example:
          ```python
          >>> import torch
-         >>> from transformers import WhisperModel, WhisperFeatureExtractor
+         >>> from transformers import WhisperFeatureExtractor, WhisperModel
          >>> from datasets import load_dataset
 
          >>> model = WhisperModel.from_pretrained("openai/whisper-base")
