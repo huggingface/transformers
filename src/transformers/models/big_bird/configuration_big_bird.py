@@ -94,15 +94,12 @@ class BigBirdConfig(PretrainedConfig):
         >>> from transformers import BigBirdConfig, BigBirdModel
 
         >>> # Initializing a BigBird google/bigbird-roberta-base style configuration
-
         >>> configuration = BigBirdConfig()
 
         >>> # Initializing a model (with random weights) from the google/bigbird-roberta-base style configuration
-
         >>> model = BigBirdModel(configuration)
 
         >>> # Accessing the model configuration
-
         >>> configuration = model.config
     ```
     """
