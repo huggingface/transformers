@@ -85,7 +85,7 @@ class Swinv2Config(PretrainedConfig):
     >>> # Initializing a Swinv2 microsoft/swinv2_tiny_patch4_windows8_256 style configuration
     >>> configuration = Swinv2Config()
 
-    >>> # Initializing a model from the microsoft/swinv2_tiny_patch4_windows8_256 style configuration
+    >>> # Initializing a model (with random weights) from the microsoft/swinv2_tiny_patch4_windows8_256 style configuration
     >>> model = Swinv2Model(configuration)
 
     >>> # Accessing the model configuration

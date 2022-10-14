@@ -40,8 +40,15 @@ class BertTokenizationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        self.tokenizers = [BertTokenizer.from_pretrained(checkpoint) for checkpoint in TOKENIZER_CHECKPOINTS]
-        self.tf_tokenizers = [TFBertTokenizer.from_pretrained(checkpoint) for checkpoint in TOKENIZER_CHECKPOINTS]
+        self.tokenizers = [
+            BertTokenizer.from_pretrained(checkpoint) for checkpoint in (TOKENIZER_CHECKPOINTS * 2)
+        ]  # repeat for when fast_bert_tokenizer=false
+        self.tf_tokenizers = [TFBertTokenizer.from_pretrained(checkpoint) for checkpoint in TOKENIZER_CHECKPOINTS] + [
+            TFBertTokenizer.from_pretrained(checkpoint, use_fast_bert_tokenizer=False)
+            for checkpoint in TOKENIZER_CHECKPOINTS
+        ]
+        assert len(self.tokenizers) == len(self.tf_tokenizers)
+
         self.test_sentences = [
             "This is a straightforward English test sentence.",
             "This one has some weird characters\rto\nsee\r\nif  those\u00E9break things.",
