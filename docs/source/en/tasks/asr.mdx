@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 <Youtube id="TksaY_FDgnk"/>
 
-Automatic speech recognition (ASR) converts a speech signal to text. It is an example of a sequence-to-sequence task, going from a sequence of audio inputs to textual outputs. Virtual assistants like Siri and Alexa use ASR models to help users everyday and there are many other useful user-facing applications like live captioning and note-taking during meetings.
+Automatic speech recognition (ASR) converts a speech signal to text, going from a sequence of audio inputs to textual outputs. Virtual assistants like Siri and Alexa use ASR models to help users everyday, and there are many other useful user-facing applications like live captioning and note-taking during meetings.
 
 This guide will show you how to:
 
@@ -64,16 +64,16 @@ Then take a look at the dataset:
 DatasetDict({
     train: Dataset({
         features: ['path', 'audio', 'transcription', 'english_transcription', 'intent_class', 'lang_id'],
-        num_rows: 450
+        num_rows: 16
     })
     test: Dataset({
         features: ['path', 'audio', 'transcription', 'english_transcription', 'intent_class', 'lang_id'],
-        num_rows: 113
+        num_rows: 4
     })
 })
 ```
 
-While the dataset contains a lot of useful information, like `lang_id` and `english_transcription`, you'll focus on the `audio` and `transcription` in this guide. Remove the other columns with the [`Dataset.remove_columns`] method:
+While the dataset contains a lot of useful information, like `lang_id` and `english_transcription`, you'll focus on the `audio` and `transcription` in this guide. Remove the other columns with the [`~datasets.Dataset.remove_columns`] method:
 
 ```py
 >>> minds = minds.remove_columns(["english_transcription", "intent_class", "lang_id"])
@@ -93,8 +93,8 @@ Take a look at the example again:
 
 There are two fields:
 
-- An `audio` column containing a 1-dimensional `array` of the speech signal that must be called to load and resample the audio file. 
-- A `transcription` column containing the text of the speech. 
+- `audio`: a 1-dimensional `array` of the speech signal that must be called to load and resample the audio file. 
+- `transcription`: the speech text. 
 
 ## Preprocess
 
@@ -106,7 +106,7 @@ The next step is to load a Wav2Vec2 processor to process the audio signal:
 >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base")
 ```
 
-The [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset has a sampling rate of 8000khz, which means you'll need to resample the dataset to 16000kHz to use the pretrained Wav2Vec2 model:
+The MInDS-14 dataset has a sampling rate of 8000khz (you can find this information in it's [dataset card](https://huggingface.co/datasets/PolyAI/minds14)) which means you'll need to resample the dataset to 16000kHz to use the pretrained Wav2Vec2 model:
 
 ```py
 >>> minds = minds.cast_column("audio", Audio(sampling_rate=16_000))
@@ -119,7 +119,7 @@ The [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset has a sam
  'transcription': "hi I'm trying to use the banking app on my phone and currently my checking and savings account balance is not refreshing"}
 ```
 
-Now you can create a preprocessing function that:
+Now create a preprocessing function that:
 
 1. Calls the `audio` column to load and resample the audio file.
 2. Extracts the `input_values` from the audio file.
@@ -136,15 +136,15 @@ Now you can create a preprocessing function that:
 ...     return batch
 ```
 
-To apply the preprocessing function over the entire dataset, use 🤗 Datasets [`~datasets.Dataset.map`] function. You can speed up `map` by increasing the number of processes with the `num_proc` parameter. Remove the columns you don't need with the [`Dataset.remove_columns`] method:
+To apply the preprocessing function over the entire dataset, use 🤗 Datasets [`~datasets.Dataset.map`] function. You can speed up `map` by increasing the number of processes with the `num_proc` parameter. Remove the columns you don't need with the [`~datasets.Dataset.remove_columns`] method:
 
 ```py
 >>> encoded_minds = minds.map(prepare_dataset, remove_columns=minds.column_names["train"], num_proc=4)
 ```
 
-🤗 Transformers doesn't have a data collator for automatic speech recognition, so you'll need to adapt the [`DataCollatorWithPadding`] to create a batch of examples. It'll also dynamically pad your text and labels to the length of the longest element in its batch so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
+🤗 Transformers doesn't have a data collator for ASR, so you'll need to adapt the [`DataCollatorWithPadding`] to create a batch of examples. It'll also dynamically pad your text and labels to the length of the longest element in its batch (instead of the entire dataset) so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
 
-Unlike other data collators, this specific data collator needs to apply a different padding method to `input_values` and `labels` with a context manager:
+Unlike other data collators, this specific data collator needs to apply a different padding method to `input_values` and `labels`:
 
 ```py
 >>> import torch
@@ -177,7 +177,7 @@ Unlike other data collators, this specific data collator needs to apply a differ
 ...         return batch
 ```
 
-Now you can create a batch of examples and dynamically pad them with `DataCollatorForCTCWithPadding`:
+Now create a batch of examples and dynamically pad them with `DataCollatorForCTCWithPadding`:
 
 ```py
 >>> data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
@@ -185,7 +185,7 @@ Now you can create a batch of examples and dynamically pad them with `DataCollat
 
 ## Evaluate
 
-Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a evaluation method using the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [word error rate](https://huggingface.co/spaces/evaluate-metric/wer)(WER) metric (see the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/a_quick_tour) quick tour to learn more about how to load and compute a metric):
+Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a evaluation method with the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [word error rate](https://huggingface.co/spaces/evaluate-metric/wer) (WER) metric (see the 🤗 Evaluate [quick tour](https://huggingface.co/docs/evaluate/a_quick_tour) to learn more about how to load and compute a metric):
 
 ```py
 >>> import evaluate
@@ -193,7 +193,7 @@ Including a metric during training is often helpful for evaluating your model's 
 >>> wer = evaluate.load("wer")
 ```
 
-Then create a function that passes your predictions and labels to [`~evaluate.EvaluateModule.compute`] to calculate the WER:
+Then create a function that passes your predictions and labels to [`~evaluate.EvaluationModule.compute`] to calculate the WER:
 
 ```py
 >>> import numpy as np
@@ -219,6 +219,12 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 <frameworkcontent>
 <pt>
+<Tip>
+
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+
+</Tip>
+
 You're ready to start training your model now! Load Wav2Vec2 with [`AutoModelForCTC`]. Specify the reduction to apply with the `ctc_loss_reduction` parameter. It is often better to use the average instead of the default summation:
 
 ```py
@@ -230,12 +236,6 @@ You're ready to start training your model now! Load Wav2Vec2 with [`AutoModelFor
 ...     pad_token_id=processor.tokenizer.pad_token_id,
 ... )
 ```
-
-<Tip>
-
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
-
-</Tip>
 
 At this point, only three steps remain:
 
@@ -319,7 +319,7 @@ The results aren't very good because the model was only trained on a few example
 {'text': "ALDCBC</s>COCB</s>DCBDBCBRBCDCTCRWKDBK<s></s>KODT</s>C</s>T</s>C</s>OD<s>B</s>BCTOR</s>AKDOBODTCTEDQOATDVDKCDSKL<unk>KEKEPKNPKPADSRDSCLCQ<unk>ED<s>BDXAXDP<unk>KQDPWDKLEPRPKDTDRDPDNFRTADPLDSRDPDKDX<unk>XLXCXLCL</s>LCXLCLDT</s>TBLDLBLTLCB</s>BXTLTBLDTM</s>BLBLCLBLCLDT</s>LXCDTB</s>L</s>T</s>LTDK</s>TDTDTLOKDADPDSDT</s><unk>RDQTDDADSNDN</s>KD</s>T'DPNVPHKDPDRDRKRKD</s>PKDCQS<unk>X<unk>LTAQDXLXCTBCLBTQBCXBDQDTXM<unk>LCXL</s>CXT"}
 ```
 
-You can also manually replicate the results of the [`pipeline`] if you'd like:
+You can also manually replicate the results of the `pipeline` if you'd like:
 
 <frameworkcontent>
 <pt>

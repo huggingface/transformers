@@ -63,7 +63,7 @@ Then take a look at an example:
 }
 ```
 
-Each number in `ner_tags` represents an entity. Convert the number to a label name for more information:
+Each number in `ner_tags` represents an entity. Convert the numbers to their label names to find out what the entities are:
 
 ```py
 >>> label_list = wnut["train"].features[f"ner_tags"].feature.names
@@ -85,10 +85,10 @@ Each number in `ner_tags` represents an entity. Convert the number to a label na
 ]
 ```
 
-The `ner_tag` describes an entity, such as a corporation, location, or person. The letter that prefixes each `ner_tag` indicates the token position of the entity:
+The letter that prefixes each `ner_tag` indicates the token position of the entity:
 
 - `B-` indicates the beginning of an entity.
-- `I-` indicates a token is contained inside the same entity (e.g., the `State` token is a part of an entity like
+- `I-` indicates a token is contained inside the same entity (for example, the `State` token is a part of an entity like
   `Empire State Building`).
 - `0` indicates the token doesn't correspond to any entity.
 
@@ -104,7 +104,7 @@ The next step is to load a DistilBERT tokenizer to preprocess the `tokens` field
 >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 ```
 
-As you saw in the example `tokens` field above, the input has already been split into words. This means you'll need to set `is_split_into_words=True` to tokenize the words into subwords. For example:
+As you saw in the example `tokens` field above, it looks like the input has already been tokenized. But the input actually hasn't been tokenized yet and you'll need to set `is_split_into_words=True` to tokenize the words into subwords. For example:
 
 ```py
 >>> example = wnut["train"][0]
@@ -114,14 +114,13 @@ As you saw in the example `tokens` field above, the input has already been split
 ['[CLS]', '@', 'paul', '##walk', 'it', "'", 's', 'the', 'view', 'from', 'where', 'i', "'", 'm', 'living', 'for', 'two', 'weeks', '.', 'empire', 'state', 'building', '=', 'es', '##b', '.', 'pretty', 'bad', 'storm', 'here', 'last', 'evening', '.', '[SEP]']
 ```
 
-However, adding the special tokens `[CLS]` and `[SEP]` and subword tokenization creates a mismatch between the input and labels. Furthermore, a single word corresponding to a single label may be split into two subwords. You'll need to realign the tokens and labels by:
+However, this adds some special tokens `[CLS]` and `[SEP]` and the subword tokenization creates a mismatch between the input and labels. A single word corresponding to a single label may now be split into two subwords. You'll need to realign the tokens and labels by:
 
 1. Mapping all tokens to their corresponding word with the [`word_ids`](https://huggingface.co/docs/tokenizers/python/latest/api/reference.html#tokenizers.Encoding.word_ids) method.
-2. Assigning the label `-100` to the special tokens `[CLS]` and `[SEP]` so the PyTorch loss function ignores
-   them.
+2. Assigning the label `-100` to the special tokens `[CLS]` and `[SEP]` so they're ignored by the PyTorch loss function.
 3. Only labeling the first token of a given word. Assign `-100` to other subtokens from the same word.
 
-Here is how you can create a function to realign the tokens and labels, and truncate sequences to be no longer than DistilBERT's maximum input length::
+Here is how you can create a function to realign the tokens and labels, and truncate sequences to be no longer than DistilBERT's maximum input length:
 
 ```py
 >>> def tokenize_and_align_labels(examples):
@@ -152,7 +151,7 @@ To apply the preprocessing function over the entire dataset, use 🤗 Datasets [
 >>> tokenized_wnut = wnut.map(tokenize_and_align_labels, batched=True)
 ```
 
-Now create a batch of examples using [`DataCollatorWithPadding`]. It'll also *dynamically pad* your text and labels to the length of the longest element in its batch, so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
+Now create a batch of examples using [`DataCollatorWithPadding`]. It'll also *dynamically pad* your text and labels to the length of the longest element in its batch (instead of the entire dataset) so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
 
 <frameworkcontent>
 <pt>
@@ -173,7 +172,7 @@ Now create a batch of examples using [`DataCollatorWithPadding`]. It'll also *dy
 
 ## Evaluate
 
-Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a evaluation method using the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load [seqeval](https://huggingface.co/spaces/evaluate-metric/seqeval) (see the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/a_quick_tour) quick tour to learn more about how to load and compute a metric). Seqeval is actually an evaluation framework that produces several scores: precision, recall, F1, and accuracy.
+Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a evaluation method with the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [seqeval](https://huggingface.co/spaces/evaluate-metric/seqeval) framework (see the 🤗 Evaluate [quick tour](https://huggingface.co/docs/evaluate/a_quick_tour) to learn more about how to load and compute a metric). Seqeval actually produces several scores: precision, recall, F1, and accuracy.
 
 ```py
 >>> import evaluate
@@ -181,7 +180,7 @@ Including a metric during training is often helpful for evaluating your model's 
 >>> seqeval = evaluate.load("seqeval")
 ```
 
-Get the NER labels first, and then create a function that passes your true predictions and true labels to [`~evaluate.EvaluateModule.compute`] to calculate the scores:
+Get the NER labels first, and then create a function that passes your true predictions and true labels to [`~evaluate.EvaluationModule.compute`] to calculate the scores:
 
 ```py
 >>> import numpy as np
@@ -217,39 +216,44 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 <frameworkcontent>
 <pt>
+<Tip>
+
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+
+</Tip>
 You're ready to start training your model now! Map the expected ids to their labels with `id2label` and `label2id`:
 
 ```py
-id2label = {
-    0: "O",
-    1: "B-corporation",
-    2: "I-corporation",
-    3: "B-creative-work",
-    4: "I-creative-work",
-    5: "B-group",
-    6: "I-group",
-    7: "B-location",
-    8: "I-location",
-    9: "B-person",
-    10: "I-person",
-    11: "B-product",
-    12: "I-product",
-}
-label2id = {
-    "O": 0,
-    "B-corporation": 1,
-    "I-corporation": 2,
-    "B-creative-work": 3,
-    "I-creative-work": 4,
-    "B-group": 5,
-    "I-group": 6,
-    "B-location": 7,
-    "I-location": 8,
-    "B-person": 9,
-    "I-person": 10,
-    "B-product": 11,
-    "I-product": 12,
-}
+>>> id2label = {
+...     0: "O",
+...     1: "B-corporation",
+...     2: "I-corporation",
+...     3: "B-creative-work",
+...     4: "I-creative-work",
+...     5: "B-group",
+...     6: "I-group",
+...     7: "B-location",
+...     8: "I-location",
+...     9: "B-person",
+...     10: "I-person",
+...     11: "B-product",
+...     12: "I-product",
+... }
+>>> label2id = {
+...     "O": 0,
+...     "B-corporation": 1,
+...     "I-corporation": 2,
+...     "B-creative-work": 3,
+...     "I-creative-work": 4,
+...     "B-group": 5,
+...     "I-group": 6,
+...     "B-location": 7,
+...     "I-location": 8,
+...     "B-person": 9,
+...     "I-person": 10,
+...     "B-product": 11,
+...     "I-product": 12,
+... }
 ```
 
 Then you can load DistilBERT with [`AutoModelForTokenClassification`] along with the number of expected labels, and the label mappings:
@@ -261,12 +265,6 @@ Then you can load DistilBERT with [`AutoModelForTokenClassification`] along with
 ...     "distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id
 ... )
 ```
-
-<Tip>
-
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
-
-</Tip>
 
 At this point, only three steps remain:
 
@@ -400,9 +398,9 @@ Configure the model for training with [`compile`](https://keras.io/api/models/mo
 >>> model.compile(optimizer=optimizer)
 ```
 
-The last two things to setup before you start training is to compute seqeval from the predictions, and provide a way to push your model to the Hub. Both of these are done by using [Keras callbacks](./main_classes/keras_callbacks).
+The last two things to setup before you start training is to compute the seqeval scores from the predictions, and provide a way to push your model to the Hub. Both are done by using [Keras callbacks](./main_classes/keras_callbacks).
 
-Set up your `compute_metrics` function with [`~transformers.KerasMetricCallback`]:
+Pass your `compute_metrics` function to [`~transformers.KerasMetricCallback`]:
 
 ```py
 >>> from transformers.keras_callbacks import KerasMetricCallback
@@ -410,7 +408,7 @@ Set up your `compute_metrics` function with [`~transformers.KerasMetricCallback`
 >>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_validation_set)
 ```
 
-Set up the [`transformers.PushToHubCallback`]:
+Specify where to push your model and tokenizer in the [`~transformers.PushToHubCallback`]:
 
 ```py
 >>> from transformers.keras_callbacks import PushToHubCallback
@@ -421,7 +419,7 @@ Set up the [`transformers.PushToHubCallback`]:
 ... )
 ```
 
-Then bundle your callbacks together and pass them to [`fit`] in the next step:
+Then bundle your callbacks together:
 
 ```py
 >>> callbacks = [metric_callback, push_to_hub_callback]
@@ -494,7 +492,7 @@ The simplest way to try out your finetuned model for inference is to use it in a
   'end': 93}]
 ```
 
-You can also manually replicate the results of the [`pipeline`] if you'd like:
+You can also manually replicate the results of the `pipeline` if you'd like:
 
 <frameworkcontent>
 <pt>
@@ -517,7 +515,7 @@ Pass your inputs to the model and return the `logits`:
 ...     logits = model(**inputs).logits
 ```
 
-Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a more readable label:
+Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a text label:
 
 ```py
 >>> predictions = torch.argmax(logits, dim=2)
@@ -561,7 +559,7 @@ Pass your inputs to the model and return the `logits`:
 >>> logits = model(**inputs).logits
 ```
 
-Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a more readable label:
+Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a text label:
 
 ```py
 >>> predicted_token_class_ids = tf.math.argmax(logits, axis=-1)

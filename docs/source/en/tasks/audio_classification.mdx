@@ -43,7 +43,7 @@ We encourage you to login to your Hugging Face account so you can upload and sha
 
 ## Load MInDS-14 dataset
 
-Start by loading the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) from the 🤗 Datasets library:
+Start by loading the MInDS-14 from the 🤗 Datasets library:
 
 ```py
 >>> from datasets import load_dataset, Audio
@@ -51,7 +51,7 @@ Start by loading the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) 
 >>> minds = load_dataset("PolyAI/minds14", name="en-US", split="train")
 ```
 
-Split the dataset's `train` split into a train and test set with the [`~Dataset.train_test_split`] method. This'll give you a chance to experiment with a smaller dataset first before spending more time training on the full `train` split.
+Split the dataset's `train` split into a smaller train and test set with the [`~datasets.Dataset.train_test_split`] method. This'll give you a chance to experiment and make sure everything works before spending more time on the full dataset.
 
 ```py
 >>> minds = minds.train_test_split(test_size=0.2)
@@ -73,7 +73,7 @@ DatasetDict({
 })
 ```
 
-While the dataset contains a lot of useful information, like `lang_id` and `english_transcription`, you'll focus on the `audio` and `intent_class` in this guide. Remove the other columns with the [`Dataset.remove_columns`] method:
+While the dataset contains a lot of useful information, like `lang_id` and `english_transcription`, you'll focus on the `audio` and `intent_class` in this guide. Remove the other columns with the [`~datasets.Dataset.remove_columns`] method:
 
 ```py
 >>> minds = minds.remove_columns(["path", "transcription", "english_transcription", "lang_id"])
@@ -92,8 +92,8 @@ Take a look at an example now:
 
 There are two fields:
 
-- An `audio` column containing a 1-dimensional `array` of the speech signal that must be called to load and resample the audio file. 
-- An `intent_class` column that represents the class id of intent. 
+- `audio`: a 1-dimensional `array` of the speech signal that must be called to load and resample the audio file. 
+- `intent_class`: represents the class id of the speaker's intent. 
 
 To make it easier for the model to get the label name from the label id, create a dictionary that maps the label name to an integer and vice versa:
 
@@ -105,14 +105,12 @@ To make it easier for the model to get the label name from the label id, create 
 ...     id2label[str(i)] = label
 ```
 
-Now you can convert the label id to a label name for more readability:
+Now you can convert the label id to a label name:
 
 ```py
 >>> id2label[str(2)]
 'app_error'
 ```
-
-Each keyword - or label - corresponds to a number; for example, `2` indicates `app_error` in the example above.
 
 ## Preprocess
 
@@ -124,7 +122,7 @@ The next step is to load a Wav2Vec2 feature extractor to process the audio signa
 >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base")
 ```
 
-The [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset has a sampling rate of 8000khz, which means you'll need to resample the dataset to 16000kHz to use the pretrained Wav2Vec2 model:
+The MInDS-14 dataset has a sampling rate of 8000khz (you can find this information in it's [dataset card](https://huggingface.co/datasets/PolyAI/minds14)), which means you'll need to resample the dataset to 16000kHz to use the pretrained Wav2Vec2 model:
 
 ```py
 >>> minds = minds.cast_column("audio", Audio(sampling_rate=16_000))
@@ -136,10 +134,10 @@ The [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset has a sam
  'intent_class': 2}
 ```
 
-Now you can create a preprocessing function that:
+Now create a preprocessing function that:
 
 1. Calls the `audio` column to load, and if necessary, resample the audio file.
-2. Checks if the sampling rate of the audio file matches the sampling rate of the audio data a model was pretrained with. You can find this information in the Wav2Vec2 [model card]((https://huggingface.co/facebook/wav2vec2-base)).
+2. Checks if the sampling rate of the audio file matches the sampling rate of the audio data a model was pretrained with. You can find this information in the Wav2Vec2 [model card](https://huggingface.co/facebook/wav2vec2-base).
 3. Set a maximum input length to batch longer inputs without truncating them.
 
 ```py
@@ -151,7 +149,7 @@ Now you can create a preprocessing function that:
 ...     return inputs
 ```
 
-To apply the preprocessing function over the entire dataset, use 🤗 Datasets [`~datasets.Dataset.map`] function. You can speed up `map` by setting `batched=True` to process multiple elements of the dataset at once. Remove the columns you don't need, and rename `intent_class` to `label` because that is what the model expects:
+To apply the preprocessing function over the entire dataset, use 🤗 Datasets [`~datasets.Dataset.map`] function. You can speed up `map` by setting `batched=True` to process multiple elements of the dataset at once. Remove the columns you don't need, and rename `intent_class` to `label` because that's the name the model expects:
 
 ```py
 >>> encoded_minds = minds.map(preprocess_function, remove_columns="audio", batched=True)
@@ -160,7 +158,7 @@ To apply the preprocessing function over the entire dataset, use 🤗 Datasets [
 
 ## Evaluate
 
-Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a evaluation method using the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) metric (see the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/a_quick_tour) quick tour to learn more about how to load and compute a metric):
+Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a evaluation method with the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) metric (see the 🤗 Evaluate [quick tour](https://huggingface.co/docs/evaluate/a_quick_tour) to learn more about how to load and compute a metric):
 
 ```py
 >>> import evaluate
@@ -168,7 +166,7 @@ Including a metric during training is often helpful for evaluating your model's 
 >>> accuracy = evaluate.load("accuracy")
 ```
 
-Then create a function that passes your predictions and labels to [`~evaluate.EvaluateModule.compute`] to calculate the accuracy:
+Then create a function that passes your predictions and labels to [`~evaluate.EvaluationModule.compute`] to calculate the accuracy:
 
 ```py
 >>> import numpy as np
@@ -185,6 +183,11 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 <frameworkcontent>
 <pt>
+<Tip>
+
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+
+</Tip>
 You're ready to start training your model now! Load Wav2Vec2 with [`AutoModelForAudioClassification`] along with the number of expected labels, and the label mappings:
 
 ```py
@@ -195,12 +198,6 @@ You're ready to start training your model now! Load Wav2Vec2 with [`AutoModelFor
 ...     "facebook/wav2vec2-base", num_labels=num_labels, label2id=label2id, id2label=id2label
 ... )
 ```
-
-<Tip>
-
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
-
-</Tip>
 
 At this point, only three steps remain:
 
@@ -270,10 +267,10 @@ Load an audio file you'd like to run inference on. Remember to resample the samp
 The simplest way to try out your finetuned model for inference is to use it in a [`pipeline`]. Instantiate a `pipeline` for audio classification with your model, and pass your audio file to it:
 
 ```py
-from transformers import pipeline
+>>> from transformers import pipeline
 
-classifier = pipeline("audio-classification", model="stevhliu/my_awesome_minds_model")
-classifier(audio_file)
+>>> classifier = pipeline("audio-classification", model="stevhliu/my_awesome_minds_model")
+>>> classifier(audio_file)
 [
     {"score": 0.09616563469171524, "label": "cash_deposit"},
     {"score": 0.08657706528902054, "label": "app_error"},
@@ -283,7 +280,7 @@ classifier(audio_file)
 ]
 ```
 
-You can also manually replicate the results of the [`pipeline`] if you'd like:
+You can also manually replicate the results of the `pipeline` if you'd like:
 
 <frameworkcontent>
 <pt>

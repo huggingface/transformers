@@ -12,23 +12,24 @@ specific language governing permissions and limitations under the License.
 
 # Language modeling
 
-Language modeling predicts words in a sentence, making these types of models great for applications involving generative tasks. You might even have a causal language model helping you write code right now! There are two types of language modeling, causal and masked language modeling.
+Language modeling tasks predicts words in a sentence, making these types of models great at generating text. You can use these models for creative applications like choosing your own text adventure or an intelligent coding assistant like Copilot or CodeParrot. There are two types of language modeling, causal and masked.
 
 <Youtube id="Vpjb1lu0MDk"/>
 
-Causal language modeling predicts the next token in a sequence of tokens, and the model can only attend to tokens on the left. This means the model cannot see future tokens. GPT-2 was pretrained as a causal language modeling.
+Causal language modeling predicts the next token in a sequence of tokens, and the model can only attend to tokens on the left. This means the model cannot see future tokens. GPT-2 is an example of a causal language model.
 
 <Youtube id="mqElG5QJWUg"/>
 
-Masked language modeling predicts a masked token in a sequence, and the model can attend to tokens bidirectionally. This means the model has full access to the tokens on the left and right. BERT was pretrained as a masked language modeling.
+Masked language modeling predicts a masked token in a sequence, and the model can attend to tokens bidirectionally. This means the model has full access to the tokens on the left and right. BERT is an example of a masked language model.
 
 This guide will show you how to:
+
 1. Finetune [DistilGPT2](https://huggingface.co/distilgpt2) for causal language modeling and [DistilRoBERTa](https://huggingface.co/distilroberta-base) for masked language modeling on the [r/askscience](https://www.reddit.com/r/askscience/) subset of the [ELI5](https://huggingface.co/datasets/eli5) dataset.
 2. Use your finetuned model for inference.
 
 <Tip>
 
-You can finetune other architectures for language modeling such as [GPT-Neo](https://huggingface.co/EleutherAI/gpt-neo-125M), [GPT-J](https://huggingface.co/EleutherAI/gpt-j-6B), and [BERT](https://huggingface.co/bert-base-uncased), following the same steps presented in this guide! See the text generation [task page](https://huggingface.co/tasks/text-generation) and fill mask [task page](https://huggingface.co/tasks/fill-mask) for more information about their associated models, datasets, and metrics.
+You can finetune other architectures for language modeling such as [GPT-Neo](https://huggingface.co/EleutherAI/gpt-neo-125M), [GPT-J](https://huggingface.co/EleutherAI/gpt-j-6B), and [BERT](https://huggingface.co/bert-base-uncased), following the same steps in this guide! See the text generation [task page](https://huggingface.co/tasks/text-generation) and fill mask [task page](https://huggingface.co/tasks/fill-mask) for more information about their associated models, datasets, and metrics.
 
 </Tip>
 
@@ -48,7 +49,7 @@ We encourage you to login to your Hugging Face account so you can upload and sha
 
 ## Load ELI5 dataset
 
-Start by loading a smaller subset of the [r/askscience](https://www.reddit.com/r/askscience/) subset of the [ELI5](https://huggingface.co/datasets/eli5) dataset from the 🤗 Datasets library. This'll give you a chance to experiment and make sure everythings works before spending more time training on the full dataset.
+Start by loading a smaller subset of the r/askscience subset of the ELI5 dataset from the 🤗 Datasets library. This'll give you a chance to experiment and make sure everythings works before spending more time training on the full dataset.
 
 ```py
 >>> from datasets import load_dataset
@@ -56,10 +57,10 @@ Start by loading a smaller subset of the [r/askscience](https://www.reddit.com/r
 >>> eli5 = load_dataset("eli5", split="train_asks[:5000]")
 ```
 
-Split the dataset's `train_asks` split into a train and test set with the [`~Dataset.train_test_split`] method:
+Split the dataset's `train_asks` split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
 
 ```py
-eli5 = eli5.train_test_split(test_size=0.2)
+>>> eli5 = eli5.train_test_split(test_size=0.2)
 ```
 
 Then take a look at an example:
@@ -80,7 +81,7 @@ Then take a look at an example:
  'title_urls': {'url': []}}
 ```
 
-While this may look like a lot, you're only really interested in the `text` field. What's cool about language modeling tasks is you don't need labels (known as an unsupervised task) because the next word *is* the label.
+While this may look like a lot, you're only really interested in the `text` field. What's cool about language modeling tasks is you don't need labels (also known as an unsupervised task) because the next word *is* the label.
 
 ## Preprocess
 
@@ -104,7 +105,7 @@ For masked language modeling, the next step is to load a DistilRoBERTa tokenizer
 >>> tokenizer = AutoTokenizer.from_pretrained("distilroberta-base")
 ```
 
-You'll notice from the example above, `text` is actually a subfield. This means you'll need to extract the `text` subfield from its nested structure with the [`flatten`](https://huggingface.co/docs/datasets/process.html#flatten) method:
+You'll notice from the example above, the `text` field is actually nested inside `answers`. This means you'll need to extract the `text` subfield from its nested structure with the [`flatten`](https://huggingface.co/docs/datasets/process.html#flatten) method:
 
 ```py
 >>> eli5 = eli5.flatten()
@@ -143,7 +144,7 @@ To apply the preprocessing function over the entire dataset, use 🤗 Datasets [
 ... )
 ```
 
-Now you'll need a second preprocessing function to capture text truncated from any lengthy examples to avoid losing any information. This preprocessing function should:
+Now you'll need a second preprocessing function to capture text truncated from the lengthier examples to avoid losing any information. This preprocessing function should:
 
 - Concatenate all the text.
 - Split the concatenated text into smaller chunks defined by `block_size`.
@@ -170,7 +171,7 @@ Apply the `group_texts` function over the entire dataset:
 >>> lm_dataset = tokenized_eli5.map(group_texts, batched=True, num_proc=4)
 ```
 
-Now create a batch of examples using [`DataCollatorForLanguageModeling`]. It'll also *dynamically pad* your text to the length of the longest element in its batch, so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient. 
+Now create a batch of examples using [`DataCollatorForLanguageModeling`]. It'll also *dynamically pad* your text to the length of the longest element in its batch (instead of the entire dataset) so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient. 
 
 <frameworkcontent>
 <pt>
@@ -213,12 +214,17 @@ For masked language modeling, use the end-of-sequence token as the padding token
 
 ## Causal language modeling
 
-Causal language modeling is frequently used for text generation. This section shows you how to finetune [DistilGPT2](https://huggingface.co/distilgpt2) to generate new text.
+Causal language models are frequently used for text generation. This section shows you how to finetune [DistilGPT2](https://huggingface.co/distilgpt2) to generate new text.
 
 ### Train
 
 <frameworkcontent>
 <pt>
+<Tip>
+
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+
+</Tip>
 You're ready to start training your model now! Load DistilGPT2 with [`AutoModelForCausalLM`]:
 
 ```py
@@ -226,12 +232,6 @@ You're ready to start training your model now! Load DistilGPT2 with [`AutoModelF
 
 >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
 ```
-
-<Tip>
-
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
-
-</Tip>
 
 At this point, only three steps remain:
 
@@ -323,7 +323,7 @@ Configure the model for training with [`compile`](https://keras.io/api/models/mo
 >>> model.compile(optimizer=optimizer)
 ```
 
-The last thing to setup before you start training is to provide a way to push your model to the Hub. This can be done by using [`transformers.PushToHubCallback`]:
+This can be done by specifying where to push your model and tokenizer in the [`~transformers.PushToHubCallback`]:
 
 ```py
 >>> from transformers.keras_callbacks import PushToHubCallback
@@ -343,6 +343,14 @@ Finally, you're ready to start training your model! Call [`fit`](https://keras.i
 Once training is completed, your model is automatically uploaded to the Hub so everyone can use it!
 </tf>
 </frameworkcontent>
+
+<Tip>
+
+For a more in-depth example of how to finetune a model for causal language modeling, take a look at the corresponding
+[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)
+or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
+
+</Tip>
 
 ### Inference
 
@@ -401,7 +409,7 @@ Tokenize the text and return the `input_ids` as TensorFlow tensors:
 >>> inputs = tokenizer(prompt, return_tensors="tf").input_ids
 ```
 
-Use the [`~transformers.generation_utils.TFGenerationMixin.generate`] method to create the summarization. For more details about the different text generation strategies and parameters for controlling generation, check out the [Text Generation](./main_classes/text_generation) API.
+Use the [`~transformers.generation_tf_utils.TFGenerationMixin.generate`] method to create the summarization. For more details about the different text generation strategies and parameters for controlling generation, check out the [Text Generation](./main_classes/text_generation) API.
 
 ```py
 >>> from transformers import TFAutoModelForCausalLM
@@ -421,12 +429,17 @@ Decode the generated token ids back into text:
 
 ## Masked language modeling
 
-Masked language modeling is also known as a fill-mask task because it predicts a masked token in a sequence. Models for masked language modeling require a good contextual understanding of an entire sequence. This section shows you how to finetune [DistilRoBERTa](https://huggingface.co/distilroberta-base) to predict a masked word.
+Masked language modeling are good for tasks that require a good contextual understanding of an entire sequence. This section shows you how to finetune [DistilRoBERTa](https://huggingface.co/distilroberta-base) to predict a masked word.
 
 ### Train
 
 <frameworkcontent>
 <pt>
+<Tip>
+
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+
+</Tip>
 You're ready to start training your model now! Load DistilRoBERTa with [`AutoModelForMaskedLM`]:
 
 ```py
@@ -434,12 +447,6 @@ You're ready to start training your model now! Load DistilRoBERTa with [`AutoMod
 
 >>> model = AutoModelForMaskedLM.from_pretrained("distilroberta-base")
 ```
-
-<Tip>
-
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
-
-</Tip>
 
 At this point, only three steps remain:
 
@@ -532,7 +539,7 @@ Configure the model for training with [`compile`](https://keras.io/api/models/mo
 >>> model.compile(optimizer=optimizer)
 ```
 
-The last thing to setup before you start training is to provide a way to push your model to the Hub. This can be done by using [`transformers.PushToHubCallback`]:
+This can be done by specifying where to push your model and tokenizer in the [`~transformers.PushToHubCallback`]:
 
 ```py
 >>> from transformers.keras_callbacks import PushToHubCallback
@@ -565,7 +572,7 @@ or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/no
 
 Great, now that you've finetuned a model, you can use it for inference!
 
-Come up with some text you'd like the model to fill in the blank with, and se the special `<mask>` token to indicate the blank:
+Come up with some text you'd like the model to fill in the blank with, and use the special `<mask>` token to indicate the blank:
 
 ```py
 >>> text = "The Milky Way is a <mask> galaxy."

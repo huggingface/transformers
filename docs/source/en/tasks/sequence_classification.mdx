@@ -65,7 +65,7 @@ Then take a look at an example:
 
 There are two fields in this dataset: 
 
-- `text`: a string containing the text of the movie review.
+- `text`: the movie review text.
 - `label`: a value that is either `0` for a negative review or `1` for a positive review.
 
 ## Preprocess
@@ -91,7 +91,7 @@ To apply the preprocessing function over the entire dataset, use 🤗 Datasets [
 tokenized_imdb = imdb.map(preprocess_function, batched=True)
 ```
 
-Now create a batch of examples using [`DataCollatorWithPadding`]. It'll *dynamically pad* your text to the length of the longest element in its batch, so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
+Now create a batch of examples using [`DataCollatorWithPadding`]. It'll *dynamically pad* your text to the length of the longest element in its batch (instead of the entire dataset) so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
 
 <frameworkcontent>
 <pt>
@@ -112,7 +112,7 @@ Now create a batch of examples using [`DataCollatorWithPadding`]. It'll *dynamic
 
 ## Evaluate
 
-Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a evaluation method using the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) metric (see the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/a_quick_tour) quick tour to learn more about how to load and compute a metric):
+Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a evaluation method with the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) metric (see the 🤗 Evaluate [quick tour](https://huggingface.co/docs/evaluate/a_quick_tour) to learn more about how to load and compute a metric):
 
 ```py
 >>> import evaluate
@@ -120,7 +120,7 @@ Including a metric during training is often helpful for evaluating your model's 
 >>> accuracy = evaluate.load("accuracy")
 ```
 
-Then create a function that passes your predictions and labels to [`~evaluate.EvaluateModule.compute`] to calculate the accuracy:
+Then create a function that passes your predictions and labels to [`~evaluate.EvaluationModule.compute`] to calculate the accuracy:
 
 ```py
 >>> import numpy as np
@@ -138,6 +138,11 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 <frameworkcontent>
 <pt>
+<Tip>
+
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+
+</Tip>
 You're ready to start training your model now! Map the expected ids to their labels with `id2label` and `label2id`:
 
 ```py
@@ -154,12 +159,6 @@ Then you can load DistilBERT with [`AutoModelForSequenceClassification`] along w
 ...     "distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id
 ... )
 ```
-
-<Tip>
-
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
-
-</Tip>
 
 At this point, only three steps remain:
 
@@ -268,9 +267,9 @@ Configure the model for training with [`compile`](https://keras.io/api/models/mo
 >>> model.compile(optimizer=optimizer)
 ```
 
-The last two things to setup before you start training is to compute the accuracy from the predictions, and provide a way to push your model to the Hub. Both of these are done by using [Keras callbacks](./main_classes/keras_callbacks).
+The last two things to setup before you start training is to compute the accuracy from the predictions, and provide a way to push your model to the Hub. Both are done by using [Keras callbacks](./main_classes/keras_callbacks).
 
-Set up your `compute_metrics` function with [`~transformers.KerasMetricCallback`]:
+Pass your `compute_metrics` function to [`~transformers.KerasMetricCallback`]:
 
 ```py
 >>> from transformers.keras_callbacks import KerasMetricCallback
@@ -278,7 +277,7 @@ Set up your `compute_metrics` function with [`~transformers.KerasMetricCallback`
 >>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_validation_set)
 ```
 
-Set up the [`transformers.PushToHubCallback`]:
+Specify where to push your model and tokenizer in the [`~transformers.PushToHubCallback`]:
 
 ```py
 >>> from transformers.keras_callbacks import PushToHubCallback
@@ -289,7 +288,7 @@ Set up the [`transformers.PushToHubCallback`]:
 ... )
 ```
 
-Then bundle your callbacks together and pass them to [`fit`] in the next step:
+Then bundle your callbacks together:
 
 ```py
 >>> callbacks = [metric_callback, push_to_hub_callback]
@@ -333,7 +332,7 @@ The simplest way to try out your finetuned model for inference is to use it in a
 [{'label': 'POSITIVE', 'score': 0.9994940757751465}]
 ```
 
-You can also manually replicate the results of the [`pipeline`] if you'd like:
+You can also manually replicate the results of the `pipeline` if you'd like:
 
 <frameworkcontent>
 <pt>
@@ -356,7 +355,7 @@ Pass your inputs to the model and return the `logits`:
 ...     logits = model(**inputs).logits
 ```
 
-Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a more readable label:
+Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a text label:
 
 ```py
 >>> predicted_class_id = logits.argmax().item()
@@ -383,7 +382,7 @@ Pass your inputs to the model and return the `logits`:
 >>> logits = model(**inputs).logits
 ```
 
-Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a more readable label:
+Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a text label:
 
 ```py
 >>> predicted_class_id = int(tf.math.argmax(logits, axis=-1)[0])

@@ -12,6 +12,8 @@ specific language governing permissions and limitations under the License.
 
 # Image classification
 
+[[open-in-colab]]
+
 <Youtube id="tjAIM7BOYhw"/>
 
 Image classification assigns a label or class to an image. Unlike text or audio classification, the inputs are the pixel values that comprise an image. There are many applications for image classification such as detecting damage after a natural disaster, monitoring crop health, or helping screen medical images for signs of disease.
@@ -43,7 +45,7 @@ We encourage you to login to your Hugging Face account so you can upload and sha
 
 ## Load Food-101 dataset
 
-Start by loading a smaller subset of the [Food-101](https://huggingface.co/datasets/food101) dataset from the 🤗 Datasets library. This'll give you a chance to experiment and make sure everythings works before spending more time training on the full dataset.
+Start by loading a smaller subset of the Food-101 dataset from the 🤗 Datasets library. This'll give you a chance to experiment and make sure everythings works before spending more time training on the full dataset.
 
 ```py
 >>> from datasets import load_dataset
@@ -51,7 +53,7 @@ Start by loading a smaller subset of the [Food-101](https://huggingface.co/datas
 >>> food = load_dataset("food101", split="train[:5000]")
 ```
 
-Split the dataset's `train` split into a train and test set with the [`~Dataset.train_test_split`] method:
+Split the dataset's `train` split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
 
 ```py
 >>> food = food.train_test_split(test_size=0.2)
@@ -67,8 +69,8 @@ Then take a look at an example:
 
 There are two fields:
 
-- An `image` field containing a PIL image of the food item.
-- A `label` field containing the food item's class.
+- `image`: a PIL image of the food item.
+- `label`: the label class of the food item.
 
 To make it easier for the model to get the label name from the label id, create a dictionary that maps the label name to an integer and vice versa:
 
@@ -80,14 +82,12 @@ To make it easier for the model to get the label name from the label id, create 
 ...     id2label[str(i)] = label
 ```
 
-Now you can convert the label id to a label name for more information:
+Now you can convert the label id to a label name:
 
 ```py
 >>> id2label[str(79)]
 'prime_rib'
 ```
-
-Each food class - or label - corresponds to an id; `79` indicates a prime rib in the example above.
 
 ## Preprocess
 
@@ -99,7 +99,9 @@ The next step is to load a ViT feature extractor to process the image into a ten
 >>> feature_extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
 ```
 
-Apply some image transformations to the images to make the model more robust against overfitting. Here you'll use torchvision's [`transforms`](https://pytorch.org/vision/stable/transforms.html) module. Crop a random part of the image, resize it, and normalize it with the image mean and standard deviation:
+Apply some image transformations to the images to make the model more robust against overfitting. Here you'll use torchvision's [`transforms`](https://pytorch.org/vision/stable/transforms.html) module, but you can also use any image library you like. 
+
+Crop a random part of the image, resize it, and normalize it with the image mean and standard deviation:
 
 ```py
 >>> from torchvision.transforms import RandomResizedCrop, Compose, Normalize, ToTensor
@@ -128,7 +130,7 @@ To apply the preprocessing function over the entire dataset, use 🤗 Datasets [
 >>> food = food.with_transform(transforms)
 ```
 
-Now create a batch of examples using [`DataCollatorWithPadding`]. Unlike other data collators in 🤗 Transformers, the `DefaultDataCollator`` does not apply additional preprocessing such as padding.
+Now create a batch of examples using [`DataCollatorWithPadding`]. Unlike other data collators in 🤗 Transformers, the `DefaultDataCollator` does not apply additional preprocessing such as padding.
 
 ```py
 >>> from transformers import DefaultDataCollator
@@ -138,7 +140,7 @@ Now create a batch of examples using [`DataCollatorWithPadding`]. Unlike other d
 
 ## Evaluate
 
-Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a evaluation method using the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) metric (see the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/a_quick_tour) quick tour to learn more about how to load and compute a metric):
+Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a evaluation method with the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) metric (see the 🤗 Evaluate [quick tour](https://huggingface.co/docs/evaluate/a_quick_tour) to learn more about how to load and compute a metric):
 
 ```py
 >>> import evaluate
@@ -146,7 +148,7 @@ Including a metric during training is often helpful for evaluating your model's 
 >>> accuracy = evaluate.load("accuracy")
 ```
 
-Then create a function that passes your predictions and labels to [`~evaluate.EvaluateModule.compute`] to calculate the accuracy:
+Then create a function that passes your predictions and labels to [`~evaluate.EvaluationModule.compute`] to calculate the accuracy:
 
 ```py
 >>> import numpy as np
@@ -163,6 +165,11 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 <frameworkcontent>
 <pt>
+<Tip>
+
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+
+</Tip>
 You're ready to start training your model now! Load ViT with [`AutoModelForImageClassification`]. Specify the number of labels along with the number of expected labels, and the label mappings:
 
 ```py
@@ -175,12 +182,6 @@ You're ready to start training your model now! Load ViT with [`AutoModelForImage
 ...     label2id=label2id,
 ... )
 ```
-
-<Tip>
-
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
-
-</Tip>
 
 At this point, only three steps remain:
 
@@ -261,7 +262,7 @@ The simplest way to try out your finetuned model for inference is to use it in a
  {'score': 0.016335085034370422, 'label': 'bruschetta'},
  {'score': 0.0160061065107584, 'label': 'ramen'}]
 ```
-You can also manually replicate the results of the [`pipeline`] if you'd like:
+You can also manually replicate the results of the `pipeline` if you'd like:
 
 <frameworkcontent>
 <pt>

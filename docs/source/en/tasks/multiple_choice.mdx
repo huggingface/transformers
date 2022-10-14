@@ -35,7 +35,7 @@ We encourage you to login to your Hugging Face account so you can upload and sha
 
 ## Load SWAG dataset
 
-Start by loading the `regular` configuration of the [SWAG](https://huggingface.co/datasets/swag) dataset from the 🤗 Datasets library:
+Start by loading the `regular` configuration of the SWAG dataset from the 🤗 Datasets library:
 
 ```py
 >>> from datasets import load_dataset
@@ -62,9 +62,9 @@ Then take a look at an example:
 
 While it looks like there are a lot of fields here, it is actually pretty straightforward:
 
-- The `sent1` and `sent2` fields show how a sentence starts. If you put the two together, you get the `startphrase` field.
-- Each `ending` field suggests a possible ending to how the sentence can end, but only one of them is correct.
-- The `label` field identifies the correct sentence ending.
+- `sent1` and `sent2`: these fields show how a sentence starts, and if you put the two together, you get the `startphrase` field.
+- `ending`: suggests a possible ending for how a sentence can end, but only one of them is correct.
+- `label`: identifies the correct sentence ending.
 
 ## Preprocess
 
@@ -78,7 +78,7 @@ The next step is to load a BERT tokenizer to process the sentence starts and the
 
 The preprocessing function you want to create needs to:
 
-1. Make four copies of the `sent1` field so you can combine each of them with `sent2` to recreate how a sentence starts.
+1. Make four copies of the `sent1` field and combine each of them with `sent2` to recreate how a sentence starts.
 2. Combine `sent2` with each of the four possible sentence endings.
 3. Flatten these two lists so you can tokenize them, and then unflatten them afterward so each example has a corresponding `input_ids`, `attention_mask`, and `labels` field.
 
@@ -100,13 +100,13 @@ The preprocessing function you want to create needs to:
 ...     return {k: [v[i : i + 4] for i in range(0, len(v), 4)] for k, v in tokenized_examples.items()}
 ```
 
-To apply the preprocessing function over the entire dataset, use 🤗 Datasets [`~datasets.Dataset.with_transform`] method. You can speed up the `map` function by setting `batched=True` to process multiple elements of the dataset at once:
+To apply the preprocessing function over the entire dataset, use 🤗 Datasets [`~datasets.Dataset.map`] method. You can speed up the `map` function by setting `batched=True` to process multiple elements of the dataset at once:
 
 ```py
 tokenized_swag = swag.map(preprocess_function, batched=True)
 ```
 
-🤗 Transformers doesn't have a data collator for multiple choice, so you'll need to adapt the [`DataCollatorWithPadding`] to create a batch of examples. It'll also *dynamically pad* your text and labels to the length of the longest element in its batch, so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
+🤗 Transformers doesn't have a data collator for multiple choice, so you'll need to adapt the [`DataCollatorWithPadding`] to create a batch of examples. It'll also *dynamically pad* your text and labels to the length of the longest element in its batch (instead of the entire dataset) so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
 
 `DataCollatorForMultipleChoice` flattens all the model inputs, applies padding, and then unflattens the results:
 
@@ -199,7 +199,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 
 ## Evaluate
 
-Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a evaluation method using the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) metric (see the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/a_quick_tour) quick tour to learn more about how to load and compute a metric):
+Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a evaluation method with the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) metric (see the 🤗 Evaluate [quick tour](https://huggingface.co/docs/evaluate/a_quick_tour) to learn more about how to load and compute a metric):
 
 ```py
 >>> import evaluate
@@ -207,7 +207,7 @@ Including a metric during training is often helpful for evaluating your model's 
 >>> accuracy = evaluate.load("accuracy")
 ```
 
-Then create a function that passes your predictions and labels to [`~evaluate.EvaluateModule.compute`] to calculate the accuracy:
+Then create a function that passes your predictions and labels to [`~evaluate.EvaluationModule.compute`] to calculate the accuracy:
 
 ```py
 >>> import numpy as np
@@ -225,6 +225,11 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 <frameworkcontent>
 <pt>
+<Tip>
+
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+
+</Tip>
 You're ready to start training your model now! Load BERT with [`AutoModelForMultipleChoice`]:
 
 ```py
@@ -232,12 +237,6 @@ You're ready to start training your model now! Load BERT with [`AutoModelForMult
 
 >>> model = AutoModelForMultipleChoice.from_pretrained("bert-base-uncased")
 ```
-
-<Tip>
-
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
-
-</Tip>
 
 At this point, only three steps remain:
 
@@ -328,9 +327,9 @@ Configure the model for training with [`compile`](https://keras.io/api/models/mo
 >>> model.compile(optimizer=optimizer)
 ```
 
-The last two things to setup before you start training is to compute the accuracy from the predictions, and provide a way to push your model to the Hub. Both of these are done by using [Keras callbacks](./main_classes/keras_callbacks).
+The last two things to setup before you start training is to compute the accuracy from the predictions, and provide a way to push your model to the Hub. Both are done by using [Keras callbacks](./main_classes/keras_callbacks).
 
-Set up your `compute_metrics` function with [`~transformers.KerasMetricCallback`]:
+Pass your `compute_metrics` function to [`~transformers.KerasMetricCallback`]:
 
 ```py
 >>> from transformers.keras_callbacks import KerasMetricCallback
@@ -338,7 +337,7 @@ Set up your `compute_metrics` function with [`~transformers.KerasMetricCallback`
 >>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_validation_set)
 ```
 
-Set up the [`transformers.PushToHubCallback`]:
+Specify where to push your model and tokenizer in the [`~transformers.PushToHubCallback`]:
 
 ```py
 >>> from transformers.keras_callbacks import PushToHubCallback
@@ -349,7 +348,7 @@ Set up the [`transformers.PushToHubCallback`]:
 ... )
 ```
 
-Then bundle your callbacks together and pass them to [`fit`] in the next step:
+Then bundle your callbacks together:
 
 ```py
 >>> callbacks = [metric_callback, push_to_hub_callback]

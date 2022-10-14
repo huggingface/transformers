@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 <Youtube id="1JvfrvZgi6c"/>
 
-Translation converts a sequence of text from one language to another. It is one of several tasks you can formulate as a sequence-to-sequence problem, a powerful framework for any task you need to generate text. Companies like Google use sequence-to-sequence models to power products like Google Translate.
+Translation converts a sequence of text from one language to another. It is one of several tasks you can formulate as a sequence-to-sequence problem, a powerful framework for returning some output from an input like translation or summarization. Companies like Google use sequence-to-sequence models to power its products like Translate and Docs.
 
 This guide will show you how to:
 
@@ -51,7 +51,7 @@ Start by loading the English-French subset of the [OPUS Books](https://huggingfa
 >>> books = load_dataset("opus_books", "en-fr")
 ```
 
-Split the dataset into a train and test set with the [`~Dataset.train_test_split`] method:
+Split the dataset into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
 
 ```py
 >>> books = books["train"].train_test_split(test_size=0.2)
@@ -66,7 +66,7 @@ Then take a look at an example:
   'fr': 'Mais ce plateau élevé ne mesurait que quelques toises, et bientôt nous fûmes rentrés dans notre élément.'}}
 ```
 
-The `translation` field contains the English and French translations of the text.
+`translation`: an English and French translation of the text.
 
 ## Preprocess
 
@@ -99,17 +99,16 @@ The preprocessing function you want to create needs to:
 ...     return model_inputs
 ```
 
-To apply the preprocessing function over the entire dataset, use 🤗 Datasets [`~datasets.Dataset.with_transform`] method. You can speed up the `map` function by setting `batched=True` to process multiple elements of the dataset at once:
+To apply the preprocessing function over the entire dataset, use 🤗 Datasets [`~datasets.Dataset.map`] method. You can speed up the `map` function by setting `batched=True` to process multiple elements of the dataset at once:
 
 ```py
 >>> tokenized_books = books.map(preprocess_function, batched=True)
 ```
 
-Now create a batch of examples using [`DataCollatorForSeq2Seq`]. It will also *dynamically pad* your text and labels to the length of the longest element in its batch so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
+Now create a batch of examples using [`DataCollatorForSeq2Seq`]. It will also *dynamically pad* your text and labels to the length of the longest element in its batch (instead of the entire dataset) so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
 
 <frameworkcontent>
 <pt>
-
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
@@ -128,7 +127,7 @@ Now create a batch of examples using [`DataCollatorForSeq2Seq`]. It will also *d
 
 ## Evaluate
 
-Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a evaluation method using the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [SacreBLEU](https://huggingface.co/spaces/evaluate-metric/sacrebleu) metric (see the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/a_quick_tour) quick tour to learn more about how to load and compute a metric):
+Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a evaluation method with the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [SacreBLEU](https://huggingface.co/spaces/evaluate-metric/sacrebleu) metric (see the 🤗 Evaluate [quick tour](https://huggingface.co/docs/evaluate/a_quick_tour) to learn more about how to load and compute a metric):
 
 ```py
 >>> import evaluate
@@ -136,7 +135,7 @@ Including a metric during training is often helpful for evaluating your model's 
 >>> sacrebleu = evaluate.load("sacrebleu")
 ```
 
-Then create a function that passes your predictions and labels to [`~evaluate.EvaluateModule.compute`] to calculate the SacreBLEU score:
+Then create a function that passes your predictions and labels to [`~evaluate.EvaluationModule.compute`] to calculate the SacreBLEU score:
 
 ```py
 >>> import numpy as np
@@ -175,6 +174,11 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 <frameworkcontent>
 <pt>
+<Tip>
+
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+
+</Tip>
 You're ready to start training your model now! Load T5 with [`AutoModelForSeq2SeqLM`]:
 
 ```py
@@ -183,15 +187,9 @@ You're ready to start training your model now! Load T5 with [`AutoModelForSeq2Se
 >>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
 ```
 
-<Tip>
-
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
-
-</Tip>
-
 At this point, only three steps remain:
 
-1. Define your training hyperparameters in [`Seq2SeqTrainingArguments`]. The only required parameter is `output_dir` which specifies where to save your model. You'll push this model to the Hub by setting `push_to_hub=True` (you need to be signed in to Hugging Face to upload your model). At the end of each epoch, the [`Trainer`] will evaluate the accuracy and save the training checkpoint.
+1. Define your training hyperparameters in [`Seq2SeqTrainingArguments`]. The only required parameter is `output_dir` which specifies where to save your model. You'll push this model to the Hub by setting `push_to_hub=True` (you need to be signed in to Hugging Face to upload your model). At the end of each epoch, the [`Trainer`] will evaluate the SacreBLEU metric and save the training checkpoint.
 2. Pass the training arguments to [`Seq2SeqTrainer`] along with the model, dataset, tokenizer, data collator, and `compute_metrics` function.
 3. Call [`~Trainer.train`] to finetune your model.
 
@@ -277,9 +275,9 @@ Configure the model for training with [`compile`](https://keras.io/api/models/mo
 >>> model.compile(optimizer=optimizer)
 ```
 
-The last two things to setup before you start training is to compute the ROUGE score from the predictions, and provide a way to push your model to the Hub. Both of these are done by using [Keras callbacks](./main_classes/keras_callbacks).
+The last two things to setup before you start training is to compute the SacreBLEU metric from the predictions, and provide a way to push your model to the Hub. Both are done by using [Keras callbacks](./main_classes/keras_callbacks).
 
-Set up your `compute_metrics` function with [`~transformers.KerasMetricCallback`]:
+Pass your `compute_metrics` function to [`~transformers.KerasMetricCallback`]:
 
 ```py
 >>> from transformers.keras_callbacks import KerasMetricCallback
@@ -287,7 +285,7 @@ Set up your `compute_metrics` function with [`~transformers.KerasMetricCallback`
 >>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_validation_set)
 ```
 
-Set up the [`~transformers.PushToHubCallback`]:
+Specify where to push your model and tokenizer in the [`~transformers.PushToHubCallback`]:
 
 ```py
 >>> from transformers.keras_callbacks import PushToHubCallback
@@ -298,7 +296,7 @@ Set up the [`~transformers.PushToHubCallback`]:
 ... )
 ```
 
-Then bundle your callbacks together and pass them to [`fit`] in the next step:
+Then bundle your callbacks together:
 
 ```py
 >>> callbacks = [metric_callback, push_to_hub_callback]
@@ -332,7 +330,7 @@ Come up with some text you'd like to translate to another language. For T5, you 
 >>> text = "translate English to French: Legumes share resources with nitrogen-fixing bacteria."
 ```
 
-The simplest way to try out your finetuned model for inference is to use it in a [`pipeline`]. Instantiate a `pipeline` for summarization with your model, and pass your text to it:
+The simplest way to try out your finetuned model for inference is to use it in a [`pipeline`]. Instantiate a `pipeline` for translation with your model, and pass your text to it:
 
 ```py
 >>> from transformers import pipeline
@@ -342,7 +340,7 @@ The simplest way to try out your finetuned model for inference is to use it in a
 [{'translation_text': 'Legumes partagent des ressources avec des bactéries azotantes.'}]
 ```
 
-You can also manually replicate the results of the [`pipeline`] if you'd like:
+You can also manually replicate the results of the `pipeline` if you'd like:
 
 <frameworkcontent>
 <pt>
@@ -381,7 +379,7 @@ Tokenize the text and return the `input_ids` as TensorFlow tensors:
 >>> inputs = tokenizer(text, return_tensors="tf").input_ids
 ```
 
-Use the [`~transformers.generation_utils.TFGenerationMixin.generate`] method to create the summarization. For more details about the different text generation strategies and parameters for controlling generation, check out the [Text Generation](./main_classes/text_generation) API.
+Use the [`~transformers.generation_tf_utils.TFGenerationMixin.generate`] method to create the translation. For more details about the different text generation strategies and parameters for controlling generation, check out the [Text Generation](./main_classes/text_generation) API.
 
 ```py
 >>> from transformers import TFAutoModelForSeq2SeqLM
