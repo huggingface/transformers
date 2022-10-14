@@ -1261,8 +1261,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
             # No mask found
             if mask_probs_item.shape[0] <= 0:
-                segmentation = None
-                segments: List[Dict] = []
+                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
+                segmentation = torch.zeros((height, width)) - 1
+                results.append({"segmentation": segmentation, "segments_info": []})
                 continue
 
             # Get segmentation map and segment information of batch item
@@ -1347,8 +1348,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
             # No mask found
             if mask_probs_item.shape[0] <= 0:
-                segmentation = None
-                segments: List[Dict] = []
+                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
+                segmentation = torch.zeros((height, width)) - 1
+                results.append({"segmentation": segmentation, "segments_info": []})
                 continue
 
             # Get segmentation map and segment information of batch item

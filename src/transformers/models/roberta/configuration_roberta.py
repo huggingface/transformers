@@ -55,7 +55,7 @@ class RobertaConfig(BertConfig):
     >>> # Initializing a RoBERTa configuration
     >>> configuration = RobertaConfig()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = RobertaModel(configuration)
 
     >>> # Accessing the model configuration

@@ -372,11 +372,17 @@ class OwlViTOnnxConfig(OnnxConfig):
     def generate_dummy_inputs(
         self,
         processor: "ProcessorMixin",
+        batch_size: int = -1,
+        seq_length: int = -1,
         framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
 
-        text_input_dict = super().generate_dummy_inputs(processor.tokenizer, framework=framework)
-        image_input_dict = super().generate_dummy_inputs(processor.feature_extractor, framework=framework)
+        text_input_dict = super().generate_dummy_inputs(
+            processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
+        )
+        image_input_dict = super().generate_dummy_inputs(
+            processor.feature_extractor, batch_size=batch_size, framework=framework
+        )
         return {**text_input_dict, **image_input_dict}
 
     @property
