@@ -521,6 +521,8 @@
       title: Utilities for Trainer
     - local: internal/generation_utils
       title: Utilities for Generation
+    - local: internal/image_processing_utils
+      title: Utilities for Image Processors
     - local: internal/file_utils
       title: General Utilities
     title: Internal Helpers

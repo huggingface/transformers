@@ -26,7 +26,7 @@ from datasets import load_dataset
 
 from huggingface_hub import snapshot_download
 from transformers import Wav2Vec2Config, is_tf_available
-from transformers.testing_utils import require_librosa, require_pyctcdecode, require_tf, slow
+from transformers.testing_utils import is_flaky, require_librosa, require_pyctcdecode, require_tf, slow
 from transformers.utils import is_librosa_available, is_pyctcdecode_available
 
 from ...test_configuration_common import ConfigTester
@@ -309,6 +309,7 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_ctc_loss(*config_and_inputs)
 
+    @is_flaky()
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
