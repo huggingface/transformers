@@ -35,6 +35,7 @@ from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shar
 from transformers.utils.import_utils import is_sagemaker_mp_enabled
 
 from .activations import get_activation
+from .bettertransformers import is_module_fast
 from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from .dynamic_module_utils import custom_object_save
@@ -68,6 +69,7 @@ from .utils import (
     is_offline_mode,
     is_remote_url,
     is_safetensors_available,
+    is_torch_greater_than_112,
     logging,
     replace_return_docstrings,
 )
@@ -2361,7 +2363,27 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return model
 
     def to_fast(self):
-        # Step 1: Get the class name of the model
+        # Step 0: check if torch >= 1.12
+        if not is_torch_greater_than_112():
+            raise ValueError(
+                "The Better Transformers feature is only available for torch>=1.12"
+                "Please follow the installation instructions at https://pytorch.org/get-started/locally/"
+                "to install the latest version of Pytorch."
+            )
+
+        # Step 1: Recurse over the modules of the model
+        def replace_to_fast(model):
+            for name, module in model.named_children():
+                if len(list(module.children())) > 0:
+                    replace_to_fast(module)
+
+                class_name = module.__class__.__name__
+                maybe_fast_module = is_module_fast(class_name)
+                if not isinstance(maybe_fast_module, bool):
+                    model._modules[name] = maybe_fast_module(module)
+            return model
+
+        self = replace_to_fast(self).eval()
 
         # Step 2: Verify if the module `Fast` is present for that model
 

@@ -22,6 +22,7 @@ import shutil
 import sys
 import warnings
 from collections import OrderedDict
+from distutils.version import StrictVersion
 from functools import lru_cache, wraps
 from itertools import chain
 from types import ModuleType
@@ -290,6 +291,14 @@ def is_torch_cuda_available():
         return torch.cuda.is_available()
     else:
         return False
+
+
+def is_torch_greater_than_112():
+    if not is_torch_available():
+        return False
+
+    current_torch_version = importlib_metadata.version("torch")
+    return StrictVersion(current_torch_version) >= StrictVersion("1.12.0")
 
 
 def is_torch_bf16_gpu_available():

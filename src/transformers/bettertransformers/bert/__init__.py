@@ -1,0 +1,1 @@
+from .modeling_bert_fast import BertLayerFast

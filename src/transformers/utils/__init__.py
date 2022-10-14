@@ -137,6 +137,7 @@ from .import_utils import (
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
+    is_torch_greater_than_112,
     is_torch_onnx_dict_inputs_support_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
