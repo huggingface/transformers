@@ -25,7 +25,6 @@ src/transformers/models/bert/modeling_tf_bert.py
 src/transformers/models/bert_generation/configuration_bert_generation.py
 src/transformers/models/bigbird_pegasus/modeling_bigbird_pegasus.py
 src/transformers/models/big_bird/modeling_big_bird.py
-src/transformers/models/blenderbot/configuration_flava.py
 src/transformers/models/blenderbot/configuration_blenderbot.py
 src/transformers/models/blenderbot/modeling_blenderbot.py
 src/transformers/models/blenderbot_small/configuration_blenderbot_small.py
@@ -49,6 +48,7 @@ src/transformers/models/detr/modeling_detr.py
 src/transformers/models/dpt/modeling_dpt.py
 src/transformers/models/electra/modeling_electra.py
 src/transformers/models/electra/modeling_tf_electra.py
+src/transformers/models/flava/configuration_flava.py
 src/transformers/models/glpn/modeling_glpn.py
 src/transformers/models/gpt2/configuration_gpt2.py
 src/transformers/models/gpt2/modeling_gpt2.py
