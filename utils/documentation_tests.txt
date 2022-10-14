@@ -50,6 +50,7 @@ src/transformers/models/detr/modeling_detr.py
 src/transformers/models/dpt/modeling_dpt.py
 src/transformers/models/electra/modeling_electra.py
 src/transformers/models/electra/modeling_tf_electra.py
+src/transformers/models/ernie/configuration_ernie.py
 src/transformers/models/glpn/modeling_glpn.py
 src/transformers/models/gpt2/configuration_gpt2.py
 src/transformers/models/gpt2/modeling_gpt2.py
