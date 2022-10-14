@@ -1,1 +1,1 @@
-from .modeling_bert_fast import BertLayerFast
+from .modeling_bert_fast import BertLayerFast  # noqa F401
