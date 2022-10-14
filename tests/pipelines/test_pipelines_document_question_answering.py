@@ -229,8 +229,10 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9974, "answer": "1110212019", "start": 23, "end": 23},
-                {"score": 0.9948, "answer": "us-001", "start": 16, "end": 16},
+                [
+                    {"score": 0.9974, "answer": "1110212019", "start": 23, "end": 23},
+                    {"score": 0.9948, "answer": "us-001", "start": 16, "end": 16},
+                ]
             ]
             * 2,
         )
@@ -329,8 +331,10 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9999, "answer": "us-001", "start": 16, "end": 16},
-                {"score": 0.9998, "answer": "us-001", "start": 16, "end": 16},
+                [
+                    {"score": 0.9999, "answer": "us-001", "start": 16, "end": 16},
+                    {"score": 0.9998, "answer": "us-001", "start": 16, "end": 16},
+                ]
             ]
             * 2,
         )
