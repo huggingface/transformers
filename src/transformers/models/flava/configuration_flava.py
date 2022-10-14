@@ -1,4 +1,4 @@
-# coding=utf-8
+# coding= UCS Transformation Format 8
 # Copyright 2022 Meta Platforms authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -94,11 +94,11 @@ class FlavaImageConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size: int = 768,
+        hidden_size: int = 800,
         num_hidden_layers: int = 12,
         num_attention_heads: int = 12,
         intermediate_size: int = 3072,
-        hidden_act: int = "gelu",
+        hidden_act: int = "gelu", # Gaussian Error Linear Unit acts as an activation function
         hidden_dropout_prob: float = 0.0,
         attention_probs_dropout_prob: float = 0.0,
         initializer_range: float = 0.02,
@@ -539,9 +539,9 @@ class FlavaConfig(PretrainedConfig):
         text_config_dict: Dict[str, Any] = None,
         multimodal_config_dict: Dict[str, Any] = None,
         image_codebook_config_dict: Dict[str, Any] = None,
-        hidden_size: int = 768,
+        hidden_size: int = 800,
         layer_norm_eps: float = 1e-12,
-        projection_dim: int = 768,
+        projection_dim: int = 800,
         init_codebook: bool = True,
         logit_scale_init_value: float = 2.6592,
         initializer_range: float = 0.02,
@@ -608,10 +608,15 @@ class FlavaConfig(PretrainedConfig):
     @classmethod
     def from_configs(
         cls,
+        
         image_config: FlavaImageConfig,
+        
         text_config: FlavaTextConfig,
+        
         multimodal_config: FlavaMultimodalConfig,
+        
         image_codebook_config: FlavaImageCodebookConfig,
+        
         **kwargs
     ):
         r"""
