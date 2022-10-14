@@ -108,6 +108,7 @@ src/transformers/models/segformer/modeling_tf_segformer.py
 src/transformers/models/swin/configuration_swin.py
 src/transformers/models/swin/modeling_swin.py
 src/transformers/models/swinv2/configuration_swinv2.py
+src/transformers/models/time_series_transformer/configuration_time_series_transformer.py
 src/transformers/models/time_series_transformer/modeling_time_series_transformer.py
 src/transformers/models/trajectory_transformer/configuration_trajectory_transformer.py
 src/transformers/models/trocr/modeling_trocr.py
