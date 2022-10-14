@@ -55,7 +55,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             distributions it is the negative log likelihood (nll) - which currently is the only supported one.
         input_size (`int`, *optional*, defaults to 1):
             The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
-            multivarate targets.
+            multivariate targets.
         scaling (`bool`, *optional* defaults to `True`):
             Whether to scale the input targets.
         lags_sequence (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 5, 6, 7]`):
