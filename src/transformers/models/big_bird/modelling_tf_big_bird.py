@@ -79,7 +79,6 @@ TF_BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST = [
 class TFBigBirdEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings.__init__
     def __init__(self, config: BigBirdConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -95,7 +94,6 @@ class TFBigBirdEmbeddings(tf.keras.layers.Layer):
         self.rescale_embeddings = config.rescale_embeddings
         self.hidden_size = config.hidden_size
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings.build
     def build(self, input_shape: tf.TensorShape):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
@@ -120,7 +118,6 @@ class TFBigBirdEmbeddings(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings.call
     def call(
         self,
         input_ids: tf.Tensor = None,
@@ -173,7 +170,6 @@ class TFBigBirdEmbeddings(tf.keras.layers.Layer):
 
 class TFBigBirdSelfAttention(tf.keras.layers.Layer):
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention.__init__
     def __init__(self, config: BigBirdConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -201,7 +197,6 @@ class TFBigBirdSelfAttention(tf.keras.layers.Layer):
 
         self.is_decoder = config.is_decoder
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention.transpose_for_scores
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
         tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
@@ -209,7 +204,6 @@ class TFBigBirdSelfAttention(tf.keras.layers.Layer):
         # Transpose the tensor from [batch_size, seq_length, num_attention_heads, attention_head_size] to [batch_size, num_attention_heads, seq_length, attention_head_size]
         return tf.transpose(tensor, perm=[0, 2, 1, 3])
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention.call
     def call(
         self,
         hidden_states: tf.Tensor,
@@ -1040,7 +1034,6 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
         return mask
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->BigBird
 class TFBigBirdSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: BigBirdConfig, **kwargs):
         super().__init__(**kwargs)
@@ -1051,10 +1044,10 @@ class TFBigBirdSelfOutput(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
+    def call(self, hidden_states: tf.Tensor, input_ids: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.dropout(inputs=hidden_states, training=training)
-        hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
+        hidden_states = self.LayerNorm(inputs=hidden_states + input_ids)
 
         return hidden_states
 
@@ -1101,7 +1094,7 @@ class TFBigBirdAttention(tf.keras.layers.Layer):
 
     def call(
         self,
-        input_tensor: tf.Tensor,
+        input_ids: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
         encoder_hidden_states: tf.Tensor,
@@ -1113,20 +1106,20 @@ class TFBigBirdAttention(tf.keras.layers.Layer):
         to_mask=None,
         from_blocked_mask=None,
         to_blocked_mask=None,
-        training: bool=False,
+        training: bool = False,
     ):
 
         # type compatibility
         if band_mask is not None:
-            band_mask = tf.cast(band_mask, input_tensor.dtype)
+            band_mask = tf.cast(band_mask, input_ids.dtype)
         if from_mask is not None:
-            from_mask = tf.cast(from_mask, input_tensor.dtype)
+            from_mask = tf.cast(from_mask, input_ids.dtype)
         if to_mask is not None:
-            to_mask = tf.cast(to_mask, input_tensor.dtype)
+            to_mask = tf.cast(to_mask, input_ids.dtype)
 
         if self.attention_type == "original_full":
             self_outputs = self.self(
-                input_tensor,
+                input_ids,
                 attention_mask,
                 head_mask,
                 encoder_hidden_states,
@@ -1139,16 +1132,15 @@ class TFBigBirdAttention(tf.keras.layers.Layer):
             if encoder_hidden_states is not None:
                 raise ValueError("BigBird cannot be used as a decoder when config.attention_type != 'original_full'")
             self_outputs = self.self(
-                input_tensor, band_mask, from_mask, to_mask, from_blocked_mask, to_blocked_mask, output_attentions
+                input_ids, band_mask, from_mask, to_mask, from_blocked_mask, to_blocked_mask, output_attentions
             )
         attention_output = self.dense_output(
-            hidden_states=self_outputs[0], input_tensor=input_tensor, training=training
+            hidden_states=self_outputs[0], input_ids=input_ids, training=training
         )
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->BigBird
 class TFBigBirdIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: BigBirdConfig, **kwargs):
         super().__init__(**kwargs)
@@ -1169,7 +1161,6 @@ class TFBigBirdIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert -> BigBird
 class TFBigBirdOutput(tf.keras.layers.Layer):
     def __init__(self, config: BigBirdConfig, **kwargs):
         super().__init__(**kwargs)
@@ -1238,7 +1229,7 @@ class TFBigBirdLayer(tf.keras.layers.Layer):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
-            input_tensor=hidden_states,
+            input_ids=hidden_states,
             attention_mask=attention_mask,
             head_mask=head_mask,
             encoder_hidden_states=None,
@@ -1272,7 +1263,7 @@ class TFBigBirdLayer(tf.keras.layers.Layer):
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             cross_attention_outputs = self.cross_attention(
-                input_tensor=attention_output,
+                input_ids=attention_output,
                 attention_mask=attention_mask,
                 head_mask=head_mask,
                 encoder_hidden_states=encoder_hidden_states,
@@ -1391,7 +1382,6 @@ class TFBigBirdEncoder(tf.keras.layers.Layer):
         )
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert -> BigBird
 class TFBigBirdPooler(tf.keras.layers.Layer):
     def __init__(self, config: BigBirdConfig, **kwargs):
         super().__init__(**kwargs)
@@ -1412,7 +1402,6 @@ class TFBigBirdPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert -> BigBird
 class TFBigBirdPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config: BigBirdConfig, **kwargs):
         super().__init__(**kwargs)
@@ -1438,7 +1427,6 @@ class TFBigBirdPredictionHeadTransform(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert -> BigBird
 class TFBigBirdLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config: BigBirdConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
@@ -1773,7 +1761,6 @@ class TFBigBirdMainLayer(tf.keras.layers.Layer):
         )
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertPreTrainedModel with Bert -> BigBird
 class TFBigBirdPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1901,10 +1888,9 @@ TF_BIG_BIRD_INPUTS_DOCSTRING = r"""
 
 
 @dataclass
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertForPreTrainingOutput with Bert -> BigBird
 class TFBigBirdForPreTrainingOutput(ModelOutput):
     """
-    Output type of [`TFBertForPreTraining`].
+    Output type of [`TFBigBirdForPreTraining`].
 
     Args:
         prediction_logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):

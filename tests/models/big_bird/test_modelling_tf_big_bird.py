@@ -26,9 +26,7 @@ if is_tf_available():
     import numpy as np
     import tensorflow as tf
 
-    from transformers.models.big_bird.modelling_tf_big_bird import (
-        TFBigBirdModel,
-    )
+    from transformers.models.big_bird.modelling_tf_big_bird import TFBigBirdModel
 
 
 class TFBigBirdModelTester:
@@ -156,7 +154,7 @@ class TFBigBirdModelTester:
         )
 
     def create_and_check_model(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFBigBirdModel(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
@@ -171,13 +169,13 @@ class TFBigBirdModelTester:
 
 
 class TFBigBirdModelTest(TFModelTesterMixin, unittest.TestCase):
-
     def setUp(self) -> None:
         self.model_tester = TFBigBirdModelTester(self)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
 
 # class TFBigBirdIntegrationTest(unittest.TestCase):
 
@@ -207,5 +205,3 @@ class TFBigBirdModelTest(TFModelTesterMixin, unittest.TestCase):
 #             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 #             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
 #             choice_labels = ids_tensor([self.batch_size], self.num_choices)
-
-
