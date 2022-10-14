@@ -25,7 +25,12 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...file_utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_torch_cuda_available,
+)
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -34,19 +39,28 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import is_ninja_available, logging
 from .configuration_bloom import BloomConfig
+from .load_custom import load_cuda_kernels
 from .parallel_layers import TensorParallelColumnLinear, TensorParallelEmbedding, TensorParallelRowLinear
+
 
 logger = logging.get_logger(__name__)
 
-CUSTOM_KERNELS_ENABLED=False
-try:
-    from .custom_kernels import fused_bloom_attention_cuda
-    from .custom_kernels import fused_bloom_gelu_cuda
-    CUSTOM_KERNELS_ENABLED=True
-except ImportError:
-    logger.warning("We're not using custom kernels.")
+
+fused_bloom_attention_cuda = None
+
+
+def use_custom_kernels():
+    global fused_bloom_attention_cuda
+    if not is_ninja_available():
+        raise RuntimeError("Ninja is necessary to use the custom kernel: `pip install ninja`.")
+
+    if not is_torch_cuda_available():
+        raise RuntimeError("The custom kernel is only usable on GPU")
+
+    fused_bloom_attention_cuda = load_cuda_kernels()
+
 
 _CHECKPOINT_FOR_DOC = "bigscience/bloom-560m"
 _CONFIG_FOR_DOC = "BloomConfig"
@@ -136,6 +150,7 @@ def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int) -> torch.Te
     alibi = slopes[..., None] * arange_tensor
     return alibi
 
+
 # @torch.jit.script
 def dropout_add(x: torch.Tensor, residual: torch.Tensor, prob: float, training: bool) -> torch.Tensor:
     """
@@ -154,6 +169,7 @@ def dropout_add(x: torch.Tensor, residual: torch.Tensor, prob: float, training: 
     out = F.dropout(x, p=prob, training=training)
     out = residual + out
     return out
+
 
 @torch.jit.script
 def bloom_gelu_forward(x: torch.Tensor) -> torch.Tensor:
@@ -189,13 +205,8 @@ def bloom_gelu_back(g: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
 class GeLUFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input: torch.Tensor) -> torch.Tensor:
-        if False and CUSTOM_KERNELS_ENABLED:
-            """My kernel is actually still slow compared to what `jit` provides."""
-            raise ValueError("WTF")
-            fused_bloom_gelu_cuda.foward(input)
-        else:
-            ctx.save_for_backward(input)
-            return bloom_gelu_forward(input)
+        ctx.save_for_backward(input)
+        return bloom_gelu_forward(input)
 
     @staticmethod
     def backward(ctx, grad_output: torch.Tensor) -> torch.Tensor:
@@ -222,8 +233,11 @@ class BloomGelu(nn.Module):
         else:
             return bloom_gelu_forward(x)
 
+
 # @torch.jit.script # this is shit for unknow reasons.
-def _split_heads(fused_qkv: torch.Tensor, num_heads: int, head_dim: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def _split_heads(
+    fused_qkv: torch.Tensor, num_heads: int, head_dim: int
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Split the last dimension into (num_heads, head_dim) without making any copies, results share same memory
     storage as `fused_qkv`
@@ -244,6 +258,7 @@ def _split_heads(fused_qkv: torch.Tensor, num_heads: int, head_dim: int) -> Tupl
     value_layer = value_layer.transpose(1, 2).reshape(batch_size * num_heads, seq_length, head_dim)
 
     return query_layer, key_layer, value_layer
+
 
 # @torch.jit.script
 def _merge_heads(x: torch.Tensor, num_heads: int, head_dim: int) -> torch.Tensor:
@@ -270,6 +285,7 @@ def _merge_heads(x: torch.Tensor, num_heads: int, head_dim: int) -> torch.Tensor
 
     # batch_size, seq_length, num_heads, head_dim -> batch_size, seq_length, num_heads * head_dim
     return x.reshape(batch_size, seq_length, num_heads * head_dim)
+
 
 class BloomAttention(nn.Module):
     def __init__(self, config: BloomConfig, process_group: Optional[torch.distributed.ProcessGroup]):
@@ -300,7 +316,9 @@ class BloomAttention(nn.Module):
         else:
             assert self.num_heads % process_group.size() == 0
             self.num_heads = self.num_heads // process_group.size()
-            self.query_key_value = TensorParallelColumnLinear(self.hidden_size, 3 * self.hidden_size, process_group=process_group, bias=True)
+            self.query_key_value = TensorParallelColumnLinear(
+                self.hidden_size, 3 * self.hidden_size, process_group=process_group, bias=True
+            )
             self.dense = TensorParallelRowLinear(self.hidden_size, self.hidden_size, process_group=process_group)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
 
@@ -314,16 +332,15 @@ class BloomAttention(nn.Module):
         beta: float,
         inv_norm_factor: float,
         num_heads: int,
-        use_cache: bool
+        use_cache: bool,
     ):
         batch_size, q_length, three_times_hidden_size = fused_qkv.shape
         head_dim = three_times_hidden_size // (3 * num_heads)
-        batch_size_times_num_heads = batch_size * num_heads
+        # batch_size_times_num_heads = batch_size * num_heads
 
-        ### TODO @thomasw21: this takes quite a bit of time, how do I accelerate that?
+        # TODO @thomasw21: this takes quite a bit of time, how do I accelerate that?
         # 3 x [batch_size, seq_length, num_heads, head_dim]
-        (query_layer, key_layer, value_layer) = _split_heads(fused_qkv, num_heads=num_heads,
-                                                             head_dim=head_dim)
+        (query_layer, key_layer, value_layer) = _split_heads(fused_qkv, num_heads=num_heads, head_dim=head_dim)
 
         if layer_past is not None:
             past_key, past_value = layer_past
@@ -387,7 +404,7 @@ class BloomAttention(nn.Module):
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         batch_size, q_length, _ = fused_qkv.shape
 
-        if CUSTOM_KERNELS_ENABLED:
+        if fused_bloom_attention_cuda is not None:
             assert self.training is False, "Only foward pass was implemented"
             assert attention_mask.shape[-1] < 4096, "Custom kernel support only up to 4096 tokens"
             context_layer, present, attention_probs = fused_bloom_attention_cuda.forward(
@@ -399,10 +416,9 @@ class BloomAttention(nn.Module):
                 self.beta,
                 self.inv_norm_factor,
                 self.num_heads,
-                use_cache
+                use_cache,
             )
         else:
-            raise ValueError("Block this path while we figure out how to run C++ code")
             context_layer, present, attention_probs = self.compute_attention(
                 fused_qkv=fused_qkv,
                 layer_past=layer_past,
@@ -412,7 +428,7 @@ class BloomAttention(nn.Module):
                 beta=self.beta,
                 inv_norm_factor=self.inv_norm_factor,
                 num_heads=self.num_heads,
-                use_cache=use_cache
+                use_cache=use_cache,
             )
 
         # aggregate results across tp ranks. See here: https://github.com/pytorch/pytorch/issues/76232
@@ -655,7 +671,7 @@ BLOOM_INPUTS_DOCSTRING = r"""
     BLOOM_START_DOCSTRING,
 )
 class BloomModel(BloomPreTrainedModel):
-    def __init__(self, config: BloomConfig, process_group: Optional[torch.distributed.ProcessGroup]=None):
+    def __init__(self, config: BloomConfig, process_group: Optional[torch.distributed.ProcessGroup] = None):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
@@ -665,13 +681,17 @@ class BloomModel(BloomPreTrainedModel):
         if process_group is None:
             self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
         else:
-            self.word_embeddings = TensorParallelEmbedding(config.vocab_size, self.embed_dim, process_group=process_group)
+            self.word_embeddings = TensorParallelEmbedding(
+                config.vocab_size, self.embed_dim, process_group=process_group
+            )
             self.tp_rank = process_group.rank()
             self.tp_world_size = process_group.size()
         self.word_embeddings_layernorm = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         # Transformer blocks
-        self.h = nn.ModuleList([BloomBlock(config, process_group=process_group) for _ in range(config.num_hidden_layers)])
+        self.h = nn.ModuleList(
+            [BloomBlock(config, process_group=process_group) for _ in range(config.num_hidden_layers)]
+        )
 
         # Final Layer Norm
         self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
@@ -795,7 +815,7 @@ class BloomModel(BloomPreTrainedModel):
         if hasattr(self, "tp_rank"):
             assert self.num_heads % self.tp_world_size == 0
             block_size = self.num_heads // self.tp_world_size
-            alibi = alibi[:, self.tp_rank * block_size: (self.tp_rank + 1) * block_size]
+            alibi = alibi[:, self.tp_rank * block_size : (self.tp_rank + 1) * block_size]
             alibi = alibi.reshape(batch_size * block_size, 1, seq_length_with_past)
             causal_mask = torch.repeat_interleave(causal_mask, block_size, dim=0)
         else:
@@ -876,15 +896,8 @@ class BloomModel(BloomPreTrainedModel):
 class BloomForCausalLM(BloomPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"h.*.self_attention.scale_mask_softmax.causal_mask", r"lm_head.weight"]
 
-    def __init__(self, config: BloomConfig):
+    def __init__(self, config: BloomConfig, process_group: Optional[torch.distributed.ProcessGroup] = None):
         super().__init__(config)
-        print(config)
-        ### HACK
-        if config.tp_parallel:
-            process_group = torch.distributed.distributed_c10d._get_default_group()
-        else:
-            process_group = None
-        ###
         self.transformer = BloomModel(config, process_group)
 
         if process_group is None:
