@@ -2360,6 +2360,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return model
 
+    def to_fast(self):
+        # Step 1: Get the class name of the model
+
+        # Step 2: Verify if the module `Fast` is present for that model
+
+        # Step 3: If yes, replace the `...Layer` module with the `...LayerFast` modules
+
+        # Step 4: If not, yield an error.
+
+        pass
+
     @classmethod
     def _load_pretrained_model(
         cls,
