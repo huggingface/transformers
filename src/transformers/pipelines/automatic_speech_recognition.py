@@ -250,6 +250,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
 
         if chunk_length_s:
+            if self.type not in {"ctc", "ctc_with_lm"}:
+                raise ValueError(
+                    "`chunk_length_s` is only valid for CTC models, use other chunking options for other models"
+                )
             if stride_length_s is None:
                 stride_length_s = chunk_length_s / 6
 
@@ -264,10 +268,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             stride_left = int(round(stride_length_s[0] * self.feature_extractor.sampling_rate / align_to) * align_to)
             stride_right = int(round(stride_length_s[1] * self.feature_extractor.sampling_rate / align_to) * align_to)
 
-            if self.type not in {"ctc", "ctc_with_lm"}:
-                raise ValueError(
-                    "`chunk_length_s` is only valid for CTC models, use other chunking options for other models"
-                )
             if chunk_len < stride_left + stride_right:
                 raise ValueError("Chunk length must be superior to stride length")
 
