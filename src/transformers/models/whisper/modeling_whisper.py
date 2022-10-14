@@ -919,9 +919,10 @@ class WhisperDecoder(WhisperPreTrainedModel):
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,
+                    None,  # encoder attention mask
                     head_mask[idx] if head_mask is not None else None,
                     cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,
+                    None,  # past_key_value
                 )
             else:
 
