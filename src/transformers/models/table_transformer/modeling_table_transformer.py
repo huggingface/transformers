@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch TABLE_TRANSFORMER model."""
+""" PyTorch Table Transformer model."""
 
 
 import math
@@ -544,8 +544,8 @@ class TableTransformerAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrEncoderLayer with Detr->TableTransformer
 class TableTransformerEncoderLayer(nn.Module):
+    # Copied from transformers.models.detr.modeling_detr.DetrEncoderLayer.__init__ with Detr->TableTransformer
     def __init__(self, config: TableTransformerConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -581,6 +581,8 @@ class TableTransformerEncoderLayer(nn.Module):
                 returned tensors for more detail.
         """
         residual = hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -590,9 +592,10 @@ class TableTransformerEncoderLayer(nn.Module):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
+
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
 
@@ -600,7 +603,6 @@ class TableTransformerEncoderLayer(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
 
         if self.training:
             if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
@@ -615,8 +617,8 @@ class TableTransformerEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrDecoderLayer with Detr->TableTransformer
 class TableTransformerDecoderLayer(nn.Module):
+    # Copied from transformers.models.detr.modeling_detr.DetrDecoderLayer.__init__ with Detr->TableTransformer
     def __init__(self, config: TableTransformerConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -675,6 +677,7 @@ class TableTransformerDecoderLayer(nn.Module):
                 returned tensors for more detail.
         """
         residual = hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
@@ -686,13 +689,13 @@ class TableTransformerDecoderLayer(nn.Module):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+
+        residual = hidden_states
+        hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
         cross_attn_weights = None
         if encoder_hidden_states is not None:
-            residual = hidden_states
-
             hidden_states, cross_attn_weights = self.encoder_attn(
                 hidden_states=hidden_states,
                 position_embeddings=query_position_embeddings,
@@ -704,16 +707,16 @@ class TableTransformerDecoderLayer(nn.Module):
 
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
+
+            residual = hidden_states
+            hidden_states = self.final_layer_norm(hidden_states)
 
         # Fully Connected
-        residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
 
@@ -824,7 +827,6 @@ TABLE_TRANSFORMER_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrEncoder with DETR->TABLE_TRANSFORMER,Detr->TableTransformer
 class TableTransformerEncoder(TableTransformerPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -832,7 +834,7 @@ class TableTransformerEncoder(TableTransformerPreTrainedModel):
 
     The encoder updates the flattened feature map through multiple self-attention layers.
 
-    Small tweak for TABLE_TRANSFORMER:
+    Small tweak for Table Transformer:
 
     - position_embeddings are added to the forward pass.
 
@@ -848,7 +850,7 @@ class TableTransformerEncoder(TableTransformerPreTrainedModel):
 
         self.layers = nn.ModuleList([TableTransformerEncoderLayer(config) for _ in range(config.encoder_layers)])
 
-        # in the original TABLE_TRANSFORMER, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
+        self.layernorm = nn.LayerNorm(config.d_model)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -903,7 +905,7 @@ class TableTransformerEncoder(TableTransformerPreTrainedModel):
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
-        for i, encoder_layer in enumerate(self.layers):
+        for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -926,6 +928,8 @@ class TableTransformerEncoder(TableTransformerPreTrainedModel):
 
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
+
+        hidden_states = self.layernorm(hidden_states)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)

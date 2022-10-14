@@ -27,7 +27,7 @@ from PIL import Image
 from torchvision.transforms import functional as F
 
 from huggingface_hub import hf_hub_download
-from transformers import DetrConfig, DetrFeatureExtractor, DetrForObjectDetection
+from transformers import DetrFeatureExtractor, TableTransformerConfig, TableTransformerForObjectDetection
 from transformers.utils import logging
 
 
@@ -209,9 +209,8 @@ def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_pat
             val = state_dict.pop(key)
             state_dict[prefix + key] = val
     # create HuggingFace model and load state dict
-    config = DetrConfig(
+    config = TableTransformerConfig(
         backbone="resnet18",
-        normalize_before=True,
         mask_loss_coefficient=1,
         dice_loss_coefficient=1,
         ce_loss_coefficient=1,
@@ -246,7 +245,7 @@ def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_pat
     feature_extractor = DetrFeatureExtractor(
         format="coco_detection", max_size=800 if "detection" in checkpoint_url else 1000
     )
-    model = DetrForObjectDetection(config)
+    model = TableTransformerForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
 
