@@ -287,7 +287,6 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         # cache of sm.MosesTokenizer instance
         self.cache_moses_tokenizer = dict()
         self.lang_with_custom_tokenizer = set(["zh", "th", "ja"])
-        # True for current supported model (v1.2.0), False for XLM-17 & 100
         self.lang2id = lang2id
         self.id2lang = id2lang
         if lang2id is not None and id2lang is not None:
