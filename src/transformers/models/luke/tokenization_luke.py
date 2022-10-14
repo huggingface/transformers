@@ -1483,7 +1483,7 @@ class LukeTokenizer(PreTrainedTokenizer):
 
         return encoded_inputs
 
-    # Copied from transformers.models.roberta.build_inputs_with_special_tokens
+    # Copied from transformers.models.roberta.build_inputs_with_special_tokens with RoBERTa->LUKE
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
