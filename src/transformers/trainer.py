@@ -1316,7 +1316,12 @@ class Trainer:
 
         # train/eval could be run multiple-times - if already wrapped, don't re-wrap it again
         if unwrap_model(model) is not model:
-            return model
+            if self.args.ort:
+                from torch_ort import ORTModule
+                if type(model) is not ORTModule:
+                    return model
+            else:
+                return model
 
         # Mixed precision training with apex (torch < 1.6)
         if self.use_apex and training:
@@ -1570,7 +1575,14 @@ class Trainer:
             or is_sagemaker_mp_enabled()
             or self.fsdp is not None
         )
+        if args.ort:
+            from torch_ort import ORTModule
+            logger.info("Converting to ORTModule ....")
+            model = ORTModule(self.model)
+            self.model_wrapped = model
         if args.deepspeed:
+            if args.ort:
+                self.model = model
             deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
                 self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint
             )
