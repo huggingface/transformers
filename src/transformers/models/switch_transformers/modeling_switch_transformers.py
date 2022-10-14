@@ -153,10 +153,10 @@ class SwitchTransformersLayerFF(nn.Module):
 
 
 class SwitchTransformersMOExpertLayer(nn.Module):
-    def __init__(self, config: SwitchTransformersConfig, expert_class:nn.Module = SwitchTransformersDenseActDense):
+    def __init__(self, config: SwitchTransformersConfig, expert_class: nn.Module = SwitchTransformersDenseActDense):
         super().__init__()
         self.experts = nn.ModuleDict()
-        
+
         for idx in range(config.num_experts):
             self.experts[f"expert_{idx}"] = expert_class(config)
 
@@ -171,7 +171,7 @@ class SwitchTransformersMOExpertLayer(nn.Module):
         for idx, expert in enumerate(self.experts.values()):
             # 1. Get the index of the tokens that are routed to the current expert
             expert_indices = torch.eq(indices[:, :, idx, :], 1).squeeze(-1)
-            # 2. Update hidden states 
+            # 2. Update hidden states
             hidden_states[expert_indices] = expert(hidden_states[expert_indices])
         return hidden_states
 
@@ -179,7 +179,7 @@ class SwitchTransformersMOExpertLayer(nn.Module):
 class SwitchTransformersSparseMLP(nn.Module):
     r"""
     Implementation of the Switch Transformers Sparse MLP module
-    We purposely create a `SwitchTransformersMOExpertLayer` in order to give freedom to people if they want to 
+    We purposely create a `SwitchTransformersMOExpertLayer` in order to give freedom to people if they want to
     change this layer (by changing the agregation for example).
     TODO: Add a LOT of details here
     """
@@ -202,15 +202,15 @@ class SwitchTransformersSparseMLP(nn.Module):
         In total the list of supported Routers are the following:
 
         """
-        # TODO, use a ALL_ROUTER_TYPE map instead of havind all the ifs? then just if None raise error. 
+        # TODO, use a ALL_ROUTER_TYPE map instead of havind all the ifs? then just if None raise error.
         if config.router_type.lower() == "tokens_masked":
             return TokensChooseMaskedRouter(config)
         elif config.router_type.lower() == "experts_masked":
             return ExpertsChooseMaskedRouter(config)
         else:
             raise NotImplementedError(
-                f"{config.router_type.lower()} not implemented ! Please chose a router in `{"tokens_masked",
-                " "experts_masked"}"
+                f"{config.router_type.lower()} not implemented ! Please chose a router in "
+                "`{'tokens_masked','experts_masked'}`"
             )
 
     def forward(self, hidden_states):
@@ -748,7 +748,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
         # TODO: change this, actually you can have a block full of sparse layers...
         self.block = nn.ModuleList()
-        for i in range(config.num_layers) :
+        for i in range(config.num_layers):
             self.block.append(
                 SwitchTransformersBlock(
                     config, has_relative_attention_bias=bool(i == 0), is_sparse=(i % sparse_step == 0)
