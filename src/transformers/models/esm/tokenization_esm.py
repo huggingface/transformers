@@ -27,8 +27,12 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "Rocketknight1/esm2_t6_8M_UR50D": "https://huggingface.co/Rocketknight1/esm2_t6_8M_UR50D/resolve/main/vocab.txt",
-        "Rocketknight1/esm2_t12_35M_UR50D": "https://huggingface.co/Rocketknight1/esm2_t12_35M_UR50D/resolve/main/vocab.txt",
+        "Rocketknight1/esm2_t6_8M_UR50D": (
+            "https://huggingface.co/Rocketknight1/esm2_t6_8M_UR50D/resolve/main/vocab.txt"
+        ),
+        "Rocketknight1/esm2_t12_35M_UR50D": (
+            "https://huggingface.co/Rocketknight1/esm2_t12_35M_UR50D/resolve/main/vocab.txt"
+        ),
     },
 }
 
