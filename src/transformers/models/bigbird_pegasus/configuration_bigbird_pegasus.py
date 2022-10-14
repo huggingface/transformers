@@ -112,12 +112,12 @@ class BigBirdPegasusConfig(PretrainedConfig):
 
     ```
 
-        >>> from transformers import BigBirdPegasusModel, BigBirdPegasusConfig
+        >>> from transformers import BigBirdPegasusConfig, BigBirdPegasusModel 
 
         >>> # Initializing a BigBirdPegasus bigbird-pegasus-base style configuration >>> configuration =
         BigBirdPegasusConfig()
 
-        >>> # Initializing a model from the bigbird-pegasus-base style configuration >>> model =
+        >>> # Initializing a model (with random weights) from the bigbird-pegasus-base style configuration >>> model =
         BigBirdPegasusModel(configuration)
 
         >>> # Accessing the model configuration >>> configuration = model.config
