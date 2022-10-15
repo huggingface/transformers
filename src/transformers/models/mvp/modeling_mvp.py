@@ -42,11 +42,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..bart.bart_utils import (
-    expand_mask,
-    make_causal_mask,
-    shift_tokens_right,
-)
+from ..bart.bart_utils import expand_mask, make_causal_mask, shift_tokens_right
 from .configuration_mvp import MvpConfig
 
 

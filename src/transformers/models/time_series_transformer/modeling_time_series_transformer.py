@@ -34,11 +34,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from ..bart.bart_utils import (
-    expand_mask,
-    make_causal_mask,
-    Attention,
-)
+from ..bart.bart_utils import Attention, expand_mask, make_causal_mask
 from .configuration_time_series_transformer import TimeSeriesTransformerConfig
 
 

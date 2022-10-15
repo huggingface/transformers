@@ -28,11 +28,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, logging, replace_return_docstrings
-from ..bart.bart_utils import (
-    expand_mask,
-    make_causal_mask,
-    Attention,
-)
+from ..bart.bart_utils import Attention, expand_mask, make_causal_mask
 from .configuration_speech_to_text_2 import Speech2Text2Config
 
 

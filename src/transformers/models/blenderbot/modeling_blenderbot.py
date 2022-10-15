@@ -43,13 +43,8 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ..bart.bart_utils import Attention, expand_mask, make_causal_mask, shift_tokens_right
 from ..blenderbot_small import BlenderbotSmallForConditionalGeneration, BlenderbotSmallModel
-from ..bart.bart_utils import (
-    expand_mask,
-    make_causal_mask,
-    shift_tokens_right,
-    Attention,
-)
 from .configuration_blenderbot import BlenderbotConfig
 
 

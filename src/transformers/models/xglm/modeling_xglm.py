@@ -28,10 +28,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from ..bart.bart_utils import (
-    expand_mask,
-    make_causal_mask,
-)
+from ..bart.bart_utils import expand_mask, make_causal_mask
 from .configuration_xglm import XGLMConfig
 
 

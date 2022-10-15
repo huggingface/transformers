@@ -28,10 +28,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, logging, replace_return_docstrings
-from ..bart.bart_utils import (
-    expand_mask,
-    make_causal_mask,
-)
+from ..bart.bart_utils import expand_mask, make_causal_mask
 from .configuration_trocr import TrOCRConfig
 
 

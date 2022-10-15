@@ -40,12 +40,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..bart.bart_utils import (
-    expand_mask,
-    make_causal_mask,
-    shift_tokens_right,
-    Attention,
-)
+from ..bart.bart_utils import Attention, expand_mask, make_causal_mask, shift_tokens_right
 from .configuration_pegasus_x import PegasusXConfig
 
 

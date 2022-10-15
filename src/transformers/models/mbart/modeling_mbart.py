@@ -42,11 +42,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..bart.bart_utils import (
-    expand_mask,
-    make_causal_mask,
-    Attention,
-)
+from ..bart.bart_utils import Attention, expand_mask, make_causal_mask
 from .configuration_mbart import MBartConfig
 
 
