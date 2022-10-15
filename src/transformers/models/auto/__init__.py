@@ -29,7 +29,6 @@ from ...utils import (
 
 _import_structure = {
     "auto_factory": ["get_values"],
-    "bettertransformers": [],
     "configuration_auto": ["ALL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CONFIG_MAPPING", "MODEL_NAMES_MAPPING", "AutoConfig"],
     "feature_extraction_auto": ["FEATURE_EXTRACTOR_MAPPING", "AutoFeatureExtractor"],
     "processing_auto": ["PROCESSOR_MAPPING", "AutoProcessor"],
