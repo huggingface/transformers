@@ -33,7 +33,6 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_scipy_available,
     is_timm_available,
-    is_vision_available,
     logging,
     replace_return_docstrings,
     requires_backends,
@@ -43,9 +42,6 @@ from .configuration_detr import DetrConfig
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
-
-if is_vision_available():
-    from .feature_extraction_detr import center_to_corners_format
 
 if is_timm_available():
     from timm import create_model
@@ -2286,6 +2282,17 @@ def generalized_box_iou(boxes1, boxes2):
     area = width_height[:, :, 0] * width_height[:, :, 1]
 
     return iou - (area - union) / area
+
+
+# Copied from transformers.models.detr.feature_extraction_detr.center_to_corners_format
+def center_to_corners_format(x):
+    """
+    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
+    (x_0, y_0, x_1, y_1).
+    """
+    x_c, y_c, w, h = x.unbind(-1)
+    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
+    return torch.stack(b, dim=-1)
 
 
 # below: taken from https://github.com/facebookresearch/detr/blob/master/util/misc.py#L306
