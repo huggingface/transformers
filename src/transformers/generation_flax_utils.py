@@ -18,7 +18,7 @@
 import inspect
 import warnings
 from functools import partial
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -30,8 +30,11 @@ from jax import lax
 from .generation_flax_logits_process import (
     FlaxForcedBOSTokenLogitsProcessor,
     FlaxForcedEOSTokenLogitsProcessor,
+    FlaxForceTokensLogitsProcessor,
     FlaxLogitsProcessorList,
     FlaxMinLengthLogitsProcessor,
+    FlaxSuppressTokensAtBeginLogitsProcessor,
+    FlaxSuppressTokensLogitsProcessor,
     FlaxTemperatureLogitsWarper,
     FlaxTopKLogitsWarper,
     FlaxTopPLogitsWarper,
@@ -227,6 +230,9 @@ class FlaxGenerationMixin:
         min_length: Optional[int] = None,
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
+        suppress_tokens: Optional[List[int]] = None,
+        begin_suppress_tokens: Optional[List[int]] = None,
+        forced_decoder_ids: Optional[List[int]] = None,
         length_penalty: Optional[float] = None,
         early_stopping: Optional[bool] = None,
         trace: bool = True,
@@ -382,7 +388,16 @@ class FlaxGenerationMixin:
 
         if not do_sample and num_beams == 1:
             logits_processor = self._get_logits_processor(
-                no_repeat_ngram_size, min_length, max_length, eos_token_id, forced_bos_token_id, forced_eos_token_id
+                no_repeat_ngram_size,
+                min_length,
+                max_length,
+                eos_token_id,
+                forced_bos_token_id,
+                forced_eos_token_id,
+                input_ids_seq_length,
+                suppress_tokens=suppress_tokens,
+                begin_suppress_tokens=begin_suppress_tokens,
+                forced_decoder_ids=forced_decoder_ids,
             )
             return self._greedy_search(
                 input_ids,
@@ -397,7 +412,16 @@ class FlaxGenerationMixin:
         elif do_sample and num_beams == 1:
             logits_warper = self._get_logits_warper(top_k=top_k, top_p=top_p, temperature=temperature)
             logits_processor = self._get_logits_processor(
-                no_repeat_ngram_size, min_length, max_length, eos_token_id, forced_bos_token_id, forced_eos_token_id
+                no_repeat_ngram_size,
+                min_length,
+                max_length,
+                eos_token_id,
+                forced_bos_token_id,
+                forced_eos_token_id,
+                input_ids_seq_length,
+                suppress_tokens=suppress_tokens,
+                begin_suppress_tokens=begin_suppress_tokens,
+                forced_decoder_ids=forced_decoder_ids,
             )
             return self._sample(
                 input_ids,
@@ -426,7 +450,16 @@ class FlaxGenerationMixin:
                 )
 
             logits_processor = self._get_logits_processor(
-                no_repeat_ngram_size, min_length, max_length, eos_token_id, forced_bos_token_id, forced_eos_token_id
+                no_repeat_ngram_size,
+                min_length,
+                max_length,
+                eos_token_id,
+                forced_bos_token_id,
+                forced_eos_token_id,
+                input_ids_seq_length,
+                suppress_tokens=suppress_tokens,
+                begin_suppress_tokens=begin_suppress_tokens,
+                forced_decoder_ids=forced_decoder_ids,
             )
 
             return self._beam_search(
@@ -478,6 +511,10 @@ class FlaxGenerationMixin:
         eos_token_id: int,
         forced_bos_token_id: int,
         forced_eos_token_id: int,
+        input_ids_seq_length: int,
+        suppress_tokens: Optional[List[int]] = None,
+        begin_suppress_tokens: Optional[List[int]] = None,
+        forced_decoder_ids: Optional[List[int]] = None,
     ) -> FlaxLogitsProcessorList:
         """
         This class returns a [`FlaxLogitsProcessorList`] list object that contains all relevant [`FlaxLogitsProcessor`]
@@ -505,6 +542,22 @@ class FlaxGenerationMixin:
             processors.append(FlaxForcedBOSTokenLogitsProcessor(forced_bos_token_id))
         if forced_eos_token_id is not None:
             processors.append(FlaxForcedEOSTokenLogitsProcessor(max_length, forced_eos_token_id))
+        suppress_tokens = suppress_tokens if suppress_tokens is not None else self.config.suppress_tokens
+        begin_suppress_tokens = (
+            begin_suppress_tokens if begin_suppress_tokens is not None else self.config.begin_suppress_tokens
+        )
+        if forced_decoder_ids is None and hasattr(self.config, "forced_decoder_ids"):
+            forced_decoder_ids = self.config.forced_decoder_ids
+        if suppress_tokens is not None:
+            processors.append(FlaxSuppressTokensLogitsProcessor(suppress_tokens))
+        if begin_suppress_tokens is not None:
+            begin_index = input_ids_seq_length
+            begin_index = begin_index if (input_ids_seq_length > 1 or forced_bos_token_id is None) else begin_index + 1
+            if forced_decoder_ids is not None:
+                begin_index += forced_decoder_ids[-1][0]  # generation starts after the last token that is forced
+            processors.append(FlaxSuppressTokensAtBeginLogitsProcessor(begin_suppress_tokens, begin_index))
+        if forced_decoder_ids is not None:
+            processors.append(FlaxForceTokensLogitsProcessor(forced_decoder_ids))
         return processors
 
     def _greedy_search(

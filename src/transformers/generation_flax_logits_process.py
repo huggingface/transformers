@@ -190,6 +190,52 @@ class FlaxTopKLogitsWarper(FlaxLogitsWarper):
         return next_scores
 
 
+class FlaxSuppressTokensAtBeginLogitsProcessor(FlaxLogitsProcessor):
+    r"""
+    [`FlaxSuppressTokensAtBeginLogitsProcessor`] supresses a list of tokens as soon as the `generate` function starts
+    generating using `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` at not
+    sampled at the begining of the generation.
+    """
+
+    def __init__(self, begin_suppress_tokens, begin_index):
+        self.begin_suppress_tokens = list(begin_suppress_tokens)
+        self.begin_index = begin_index
+
+    def __call__(self, input_ids, scores, cur_len: int):
+        if input_ids.shape[1] == self.begin_index:
+            scores = scores.at[:, self.begin_suppress_tokens].set(-float("inf"))
+
+        return scores
+
+
+class FlaxSuppressTokensLogitsProcessor(FlaxLogitsProcessor):
+    r"""This processor can be used to suppress a list of tokens. The processor will set their log probs to `-inf` so that they
+    are not sampled."""
+
+    def __init__(self, suppress_tokens):
+        self.suppress_tokens = list(suppress_tokens)
+
+    def __call__(self, input_ids, scores, cur_len: int):
+        scores = scores.at[:, self.suppress_tokens].set(-float("inf"))
+        return scores
+
+
+class FlaxForceTokensLogitsProcessor(FlaxLogitsProcessor):
+    r"""This processor can be used to force a list of tokens. The processor will set their log probs to `inf` so that they
+    are sampled at their corresponding index."""
+
+    def __init__(self, force_token_map):
+        self.force_token_map = dict(force_token_map)
+
+    def __call__(self, input_ids, scores, cur_len: int):
+        generation_idx = input_ids.shape[-1]
+        current_token = self.force_token_map.get(generation_idx, None)
+        if current_token is not None:
+            scores = scores.at[:, :].set(-float("inf"))
+            scores = scores.at[:, current_token].set(0)
+        return scores
+
+
 class FlaxForcedBOSTokenLogitsProcessor(FlaxLogitsProcessor):
     r"""
     [`FlaxLogitsProcessor`] that enforces the specified token as the first generated token.
