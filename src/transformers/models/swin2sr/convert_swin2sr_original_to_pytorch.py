@@ -1,0 +1,174 @@
+# coding=utf-8
+# Copyright 2022 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Convert Swin2SR checkpoints from the original repository. URL: https://github.com/mv-lab/swin2sr"""
+
+import argparse
+from pathlib import Path
+
+import torch
+from PIL import Image
+
+import requests
+from transformers import Swin2SRConfig, Swin2SRForImageSuperResolution
+
+from torchvision.transforms import Compose, Normalize, Resize, ToTensor
+
+
+def get_config(model_name):
+    config = Swin2SRConfig()
+
+    return config
+
+
+def rename_key(name):
+    if "patch_embed.proj" in name:
+        name = name.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
+    if "patch_embed.norm" in name:
+        name = name.replace("patch_embed.norm", "embeddings.norm")
+    # if "layers" in name:
+    #     name = "encoder." + name
+    # if "attn.proj" in name:
+    #     name = name.replace("attn.proj", "attention.output.dense")
+    # if "attn" in name:
+    #     name = name.replace("attn", "attention.self")
+    # if "norm1" in name:
+    #     name = name.replace("norm1", "layernorm_before")
+    # if "norm2" in name:
+    #     name = name.replace("norm2", "layernorm_after")
+    # if "mlp.fc1" in name:
+    #     name = name.replace("mlp.fc1", "intermediate.dense")
+    # if "mlp.fc2" in name:
+    #     name = name.replace("mlp.fc2", "output.dense")
+    # if "q_bias" in name:
+    #     name = name.replace("q_bias", "query.bias")
+    # if "k_bias" in name:
+    #     name = name.replace("k_bias", "key.bias")
+    # if "v_bias" in name:
+    #     name = name.replace("v_bias", "value.bias")
+    # if "cpb_mlp" in name:
+    #     name = name.replace("cpb_mlp", "continuous_position_bias_mlp")
+    # if name == "norm.weight":
+    #     name = "layernorm.weight"
+    # if name == "norm.bias":
+    #     name = "layernorm.bias"
+
+    # if "head" in name:
+    #     name = name.replace("head", "classifier")
+    # else:
+    #     name = "swin2sr." + name
+
+    return name
+
+
+def convert_state_dict(orig_state_dict, model):
+    for key in orig_state_dict.copy().keys():
+        val = orig_state_dict.pop(key)
+
+        if "qkv" in key:
+            # key_split = key.split(".")
+            # layer_num = int(key_split[1])
+            # block_num = int(key_split[3])
+            # dim = model.swin2sr.encoder.layers[layer_num].blocks[block_num].attention.self.all_head_size
+
+            # if "weight" in key:
+            #     orig_state_dict[
+            #         f"swin2sr.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"
+            #     ] = val[:dim, :]
+            #     orig_state_dict[
+            #         f"swin2sr.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"
+            #     ] = val[dim : dim * 2, :]
+            #     orig_state_dict[
+            #         f"swin2sr.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"
+            #     ] = val[-dim:, :]
+            # else:
+            #     orig_state_dict[
+            #         f"swin2sr.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"
+            #     ] = val[:dim]
+            #     orig_state_dict[f"swin2sr.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"] = val[
+            #         dim : dim * 2
+            #     ]
+            #     orig_state_dict[
+            #         f"swin2sr.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"
+            #     ] = val[-dim:]
+            pass
+        else:
+            orig_state_dict[rename_key(key)] = val
+
+    return orig_state_dict
+
+
+def convert_swin2sr_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_path, push_to_hub):
+    config = get_config(model_name)
+    model = Swin2SRForImageSuperResolution(config)
+    model.eval()
+
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
+    new_state_dict = convert_state_dict(state_dict, model)
+    model.load_state_dict(new_state_dict, strict=False)
+
+    # TODO create feature extractor
+    url = 'https://github.com/mv-lab/swin2sr/blob/main/testsets/real-inputs/shanghai.jpg?raw=true'
+    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+
+    transforms = Compose([
+        Resize((256, 256)),
+        ToTensor(),
+        Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
+    pixel_values = transforms(image).unsqueeze(0)
+    print("Shape of pixel values:", pixel_values.shape)
+
+    outputs = model(pixel_values)
+    
+    print("Shape of logits:", outputs.logits.shape)
+
+    # TODO assert values
+
+    if pytorch_dump_folder_path is not None:
+        print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
+        model.save_pretrained(pytorch_dump_folder_path)
+
+        # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+        # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+
+    if push_to_hub:
+        model.push_to_hub(f"nielsr/{model_name}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    # Required parameters
+    parser.add_argument(
+        "--checkpoint_url",
+        default="https://github.com/mv-lab/swin2sr/releases/download/v0.0.1/Swin2SR_ClassicalSR_X2_64.pth",
+        type=str,
+        help="URL of the original Swin2SR checkpoint you'd like to convert.",
+    )
+    parser.add_argument(
+        "--model_name",
+        default="swin2SR-classical-sr-x2-64",
+        type=str,
+        help="Name of the Swin2SR model you'd like to convert.",
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+    )
+    parser.add_argument(
+        "--push_to_hub", default=None, type=bool, help="Whether to push the converted model to the hub."
+    )
+
+    args = parser.parse_args()
+    convert_swin2sr_checkpoint(args.checkpoint_url, args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)

@@ -147,6 +147,7 @@ from . import (
     splinter,
     squeezebert,
     swin,
+    swin2sr,
     swinv2,
     switch_transformers,
     t5,
