@@ -85,11 +85,11 @@ class ConvBertConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import ConvBertModel, ConvBertConfig
+    >>> from transformers import ConvBertConfig, ConvBertModel
 
     >>> # Initializing a ConvBERT convbert-base-uncased style configuration
     >>> configuration = ConvBertConfig()
-    >>> # Initializing a model from the convbert-base-uncased style configuration
+    >>> # Initializing a model (with random weights) from the convbert-base-uncased style configuration
     >>> model = ConvBertModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
