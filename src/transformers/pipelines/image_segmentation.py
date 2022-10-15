@@ -172,7 +172,7 @@ class ImageSegmentationPipeline(Pipeline):
 
             for label in labels:
                 mask = (segmentation == label) * 255
-                mask = Image.fromarray(mask, mode="L")
+                mask = Image.fromarray(mask.astype(np.uint8), mode="L")
                 label = self.model.config.id2label[label]
                 annotation.append({"score": None, "label": label, "mask": mask})
         else:
