@@ -52,6 +52,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 _import_structure = {
     "benchmark": [],
     "bettertransformers": [],
+    "bettertransformers.bert": [],
     "commands": [],
     "configuration_utils": ["PretrainedConfig"],
     "convert_graph_to_onnx": [],
