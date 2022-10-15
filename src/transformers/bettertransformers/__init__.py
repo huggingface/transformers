@@ -11,14 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from ..utils import is_torch_available
 from . import bert
 
 
-FAST_LAYERS_MAPPING_DICT = {"BertLayer": bert.BertLayerFast, "ElectraLayer": bert.BertLayerFast}
+if is_torch_available():
+    FAST_LAYERS_MAPPING_DICT = {"BertLayer": bert.BertLayerFast, "ElectraLayer": bert.BertLayerFast}
 
-
-def is_module_fast(module_name):
-    if module_name not in FAST_LAYERS_MAPPING_DICT.keys():
-        return False
-    else:
-        return FAST_LAYERS_MAPPING_DICT[module_name]
+    def is_module_fast(module_name):
+        if module_name not in FAST_LAYERS_MAPPING_DICT.keys():
+            return False
+        else:
+            return FAST_LAYERS_MAPPING_DICT[module_name]
