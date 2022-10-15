@@ -336,7 +336,7 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
         training: bool = False,
     ) -> Tuple[tf.Tensor, tf.Tensor]:
 
-        batch_size, seqlen, _ = hidden_states.size()
+        batch_size, seqlen, _ = tf.shape(hidden_states)
         to_seq_length = from_seq_length = seqlen
         from_block_size = to_block_size = self.block_size
 
@@ -427,7 +427,7 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
                 plan_num_rand_blocks=plan_num_rand_blocks,
             )
 
-        rand_attn = tf.Tensor(rand_attn)
+        rand_attn = tf.stack(rand_attn, axis=0)
         rand_attn = tf.expand_dims(rand_attn, axis=0)
         rand_attn = tf.concat([rand_attn for _ in range(batch_size)], axis=0)
 
@@ -751,6 +751,76 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
         attention_probs[:, :, -from_block_size:, :] = last_attn_weights  # all keys global
 
         return context_layer, attention_probs
+
+    @staticmethod
+    def _get_rand_attn_plan(from_seq_length, from_block_size, num_rand_blocks):
+        """
+        Gives the plan of where to put random attention.
+
+        Args:
+            from_seq_length: int. length of from sequence.
+            from_block_size: int. size of block in from sequence.
+            num_rand_blocks: int. Number of random chunks per row.
+
+        Returns:
+            plan_from_length: ending location of from block plan_num_rand_blocks: number of random ending location for
+            each block
+        """
+
+        plan_from_length = []
+        plan_num_rand_blocks = []
+        if (2 * num_rand_blocks + 5) < (from_seq_length // from_block_size):
+            plan_from_length.append(int((2 * num_rand_blocks + 5) * from_block_size))
+            plan_num_rand_blocks.append(num_rand_blocks)
+            plan_from_length.append(from_seq_length)
+            plan_num_rand_blocks.append(0)
+        elif (num_rand_blocks + 5) < (from_seq_length // from_block_size):
+            plan_from_length.append(int((num_rand_blocks + 5) * from_block_size))
+            plan_num_rand_blocks.append(num_rand_blocks // 2)
+            plan_from_length.append(from_seq_length)
+            plan_num_rand_blocks.append(num_rand_blocks - (num_rand_blocks // 2))
+        else:
+            plan_from_length.append(from_seq_length)
+            plan_num_rand_blocks.append(num_rand_blocks)
+
+        return plan_from_length, plan_num_rand_blocks
+
+    @staticmethod
+    def _create_rand_mask_from_inputs(
+            from_blocked_mask,
+            to_blocked_mask,
+            rand_attn,
+            num_attention_heads,
+            num_rand_blocks,
+            batch_size,
+            from_seq_length,
+            from_block_size,
+    ):
+        """
+        Create 3D attention mask from a 2D tensor mask.
+
+        Args:
+            from_blocked_mask: 2D Tensor of shape [batch_size,
+            from_seq_length//from_block_size, from_block_size].
+            to_blocked_mask: int32 Tensor of shape [batch_size,
+            to_seq_length//to_block_size, to_block_size].
+            rand_attn: [batch_size, num_attention_heads,
+            from_seq_length//from_block_size-2, num_rand_blocks]
+            num_attention_heads: int. Number of attention heads.
+            num_rand_blocks: int. Number of random chunks per row.
+            batch_size: int. Batch size for computation.
+            from_seq_length: int. length of from sequence.
+            from_block_size: int. size of block in from sequence.
+
+        Returns:
+            float Tensor of shape [batch_size, num_attention_heads, from_seq_length//from_block_size-2,
+            from_block_size, num_rand_blocks*to_block_size].
+        """
+        num_windows = from_seq_length // from_block_size - 2
+        rand_mask = tf.stack([tf.reshape(tf.boolean_mask(i1, p1), [-1]) for p1, i1 in zip(to_blocked_mask, rand_attn)])
+        rand_mask = rand_mask.view(batch_size, num_attention_heads, num_windows, num_rand_blocks * from_block_size)
+        rand_mask = tf.einsum("blq,bhlk->bhlqk", from_blocked_mask[:, 1:-1], rand_mask)
+        return rand_mask
 
     @staticmethod
     def _get_single_block_row_attention(
@@ -1131,7 +1201,15 @@ class TFBigBirdAttention(tf.keras.layers.Layer):
             if encoder_hidden_states is not None:
                 raise ValueError("BigBird cannot be used as a decoder when config.attention_type != 'original_full'")
             self_outputs = self.self(
-                input_ids, band_mask, from_mask, to_mask, from_blocked_mask, to_blocked_mask, output_attentions
+                input_ids,
+                attention_mask=attention_mask,
+                band_mask=band_mask,
+                from_mask=from_mask,
+                to_mask=to_mask,
+                from_blocked_mask=from_blocked_mask,
+                to_blocked_mask=to_blocked_mask,
+                output_attentions=output_attentions,
+                training=training,
             )
         attention_output = self.dense_output(hidden_states=self_outputs[0], input_ids=input_ids, training=training)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -1206,7 +1284,7 @@ class TFBigBirdLayer(tf.keras.layers.Layer):
         self.attention.set_attention_type(value)
 
         if self.add_cross_attention:
-            self.crossattention.set_attention_type(value)
+            self.cross_attention.set_attention_type(value)
 
     def call(
         self,
@@ -1506,6 +1584,8 @@ class TFBigBirdMainLayer(tf.keras.layers.Layer):
         self.is_decoder = config.is_decoder
         self.attention_type = config.attention_type
 
+        self.block_size = self.config.block_size
+
         self.embeddings = TFBigBirdEmbeddings(config, name="embeddings")
         self.encoder = TFBigBirdEncoder(config, name="encoder")
         self.pooler = TFBigBirdPooler(config, name="pooler") if add_pooling_layer else None
@@ -1534,6 +1614,88 @@ class TFBigBirdMainLayer(tf.keras.layers.Layer):
             return
         self.attention_type = value
         self.encoder.set_attention_type(value)
+
+    def _pad_to_block_size(
+        self,
+        input_ids: tf.Tensor,
+        attention_mask: tf.Tensor,
+        token_type_ids: tf.Tensor,
+        position_ids: tf.Tensor,
+        inputs_embeds: tf.Tensor,
+        pad_token_id: int,
+    ):
+        """A helper function to pad tokens and mask to work with implementation of BigBird block-sparse attention."""
+        # padding
+        block_size = self.config.block_size
+
+        input_shape = input_ids.shape if input_ids is not None else inputs_embeds.shape
+        batch_size, seq_len = input_shape[:2]
+
+        padding_len = (block_size - seq_len % block_size) % block_size
+        if padding_len > 0:
+            logger.info(
+                f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
+                f"`config.block_size`: {block_size}"
+            )
+            if input_ids is not None:
+                # input_ids = nn.functional.pad(input_ids, (0, padding_len), value=pad_token_id)
+                input_ids = tf.pad(input_ids, (0, padding_len), mode="CONSTANT", constant_values=pad_token_id)
+            if position_ids is not None:
+                # pad with position_id = pad_token_id as in modeling_bigbird.BigBirdEmbeddings
+                position_ids = tf.pad(position_ids, (0, padding_len), mode="CONSTANT", constant_values=pad_token_id)
+            if inputs_embeds is not None:
+                input_ids_padding = tf.fill(
+                    dims=(batch_size, padding_len),
+                    value=self.config.pad_token_id,
+                )
+                inputs_embeds_padding = self.embeddings(input_ids_padding)
+                inputs_embeds = tf.concat([inputs_embeds, inputs_embeds_padding], dim=-2)
+
+            attention_mask = tf.pad(
+                attention_mask, (0, padding_len), mode="CONSTANT", constant_values=False
+            )  # no attention on the padding tokens
+            token_type_ids = tf.pad(token_type_ids, (0, padding_len), mode="CONSTANT", constant_values=0)  # pad with token_type_id = 0
+
+        return padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds
+
+    @staticmethod
+    def create_masks_for_block_sparse_attn(attention_mask: tf.Tensor, block_size: int):
+
+        batch_size, seq_length = tf.shape(attention_mask)
+        if seq_length % block_size != 0:
+            raise ValueError(
+                f"Sequence length must be multiple of block size, but sequence length is {seq_length}, while block"
+                f" size is {block_size}."
+            )
+
+        def create_band_mask_from_inputs(from_blocked_mask, to_blocked_mask):
+            """
+            Create 3D attention mask from a 2D tensor mask.
+
+            Args:
+                from_blocked_mask: 2D Tensor of shape [batch_size,
+                from_seq_length//from_block_size, from_block_size].
+                to_blocked_mask: int32 Tensor of shape [batch_size,
+                to_seq_length//to_block_size, to_block_size].
+
+            Returns:
+                float Tensor of shape [batch_size, 1, from_seq_length//from_block_size-4, from_block_size,
+                3*to_block_size].
+            """
+            exp_blocked_to_pad = tf.concat(
+                [to_blocked_mask[:, 1:-3], to_blocked_mask[:, 2:-2], to_blocked_mask[:, 3:-1]], axis=2
+            )
+            band_mask = tf.einsum("blq,blk->blqk", from_blocked_mask[:, 2:-2], exp_blocked_to_pad)
+            tf.expand_dims(band_mask, 1)
+            return band_mask
+
+        blocked_encoder_mask = tf.reshape(attention_mask, (batch_size, seq_length // block_size, block_size))
+        band_mask = create_band_mask_from_inputs(blocked_encoder_mask, blocked_encoder_mask)
+
+        from_mask = tf.reshape(attention_mask, (batch_size, 1, seq_length, 1))
+        to_mask = tf.reshape(attention_mask, (batch_size, 1, 1, seq_length))
+
+        return blocked_encoder_mask, band_mask, from_mask, to_mask
 
     @unpack_inputs
     def call(
@@ -1929,7 +2091,7 @@ class TFBigBirdModel(TFBigBirdPreTrainedModel):
 
         self.embeddings = TFBigBirdEmbeddings(config)
         self.encoder = TFBigBirdEncoder(config)
-        self.bigbird = TFBigBirdMainLayer(config, name="big_bird")
+        self.bigbird = TFBigBirdMainLayer(config, name="bigbird")
 
     def set_attention_type(self, value: str):
         if value not in ["original_full", "block_sparse"]:
@@ -2075,7 +2237,7 @@ class TFBigBirdForPreTraining(TFBigBirdPreTrainedModel, TFBigBirdPreTrainingLoss
     def __init__(self, config: BigBirdConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.bigbird = TFBigBirdMainLayer(config, name="big_bird")
+        self.bigbird = TFBigBirdMainLayer(config, name="bigbird")
         self.nsp = TFBigBirdNSPHead(config, name="nsp___cls")
         self.mlm = TFBigBirdMLMHead(config, input_embeddings=self.bigbird.embeddings, name="mlm___cls")
 
@@ -2272,32 +2434,78 @@ class TFBigBirdForMaskedLM(TFBigBirdPreTrainedModel, TFMaskedLanguageModelingLos
 
         return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
+class TFBigBirdLMHead(tf.keras.layers.Layer):
+    """BigBird Head for masked language modeling."""
+
+    def __init__(self, config, input_embeddings, **kwargs):
+        super().__init__(**kwargs)
+
+        self.vocab_size = config.vocab_size
+        self.hidden_size = config.hidden_size
+        self.dense = tf.keras.layers.Dense(
+            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        )
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.act = get_tf_activation("gelu")
+
+        # The output weights are the same as the input embeddings, but there is
+        # an output-only bias for each token.
+        self.decoder = input_embeddings
+
+    def build(self, input_shape):
+        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+
+        super().build(input_shape)
+
+    def get_output_embeddings(self):
+        return self.decoder
+
+    def set_output_embeddings(self, value):
+        self.decoder.weight = value
+        self.decoder.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
+
+    def call(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
+
+        # project back to size of vocabulary with bias
+        seq_length = shape_list(tensor=hidden_states)[1]
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
+        hidden_states = tf.matmul(a=hidden_states, b=self.decoder.weight, transpose_b=True)
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
+        hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
+
+        return hidden_states
 
 class TFBigBirdForCausalLM(TFBigBirdPreTrainedModel, TFCausalLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    _keys_to_ignore_on_load_unexpected = [
-        r"pooler",
-        r"cls.seq_relationship",
-        r"cls.predictions.decoder.weight",
-        r"nsp___cls",
-    ]
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head.decoder.weight"]
 
     def __init__(self, config: BigBirdConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `TFBigBirdForCausalLM` as a standalone, add `is_decoder=True.`")
+            logger.warning("If you want to use `TFBigBirdLMHeadModel` as a standalone, add `is_decoder=True.`")
 
-        self.bert = TFBigBirdMainLayer(config, add_pooling_layer=False, name="bert")
-        self.mlm = TFBigBirdMLMHead(config, input_embeddings=self.bert.embeddings, name="mlm___cls")
+        self.bigbird = TFBigBirdMainLayer(config, add_pooling_layer=False, name="bigbird")
+        self.lm_head = TFBigBirdLMHead(config, input_embeddings=self.bigbird.embeddings, name="lm_head")
 
-    def get_lm_head(self) -> tf.keras.layers.Layer:
-        return self.mlm.predictions
+    def get_lm_head(self):
+        return self.lm_head
 
-    def get_prefix_bias_name(self) -> str:
+    def get_prefix_bias_name(self):
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
-        return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
+        return self.name + "/" + self.lm_head.name
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel.prepare_inputs_for_generation
     def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
@@ -2311,6 +2519,7 @@ class TFBigBirdForCausalLM(TFBigBirdPreTrainedModel, TFCausalLanguageModelingLos
         return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
 
     @unpack_inputs
+    @add_start_docstrings_to_model_forward(TF_BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -2334,7 +2543,6 @@ class TFBigBirdForCausalLM(TFBigBirdPreTrainedModel, TFCausalLanguageModelingLos
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFCausalLMOutputWithCrossAttentions, Tuple[tf.Tensor]]:
         r"""
         encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -2359,7 +2567,7 @@ class TFBigBirdForCausalLM(TFBigBirdPreTrainedModel, TFCausalLanguageModelingLos
             Labels for computing the cross entropy classification loss. Indices should be in `[0, ...,
             config.vocab_size - 1]`.
         """
-        outputs = self.bert(
+        outputs = self.bigbird(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -2375,8 +2583,9 @@ class TFBigBirdForCausalLM(TFBigBirdPreTrainedModel, TFCausalLanguageModelingLos
             return_dict=return_dict,
             training=training,
         )
+
         sequence_output = outputs[0]
-        logits = self.mlm(sequence_output=sequence_output, training=training)
+        logits = self.lm_head(hidden_states=sequence_output, training=training)
         loss = None
 
         if labels is not None:
@@ -2398,6 +2607,7 @@ class TFBigBirdForCausalLM(TFBigBirdPreTrainedModel, TFCausalLanguageModelingLos
             cross_attentions=outputs.cross_attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel.serving_output
     def serving_output(self, output: TFCausalLMOutputWithCrossAttentions) -> TFCausalLMOutputWithCrossAttentions:
         output_cache = self.config.use_cache and self.config.is_decoder
         pkv = tf.convert_to_tensor(output.past_key_values) if output_cache else None
@@ -2412,6 +2622,7 @@ class TFBigBirdForCausalLM(TFBigBirdPreTrainedModel, TFCausalLanguageModelingLos
         )
 
     @staticmethod
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel._reorder_cache
     def _reorder_cache(past, beam_idx):
         reordered_past = ()
         for layer_past in past:

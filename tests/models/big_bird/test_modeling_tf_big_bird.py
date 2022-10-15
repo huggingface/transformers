@@ -18,16 +18,25 @@ import unittest
 from transformers import BigBirdConfig, is_tf_available
 
 # from ...test_configuration_common import ConfigTester
+from transformers.testing_utils import slow
+from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 # from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 if is_tf_available():
-    # import numpy as np
-    # import tensorflow as tf
+    import numpy as np
+    import tensorflow as tf
 
-    from transformers.models.big_bird.modeling_tf_big_bird import TFBigBirdModel
+    from transformers.models.big_bird.modeling_tf_big_bird import (
+        TFBigBirdModel,
+        TFBigBirdForCausalLM,
+        TFBigBirdForMaskedLM,
+        TFBigBirdForQuestionAnswering,
+        TFBigBirdForSequenceClassification,
+        TFBigBirdForTokenClassification, TFBigBirdForPreTraining, TF_BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST,
+)
 
 
 class TFBigBirdModelTester:
@@ -92,6 +101,28 @@ class TFBigBirdModelTester:
         self.num_rand_blocks = num_rand_blocks
         self.position_embedding_type = position_embedding_type
 
+    def get_config(self):
+        return BigBirdConfig(
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            intermediate_size=self.intermediate_size,
+            hidden_act=self.hidden_act,
+            hidden_dropout_prob=self.hidden_dropout_prob,
+            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            max_position_embeddings=self.max_position_embeddings,
+            type_vocab_size=self.type_vocab_size,
+            is_encoder_decoder=False,
+            initializer_range=self.initializer_range,
+            attention_type=self.attention_type,
+            use_bias=self.use_bias,
+            rescale_embeddings=self.rescale_embeddings,
+            block_size=self.block_size,
+            num_random_blocks=self.num_rand_blocks,
+            position_embedding_type=self.position_embedding_type,
+        )
+
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -111,19 +142,7 @@ class TFBigBirdModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = BigBirdConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            initializer_range=self.initializer_range,
-        )
+        config = self.get_config()
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
@@ -154,6 +173,20 @@ class TFBigBirdModelTester:
             encoder_attention_mask,
         )
 
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        return config, inputs_dict
+
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -168,41 +201,114 @@ class TFBigBirdModelTester:
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    def create_and_check_for_masked_lm(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = TFBigBirdForMaskedLM(config=config)
+
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+    def create_and_check_decoder_model_past_large_inputs(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
+    ):
+        config.is_decoder = True
+        config.add_cross_attention = True
+        model = TFBigBirdForCausalLM(config=config)
+
+        # first forward pass
+        outputs = model(
+            input_ids,
+            attention_mask=input_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            use_cache=True,
+        )
+        past_key_values = outputs.past_key_values
+
+        # create hypothetical multiple next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
+
+        # append to next input_ids and
+        next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
+        next_attention_mask = tf.concat([input_mask, next_mask], axis=-1)
+
+        output_from_no_past = model(
+            next_input_ids,
+            attention_mask=next_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            output_hidden_states=True,
+        )["hidden_states"][0]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            output_hidden_states=True,
+        )["hidden_states"][0]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).numpy()[0]
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx]
+        output_from_past_slice = output_from_past[:, :, random_slice_idx]
+
+        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(np.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
 
 class TFBigBirdModelTest(TFModelTesterMixin, unittest.TestCase):
+
+    all_model_classes = (
+        (
+            TFBigBirdModel,
+            TFBigBirdForCausalLM,
+            # TFBigBirdForMaskedLM,
+            # TFBigBirdForSequenceClassification,
+            # TFBigBirdForTokenClassification,
+            # TFBigBirdForQuestionAnswering,
+        )
+        if is_tf_available()
+        else ()
+    )
+
+    test_head_masking = False
+    test_onnx = False
+
     def setUp(self) -> None:
         self.model_tester = TFBigBirdModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=BigBirdConfig, hidden_size=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_for_masked_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
-# class TFBigBirdIntegrationTest(unittest.TestCase):
+    def test_decoder_model_past_with_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-#     @slow
-#     model = TFBigBirdModel.from_pretrained("google/bigbird-roberta-base")
-#     input_ids = tf.Tensor(
-#         [[6, 117, 33, 36, 70, 22, 63, 31, 71, 72, 88, 58, 109, 49, 48, 116, 92, 6, 19, 95, 118, 100, 80, 111, 93, 2, 31, 84, 26, 5, 6, 82, 46, 96, 109, 4, 39, 19, 109, 13, 92, 31, 36, 90, 111, 18, 75, 6, 56, 74, 16, 42, 56, 92, 69, 108, 127, 81, 82, 41, 106, 19, 44, 24, 82, 121, 120, 65, 36, 26, 72, 13, 36, 98, 43, 64, 8, 53, 100, 92, 51, 122, 66, 17, 61, 50, 104, 127, 26, 35, 94, 23, 110, 71, 80, 67, 109, 111, 44, 19, 51, 41, 86, 71, 76, 44, 18, 68, 44, 77, 107, 81, 98, 126, 100, 2, 49, 98, 84, 39, 23, 98, 52, 46, 10, 82, 121, 73],[6, 117, 33, 36, 70, 22, 63, 31, 71, 72, 88, 58, 109, 49, 48, 116, 92, 6, 19, 95, 118, 100, 80, 111, 93, 2, 31, 84, 26, 5, 6, 82, 46, 96, 109, 4, 39, 19, 109, 13, 92, 31, 36, 90, 111, 18, 75, 6, 56, 74, 16, 42, 56, 92, 69, 108, 127, 81, 82, 41, 106, 19, 44, 24, 82, 121, 120, 65, 36, 26, 72, 13, 36, 98, 43, 64, 8, 53, 100, 92, 51, 12, 66, 17, 61, 50, 104, 127, 26, 35, 94, 23, 110, 71, 80, 67, 109, 111, 44, 19, 51, 41, 86, 71, 76, 28, 18, 68, 44, 77, 107, 81, 98, 126, 100, 2, 49, 18, 84, 39, 23, 98, 52, 46, 10, 82, 121, 73]],  # noqa: E231
-# )
-#     input_ids = input_ids % 99
-#     input_ids[1] = input_ids[1] - 1
-#
-#     def prepare_config_and_inputs(self):
-#         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-#
-#         input_mask = None
-#         if self.use_input_mask:
-#             input_mask = random_attention_mask([self.batch_size, self.seq_length])
-#
-#         token_type_ids = None
-#         if self.use_token_type_ids:
-#             token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-#
-#         sequence_labels = None
-#         token_labels = None
-#         choice_labels = None
-#         if self.use_labels:
-#             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-#             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-#             choice_labels = ids_tensor([self.batch_size], self.num_choices)
+    def test_model_various_attn_type(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        for type in ["original_full", "block_sparse"]:
+            config_and_inputs[0].attention_type = type
+            self.model_tester.create_and_check_model(*config_and_inputs)
