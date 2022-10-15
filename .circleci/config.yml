@@ -1,162 +1,26 @@
+# Use the latest 2.1 version of CircleCI pipeline process engine.
+# See: https://circleci.com/docs/2.0/configuration-reference
 version: 2.1
-setup: true
-orbs:
-    continuation: circleci/continuation@0.1.0
 
-parameters:
-    nightly:
-        type: boolean
-        default: false
-
+# Define a job to be invoked later in a workflow.
+# See: https://circleci.com/docs/2.0/configuration-reference/#jobs
 jobs:
-    # Fetch the tests to run
-    fetch_tests:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        parallelism: 1
-        steps:
-            - checkout
-            - run: pip install --upgrade pip
-            - run: pip install GitPython
-            - run: pip install .
-            - run: mkdir -p test_preparation
-            - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
-            - store_artifacts:
-                  path: ~/transformers/tests_fetched_summary.txt
-            - run: |
-                if [ -f test_list.txt ]; then
-                    cp test_list.txt test_preparation/test_list.txt
-                else
-                    touch test_preparation/test_list.txt
-                fi
-            - run: python utils/tests_fetcher.py --filter_pipeline_tests
-            - run: |
-                if [ -f test_list.txt ]; then
-                    mv test_list.txt test_preparation/filtered_test_list.txt
-                else
-                    touch test_preparation/filtered_test_list.txt
-                fi
-            - run: python utils/tests_fetcher.py --filters tests examples | tee examples_tests_fetched_summary.txt
-            - run: |
-                  if [ -f test_list.txt ]; then
-                      mv test_list.txt test_preparation/examples_test_list.txt
-                  else
-                      touch test_preparation/examples_test_list.txt
-                  fi
-            - store_artifacts:
-                  path: test_preparation/test_list.txt
-            - store_artifacts:
-                  path: ~/transformers/test_preparation/filtered_test_list.txt
-            - store_artifacts:
-                  path: test_preparation/examples_test_list.txt
-            - run: python .circleci/create_circleci_config.py --fetcher_folder test_preparation
-            - run: |
-                  if [ ! -s test_preparation/generated_config.yml ]; then
-                      echo "No tests to run, exiting early!"
-                      circleci-agent step halt
-                  fi
-            - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
-            - store_artifacts:
-                  path: test_preparation/generated_config.txt
-            - continuation/continue:
-                  configuration_path: test_preparation/generated_config.yml
+  say-hello:
+    # Specify the execution environment. You can specify an image from Dockerhub or use one of our Convenience Images from CircleCI's Developer Hub.
+    # See: https://circleci.com/docs/2.0/configuration-reference/#docker-machine-macos-windows-executor
+    docker:
+      - image: cimg/base:stable
+    # Add steps to the job
+    # See: https://circleci.com/docs/2.0/configuration-reference/#steps
+    steps:
+      - checkout
+      - run:
+          name: "Say hello"
+          command: "echo Hello, World!"
 
-    # To run all tests for the nightly build
-    fetch_all_tests:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        parallelism: 1
-        steps:
-            - run: pip install --upgrade pip
-            - run: pip install .
-            - run: |
-                  mkdir test_preparation
-                  echo "tests" > test_preparation/test_list.txt
-                  echo "tests" > test_preparation/examples_test_list.txt
-            - run: python utils/tests_fetcher.py --filter_pipeline_tests
-            - run: mv test_list.txt test_preparation/filtered_test_list.txt
-            - run: python .circleci/create_circleci_config.py --fetcher_folder test_preparation
-            - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
-            - store_artifacts:
-                  path: test_preparation/generated_config.txt
-            - continuation/continue:
-                  configuration_path: test_preparation/generated_config.yml
-
-    check_code_quality:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        resource_class: large
-        environment:
-            TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
-        parallelism: 1
-        steps:
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-code_quality-{{ checksum "setup.py" }}
-                      - v0.5-code-quality
-            - run: pip install --upgrade pip
-            - run: pip install .[all,quality]
-            - save_cache:
-                  key: v0.5-code_quality-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: black --check --preview examples tests src utils
-            - run: isort --check-only examples tests src utils
-            - run: python utils/custom_init_isort.py --check_only
-            - run: python utils/sort_auto_mappings.py --check_only
-            - run: flake8 examples tests src utils
-            - run: doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
-            - run: python utils/check_doc_toc.py
-
-    check_repository_consistency:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        resource_class: large
-        environment:
-            TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
-        parallelism: 1
-        steps:
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-repository_consistency-{{ checksum "setup.py" }}
-                      - v0.5-repository_consistency
-            - run: pip install --upgrade pip
-            - run: pip install .[all,quality]
-            - save_cache:
-                  key: v0.5-repository_consistency-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: python utils/check_copies.py
-            - run: python utils/check_table.py
-            - run: python utils/check_dummies.py
-            - run: python utils/check_repo.py
-            - run: python utils/check_inits.py
-            - run: python utils/check_config_docstrings.py
-            - run: make deps_table_check_updated
-            - run: python utils/tests_fetcher.py --sanity_check
-            - run: python utils/update_metadata.py --check-only
-
+# Invoke jobs via workflows
+# See: https://circleci.com/docs/2.0/configuration-reference/#workflows
 workflows:
-    version: 2
-    setup_and_quality:
-        when:
-            not: <<pipeline.parameters.nightly>>
-        jobs:
-            - check_code_quality
-            - check_repository_consistency
-            - fetch_tests
-
-    nightly:
-        when: <<pipeline.parameters.nightly>>
-        jobs:
-            - check_code_quality
-            - check_repository_consistency
-            - fetch_all_tests
+  say-hello-workflow:
+    jobs:
+      - say-hello
