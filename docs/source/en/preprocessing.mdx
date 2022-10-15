@@ -383,7 +383,7 @@ For computer vision tasks, it is common to add some type of data augmentation to
 4. Now when you access the image, you'll notice the feature extractor has added `pixel_values`. You can pass your processed dataset to the model now!
 
 ```py
->>> dataset[0]["image"]
+>>> dataset[0]
 {'image': <PIL.JpegImagePlugin.JpegImageFile image mode=RGB size=384x512 at 0x7F1A7B0630D0>,
  'label': 6,
  'pixel_values': tensor([[[ 0.0353,  0.0745,  0.1216,  ..., -0.9922, -0.9922, -0.9922],
