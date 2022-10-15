@@ -17,7 +17,6 @@
 
 import math
 import random
-from typing import Optional
 
 import torch
 import torch.utils.checkpoint

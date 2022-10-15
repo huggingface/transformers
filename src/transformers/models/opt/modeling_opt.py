@@ -36,7 +36,10 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..bart.bart_utils import expand_mask
+from ..bart.bart_utils import (
+    expand_mask,
+    make_causal_mask,
+)
 from .configuration_opt import OPTConfig
 
 
@@ -64,21 +67,6 @@ OPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/opt-30b",
     # See all OPT models at https://huggingface.co/models?filter=opt
 ]
-
-
-def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
-    """
-    Make causal mask used for bi-directional self-attention.
-    """
-    bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min))
-    mask_cond = torch.arange(mask.size(-1))
-    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
-    mask = mask.to(dtype)
-
-    if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
 class OPTLearnedPositionalEmbedding(nn.Embedding):
@@ -516,7 +504,7 @@ class OPTDecoder(OPTPreTrainedModel):
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
         if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(
+            combined_attention_mask = make_causal_mask(
                 input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
             ).to(inputs_embeds.device)
 
