@@ -952,6 +952,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     is_parallelizable = False
     supports_gradient_checkpointing = False
 
+    is_fast = False  # By default all models are not `Fast`
+
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
         """
@@ -2387,6 +2389,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return model
 
         self = replace_to_fast(self).eval()
+
+        # Step 5: Add a class arguments, we might need to identify whether the model
+        # has been correctly converted to its `Fast` version.
+        self.is_fast = True
 
     @classmethod
     def _load_pretrained_model(
