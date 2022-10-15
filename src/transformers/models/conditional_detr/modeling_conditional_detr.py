@@ -38,6 +38,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ..bart.bart_utils import expand_mask
 from .configuration_conditional_detr import ConditionalDetrConfig
 
 
@@ -395,21 +396,6 @@ class ConditionalDetrConvModel(nn.Module):
             pos.append(self.position_embedding(feature_map, mask).to(feature_map.dtype))
 
         return out, pos
-
-
-# Copied from transformers.models.detr.modeling_detr._expand_mask with Detr->ConditionalDetr
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, target_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[batch_size, seq_len]` to `[batch_size, 1, target_seq_len, source_seq_len]`.
-    """
-    batch_size, source_len = mask.size()
-    target_len = target_len if target_len is not None else source_len
-
-    expanded_mask = mask[:, None, None, :].expand(batch_size, 1, target_len, source_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrSinePositionEmbedding with Detr->ConditionalDetr
@@ -1203,7 +1189,7 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
         # expand attention_mask
         if attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = expand_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1334,14 +1320,14 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
 
         if attention_mask is not None and combined_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            combined_attention_mask = combined_attention_mask + _expand_mask(
+            combined_attention_mask = combined_attention_mask + expand_mask(
                 attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
             )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _expand_mask(
+            encoder_attention_mask = expand_mask(
                 encoder_attention_mask, inputs_embeds.dtype, target_len=input_shape[-1]
             )
 
