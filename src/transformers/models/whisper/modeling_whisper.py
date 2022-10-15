@@ -92,11 +92,11 @@ class WhisperAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    # Copied from transformers.models.bart.modeling_bart.bart_utils.Attention._shape with BART->whisper
+    # Copied from transformers.models.bart.bart_utils.Attention._shape with BART->whisper
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    # Copied from transformers.models.bart.modeling_bart.bart_utils.Attention.forward with BART->whisper
+    # Copied from transformers.models.bart.bart_utils.Attention.forward with BART->whisper
     def forward(
         self,
         hidden_states: torch.Tensor,
