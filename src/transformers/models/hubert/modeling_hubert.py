@@ -395,6 +395,7 @@ class HubertFeatureProjection(nn.Module):
         hidden_states = self.dropout(hidden_states)
         return hidden_states
 
+
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward with Wav2Vec2->Hubert
 class HubertFeedForward(nn.Module):
     def __init__(self, config):

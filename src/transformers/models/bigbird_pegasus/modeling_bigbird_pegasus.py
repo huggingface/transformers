@@ -47,7 +47,7 @@ from ...utils import (
 from ..bart.bart_utils import (
     expand_mask,
     make_causal_mask,
-    Attention
+    Attention,
 )
 from .configuration_bigbird_pegasus import BigBirdPegasusConfig
 

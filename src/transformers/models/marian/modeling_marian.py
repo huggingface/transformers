@@ -46,7 +46,7 @@ from ..bart.bart_utils import (
     expand_mask,
     make_causal_mask,
     shift_tokens_right,
-    Attention
+    Attention,
 )
 from .configuration_marian import MarianConfig
 

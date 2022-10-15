@@ -1076,14 +1076,14 @@ class DetrDecoder(DetrPreTrainedModel):
         if attention_mask is not None and combined_attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
             combined_attention_mask = combined_attention_mask + expand_mask(
-                attention_mask, inputs_embeds.dtype, target_len=input_shape[-1]
+                attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
             )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
             encoder_attention_mask = expand_mask(
-                encoder_attention_mask, inputs_embeds.dtype, target_len=input_shape[-1]
+                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
             )
 
         # optional intermediate hidden states
