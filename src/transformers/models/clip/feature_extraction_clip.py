@@ -39,10 +39,11 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             Whether to resize the input to a certain `size`.
         size (`int`, *optional*, defaults to 224):
             Resize the input to the given size. Only has an effect if `do_resize` is set to `True`.
-        resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
-            An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
-            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
-            if `do_resize` is set to `True`.
+        resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BICUBIC`):
+            An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
+            `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
+            `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
+            to `True`.
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to crop the input at the center. If the input size is smaller than `crop_size` along any edge, the
             image is padded with 0's and then center cropped.
@@ -64,7 +65,7 @@ class CLIPFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self,
         do_resize=True,
         size=224,
-        resample=Image.BICUBIC,
+        resample=Image.Resampling.BICUBIC,
         do_center_crop=True,
         crop_size=224,
         do_normalize=True,

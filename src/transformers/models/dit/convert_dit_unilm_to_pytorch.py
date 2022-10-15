@@ -170,7 +170,9 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     model.load_state_dict(state_dict)
 
     # Check outputs on an image
-    feature_extractor = BeitFeatureExtractor(size=config.image_size, resample=Image.BILINEAR, do_center_crop=False)
+    feature_extractor = BeitFeatureExtractor(
+        size=config.image_size, resample=Image.Resampling.BILINEAR, do_center_crop=False
+    )
     image = prepare_img()
 
     encoding = feature_extractor(images=image, return_tensors="pt")

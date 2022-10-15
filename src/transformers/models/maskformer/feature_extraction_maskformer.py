@@ -201,10 +201,11 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         max_size (`int`, *optional*, defaults to 1333):
             The largest size an image dimension can have (otherwise it's capped). Only has an effect if `do_resize` is
             set to `True`.
-        resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
-            An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
-            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
-            if `do_resize` is set to `True`.
+        resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
+            An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
+            `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
+            `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
+            to `True`.
         size_divisibility (`int`, *optional*, defaults to 32):
             Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
             Swin Transformer.
@@ -232,7 +233,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         do_resize=True,
         size=800,
         max_size=1333,
-        resample=Image.BILINEAR,
+        resample=Image.Resampling.BILINEAR,
         size_divisibility=32,
         do_normalize=True,
         image_mean=None,

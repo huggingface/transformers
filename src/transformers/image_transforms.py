@@ -213,7 +213,7 @@ def get_resize_output_image_size(
 def resize(
     image,
     size: Tuple[int, int],
-    resample=PIL.Image.BILINEAR,
+    resample=PIL.Image.Resampling.BILINEAR,
     data_format: Optional[ChannelDimension] = None,
     return_numpy: bool = True,
 ) -> np.ndarray:
@@ -225,7 +225,7 @@ def resize(
             The image to resize.
         size (`Tuple[int, int]`):
             The size to use for resizing the image.
-        resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
+        resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
             The filter to user for resampling.
         data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the output image. If `None`, will use the inferred format from the input.

@@ -59,7 +59,7 @@ class ResizeShortestEdge:
 
             if img.dtype == np.uint8:
                 pil_image = Image.fromarray(img)
-                pil_image = pil_image.resize((neww, newh), Image.BILINEAR)
+                pil_image = pil_image.resize((neww, newh), Image.Resampling.BILINEAR)
                 img = np.asarray(pil_image)
             else:
                 img = img.permute(2, 0, 1).unsqueeze(0)  # 3, 0, 1)  # hw(c) -> nchw

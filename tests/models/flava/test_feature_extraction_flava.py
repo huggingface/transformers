@@ -80,7 +80,7 @@ class FlavaFeatureExtractionTester(unittest.TestCase):
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.size = size
-        self.resample = resample if resample is not None else Image.BICUBIC
+        self.resample = resample if resample is not None else Image.Resampling.BICUBIC
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
