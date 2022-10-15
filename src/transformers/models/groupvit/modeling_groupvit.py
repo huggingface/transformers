@@ -35,6 +35,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ..bart.bart_utils import expand_mask
 from .configuration_groupvit import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
 
 
@@ -46,21 +47,6 @@ GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "nvidia/groupvit-gcc-yfcc",
     # See all GroupViT models at https://huggingface.co/models?filter=groupvit
 ]
-
-
-# Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 # contrastive loss function, adapted from
@@ -1116,7 +1102,7 @@ class GroupViTTextTransformer(nn.Module):
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
+            attention_mask = expand_mask(attention_mask, hidden_states.dtype)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,

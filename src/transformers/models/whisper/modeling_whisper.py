@@ -33,6 +33,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ..bart.bart_utils import (
+    expand_mask,
+    make_causal_mask,
+    shift_tokens_right,
+)
 from .configuration_whisper import WhisperConfig
 
 
@@ -46,54 +51,6 @@ WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "openai/whisper-base",
     # See all Whisper models at https://huggingface.co/models?filter=whisper
 ]
-
-
-# Copied from transformers.models.bart.modeling_bart.shift_tokens_right
-def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
-    """
-    Shift input ids one token to the right.
-    """
-    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
-    shifted_input_ids[:, 0] = decoder_start_token_id
-
-    if pad_token_id is None:
-        raise ValueError("self.model.config.pad_token_id has to be defined.")
-    # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
-
-    return shifted_input_ids
-
-
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
-def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
-    """
-    Make causal mask used for bi-directional self-attention.
-    """
-    bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min))
-    mask_cond = torch.arange(mask.size(-1))
-    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
-    mask = mask.to(dtype)
-
-    if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
-
-
-# Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 class WhisperPositionalEmbedding(nn.Embedding):
@@ -135,11 +92,11 @@ class WhisperAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    # Copied from transformers.models.bart.modeling_bart.BartAttention._shape with BART->whisper
+    # Copied from transformers.models.bart.modeling_bart.bart_utils.Attention._shape with BART->whisper
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    # Copied from transformers.models.bart.modeling_bart.BartAttention.forward with BART->whisper
+    # Copied from transformers.models.bart.modeling_bart.bart_utils.Attention.forward with BART->whisper
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -747,7 +704,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         combined_attention_mask = None
 
         if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(
+            combined_attention_mask = make_causal_mask(
                 input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
             ).to(inputs_embeds.device)
 
@@ -755,7 +712,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
             if attention_mask.shape[-1] > input_shape[-1] > 0:
                 attention_mask = attention_mask[:, : input_shape[-1] + past_key_values_length]
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+            expanded_attn_mask = expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
             combined_attention_mask = (
                 expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
             )

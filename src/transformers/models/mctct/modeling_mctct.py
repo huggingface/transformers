@@ -34,6 +34,7 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
+from ..bart.bart_utils import expand_mask
 from .configuration_mctct import MCTCTConfig
 
 
@@ -57,21 +58,6 @@ MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "speechbrain/m-ctc-t-large",
     # See all M-CTC-T models at https://huggingface.co/models?filter=mctct
 ]
-
-
-# Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 class MCTCTConv1dSubsampler(nn.Module):
@@ -592,7 +578,7 @@ class MCTCTEncoder(MCTCTPreTrainedModel):
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = expand_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
