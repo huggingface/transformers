@@ -31,75 +31,80 @@ def get_config(model_name):
 
 
 def rename_key(name):
-    if "patch_embed.proj" in name:
+    if "patch_embed.proj" in name and "layers" not in name:
         name = name.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
     if "patch_embed.norm" in name:
-        name = name.replace("patch_embed.norm", "embeddings.norm")
-    # if "layers" in name:
-    #     name = "encoder." + name
-    # if "attn.proj" in name:
-    #     name = name.replace("attn.proj", "attention.output.dense")
-    # if "attn" in name:
-    #     name = name.replace("attn", "attention.self")
-    # if "norm1" in name:
-    #     name = name.replace("norm1", "layernorm_before")
-    # if "norm2" in name:
-    #     name = name.replace("norm2", "layernorm_after")
-    # if "mlp.fc1" in name:
-    #     name = name.replace("mlp.fc1", "intermediate.dense")
-    # if "mlp.fc2" in name:
-    #     name = name.replace("mlp.fc2", "output.dense")
-    # if "q_bias" in name:
-    #     name = name.replace("q_bias", "query.bias")
-    # if "k_bias" in name:
-    #     name = name.replace("k_bias", "key.bias")
-    # if "v_bias" in name:
-    #     name = name.replace("v_bias", "value.bias")
-    # if "cpb_mlp" in name:
-    #     name = name.replace("cpb_mlp", "continuous_position_bias_mlp")
-    # if name == "norm.weight":
-    #     name = "layernorm.weight"
-    # if name == "norm.bias":
-    #     name = "layernorm.bias"
+        name = name.replace("patch_embed.norm", "embeddings.patch_embeddings.layernorm")
+    if "layers" in name:
+        name = name.replace("layers", "encoder.stages")
+    if "residual_group.blocks" in name:
+        name = name.replace("residual_group.blocks", "layers")
+    if "attn.proj" in name:
+        name = name.replace("attn.proj", "attention.output.dense")
+    if "attn" in name:
+        name = name.replace("attn", "attention.self")
+    if "norm1" in name:
+        name = name.replace("norm1", "layernorm_before")
+    if "norm2" in name:
+        name = name.replace("norm2", "layernorm_after")
+    if "mlp.fc1" in name:
+        name = name.replace("mlp.fc1", "intermediate.dense")
+    if "mlp.fc2" in name:
+        name = name.replace("mlp.fc2", "output.dense")
+    if "q_bias" in name:
+        name = name.replace("q_bias", "query.bias")
+    if "k_bias" in name:
+        name = name.replace("k_bias", "key.bias")
+    if "v_bias" in name:
+        name = name.replace("v_bias", "value.bias")
+    if "cpb_mlp" in name:
+        name = name.replace("cpb_mlp", "continuous_position_bias_mlp")
+    if "patch_embed.proj" in name:
+        name = name.replace("patch_embed.proj", "patch_embed.projection")
 
-    # if "head" in name:
-    #     name = name.replace("head", "classifier")
-    # else:
-    #     name = "swin2sr." + name
+    if name == "norm.weight":
+        name = "layernorm.weight"
+    if name == "norm.bias":
+        name = "layernorm.bias"
+
+    if "upsample" in name or "conv_last" in name:
+        pass
+    else:
+        name = "swin2sr." + name
 
     return name
 
 
-def convert_state_dict(orig_state_dict, model):
+def convert_state_dict(orig_state_dict, config):
     for key in orig_state_dict.copy().keys():
         val = orig_state_dict.pop(key)
 
         if "qkv" in key:
-            # key_split = key.split(".")
-            # layer_num = int(key_split[1])
-            # block_num = int(key_split[3])
-            # dim = model.swin2sr.encoder.layers[layer_num].blocks[block_num].attention.self.all_head_size
+            key_split = key.split(".")
+            stage_num = int(key_split[1])
+            block_num = int(key_split[4])
+            dim = config.embed_dim
 
-            # if "weight" in key:
-            #     orig_state_dict[
-            #         f"swin2sr.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"
-            #     ] = val[:dim, :]
-            #     orig_state_dict[
-            #         f"swin2sr.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"
-            #     ] = val[dim : dim * 2, :]
-            #     orig_state_dict[
-            #         f"swin2sr.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"
-            #     ] = val[-dim:, :]
-            # else:
-            #     orig_state_dict[
-            #         f"swin2sr.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"
-            #     ] = val[:dim]
-            #     orig_state_dict[f"swin2sr.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"] = val[
-            #         dim : dim * 2
-            #     ]
-            #     orig_state_dict[
-            #         f"swin2sr.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"
-            #     ] = val[-dim:]
+            if "weight" in key:
+                orig_state_dict[
+                    f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.query.weight"
+                ] = val[:dim, :]
+                orig_state_dict[
+                    f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.key.weight"
+                ] = val[dim : dim * 2, :]
+                orig_state_dict[
+                    f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.value.weight"
+                ] = val[-dim:, :]
+            else:
+                orig_state_dict[
+                    f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.query.bias"
+                ] = val[:dim]
+                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.key.bias"] = val[
+                    dim : dim * 2
+                ]
+                orig_state_dict[
+                    f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.value.bias"
+                ] = val[-dim:]
             pass
         else:
             orig_state_dict[rename_key(key)] = val
@@ -113,8 +118,8 @@ def convert_swin2sr_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_p
     model.eval()
 
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
-    new_state_dict = convert_state_dict(state_dict, model)
-    model.load_state_dict(new_state_dict, strict=False)
+    new_state_dict = convert_state_dict(state_dict, config)
+    model.load_state_dict(new_state_dict)
 
     # TODO create feature extractor
     url = "https://github.com/mv-lab/swin2sr/blob/main/testsets/real-inputs/shanghai.jpg?raw=true"
@@ -163,7 +168,7 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", default=None, type=bool, help="Whether to push the converted model to the hub."
+        "--push_to_hub", default=False, type=bool, help="Whether to push the converted model to the hub."
     )
 
     args = parser.parse_args()

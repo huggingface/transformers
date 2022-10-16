@@ -684,7 +684,7 @@ class Swin2SRStage(nn.Module):
         super().__init__()
         self.config = config
         self.dim = dim
-        self.blocks = nn.ModuleList(
+        self.layers = nn.ModuleList(
             [
                 Swin2SRLayer(
                     config=config,
@@ -716,7 +716,7 @@ class Swin2SRStage(nn.Module):
         print("Shape of residual:", residual.shape)
 
         height, width = input_dimensions
-        for i, layer_module in enumerate(self.blocks):
+        for i, layer_module in enumerate(self.layers):
             print(f"Shape of hidden states before block {i}: {hidden_states.shape}")
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
@@ -991,6 +991,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         )
 
 
+# TODO inherit from nn.Module here
 class Upsample(nn.Sequential):
     """Upsample module.
 
