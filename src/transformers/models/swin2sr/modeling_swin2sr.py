@@ -394,7 +394,9 @@ class Swin2SRSelfAttention(nn.Module):
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
         # cosine attention
-        attention_scores = nn.functional.normalize(query_layer, dim=-1) @ nn.functional.normalize(key_layer, dim=-1).transpose(-2, -1)
+        attention_scores = nn.functional.normalize(query_layer, dim=-1) @ nn.functional.normalize(
+            key_layer, dim=-1
+        ).transpose(-2, -1)
         logit_scale = torch.clamp(self.logit_scale, max=math.log(1.0 / 0.01)).exp()
         attention_scores = attention_scores * logit_scale
         relative_position_bias_table = self.continuous_position_bias_mlp(self.relative_coords_table).view(
@@ -678,9 +680,7 @@ class Swin2SRStage(nn.Module):
     This corresponds to the Residual Swin Transformer Block (RSTB) in the original implementation.
     """
 
-    def __init__(
-        self, config, dim, input_resolution, depth, num_heads, drop_path, pretrained_window_size=0
-    ):
+    def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, pretrained_window_size=0):
         super().__init__()
         self.config = config
         self.dim = dim
@@ -765,7 +765,6 @@ class Swin2SREncoder(nn.Module):
 
         self.gradient_checkpointing = False
 
-    # Copied from transformers.models.swin.modeling_swin.SwinEncoder.forward with SwinEncoderOutput->Swin2SREncoderOutput
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1010,7 +1009,7 @@ class Upsample(nn.Sequential):
             m.append(nn.Conv2d(num_feat, 9 * num_feat, 3, 1, 1))
             m.append(nn.PixelShuffle(3))
         else:
-            raise ValueError(f'scale {scale} is not supported. ' 'Supported scales: 2^n and 3.')
+            raise ValueError(f"scale {scale} is not supported. Supported scales: 2^n and 3.")
         super(Upsample, self).__init__(*m)
 
 
@@ -1029,8 +1028,9 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
 
         # Upsampler for classical SR
         num_feat = 64
-        self.conv_before_upsample = nn.Sequential(nn.Conv2d(config.embed_dim, num_feat, 3, 1, 1),
-                                                      nn.LeakyReLU(inplace=True))
+        self.conv_before_upsample = nn.Sequential(
+            nn.Conv2d(config.embed_dim, num_feat, 3, 1, 1), nn.LeakyReLU(inplace=True)
+        )
         self.upsample = Upsample(config.upscale, num_feat)
         self.conv_last = nn.Conv2d(num_feat, config.num_channels, 3, 1, 1)
 
@@ -1064,7 +1064,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
 
          >>> feature_extractor = Swin2SRFeatureExtractor.from_pretrained("openai/whisper-base")
          >>> model = Swin2SRForImageSuperResolution.from_pretrained("openai/whisper-base")
-         
+
          >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
          >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
          >>> input_features = inputs.input_features

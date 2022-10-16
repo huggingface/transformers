@@ -75,7 +75,8 @@ class Swin2SRConfig(PretrainedConfig):
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         upscale (`int`, *optional*, defaults to 2):
-            The upscale factor for the image. 2/3/4/8 for image super resolution, 1 for denoising and compress artifact reduction
+            The upscale factor for the image. 2/3/4/8 for image super resolution, 1 for denoising and compress artifact
+            reduction
 
     Example:
 
