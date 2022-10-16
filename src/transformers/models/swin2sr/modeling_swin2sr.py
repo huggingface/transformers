@@ -680,7 +680,7 @@ class Swin2SRStage(nn.Module):
     """
 
     def __init__(
-        self, config, dim, input_resolution, depth, num_heads, drop_path, downsample, pretrained_window_size=0
+        self, config, dim, input_resolution, depth, num_heads, drop_path, pretrained_window_size=0
     ):
         super().__init__()
         self.config = config
@@ -699,14 +699,6 @@ class Swin2SRStage(nn.Module):
             ]
         )
 
-        # patch merging layer
-        if downsample is not None:
-            self.downsample = downsample(input_resolution, dim=dim, norm_layer=nn.LayerNorm)
-        else:
-            self.downsample = None
-
-        self.pointing = False
-
         self.conv = nn.Conv2d(dim, dim, 3, 1, 1)
 
         self.patch_embed = Swin2SRPatchEmbeddings(config, normalize_patches=False)
@@ -722,25 +714,25 @@ class Swin2SRStage(nn.Module):
     ) -> Tuple[torch.Tensor]:
         residual = hidden_states
 
+        print("Shape of residual:", residual.shape)
+
         height, width = input_dimensions
         for i, layer_module in enumerate(self.blocks):
-
+            print(f"Shape of hidden states before block {i}: {hidden_states.shape}")
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
+            print(f"Shape of hidden states after block {i}: {hidden_states.shape}")
 
-        if self.downsample is not None:
-            height_downsampled, width_downsampled = (height + 1) // 2, (width + 1) // 2
-            output_dimensions = (height, width, height_downsampled, width_downsampled)
-            hidden_states = self.downsample(layer_outputs[0], input_dimensions)
-        else:
-            output_dimensions = (height, width, height, width)
+        output_dimensions = (height, width, height, width)
 
         hidden_states = self.patch_unembed(hidden_states, input_dimensions)
         hidden_states = self.conv(hidden_states)
-        hidden_states = self.patch_embed(hidden_states)
+        hidden_states, _ = self.patch_embed(hidden_states)
+
+        print("Shape of hidden states after patch embed:", hidden_states.shape)
 
         hidden_states = hidden_states + residual
 
@@ -752,9 +744,10 @@ class Swin2SRStage(nn.Module):
 
 
 class Swin2SREncoder(nn.Module):
-    def __init__(self, config, patches_resolution, pretrained_window_sizes=(0, 0, 0, 0)):
+    def __init__(self, config, grid_size, pretrained_window_sizes=(0, 0, 0, 0, 0, 0)):
         super().__init__()
         self.num_layers = len(config.depths)
+        print("Number of layers:", self.num_layers)
         self.config = config
         if self.config.pretrained_window_sizes is not None:
             pretrained_window_sizes = config.pretrained_window_sizes
@@ -763,12 +756,11 @@ class Swin2SREncoder(nn.Module):
             [
                 Swin2SRStage(
                     config=config,
-                    dim=int(config.embed_dim * 2**i_layer),
-                    input_resolution=(patches_resolution[0], patches_resolution[1]),
+                    dim=config.embed_dim,
+                    input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
                     depth=config.depths[i_layer],
                     num_heads=config.num_heads[i_layer],
                     drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                    downsample=Swin2SRPatchMerging if (i_layer < self.num_layers - 1) else None,
                     pretrained_window_size=pretrained_window_sizes[i_layer],
                 )
                 for i_layer in range(self.num_layers)
@@ -815,7 +807,9 @@ class Swin2SREncoder(nn.Module):
                     create_custom_forward(layer_module), hidden_states, input_dimensions, layer_head_mask
                 )
             else:
+                print(f"Shape of hidden states before stage {i}: {hidden_states.shape}")
                 layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+                print(f"Shape of hidden states after stage {i}: {layer_outputs[0].shape}")
 
             hidden_states = layer_outputs[0]
             output_dimensions = layer_outputs[1]
@@ -845,7 +839,7 @@ class Swin2SREncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->Swin2SR,swin->swin2sr
+# Copied from transformers.models.swinv2.modeling_swinv2.Swinv2PreTrainedModel with Swinv2->Swin2SR, swinv2->swin2sr
 class Swin2SRPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -920,7 +914,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
 
         self.conv_first = nn.Conv2d(config.num_channels, config.embed_dim, 3, 1, 1)
         self.embeddings = Swin2SREmbeddings(config)
-        self.encoder = Swin2SREncoder(config, self.embeddings.patch_embeddings.patches_resolution)
+        self.encoder = Swin2SREncoder(config, grid_size=self.embeddings.patch_embeddings.patches_resolution)
 
         self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
         self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
@@ -970,7 +964,6 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, len(self.config.depths))
 
         embeddings = self.conv_first(pixel_values)
-        print("Shape of x after conv_first:", embeddings.shape)
         embedding_output, input_dimensions = self.embeddings(embeddings)
 
         encoder_outputs = self.encoder(

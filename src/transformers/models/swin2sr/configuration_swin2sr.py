@@ -47,13 +47,13 @@ class Swin2SRConfig(PretrainedConfig):
             The number of input channels.
         embed_dim (`int`, *optional*, defaults to 180):
             Dimensionality of patch embedding.
-        depths (`list(int)`, *optional*, defaults to `[2, 2, 6, 2]`):
+        depths (`list(int)`, *optional*, defaults to `[6, 6, 6, 6, 6, 6]`):
             Depth of each layer in the Transformer encoder.
-        num_heads (`list(int)`, *optional*, defaults to `[3, 6, 12, 24]`):
+        num_heads (`list(int)`, *optional*, defaults to `[6, 6, 6, 6, 6, 6]`):
             Number of attention heads in each layer of the Transformer encoder.
-        window_size (`int`, *optional*, defaults to 7):
+        window_size (`int`, *optional*, defaults to 8):
             Size of windows.
-        mlp_ratio (`float`, *optional*, defaults to 4.0):
+        mlp_ratio (`float`, *optional*, defaults to 2.0):
             Ratio of MLP hidden dimensionality to embedding dimensionality.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether or not a learnable bias should be added to the queries, keys and values.
@@ -74,8 +74,6 @@ class Swin2SRConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        encoder_stride (`int`, `optional`, defaults to 32):
-            Factor to increase the spatial resolution by in the decoder head for masked image modeling.
 
     Example:
 
@@ -104,10 +102,10 @@ class Swin2SRConfig(PretrainedConfig):
         patch_size=1,
         num_channels=3,
         embed_dim=180,
-        depths=[2, 2, 6, 2],
-        num_heads=[3, 6, 12, 24],
-        window_size=7,
-        mlp_ratio=4.0,
+        depths=[6, 6, 6, 6, 6, 6],
+        num_heads=[6, 6, 6, 6, 6, 6],
+        window_size=8,
+        mlp_ratio=2.0,
         qkv_bias=True,
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
@@ -140,8 +138,4 @@ class Swin2SRConfig(PretrainedConfig):
         self.path_norm = patch_norm
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
-        self.encoder_stride = encoder_stride
-        # we set the hidden_size attribute in order to make Swin2SR work with VisionEncoderDecoderModel
-        # this indicates the channel dimension after the last stage of the model
-        self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
-        self.pretrained_window_sizes = (0, 0, 0, 0)
+        self.pretrained_window_sizes = (0, 0, 0, 0, 0, 0)
