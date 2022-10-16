@@ -205,7 +205,7 @@ class Swin2SREmbeddings(nn.Module):
 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.window_size = config.window_size
-    
+
     def forward(self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor]:
         embeddings, output_dimensions = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = embeddings.size()
@@ -699,7 +699,17 @@ class Swin2SRStage(nn.Module):
             ]
         )
 
-        self.conv = nn.Conv2d(dim, dim, 3, 1, 1)
+        if config.resi_connection == "1conv":
+            self.conv = nn.Conv2d(dim, dim, 3, 1, 1)
+        elif config.resi_connection == "3conv":
+            # to save parameters and memory
+            self.conv = nn.Sequential(
+                nn.Conv2d(dim, dim // 4, 3, 1, 1),
+                nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                nn.Conv2d(dim // 4, dim // 4, 1, 1, 0),
+                nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                nn.Conv2d(dim // 4, dim, 3, 1, 1),
+            )
 
         self.patch_embed = Swin2SRPatchEmbeddings(config, normalize_patches=False)
 
@@ -938,9 +948,9 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
 
         modulo_pad_height = (window_size - height % window_size) % window_size
         modulo_pad_width = (window_size - width % window_size) % window_size
-        pixel_values = nn.functional.pad(pixel_values, (0, modulo_pad_width, 0, modulo_pad_height), 'reflect')
+        pixel_values = nn.functional.pad(pixel_values, (0, modulo_pad_width, 0, modulo_pad_height), "reflect")
         return pixel_values
-    
+
     @add_start_docstrings_to_model_forward(SWIN2SR_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
@@ -972,14 +982,14 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, len(self.config.depths))
 
         _, _, height, width = pixel_values.shape
-        
+
         # some preprocessing: padding + normalization
         # TODO make this prettier
         pixel_values = self.check_image_size(pixel_values)
 
         self.mean = self.mean.type_as(pixel_values)
         pixel_values = (pixel_values - self.mean) * self.img_range
-        
+
         embeddings = self.conv_first(pixel_values)
         embedding_output, input_dimensions = self.embeddings(embeddings)
 
@@ -1053,12 +1063,15 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         self.swin2sr = Swin2SRModel(config)
 
         # Upsampler for classical SR
-        num_features = 64
-        self.conv_before_upsample = nn.Sequential(
-            nn.Conv2d(config.embed_dim, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True)
-        )
-        self.upsample = Upsample(config.upscale, num_features)
-        self.conv_last = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
+        if config.upsampler == "pixelshuffle":
+            num_features = 64
+            self.conv_before_upsample = nn.Sequential(
+                nn.Conv2d(config.embed_dim, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True)
+            )
+            self.upsample = Upsample(config.upscale, num_features)
+            self.conv_last = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
+        else:
+            raise NotImplementedError("To do")
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1118,7 +1131,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         sequence_output = self.conv_last(sequence_output)
 
         x = sequence_output / self.swin2sr.img_range + self.swin2sr.mean
-        result = x[:, :, :height*self.upscale, :width*self.upscale]
+        result = x[:, :, : height * self.upscale, : width * self.upscale]
 
         print("Shape of result:", result.shape)
         print("First values of result:", result[0, 0, :3, :3])

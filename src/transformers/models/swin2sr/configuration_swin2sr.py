@@ -79,6 +79,10 @@ class Swin2SRConfig(PretrainedConfig):
             reduction
         img_range (`float`, *optional*, defaults to 1.):
             The range of the values of the input image.
+        resi_connection (`str`, *optional*, defaults to `"1conv"`):
+            The convolutional block to use before the residual connection in each stage.
+        upsampler (`str`, *optional*, defaults to `"pixelshuffle"`):
+            The upsampler for the image. `"bicubic"` or `"nearest"` are supported.
 
     Example:
 
@@ -121,7 +125,9 @@ class Swin2SRConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         upscale=2,
-        img_range=1.,
+        img_range=1.0,
+        resi_connection="1conv",
+        upsampler="pixelshuffle",
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -146,3 +152,5 @@ class Swin2SRConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.upscale = upscale
         self.img_range = img_range
+        self.resi_connection = resi_connection
+        self.upsampler = upsampler

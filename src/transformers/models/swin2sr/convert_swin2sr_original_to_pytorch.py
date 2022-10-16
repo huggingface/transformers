@@ -27,6 +27,38 @@ from transformers import Swin2SRConfig, Swin2SRForImageSuperResolution
 def get_config(model_name):
     config = Swin2SRConfig()
 
+    if model_name == "swin2SR-classicalSR-x4-64":
+        config.upscale = 4
+    elif model_name == "swin2SR-lightweight-x2-64":
+        config.depths = [6, 6, 6, 6]
+        config.embed_dim = 60
+        config.num_heads = [6, 6, 6, 6]
+        config.upsampler = "pixelshuffledirect"
+    elif model_name == "swin2SR-compressedSR-x4-48":
+        config.image_size = 48
+        config.upscale = 4
+        config.upsampler = "pixelshuffle_aux"
+    elif "real-sr" in model_name:
+        config.upscale = 4
+        config.upsampler = "nearest+conv"
+    elif "real-sr-large" in model_name:
+        config.upscale = 4
+        config.upsampler = "nearest+conv"
+        config.resi_connection = "3conv"
+    elif "jpeg-car" in model_name:
+        config.num_channels = 1
+        config.upscale = 1
+        config.image_size = 126
+        config.window_size = 7
+        config.img_range = 255.0
+        config.upsampler = ""
+    elif "color-jpeg-car" in model_name:
+        config.upscale = 1
+        config.image_size = 126
+        config.window_size = 7
+        config.img_range = 255.0
+        config.upsampler = ""
+
     return config
 
 
@@ -99,9 +131,9 @@ def convert_state_dict(orig_state_dict, config):
                 orig_state_dict[
                     f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.query.bias"
                 ] = val[:dim]
-                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.key.bias"] = val[
-                    dim : dim * 2
-                ]
+                orig_state_dict[
+                    f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.key.bias"
+                ] = val[dim : dim * 2]
                 orig_state_dict[
                     f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.value.bias"
                 ] = val[-dim:]
@@ -139,9 +171,16 @@ def convert_swin2sr_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_p
 
     outputs = model(pixel_values)
 
-    print("Shape of logits:", outputs.logits.shape)
-
-    # TODO assert values
+    # assert values
+    expected_shape = torch.Size([1, 3, 512, 512])
+    expected_slice = torch.tensor(
+        [[-0.7087, -0.7138, -0.6721], [-0.8340, -0.8095, -0.7298], [-0.9149, -0.8414, -0.7940]]
+    )
+    assert (
+        outputs.logits.shape == expected_shape
+    ), f"Shape of logits should be {expected_shape}, but is {outputs.logits.shape}"
+    assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-3)
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
@@ -172,9 +211,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
-    parser.add_argument(
-        "--push_to_hub", default=False, type=bool, help="Whether to push the converted model to the hub."
-    )
+    parser.add_argument("--push_to_hub", action="store_true", help="Whether to push the converted model to the hub.")
 
     args = parser.parse_args()
     convert_swin2sr_checkpoint(args.checkpoint_url, args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
