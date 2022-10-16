@@ -358,6 +358,9 @@ MODEL_FOR_CAUSAL_LM_MAPPING = None
 MODEL_FOR_CTC_MAPPING = None
 
 
+MODEL_FOR_DEPTH_ESTIMATION_MAPPING = None
+
+
 MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING = None
 
 
@@ -463,6 +466,13 @@ class AutoModelForCausalLM(metaclass=DummyObject):
 
 
 class AutoModelForCTC(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForDepthEstimation(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -2819,6 +2829,44 @@ class LevitModel(metaclass=DummyObject):
 
 
 class LevitPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+LILT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class LiltForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LiltForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LiltForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LiltModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LiltPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

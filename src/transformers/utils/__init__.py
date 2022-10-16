@@ -164,6 +164,7 @@ SAFE_WEIGHTS_NAME = "model.safetensors"
 SAFE_WEIGHTS_INDEX_NAME = "model.safetensors.index.json"
 CONFIG_NAME = "config.json"
 FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
+IMAGE_PROCESSOR_NAME = FEATURE_EXTRACTOR_NAME
 MODEL_CARD_NAME = "modelcard.json"
 
 SENTENCEPIECE_UNDERLINE = "▁"
