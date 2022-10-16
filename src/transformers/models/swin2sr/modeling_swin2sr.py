@@ -909,14 +909,12 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
-        self.num_layers = len(config.depths)
-        self.num_features = int(config.embed_dim * 2 ** (self.num_layers - 1))
 
         self.conv_first = nn.Conv2d(config.num_channels, config.embed_dim, 3, 1, 1)
         self.embeddings = Swin2SREmbeddings(config)
         self.encoder = Swin2SREncoder(config, grid_size=self.embeddings.patch_embeddings.patches_resolution)
 
-        self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
+        self.layernorm = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
         self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
@@ -1011,9 +1009,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         self.swin2sr = Swin2SRModel(config)
 
         # Classifier head
-        self.classifier = (
-            nn.Linear(self.swin2sr.num_features, config.num_labels) if config.num_labels > 0 else nn.Identity()
-        )
+        self.classifier = nn.Linear(config.embed_dim, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
