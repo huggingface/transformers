@@ -21,7 +21,6 @@ from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
@@ -395,7 +394,7 @@ class Swin2SRSelfAttention(nn.Module):
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
         # cosine attention
-        attention_scores = F.normalize(query_layer, dim=-1) @ F.normalize(key_layer, dim=-1).transpose(-2, -1)
+        attention_scores = nn.functional.normalize(query_layer, dim=-1) @ nn.functional.normalize(key_layer, dim=-1).transpose(-2, -1)
         logit_scale = torch.clamp(self.logit_scale, max=math.log(1.0 / 0.01)).exp()
         attention_scores = attention_scores * logit_scale
         relative_position_bias_table = self.continuous_position_bias_mlp(self.relative_coords_table).view(
@@ -1061,11 +1060,12 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         Example:
          ```python
          >>> import torch
-         >>> from transformers import WhisperFeatureExtractor, WhisperModel
+         >>> from transformers import Swin2SRFeatureExtractor, Swin2SRForImageSuperResolution
          >>> from datasets import load_dataset
 
-         >>> model = WhisperModel.from_pretrained("openai/whisper-base")
-         >>> feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
+         >>> feature_extractor = Swin2SRFeatureExtractor.from_pretrained("openai/whisper-base")
+         >>> model = Swin2SRForImageSuperResolution.from_pretrained("openai/whisper-base")
+         
          >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
          >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
          >>> input_features = inputs.input_features
@@ -1087,7 +1087,8 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         sequence_output = outputs[0]
 
         sequence_output = self.conv_before_upsample(sequence_output)
-        logits = self.conv_last(self.upsample(sequence_output))
+        sequence_output = self.upsample(sequence_output)
+        logits = self.conv_last(sequence_output)
 
         loss = None
         if labels is not None:
