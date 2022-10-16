@@ -744,13 +744,11 @@ class Swin2SRStage(nn.Module):
 
 
 class Swin2SREncoder(nn.Module):
-    def __init__(self, config, grid_size, pretrained_window_sizes=(0, 0, 0, 0, 0, 0)):
+    def __init__(self, config, grid_size):
         super().__init__()
         self.num_layers = len(config.depths)
         print("Number of layers:", self.num_layers)
         self.config = config
-        if self.config.pretrained_window_sizes is not None:
-            pretrained_window_sizes = config.pretrained_window_sizes
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
         self.layers = nn.ModuleList(
             [
@@ -761,7 +759,7 @@ class Swin2SREncoder(nn.Module):
                     depth=config.depths[i_layer],
                     num_heads=config.num_heads[i_layer],
                     drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                    pretrained_window_size=pretrained_window_sizes[i_layer],
+                    pretrained_window_size=0,
                 )
                 for i_layer in range(self.num_layers)
             ]
@@ -915,7 +913,8 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         self.encoder = Swin2SREncoder(config, grid_size=self.embeddings.patch_embeddings.patches_resolution)
 
         self.layernorm = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
-        self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
+        self.patch_unembed = Swin2SRPatchUnEmbeddings(config)
+        self.conv_after_body = nn.Conv2d(config.embed_dim, config.embed_dim, 3, 1, 1)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -961,6 +960,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, len(self.config.depths))
 
+        _, _, height, width = pixel_values.shape
         embeddings = self.conv_first(pixel_values)
         embedding_output, input_dimensions = self.embeddings(embeddings)
 
@@ -975,12 +975,11 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
 
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
+        sequence_output = self.patch_unembed(sequence_output, (height, width))
+        sequence_output = self.conv_after_body(sequence_output) + embeddings
 
+        # TODO add pooled output
         pooled_output = None
-        if self.pooler is not None:
-            pooled_output = self.pooler(sequence_output.transpose(1, 2))
-            pooled_output = torch.flatten(pooled_output, 1)
-
         if not return_dict:
             output = (sequence_output, pooled_output) + encoder_outputs[1:]
 
@@ -993,6 +992,28 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
             attentions=encoder_outputs.attentions,
             reshaped_hidden_states=encoder_outputs.reshaped_hidden_states,
         )
+
+
+class Upsample(nn.Sequential):
+    """Upsample module.
+
+    Args:
+        scale (int): Scale factor. Supported scales: 2^n and 3.
+        num_feat (int): Channel number of intermediate features.
+    """
+
+    def __init__(self, scale, num_feat):
+        m = []
+        if (scale & (scale - 1)) == 0:  # scale = 2^n
+            for _ in range(int(math.log(scale, 2))):
+                m.append(nn.Conv2d(num_feat, 4 * num_feat, 3, 1, 1))
+                m.append(nn.PixelShuffle(2))
+        elif scale == 3:
+            m.append(nn.Conv2d(num_feat, 9 * num_feat, 3, 1, 1))
+            m.append(nn.PixelShuffle(3))
+        else:
+            raise ValueError(f'scale {scale} is not supported. ' 'Supported scales: 2^n and 3.')
+        super(Upsample, self).__init__(*m)
 
 
 @add_start_docstrings(
@@ -1008,8 +1029,12 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         self.num_labels = config.num_labels
         self.swin2sr = Swin2SRModel(config)
 
-        # Classifier head
-        self.classifier = nn.Linear(config.embed_dim, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        # Upsampler for classical SR
+        num_feat = 64
+        self.conv_before_upsample = nn.Sequential(nn.Conv2d(config.embed_dim, num_feat, 3, 1, 1),
+                                                      nn.LeakyReLU(inplace=True))
+        self.upsample = Upsample(config.upscale, num_feat)
+        self.conv_last = nn.Conv2d(num_feat, config.num_channels, 3, 1, 1)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1059,9 +1084,10 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = outputs[1]
+        sequence_output = outputs[0]
 
-        logits = self.classifier(pooled_output)
+        sequence_output = self.conv_before_upsample(sequence_output)
+        logits = self.conv_last(self.upsample(sequence_output))
 
         loss = None
         if labels is not None:
