@@ -228,7 +228,7 @@ You should install 🤗 Transformers in a [virtual environment](https://docs.pyt
 First, create a virtual environment with the version of Python you're going to use and activate it.
 
 Then, you will need to install at least one of Flax, PyTorch or TensorFlow.
-Please refer to [TensorFlow installation page](https://www.tensorflow.org/install/), [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) and/or [Flax](https://github.com/google/flax#quick-install) and [Jax](https://github.com/google/jax#installation) installation pages regarding the specific install command for your platform.
+Please refer to [TensorFlow installation page](https://www.tensorflow.org/install/), [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) and/or [Flax](https://github.com/google/flax#quick-install) and [Jax](https://github.com/google/jax#installation) installation pages regarding the specific installation command for your platform.
 
 When one of those backends has been installed, 🤗 Transformers can be installed using pip as follows:
 
