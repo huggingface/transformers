@@ -77,6 +77,8 @@ class Swin2SRConfig(PretrainedConfig):
         upscale (`int`, *optional*, defaults to 2):
             The upscale factor for the image. 2/3/4/8 for image super resolution, 1 for denoising and compress artifact
             reduction
+        img_range (`float`, *optional*, defaults to 1.):
+            The range of the values of the input image.
 
     Example:
 
@@ -119,6 +121,7 @@ class Swin2SRConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         upscale=2,
+        img_range=1.,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -142,3 +145,4 @@ class Swin2SRConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         self.upscale = upscale
+        self.img_range = img_range

@@ -205,13 +205,6 @@ class Swin2SREmbeddings(nn.Module):
 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.window_size = config.window_size
-        
-        if config.num_channels == 3:
-            rgb_mean = (0.4488, 0.4371, 0.4040)
-            self.mean = torch.Tensor(rgb_mean).view(1, 3, 1, 1)
-        else:
-            self.mean = torch.zeros(1, 1, 1, 1)
-        self.img_range = 1.
     
     def forward(self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor]:
         embeddings, output_dimensions = self.patch_embeddings(pixel_values)
@@ -909,6 +902,13 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         super().__init__(config)
         self.config = config
 
+        if config.num_channels == 3:
+            rgb_mean = (0.4488, 0.4371, 0.4040)
+            self.mean = torch.Tensor(rgb_mean).view(1, 3, 1, 1)
+        else:
+            self.mean = torch.zeros(1, 1, 1, 1)
+        self.img_range = config.img_range
+
         self.conv_first = nn.Conv2d(config.num_channels, config.embed_dim, 3, 1, 1)
         self.embeddings = Swin2SREmbeddings(config)
         self.encoder = Swin2SREncoder(config, grid_size=self.embeddings.patch_embeddings.patches_resolution)
@@ -977,13 +977,6 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         # TODO make this prettier
         pixel_values = self.check_image_size(pixel_values)
 
-        if self.config.num_channels == 3:
-            rgb_mean = (0.4488, 0.4371, 0.4040)
-            self.mean = torch.Tensor(rgb_mean).view(1, 3, 1, 1)
-        else:
-            self.mean = torch.zeros(1, 1, 1, 1)
-        self.img_range = 1.
-
         self.mean = self.mean.type_as(pixel_values)
         pixel_values = (pixel_values - self.mean) * self.img_range
         
@@ -1003,6 +996,9 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         sequence_output = self.layernorm(sequence_output)
         sequence_output = self.patch_unembed(sequence_output, (height, width))
         sequence_output = self.conv_after_body(sequence_output) + embeddings
+
+        print("Shape of sequence output after body:", sequence_output.shape)
+        print("First values of sequence output after body:", sequence_output[0, 0, :3, :3])
 
         # TODO add pooled output
         pooled_output = None
@@ -1026,17 +1022,17 @@ class Upsample(nn.Sequential):
 
     Args:
         scale (int): Scale factor. Supported scales: 2^n and 3.
-        num_feat (int): Channel number of intermediate features.
+        num_features (int): Channel number of intermediate features.
     """
 
-    def __init__(self, scale, num_feat):
+    def __init__(self, scale, num_features):
         m = []
         if (scale & (scale - 1)) == 0:  # scale = 2^n
             for _ in range(int(math.log(scale, 2))):
-                m.append(nn.Conv2d(num_feat, 4 * num_feat, 3, 1, 1))
+                m.append(nn.Conv2d(num_features, 4 * num_features, 3, 1, 1))
                 m.append(nn.PixelShuffle(2))
         elif scale == 3:
-            m.append(nn.Conv2d(num_feat, 9 * num_feat, 3, 1, 1))
+            m.append(nn.Conv2d(num_features, 9 * num_features, 3, 1, 1))
             m.append(nn.PixelShuffle(3))
         else:
             raise ValueError(f"scale {scale} is not supported. Supported scales: 2^n and 3.")
@@ -1053,16 +1049,16 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.num_labels = config.num_labels
+        self.upscale = config.upscale
         self.swin2sr = Swin2SRModel(config)
 
         # Upsampler for classical SR
-        num_feat = 64
+        num_features = 64
         self.conv_before_upsample = nn.Sequential(
-            nn.Conv2d(config.embed_dim, num_feat, 3, 1, 1), nn.LeakyReLU(inplace=True)
+            nn.Conv2d(config.embed_dim, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True)
         )
-        self.upsample = Upsample(config.upscale, num_feat)
-        self.conv_last = nn.Conv2d(num_feat, config.num_channels, 3, 1, 1)
+        self.upsample = Upsample(config.upscale, num_features)
+        self.conv_last = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1105,6 +1101,8 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
          ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        height, width = pixel_values.shape[2:]
+
         outputs = self.swin2sr(
             pixel_values,
             head_mask=head_mask,
@@ -1117,19 +1115,25 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
 
         sequence_output = self.conv_before_upsample(sequence_output)
         sequence_output = self.upsample(sequence_output)
-        logits = self.conv_last(sequence_output)
+        sequence_output = self.conv_last(sequence_output)
+
+        x = sequence_output / self.swin2sr.img_range + self.swin2sr.mean
+        result = x[:, :, :height*self.upscale, :width*self.upscale]
+
+        print("Shape of result:", result.shape)
+        print("First values of result:", result[0, 0, :3, :3])
 
         loss = None
         if labels is not None:
             raise NotImplementedError("To do")
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (result,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutput(
             loss=loss,
-            logits=logits,
+            logits=result,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
