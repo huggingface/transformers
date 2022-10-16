@@ -745,22 +745,21 @@ class Swin2SRStage(nn.Module):
 class Swin2SREncoder(nn.Module):
     def __init__(self, config, grid_size):
         super().__init__()
-        self.num_layers = len(config.depths)
-        print("Number of layers:", self.num_layers)
+        self.num_stages = len(config.depths)
         self.config = config
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
-        self.layers = nn.ModuleList(
+        self.stages = nn.ModuleList(
             [
                 Swin2SRStage(
                     config=config,
                     dim=config.embed_dim,
-                    input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
-                    depth=config.depths[i_layer],
-                    num_heads=config.num_heads[i_layer],
-                    drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
+                    input_resolution=(grid_size[0], grid_size[1]),
+                    depth=config.depths[stage_idx],
+                    num_heads=config.num_heads[stage_idx],
+                    drop_path=dpr[sum(config.depths[:stage_idx]) : sum(config.depths[: stage_idx + 1])],
                     pretrained_window_size=0,
                 )
-                for i_layer in range(self.num_layers)
+                for stage_idx in range(self.num_stages)
             ]
         )
 
@@ -789,7 +788,7 @@ class Swin2SREncoder(nn.Module):
             all_hidden_states += (hidden_states,)
             all_reshaped_hidden_states += (reshaped_hidden_state,)
 
-        for i, layer_module in enumerate(self.layers):
+        for i, stage_module in enumerate(self.stages):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
@@ -801,11 +800,11 @@ class Swin2SREncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module), hidden_states, input_dimensions, layer_head_mask
+                    create_custom_forward(stage_module), hidden_states, input_dimensions, layer_head_mask
                 )
             else:
                 print(f"Shape of hidden states before stage {i}: {hidden_states.shape}")
-                layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+                layer_outputs = stage_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
                 print(f"Shape of hidden states after stage {i}: {layer_outputs[0].shape}")
 
             hidden_states = layer_outputs[0]
