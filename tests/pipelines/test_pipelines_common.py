@@ -29,6 +29,7 @@ from unittest import skipIf
 import numpy as np
 
 from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from parameterized import parameterized
 from requests.exceptions import HTTPError
 from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
@@ -54,6 +55,7 @@ from transformers.testing_utils import (
     require_tensorflow_probability,
     require_tf,
     require_torch,
+    require_torch_and_tf,
     require_torch_or_tf,
     slow,
 )
