@@ -204,7 +204,15 @@ class Swin2SREmbeddings(nn.Module):
             self.position_embeddings = None
 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
+        self.window_size = config.window_size
+        
+        if config.num_channels == 3:
+            rgb_mean = (0.4488, 0.4371, 0.4040)
+            self.mean = torch.Tensor(rgb_mean).view(1, 3, 1, 1)
+        else:
+            self.mean = torch.zeros(1, 1, 1, 1)
+        self.img_range = 1.
+    
     def forward(self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor]:
         embeddings, output_dimensions = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = embeddings.size()
@@ -713,25 +721,19 @@ class Swin2SRStage(nn.Module):
     ) -> Tuple[torch.Tensor]:
         residual = hidden_states
 
-        print("Shape of residual:", residual.shape)
-
         height, width = input_dimensions
         for i, layer_module in enumerate(self.layers):
-            print(f"Shape of hidden states before block {i}: {hidden_states.shape}")
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
-            print(f"Shape of hidden states after block {i}: {hidden_states.shape}")
 
         output_dimensions = (height, width, height, width)
 
         hidden_states = self.patch_unembed(hidden_states, input_dimensions)
         hidden_states = self.conv(hidden_states)
         hidden_states, _ = self.patch_embed(hidden_states)
-
-        print("Shape of hidden states after patch embed:", hidden_states.shape)
 
         hidden_states = hidden_states + residual
 
@@ -803,8 +805,10 @@ class Swin2SREncoder(nn.Module):
                 )
             else:
                 print(f"Shape of hidden states before stage {i}: {hidden_states.shape}")
+                print(f"First values of hidden states before stage {i}: {hidden_states[0, :3, :3]}")
                 layer_outputs = stage_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
                 print(f"Shape of hidden states after stage {i}: {layer_outputs[0].shape}")
+                print(f"First values of hidden states after stage {i}: {hidden_states[0, :3, :3]}")
 
             hidden_states = layer_outputs[0]
             output_dimensions = layer_outputs[1]
@@ -927,6 +931,16 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    def check_image_size(self, pixel_values):
+        _, _, height, width = pixel_values.size()
+
+        window_size = self.config.window_size
+
+        modulo_pad_height = (window_size - height % window_size) % window_size
+        modulo_pad_width = (window_size - width % window_size) % window_size
+        pixel_values = nn.functional.pad(pixel_values, (0, modulo_pad_width, 0, modulo_pad_height), 'reflect')
+        return pixel_values
+    
     @add_start_docstrings_to_model_forward(SWIN2SR_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
@@ -958,6 +972,21 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, len(self.config.depths))
 
         _, _, height, width = pixel_values.shape
+        
+        # some preprocessing: padding + normalization
+        # TODO make this prettier
+        pixel_values = self.check_image_size(pixel_values)
+
+        if self.config.num_channels == 3:
+            rgb_mean = (0.4488, 0.4371, 0.4040)
+            self.mean = torch.Tensor(rgb_mean).view(1, 3, 1, 1)
+        else:
+            self.mean = torch.zeros(1, 1, 1, 1)
+        self.img_range = 1.
+
+        self.mean = self.mean.type_as(pixel_values)
+        pixel_values = (pixel_values - self.mean) * self.img_range
+        
         embeddings = self.conv_first(pixel_values)
         embedding_output, input_dimensions = self.embeddings(embeddings)
 

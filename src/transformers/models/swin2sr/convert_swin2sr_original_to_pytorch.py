@@ -119,7 +119,13 @@ def convert_swin2sr_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_p
 
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
     new_state_dict = convert_state_dict(state_dict, config)
-    model.load_state_dict(new_state_dict)
+    missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
+
+    if len(missing_keys) > 0:
+        raise ValueError("Missing keys when converting: {}".format(missing_keys))
+    for key in unexpected_keys:
+        if not ("relative_position_index" in key or "relative_coords_table" in key or "self_mask" in key):
+            raise ValueError(f"Unexpected key {key} in state_dict")
 
     # TODO create feature extractor
     url = "https://github.com/mv-lab/swin2sr/blob/main/testsets/real-inputs/shanghai.jpg?raw=true"
@@ -130,7 +136,6 @@ def convert_swin2sr_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_p
     )
 
     pixel_values = transforms(image).unsqueeze(0)
-    print("Shape of pixel values:", pixel_values.shape)
 
     outputs = model(pixel_values)
 
