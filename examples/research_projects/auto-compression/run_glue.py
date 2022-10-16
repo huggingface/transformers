@@ -1,32 +1,26 @@
 """ Compress a 🤗 Transformers model for sequence classification on GLUE. by PaddleSlim"""
 import argparse
-import json
 import logging
-import math
 import os
 import random
-import numpy as np
-from pathlib import Path
 
 import datasets
-import paddle 
+import numpy as np
 from datasets import load_dataset
-from paddle.io import DataLoader
-from paddleslim.common import load_config as load_slim_config
-from paddleslim.auto_compression.compressor import AutoCompression
 
 import evaluate
+import paddle
 import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
-from transformers import (
-    AutoConfig,
-    AutoTokenizer,
-    default_data_collator
-)
-from transformers.utils import check_min_version, get_full_repo_name, send_example_telemetry
+from paddle.io import DataLoader
+from paddleslim.auto_compression.compressor import AutoCompression
+from paddleslim.common import load_config as load_slim_config
+from transformers import AutoTokenizer, default_data_collator
+from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
+
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.22.0.dev0")
@@ -51,11 +45,8 @@ task_to_keys = {
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers model on a text classification task")
     parser.add_argument(
-        '--config_path',
-        type=str,
-        default=None,
-        help="path of compression strategy config.",
-        required=True)
+        "--config_path", type=str, default=None, help="path of compression strategy config.", required=True
+    )
     parser.add_argument(
         "--task_name",
         type=str,
@@ -118,19 +109,23 @@ def parse_args():
 
     return args
 
+
 def paddle_data_collator(features):
-    batch = default_data_collator(features, return_tensors='np')
+    batch = default_data_collator(features, return_tensors="np")
     return batch
+
 
 def eval_function(exe, compiled_test_program, test_feed_names, test_fetch_list):
     for data in eval_dataloader():
-        logits = exe.run(compiled_test_program,
-                         feed={
-                             test_feed_names[0]: data[0]['x0'],
-                             test_feed_names[1]: data[0]['x1'],
-                             test_feed_names[2]: data[0]['x2']
-                         },
-                         fetch_list=test_fetch_list)
+        logits = exe.run(
+            compiled_test_program,
+            feed={
+                test_feed_names[0]: data[0]["x0"],
+                test_feed_names[1]: data[0]["x1"],
+                test_feed_names[2]: data[0]["x2"],
+            },
+            fetch_list=test_fetch_list,
+        )
         predictions = np.argmax(np.array(logits[0]), axis=-1) if not is_regression else np.squeeze(np.array(logits[0]))
         predictions, references = accelerator.gather((predictions, np.squeeze(data[0]["labels"])))
         metric.add_batch(
@@ -145,6 +140,45 @@ def eval_function(exe, compiled_test_program, test_feed_names, test_fetch_list):
     else:
         res = eval_metric
     return res
+
+
+def eval(args):
+    devices = paddle.device.get_device().split(":")[0]
+    places = paddle.device._convert_to_place(devices)
+    exe = paddle.static.Executor(places)
+    val_program, feed_target_names, fetch_targets = paddle.static.load_inference_model(
+        args.model_name_or_path, exe, model_filename="model.pdmodel", params_filename="model.pdiparams"
+    )
+    print("Loaded model from: {}".format(args.model_name_or_path))
+    print("Evaluating...", feed_target_names, fetch_targets)
+    for data in eval_dataloader():
+        logits = exe.run(
+            val_program,
+            feed={
+                feed_target_names[0]: data[0]["x0"],
+                feed_target_names[1]: data[0]["x1"],
+                feed_target_names[2]: data[0]["x2"],
+            },
+            fetch_list=fetch_targets,
+        )
+        predictions = np.argmax(np.array(logits[0]), axis=-1) if not is_regression else np.squeeze(np.array(logits[0]))
+        predictions, references = accelerator.gather((predictions, np.squeeze(data[0]["labels"])))
+        print("predictions: ", predictions.flatten())
+        # print("references: ", references)
+        metric.add_batch(
+            predictions=predictions,
+            references=references,
+        )
+    eval_metric = metric.compute()
+    print("task name: {}, metric: {}, \n".format(args.task_name, eval_metric))
+    if isinstance(eval_metric, dict):
+        res = list(eval_metric.values())[0]
+    elif isinstance(eval_metric, list) or isinstance(eval_metric, tuple):
+        res = eval_metric[0]
+    else:
+        res = eval_metric
+    print(res)
+
 
 def main():
     args = parse_args()
@@ -221,25 +255,17 @@ def main():
         is_regression = args.task_name == "stsb"
         if not is_regression:
             label_list = raw_datasets["train"].features["label"].names
-            num_labels = len(label_list)
-        else:
-            num_labels = 1
     else:
         # Trying to have good defaults here, don't hesitate to tweak to your needs.
         is_regression = raw_datasets["train"].features["label"].dtype in ["float32", "float64"]
-        if is_regression:
-            num_labels = 1
-        else:
+        if not is_regression:
             # A useful fast method:
             # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.unique
             label_list = raw_datasets["train"].unique("label")
             label_list.sort()  # Let's sort it for determinism
-            num_labels = len(label_list)
 
-    # Load pretrained model and tokenizer
-    #
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
-    # download model & vocab.
+    # download vocab.
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_fast=not args.use_slow_tokenizer)
 
     # Preprocessing the datasets
@@ -266,7 +292,7 @@ def main():
         texts = (
             (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
         )
-        result = tokenizer(*texts, padding='max_length', max_length=args.max_length, truncation=True)
+        result = tokenizer(*texts, padding="max_length", max_length=args.max_length, truncation=True)
 
         if "label" in examples:
             if label_to_id is not None:
@@ -295,30 +321,43 @@ def main():
     # DataLoaders creation:
     # If padding was already done ot max length, we use the default data collator that will just convert everything
     # to tensors.
-    data_collator = paddle_data_collator 
+    data_collator = paddle_data_collator
 
     paddle.enable_static()
 
-    def reader_wrapper(reader, input_name=['x0', 'x1', 'x2']):
+    def reader_wrapper(reader, input_name=["x0", "x1", "x2"]):
         def gen():
             feed_data = {}
             data_names = list(reader.dataset[0].keys())
             for data in reader:
                 for idx in range(len(input_name)):
                     feed_data[input_name[idx]] = data[data_names[idx]]
-                if 'labels' in feed_data:
-                    feed_data['labels'] = np.array(feed_data['labels']).reshape(-1, 1)
+                if "labels" in feed_data:
+                    feed_data["labels"] = np.array(feed_data["labels"]).reshape(-1, 1)
                 yield [feed_data]
-    
+
         return gen
 
     train_dataloader = DataLoader(
-        train_dataset, collate_fn=data_collator, batch_size=args.per_device_train_batch_size, num_workers=0, shuffle=True, drop_last=True)
-    train_dataloader = reader_wrapper(train_dataloader, ['x0', 'x2', 'x1'])
+        train_dataset,
+        collate_fn=data_collator,
+        batch_size=args.per_device_train_batch_size,
+        num_workers=0,
+        shuffle=True,
+        drop_last=True,
+    )
+    train_dataloader = reader_wrapper(train_dataloader, ["x0", "x2", "x1"])
 
-    global eval_dataloader 
-    eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size, num_workers=0, shuffle=False, drop_last=True)
-    eval_dataloader = reader_wrapper(eval_dataloader, ['x0', 'x2', 'x1', 'labels'])
+    global eval_dataloader
+    eval_dataloader = DataLoader(
+        eval_dataset,
+        collate_fn=data_collator,
+        batch_size=args.per_device_eval_batch_size,
+        num_workers=0,
+        shuffle=False,
+        drop_last=True,
+    )
+    eval_dataloader = reader_wrapper(eval_dataloader, ["x0", "x2", "x1", "labels"])
 
     # Optimizer
     # Split weights in two groups, one with weight decay and the other not.
@@ -333,22 +372,22 @@ def main():
             return False
 
     config = load_slim_config(args.config_path)
-    if 'TrainConfig' in config:
-        config['TrainConfig']['optimizer_builder'][
-            'apply_decay_param_fun'] = apply_decay_param_fun
+    if "TrainConfig" in config:
+        config["TrainConfig"]["optimizer_builder"]["apply_decay_param_fun"] = apply_decay_param_fun
 
+    # eval(args)
     ac = AutoCompression(
         model_dir=args.model_name_or_path,
-        model_filename='model.pdmodel',
-        params_filename='model.pdiparams',
+        model_filename="model.pdmodel",
+        params_filename="model.pdiparams",
         save_dir=args.output_dir,
         config=config,
         train_dataloader=train_dataloader,
-        eval_callback=eval_function, 
-        eval_dataloader=eval_dataloader)
+        eval_callback=eval_function,
+        eval_dataloader=eval_dataloader,
+    )
     ac.compress()
     ac.export_onnx()
-
 
 
 if __name__ == "__main__":
