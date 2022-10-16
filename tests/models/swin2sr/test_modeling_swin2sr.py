@@ -135,28 +135,9 @@ class Swin2SRModelTester:
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, expected_dim))
 
-    def create_and_check_for_masked_image_modeling(self, config, pixel_values, labels):
-        model = Swin2SRForMaskedImageModeling(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
-        )
-
-        # test greyscale images
-        config.num_channels = 1
-        model = Swin2SRForMaskedImageModeling(config)
-        model.to(torch_device)
-        model.eval()
-
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
-        result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.image_size, self.image_size))
-
-    def create_and_check_for_image_classification(self, config, pixel_values, labels):
+    def create_and_check_for_image_super_resolution(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
-        model = Swin2SRForImageClassification(config)
+        model = Swin2SRForImageSuperResolution(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
@@ -172,9 +153,7 @@ class Swin2SRModelTester:
 @require_torch
 class Swin2SRModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (
-        (Swin2SRModel, Swin2SRForImageSuperResolution) if is_torch_available() else ()
-    )
+    all_model_classes = (Swin2SRModel, Swin2SRForImageSuperResolution) if is_torch_available() else ()
 
     fx_compatible = False
     test_pruning = False
@@ -404,16 +383,12 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            AutoFeatureExtractor.from_pretrained("caidas/swin2sr-classicalsr-x2-64")
-            if is_vision_available()
-            else None
+            AutoFeatureExtractor.from_pretrained("caidas/swin2sr-classicalsr-x2-64") if is_vision_available() else None
         )
 
     @slow
-    def test_inference_image_classification_head(self):
-        model = Swin2SRForImageClassification.from_pretrained("caidas/swin2sr-classicalsr-x2-64").to(
-            torch_device
-        )
+    def test_inference_image_super_resolution_head(self):
+        model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2sr-classicalsr-x2-64").to(torch_device)
         feature_extractor = self.default_feature_extractor
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")

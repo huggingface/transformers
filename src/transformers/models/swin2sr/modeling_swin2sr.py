@@ -24,11 +24,10 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_utils import PreTrainedModel
 from ...modeling_outputs import ImageClassifierOutput
+from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
@@ -50,10 +49,6 @@ _FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 # Base docstring
 _CHECKPOINT_FOR_DOC = "caidas/swin2sr-classicalsr-x2-64"
 _EXPECTED_OUTPUT_SHAPE = [1, 64, 768]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "caidas/swin2sr-classicalsr-x2-64"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
 SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -200,7 +195,7 @@ class Swin2SREmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        
+
         self.patch_embeddings = Swin2SRPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
 
@@ -211,7 +206,7 @@ class Swin2SREmbeddings(nn.Module):
 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, pixel_values: Optional[torch.FloatTensor])-> Tuple[torch.Tensor]:
+    def forward(self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor]:
         embeddings, output_dimensions = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = embeddings.size()
 
@@ -219,12 +214,12 @@ class Swin2SREmbeddings(nn.Module):
             embeddings = embeddings + self.position_embeddings
 
         embeddings = self.dropout(embeddings)
-        
+
         return embeddings, output_dimensions
 
 
 class Swin2SRPatchEmbeddings(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, normalize_patches=True):
         super().__init__()
         num_channels = config.embed_dim
         image_size, patch_size = config.image_size, config.patch_size
@@ -236,12 +231,32 @@ class Swin2SRPatchEmbeddings(nn.Module):
         self.num_patches = patches_resolution[0] * patches_resolution[1]
 
         self.projection = nn.Conv2d(num_channels, config.embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.layernorm = nn.LayerNorm(config.embed_dim) if normalize_patches else None
 
     def forward(self, embeddings: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor, Tuple[int]]:
         embeddings = self.projection(embeddings)
+        _, _, height, width = embeddings.shape
+        output_dimensions = (height, width)
         embeddings = embeddings.flatten(2).transpose(1, 2)
 
-        return embeddings, None
+        if self.layernorm is not None:
+            embeddings = self.layernorm(embeddings)
+
+        return embeddings, output_dimensions
+
+
+class Swin2SRPatchUnEmbeddings(nn.Module):
+    r"""Image to Patch Unembedding"""
+
+    def __init__(self, config):
+        super().__init__()
+
+        self.embed_dim = config.embed_dim
+
+    def forward(self, embeddings, x_size):
+        batch_size, height_width, num_channels = embeddings.shape
+        embeddings = embeddings.transpose(1, 2).view(batch_size, self.embed_dim, x_size[0], x_size[1])  # B Ph*Pw C
+        return embeddings
 
 
 # Copied from transformers.models.swinv2.modeling_swinv2.Swinv2PatchMerging with Swinv2->Swin2SR
@@ -659,8 +674,11 @@ class Swin2SRLayer(nn.Module):
         return layer_outputs
 
 
-# Copied from transformers.models.swinv2.modeling_swinv2.Swinv2Stage with Swinv2->Swin2SR
 class Swin2SRStage(nn.Module):
+    """
+    This corresponds to the Residual Swin Transformer Block (RSTB) in the original implementation.
+    """
+
     def __init__(
         self, config, dim, input_resolution, depth, num_heads, drop_path, downsample, pretrained_window_size=0
     ):
@@ -689,7 +707,12 @@ class Swin2SRStage(nn.Module):
 
         self.pointing = False
 
-    # Copied from transformers.models.swin.modeling_swin.SwinStage.forward
+        self.conv = nn.Conv2d(dim, dim, 3, 1, 1)
+
+        self.patch_embed = Swin2SRPatchEmbeddings(config, normalize_patches=False)
+
+        self.patch_unembed = Swin2SRPatchUnEmbeddings(config)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -697,6 +720,8 @@ class Swin2SRStage(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
+        residual = hidden_states
+
         height, width = input_dimensions
         for i, layer_module in enumerate(self.blocks):
 
@@ -712,6 +737,12 @@ class Swin2SRStage(nn.Module):
             hidden_states = self.downsample(layer_outputs[0], input_dimensions)
         else:
             output_dimensions = (height, width, height, width)
+
+        hidden_states = self.patch_unembed(hidden_states, input_dimensions)
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.patch_embed(hidden_states)
+
+        hidden_states = hidden_states + residual
 
         stage_outputs = (hidden_states, output_dimensions)
 
@@ -995,7 +1026,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(SWIN2SR_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=Swin2SRForImageSuperResolutionOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1010,7 +1041,25 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
+
+        Returns:
+
+        Example:
+         ```python
+         >>> import torch
+         >>> from transformers import WhisperFeatureExtractor, WhisperModel
+         >>> from datasets import load_dataset
+
+         >>> model = WhisperModel.from_pretrained("openai/whisper-base")
+         >>> feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
+         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+         >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
+         >>> input_features = inputs.input_features
+         >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
+         >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
+         >>> list(last_hidden_state.shape)
+         [1, 2, 512]
+         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.swin2sr(

@@ -15,15 +15,13 @@
 """Convert Swin2SR checkpoints from the original repository. URL: https://github.com/mv-lab/swin2sr"""
 
 import argparse
-from pathlib import Path
 
 import torch
 from PIL import Image
+from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 import requests
 from transformers import Swin2SRConfig, Swin2SRForImageSuperResolution
-
-from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 
 def get_config(model_name):
@@ -119,20 +117,18 @@ def convert_swin2sr_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_p
     model.load_state_dict(new_state_dict, strict=False)
 
     # TODO create feature extractor
-    url = 'https://github.com/mv-lab/swin2sr/blob/main/testsets/real-inputs/shanghai.jpg?raw=true'
+    url = "https://github.com/mv-lab/swin2sr/blob/main/testsets/real-inputs/shanghai.jpg?raw=true"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-    transforms = Compose([
-        Resize((256, 256)),
-        ToTensor(),
-        Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
+    transforms = Compose(
+        [Resize((256, 256)), ToTensor(), Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])]
+    )
 
     pixel_values = transforms(image).unsqueeze(0)
     print("Shape of pixel values:", pixel_values.shape)
 
     outputs = model(pixel_values)
-    
+
     print("Shape of logits:", outputs.logits.shape)
 
     # TODO assert values
