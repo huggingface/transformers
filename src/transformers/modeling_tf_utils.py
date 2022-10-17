@@ -707,8 +707,15 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
 
     # Since TF adds the name of the class to its weights, and uses the index and not the name of the layer to load
     # the weight, we have to get rid of the first prefix of the name of the layer.
-    model_keys = set("/".join(k.name.split("/")[1:]) for k in model.weights)
-    model_layer_map = {"/".join(k.name.split("/")[1:]): i for i, k in enumerate(model.weights)}
+    model_keys = set()
+    model_layer_map = dict()
+    for i, k in enumerate(model.weights):
+        if "model." in k.name or len(k.name.split("/")) == 1:
+            layer_name = k.name
+        else:
+            layer_name = "/".join(k.name.split("/")[1:])
+        model_keys.add(layer_name)
+        model_layer_map[layer_name] = i
 
     for shard_file in shard_files:
         state_dict = tf.io.read_file(shard_file)
@@ -2059,12 +2066,23 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Return:
             `tf.keras.layers.Embedding`: Resized Embedding layer.
         """
+
+        # Get the initialization range for the embeddings
+        init_range = 0.02  # default value
+        potential_initialization_variable_names = [
+            "initializer_range",  # most common
+            "initializer_factor",  # e.g. T5
+            "init_std",  # e.g BART
+        ]
+        for var_name in potential_initialization_variable_names:
+            if hasattr(self.config, var_name):
+                init_range = getattr(self.config, var_name)
+
         # Get a new (initialized) embeddings layer
-        init_range = getattr(self.config, "initializer_range", 0.02)
         new_embeddings = tf.keras.layers.Embedding(
             input_dim=new_num_tokens,
             output_dim=old_embeddings.output_dim,
-            embeddings_initializer=get_initializer(init_range),
+            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=init_range),
             name=old_embeddings.embeddings.name[:-13],  # exact same scoped name except "/embeddings:0"
         )
         new_embeddings(tf.constant([[0]]))
@@ -2097,6 +2115,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         saved_model=False,
         version=1,
         push_to_hub=False,
+        signatures=None,
         max_shard_size: Union[int, str] = "10GB",
         create_pr: bool = False,
         **kwargs
@@ -2118,6 +2137,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
+            signatures (`dict` or `tf.function`, *optional*):
+                Model's signature used for serving. This will be passed to the `signatures` argument of model.save().
             max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
                 The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size
                 lower than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
@@ -2148,8 +2169,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             files_timestamps = self._get_files_timestamps(save_directory)
 
         if saved_model:
+            if signatures is None:
+                signatures = self.serving
             saved_model_dir = os.path.join(save_directory, "saved_model", str(version))
-            self.save(saved_model_dir, include_optimizer=False, signatures=self.serving)
+            self.save(saved_model_dir, include_optimizer=False, signatures=signatures)
             logger.info(f"Saved model created in {saved_model_dir}")
 
         # Save configuration file
@@ -2195,17 +2218,19 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             )
             for shard_file, shard in shards.items():
                 with h5py.File(os.path.join(save_directory, shard_file), mode="w") as shard_file:
-                    save_attributes_to_hdf5_group(
-                        shard_file,
-                        "layer_names",
-                        ["/".join(layer.name.split("/")[1:]).encode("utf8") for layer in shard],
-                    )
-
+                    layers = []
                     for layer in sorted(shard, key=lambda x: x.name):
+                        if "model." in layer.name or len(layer.name.split("/")) == 1:
+                            layer_name = layer.name
+                            print(layer_name)
+                        else:
+                            layer_name = "/".join(layer.name.split("/")[1:])
                         param_dset = shard_file.create_dataset(
-                            "/".join(layer.name.split("/")[1:]), layer.numpy().shape, dtype=layer.numpy().dtype
+                            layer_name, layer.numpy().shape, dtype=layer.numpy().dtype
                         )
                         param_dset[:] = layer.numpy()
+                        layers.append(layer_name.encode("utf8"))
+                    save_attributes_to_hdf5_group(shard_file, "layer_names", layers)
 
         if push_to_hub:
             self._upload_modified_files(
@@ -3022,36 +3047,3 @@ def get_initializer(initializer_range: float = 0.02) -> tf.initializers.Truncate
         `tf.initializers.TruncatedNormal`: The truncated normal initializer.
     """
     return tf.keras.initializers.TruncatedNormal(stddev=initializer_range)
-
-
-class TFWrappedEmbeddings:
-    """
-    this class wraps a the TFSharedEmbeddingTokens layer into a python 'no-keras-layer' class to avoid problem with
-    weight restoring. Also it makes sure that the layer is called from the correct scope to avoid problem with
-    saving/storing the correct weights
-    """
-
-    # TODO (joao): flagged for delection due to embeddings refactor
-
-    def __init__(self, layer, abs_scope_name=None):
-        self._layer = layer
-        self._abs_scope_name = abs_scope_name
-        self.vocab_size = self._layer.vocab_size
-
-    def call(self, inputs, mode="embedding"):
-        if self._abs_scope_name is None:
-            return self._layer.call(inputs, mode)
-
-        # if an abs scope name is given to the embedding variable, call variable from absolute scope
-        with tf.compat.v1.variable_scope(self._abs_scope_name, auxiliary_name_scope=False) as abs_scope_name:
-            with tf.name_scope(abs_scope_name.original_name_scope):
-                return self._layer.call(inputs, mode)
-
-    def __call__(self, inputs, mode="embedding"):
-        if self._abs_scope_name is None:
-            return self._layer(inputs, mode)
-
-        # if an abs scope name is given to the embedding variable, call variable from absolute scope
-        with tf.compat.v1.variable_scope(self._abs_scope_name, auxiliary_name_scope=False) as abs_scope_name:
-            with tf.name_scope(abs_scope_name.original_name_scope):
-                return self._layer(inputs, mode)

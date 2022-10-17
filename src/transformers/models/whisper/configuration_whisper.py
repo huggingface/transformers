@@ -134,12 +134,12 @@ class WhisperConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import WhisperModel, WhisperConfig
+    >>> from transformers import WhisperConfig, WhisperModel
 
     >>> # Initializing a Whisper tiny style configuration
     >>> configuration = WhisperConfig()
 
-    >>> # Initializing a model from the tiny style configuration
+    >>> # Initializing a model (with random weights) from the tiny style configuration
     >>> model = WhisperModel(configuration)
 
     >>> # Accessing the model configuration

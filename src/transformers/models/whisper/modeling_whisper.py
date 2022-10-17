@@ -20,6 +20,7 @@ import random
 from typing import Optional, Tuple
 
 import torch
+import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -38,6 +39,7 @@ from .configuration_whisper import WhisperConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "WhisperConfig"
+_CHECKPOINT_FOR_DOC = "openai/whisper-tiny"
 
 
 WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -599,6 +601,11 @@ class WhisperEncoder(WhisperPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def _freeze_parameters(self):
+        for param in self.parameters():
+            param.requires_grad = False
+        self._requires_grad = False
+
     def forward(
         self,
         input_features,
@@ -904,9 +911,10 @@ class WhisperDecoder(WhisperPreTrainedModel):
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,
+                    None,  # encoder attention mask
                     head_mask[idx] if head_mask is not None else None,
                     cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,
+                    None,  # past_key_value
                 )
             else:
 
@@ -981,8 +989,15 @@ class WhisperModel(WhisperPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
+    def freeze_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the Whisper encoder so that its parameters will
+        not be updated during training.
+        """
+        self.encoder._freeze_parameters()
+
     @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_features=None,
@@ -1003,10 +1018,9 @@ class WhisperModel(WhisperPreTrainedModel):
         Returns:
 
         Example:
-
          ```python
          >>> import torch
-         >>> from transformers import WhisperModel, WhisperFeatureExtractor
+         >>> from transformers import WhisperFeatureExtractor, WhisperModel
          >>> from datasets import load_dataset
 
          >>> model = WhisperModel.from_pretrained("openai/whisper-base")
@@ -1019,7 +1033,6 @@ class WhisperModel(WhisperPreTrainedModel):
          >>> list(last_hidden_state.shape)
          [1, 2, 512]
          ```"""
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1111,6 +1124,13 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.proj_out = new_embeddings
+
+    def freeze_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the Whisper encoder so that its parameters will
+        not be updated during training.
+        """
+        self.model.encoder._freeze_parameters()
 
     @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
