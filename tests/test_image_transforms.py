@@ -36,6 +36,7 @@ if is_vision_available():
 
     from transformers.image_transforms import (
         get_resize_output_image_size,
+        normalize,
         resize,
         to_channel_dimension_format,
         to_pil_image,
@@ -172,3 +173,25 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertIsInstance(resized_image, PIL.Image.Image)
         # PIL size is in (width, height) order
         self.assertEqual(resized_image.size, (40, 30))
+
+    def test_normalize(self):
+        image = np.random.randint(0, 256, (224, 224, 3)) / 255
+
+        # Number of mean values != number of channels
+        with self.assertRaises(ValueError):
+            normalize(image, mean=(0.5, 0.6), std=1)
+
+        # Number of std values != number of channels
+        with self.assertRaises(ValueError):
+            normalize(image, mean=1, std=(0.5, 0.6))
+
+        # Test result is correct - output data format is channels_first and normalization
+        # correctly computed
+        mean = (0.5, 0.6, 0.7)
+        std = (0.1, 0.2, 0.3)
+        expected_image = ((image - mean) / std).transpose((2, 0, 1))
+
+        normalized_image = normalize(image, mean=mean, std=std, data_format="channels_first")
+        self.assertIsInstance(normalized_image, np.ndarray)
+        self.assertEqual(normalized_image.shape, (3, 224, 224))
+        self.assertTrue(np.allclose(normalized_image, expected_image))
