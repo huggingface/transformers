@@ -129,13 +129,6 @@ class ConstrainedBeamSearchScorer(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class ContrastiveDecodingOneStepFast(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class ForcedBOSTokenLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
