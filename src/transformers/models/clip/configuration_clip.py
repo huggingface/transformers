@@ -270,7 +270,21 @@ class CLIPConfig(PretrainedConfig):
             The inital value of the *logit_scale* paramter. Default is used as per the original CLIP implementation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
-    """
+
+    Example:
+
+    ```python
+    >>> from transformers import CLIPConfig, CLIPModel
+
+    >>> # Initializing a CLIPConfig with openai/clip-vit-base-patch32 style configuration
+    >>> configuration = CLIPConfig()
+
+    >>> # Initializing a CLIPModel (with random weights) from the openai/clip-vit-base-patch32 style configuration
+    >>> model = CLIPModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "clip"
     is_composition = True
