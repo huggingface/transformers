@@ -1394,7 +1394,7 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
 
-        # XXX: Keep batch_size as first dimension
+        # Keep batch_size as first dimension
         intermediate = torch.stack(intermediate, dim=1)
         intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
 
@@ -1936,7 +1936,7 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             outputs_coord = outputs_coord_logits.sigmoid()
             outputs_classes.append(outputs_class)
             outputs_coords.append(outputs_coord)
-        # XXX: Keep batch_size as first dimension
+        # Keep batch_size as first dimension
         outputs_class = torch.stack(outputs_classes, dim=1)
         outputs_coord = torch.stack(outputs_coords, dim=1)
 
