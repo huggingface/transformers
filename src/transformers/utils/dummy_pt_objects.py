@@ -2065,6 +2065,13 @@ class FlaubertModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class FlaubertPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class FlaubertWithLMHeadModel(metaclass=DummyObject):
     _backends = ["torch"]
 

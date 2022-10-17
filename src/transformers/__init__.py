@@ -1273,6 +1273,7 @@ else:
             "FlaubertForTokenClassification",
             "FlaubertModel",
             "FlaubertWithLMHeadModel",
+            "FlaubertPreTrainedModel",
         ]
     )
     _import_structure["models.flava"].extend(
@@ -4141,6 +4142,7 @@ if TYPE_CHECKING:
             FlaubertForSequenceClassification,
             FlaubertForTokenClassification,
             FlaubertModel,
+            FlaubertPreTrainedModel,
             FlaubertWithLMHeadModel,
         )
         from .models.flava import (
