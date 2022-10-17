@@ -339,7 +339,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         filename = ds[0]["file"]
         output = speech_recognizer(filename)
-        self.assertEqual(output, {"text": " Mr. Quilter is the apostle of the middle classes, and we are glad to"})
+        self.assertEqual(
+            output,
+            {"text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."},
+        )
 
     @slow
     @require_torch
