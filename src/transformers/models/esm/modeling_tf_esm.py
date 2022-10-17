@@ -731,7 +731,6 @@ class TFEsmMainLayer(Layer):
     """
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
-    supports_gradient_checkpointing = False
 
     def __init__(self, config, add_pooling_layer=True, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
