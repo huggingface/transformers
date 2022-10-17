@@ -56,7 +56,7 @@ feedback.
 The 🤗 Transformers library is robust and reliable thanks to the users who notify us of
 the problems they encounter. So thank you for reporting an issue.
 
-First, we would really appreciate it if you could **make sure the bug was not
+First, we would really appreciate it if you could **make sure that the bug was not
 already reported** (use the search bar on Github under Issues).
 
 Did not find it? :( So we can act quickly on it, please follow these steps:
