@@ -220,11 +220,12 @@ class DataCollatorSpeechSeq2SeqWithPadding:
 
         # now handle the target labels
         for feature in features:
-            # if bos token is appended in previous tokenization step,
-            # cut bos token here as it's append later anyways
+            # if bos token is prepended in previous tokenization step,
+            # cut bos token here as it's prepended later anyways
             if feature["labels"][0] == self.decoder_start_token_id:
                 feature["labels"] = feature["labels"][1:]
-            # if eos token if not added in previous tokenization step append here as it's not appended later
+            # if eos token is not appended in previous tokenization step,
+            # append eos token here as it's not appended later
             if feature["labels"][-1] != self.eos_token_id and self.eos_token_id is not None:
                 feature["labels"].append(self.eos_token_id)
 
@@ -352,6 +353,11 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
+
+    # TODO: address feature extractor attn mask -> remove from whisper config on Hub
+    if True:
+        feature_extractor.return_attention_mask = False
+
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
@@ -375,6 +381,7 @@ def main():
 
     if model_args.freeze_encoder:
         model.freeze_encoder()
+        model.model.encoder.gradient_checkpointing = False
 
     # 6. Resample speech dataset if necessary
     dataset_sampling_rate = next(iter(raw_datasets.values())).features[data_args.audio_column_name].sampling_rate
@@ -405,7 +412,7 @@ def main():
         inputs = feature_extractor(sample["array"], sampling_rate=sample["sampling_rate"])
         # process audio length
         batch[model_input_name] = inputs.get(model_input_name)[0]
-        batch["input_length"] = len(inputs.get(model_input_name)[0])
+        batch["input_length"] = len(sample["array"])
 
         # process targets
         input_str = batch[text_column_name].lower() if do_lower_case else batch[text_column_name]
