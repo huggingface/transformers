@@ -2235,7 +2235,7 @@ class ConditionalDetrLoss(nn.Module):
         num_classes (`int`):
             Number of object categories, omitting the special no-object category.
         focal_alpha (`float`):
-            Alpha parmeter in focal loss.
+            Alpha parameter in focal loss.
         losses (`List[str]`):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
