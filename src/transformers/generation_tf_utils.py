@@ -508,9 +508,8 @@ class TFGenerationMixin:
                 logit processor will set their log probs to `-inf` so that they are not sampled.
             forced_decoder_ids (`List[List[int]]`, *optional*, defaults to `model.config.forced_decoder_ids`):
                 A list of pairs of integers which indicates a mapping from generation indices to token indices that
-                will be forced before sampling. For example, `[[1, 123]]` means the second generated token (which could
-                virtually be the first meaningful token when a BOS symbol is generated) will always be a token of index
-                123.
+                will be forced before sampling. For example, `[[1, 123]]` means the second generated token will always
+                be a token of index 123.
             model_specific_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model.
 
@@ -1498,9 +1497,8 @@ class TFGenerationMixin:
                 logit processor will set their log probs to `-inf` so that they are not sampled.
             forced_decoder_ids (`List[List[int]]`, *optional*, defaults to `model.config.forced_decoder_ids`):
                 A list of pairs of integers which indicates a mapping from generation indices to token indices that
-                will be forced before sampling. For example, `[[1, 123]]` means the second generated token (which could
-                virtually be the first meaningful token when a BOS symbol is generated) will always be a token of index
-                123.
+                will be forced before sampling. For example, `[[1, 123]]` means the second generated token will always
+                be a token of index 123.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `call` function of the model.
 
