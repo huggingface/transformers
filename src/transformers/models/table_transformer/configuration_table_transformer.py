@@ -218,6 +218,7 @@ class TableTransformerConfig(PretrainedConfig):
         return self.d_model
 
 
+# Copied from transformers.models.detr.configuration_detr.DetrOnnxConfig
 class TableTransformerOnnxConfig(OnnxConfig):
 
     torch_onnx_minimum_version = version.parse("1.11")
