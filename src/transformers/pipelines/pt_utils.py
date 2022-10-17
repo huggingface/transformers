@@ -83,7 +83,10 @@ class PipelineIterator(IterableDataset):
                     elif isinstance(element[0], np.ndarray):
                         loader_batched[k] = tuple(np.expand_dims(el[self._loader_batch_index], 0) for el in element)
                     continue
-                if isinstance(element[self._loader_batch_index], torch.Tensor):
+                if element is None:
+                    # This can happen for optional data that get passed around
+                    loader_batched[k] = None
+                elif isinstance(element[self._loader_batch_index], torch.Tensor):
                     # Take correct batch data, but make it looked like batch_size=1
                     # For compatibility with other methods within transformers
 

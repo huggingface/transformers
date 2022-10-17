@@ -2463,6 +2463,16 @@ else:
         ]
     )
     _import_structure["models.encoder_decoder"].append("TFEncoderDecoderModel")
+    _import_structure["models.esm"].extend(
+        [
+            "ESM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFEsmForMaskedLM",
+            "TFEsmForSequenceClassification",
+            "TFEsmForTokenClassification",
+            "TFEsmModel",
+            "TFEsmPreTrainedModel",
+        ]
+    )
     _import_structure["models.flaubert"].extend(
         [
             "TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5136,6 +5146,14 @@ if TYPE_CHECKING:
             TFElectraPreTrainedModel,
         )
         from .models.encoder_decoder import TFEncoderDecoderModel
+        from .models.esm import (
+            ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFEsmForMaskedLM,
+            TFEsmForSequenceClassification,
+            TFEsmForTokenClassification,
+            TFEsmModel,
+            TFEsmPreTrainedModel,
+        )
         from .models.flaubert import (
             TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFFlaubertForMultipleChoice,
