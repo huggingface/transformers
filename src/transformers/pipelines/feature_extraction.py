@@ -32,7 +32,7 @@ class FeatureExtractionPipeline(Pipeline):
             both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model is
             provided.
         return_tensor (`bool`, *optional*):
-            If true, returns a tensor according to the specified framework. Else, it returns a list.
+            If `True`, returns a tensor according to the specified framework, otherwise returns a list.
         task (`str`, defaults to `""`):
             A task-identifier for the pipeline.
         args_parser ([`~pipelines.ArgumentHandler`], *optional*):
