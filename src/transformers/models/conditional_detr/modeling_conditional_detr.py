@@ -675,11 +675,11 @@ class ConditionalDetrAttention(nn.Module):
 
         self.out_proj = nn.Linear(out_dim, out_dim, bias=bias)
 
-    def _qk_shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+    def _qk_shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
+        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    def _v_shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.v_head_dim).transpose(1, 2).contiguous()
+    def _v_shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
+        return tensor.view(batch_size, seq_len, self.num_heads, self.v_head_dim).transpose(1, 2).contiguous()
 
     def forward(
         self,
@@ -691,37 +691,37 @@ class ConditionalDetrAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
-        bsz, tgt_len, _ = hidden_states.size()
+        batch_size, target_len, _ = hidden_states.size()
 
         # get query proj
         query_states = hidden_states * self.scaling
         # get key, value proj
-        key_states = self._qk_shape(key_states, -1, bsz)
-        value_states = self._v_shape(value_states, -1, bsz)
+        key_states = self._qk_shape(key_states, -1, batch_size)
+        value_states = self._v_shape(value_states, -1, batch_size)
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        v_proj_shape = (bsz * self.num_heads, -1, self.v_head_dim)
-        query_states = self._qk_shape(query_states, tgt_len, bsz).view(*proj_shape)
+        proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
+        v_proj_shape = (batch_size * self.num_heads, -1, self.v_head_dim)
+        query_states = self._qk_shape(query_states, target_len, batch_size).view(*proj_shape)
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*v_proj_shape)
 
-        src_len = key_states.size(1)
+        source_len = key_states.size(1)
 
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+        if attn_weights.size() != (batch_size * self.num_heads, target_len, source_len):
             raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f"Attention weights should be of size {(batch_size * self.num_heads, target_len, source_len)}, but is"
                 f" {attn_weights.size()}"
             )
 
         if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+            if attention_mask.size() != (batch_size, 1, target_len, source_len):
                 raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                    f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
+            attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
@@ -730,8 +730,8 @@ class ConditionalDetrAttention(nn.Module):
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights_reshaped = attn_weights.view(batch_size, self.num_heads, target_len, source_len)
+            attn_weights = attn_weights_reshaped.view(batch_size * self.num_heads, target_len, source_len)
         else:
             attn_weights_reshaped = None
 
@@ -739,15 +739,15 @@ class ConditionalDetrAttention(nn.Module):
 
         attn_output = torch.bmm(attn_probs, value_states)
 
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.v_head_dim):
+        if attn_output.size() != (batch_size * self.num_heads, target_len, self.v_head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.v_head_dim)}, but is"
+                f"`attn_output` should be of size {(batch_size, self.num_heads, target_len, self.v_head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.v_head_dim)
+        attn_output = attn_output.view(batch_size, self.num_heads, target_len, self.v_head_dim)
         attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, self.out_dim)
+        attn_output = attn_output.reshape(batch_size, target_len, self.out_dim)
 
         attn_output = self.out_proj(attn_output)
 
@@ -883,7 +883,7 @@ class ConditionalDetrDecoderLayer(nn.Module):
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+                `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative values.
             position_embeddings (`torch.FloatTensor`, *optional*):
                 position embeddings that are added to the queries and keys
             in the cross-attention layer.
@@ -893,7 +893,7 @@ class ConditionalDetrDecoderLayer(nn.Module):
             encoder_hidden_states (`torch.FloatTensor`):
                 cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+                `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative values.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -936,7 +936,7 @@ class ConditionalDetrDecoderLayer(nn.Module):
         v = self.ca_v_proj(encoder_hidden_states)
 
         batch_size, num_queries, n_model = q_content.shape
-        _, src_len, _ = k_content.shape
+        _, source_len, _ = k_content.shape
 
         k_pos = self.ca_kpos_proj(position_embeddings)
 
@@ -954,9 +954,9 @@ class ConditionalDetrDecoderLayer(nn.Module):
         query_sine_embed = self.ca_qpos_sine_proj(query_sine_embed)
         query_sine_embed = query_sine_embed.view(batch_size, num_queries, self.nhead, n_model // self.nhead)
         q = torch.cat([q, query_sine_embed], dim=3).view(batch_size, num_queries, n_model * 2)
-        k = k.view(batch_size, src_len, self.nhead, n_model // self.nhead)
-        k_pos = k_pos.view(batch_size, src_len, self.nhead, n_model // self.nhead)
-        k = torch.cat([k, k_pos], dim=3).view(batch_size, src_len, n_model * 2)
+        k = k.view(batch_size, source_len, self.nhead, n_model // self.nhead)
+        k_pos = k_pos.view(batch_size, source_len, self.nhead, n_model // self.nhead)
+        k = torch.cat([k, k_pos], dim=3).view(batch_size, source_len, n_model * 2)
 
         # Cross-Attention Block
         cross_attn_weights = None
@@ -1329,14 +1329,14 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         combined_attention_mask = None
 
         if attention_mask is not None and combined_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
             combined_attention_mask = combined_attention_mask + _expand_mask(
-                attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+                attention_mask, inputs_embeds.dtype, target_len=input_shape[-1]
             )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
             encoder_attention_mask = _expand_mask(
                 encoder_attention_mask, inputs_embeds.dtype, target_len=input_shape[-1]
             )
@@ -2252,27 +2252,27 @@ class ConditionalDetrLoss(nn.Module):
         """
         if "logits" not in outputs:
             raise KeyError("No logits were found in the outputs")
-        src_logits = outputs["logits"]
+        source_logits = outputs["logits"]
 
-        idx = self._get_src_permutation_idx(indices)
+        idx = self._get_source_permutation_idx(indices)
         target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
         target_classes = torch.full(
-            src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
+            source_logits.shape[:2], self.num_classes, dtype=torch.int64, device=source_logits.device
         )
         target_classes[idx] = target_classes_o
 
         target_classes_onehot = torch.zeros(
-            [src_logits.shape[0], src_logits.shape[1], src_logits.shape[2] + 1],
-            dtype=src_logits.dtype,
-            layout=src_logits.layout,
-            device=src_logits.device,
+            [source_logits.shape[0], source_logits.shape[1], source_logits.shape[2] + 1],
+            dtype=source_logits.dtype,
+            layout=source_logits.layout,
+            device=source_logits.device,
         )
         target_classes_onehot.scatter_(2, target_classes.unsqueeze(-1), 1)
 
         target_classes_onehot = target_classes_onehot[:, :, :-1]
         loss_ce = (
-            sigmoid_focal_loss(src_logits, target_classes_onehot, num_boxes, alpha=self.focal_alpha, gamma=2)
-            * src_logits.shape[1]
+            sigmoid_focal_loss(source_logits, target_classes_onehot, num_boxes, alpha=self.focal_alpha, gamma=2)
+            * source_logits.shape[1]
         )
         losses = {"loss_ce": loss_ce}
 
@@ -2287,10 +2287,10 @@ class ConditionalDetrLoss(nn.Module):
         """
         logits = outputs["logits"]
         device = logits.device
-        tgt_lengths = torch.as_tensor([len(v["class_labels"]) for v in targets], device=device)
+        target_lengths = torch.as_tensor([len(v["class_labels"]) for v in targets], device=device)
         # Count the number of predictions that are NOT "no-object" (which is the last class)
         card_pred = (logits.argmax(-1) != logits.shape[-1] - 1).sum(1)
-        card_err = nn.functional.l1_loss(card_pred.float(), tgt_lengths.float())
+        card_err = nn.functional.l1_loss(card_pred.float(), target_lengths.float())
         losses = {"cardinality_error": card_err}
         return losses
 
@@ -2303,17 +2303,17 @@ class ConditionalDetrLoss(nn.Module):
         """
         if "pred_boxes" not in outputs:
             raise KeyError("No predicted boxes found in outputs")
-        idx = self._get_src_permutation_idx(indices)
-        src_boxes = outputs["pred_boxes"][idx]
+        idx = self._get_source_permutation_idx(indices)
+        source_boxes = outputs["pred_boxes"][idx]
         target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
 
-        loss_bbox = nn.functional.l1_loss(src_boxes, target_boxes, reduction="none")
+        loss_bbox = nn.functional.l1_loss(source_boxes, target_boxes, reduction="none")
 
         losses = {}
         losses["loss_bbox"] = loss_bbox.sum() / num_boxes
 
         loss_giou = 1 - torch.diag(
-            generalized_box_iou(center_to_corners_format(src_boxes), center_to_corners_format(target_boxes))
+            generalized_box_iou(center_to_corners_format(source_boxes), center_to_corners_format(target_boxes))
         )
         losses["loss_giou"] = loss_giou.sum() / num_boxes
         return losses
@@ -2327,41 +2327,41 @@ class ConditionalDetrLoss(nn.Module):
         if "pred_masks" not in outputs:
             raise KeyError("No predicted masks found in outputs")
 
-        src_idx = self._get_src_permutation_idx(indices)
-        tgt_idx = self._get_tgt_permutation_idx(indices)
-        src_masks = outputs["pred_masks"]
-        src_masks = src_masks[src_idx]
+        source_idx = self._get_source_permutation_idx(indices)
+        target_idx = self._get_target_permutation_idx(indices)
+        source_masks = outputs["pred_masks"]
+        source_masks = source_masks[source_idx]
         masks = [t["masks"] for t in targets]
         # TODO use valid to mask invalid areas due to padding in loss
         target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
-        target_masks = target_masks.to(src_masks)
-        target_masks = target_masks[tgt_idx]
+        target_masks = target_masks.to(source_masks)
+        target_masks = target_masks[target_idx]
 
         # upsample predictions to the target size
-        src_masks = nn.functional.interpolate(
-            src_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
+        source_masks = nn.functional.interpolate(
+            source_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
         )
-        src_masks = src_masks[:, 0].flatten(1)
+        source_masks = source_masks[:, 0].flatten(1)
 
         target_masks = target_masks.flatten(1)
-        target_masks = target_masks.view(src_masks.shape)
+        target_masks = target_masks.view(source_masks.shape)
         losses = {
-            "loss_mask": sigmoid_focal_loss(src_masks, target_masks, num_boxes),
-            "loss_dice": dice_loss(src_masks, target_masks, num_boxes),
+            "loss_mask": sigmoid_focal_loss(source_masks, target_masks, num_boxes),
+            "loss_dice": dice_loss(source_masks, target_masks, num_boxes),
         }
         return losses
 
-    def _get_src_permutation_idx(self, indices):
+    def _get_source_permutation_idx(self, indices):
         # permute predictions following indices
-        batch_idx = torch.cat([torch.full_like(src, i) for i, (src, _) in enumerate(indices)])
-        src_idx = torch.cat([src for (src, _) in indices])
-        return batch_idx, src_idx
+        batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
+        source_idx = torch.cat([source for (source, _) in indices])
+        return batch_idx, source_idx
 
-    def _get_tgt_permutation_idx(self, indices):
+    def _get_target_permutation_idx(self, indices):
         # permute targets following indices
-        batch_idx = torch.cat([torch.full_like(tgt, i) for i, (_, tgt) in enumerate(indices)])
-        tgt_idx = torch.cat([tgt for (_, tgt) in indices])
-        return batch_idx, tgt_idx
+        batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
+        target_idx = torch.cat([target for (_, target) in indices])
+        return batch_idx, target_idx
 
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
@@ -2496,21 +2496,21 @@ class ConditionalDetrHungarianMatcher(nn.Module):
         out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
 
         # Also concat the target labels and boxes
-        tgt_ids = torch.cat([v["class_labels"] for v in targets])
-        tgt_bbox = torch.cat([v["boxes"] for v in targets])
+        target_ids = torch.cat([v["class_labels"] for v in targets])
+        target_bbox = torch.cat([v["boxes"] for v in targets])
 
         # Compute the classification cost.
         alpha = 0.25
         gamma = 2.0
         neg_cost_class = (1 - alpha) * (out_prob**gamma) * (-(1 - out_prob + 1e-8).log())
         pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
-        class_cost = pos_cost_class[:, tgt_ids] - neg_cost_class[:, tgt_ids]
+        class_cost = pos_cost_class[:, target_ids] - neg_cost_class[:, target_ids]
 
         # Compute the L1 cost between boxes
-        bbox_cost = torch.cdist(out_bbox, tgt_bbox, p=1)
+        bbox_cost = torch.cdist(out_bbox, target_bbox, p=1)
 
         # Compute the giou cost between boxes
-        giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(tgt_bbox))
+        giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
 
         # Final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
