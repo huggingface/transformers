@@ -523,7 +523,7 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
             self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
         self.pos_conv_embed = SpeechT5PositionalConvEmbedding(config)
-        self.embed_positions = SpeechT5SinusoidalPositionalEmbedding(
+        self.pos_sinusoidal_embed = SpeechT5SinusoidalPositionalEmbedding(
             config.max_speech_positions + config.pad_token_id + 1,
             config.hidden_size,
             config.pad_token_id,
@@ -553,16 +553,16 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
             hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
         )
 
-        position_embeddings = self.pos_conv_embed(hidden_states)
-        hidden_states = hidden_states + position_embeddings
+        positional_conv_embedding = self.pos_conv_embed(hidden_states)
+        hidden_states = hidden_states + positional_conv_embedding
 
         if attention_mask is not None:
             padding_mask = attention_mask.ne(1).long()
         else:
             padding_mask = torch.zeros(hidden_states.shape[:2], dtype=torch.long, device=hidden_states.device)
 
-        position_embeddings = self.embed_positions(padding_mask)
-        hidden_states = hidden_states + position_embeddings
+        positional_sinusoidal_embeddings = self.pos_sinusoidal_embed(padding_mask)
+        hidden_states = hidden_states + positional_sinusoidal_embeddings
 
         return hidden_states, attention_mask
 
@@ -582,7 +582,7 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
 
-    # Copied from transformers.models.hubert.modeling_hubert.HubertPreTrainedModel._get_feat_extract_output_lengths
+    # Copied from transformers.models.unispeech.modeling_unispeech.UniSpeechPreTrainedModel._get_feat_extract_output_lengths
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
         """
         Computes the output length of the convolutional layers
@@ -715,29 +715,15 @@ class SpeechT5TextDecoderPrenet(nn.Module):
         past_key_values: Optional[List[torch.FloatTensor]] = None,
     ):
         if input_ids is not None:
-            input = input_ids
-            input_shape = input.shape
+            input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
         else:
             raise ValueError("You have to specify decoder_input_ids")
 
-        # TODO: Just like the original model, if the input_ids contain padding tokens,
-        # we set these positions to zero in the attention mask. However, other models
-        # from Transformers don't appear to do this?
-        # Having this logic also breaks `model.generate` when using it on a batch;
-        # as one output sequence is finished, it will start to emit pad_tokens and
-        # suddenly the logic here starts to create an attention mask but it will be
-        # too small to cover the entire sequence. That's why the code is commented out.
-        # Not sure if it's worth trying to fix, or better to simply not do this.
-        # if input_ids.eq(self.config.pad_token_id).any():
-        #     if attention_mask is None:
-        #         attention_mask = torch.ones_like(input_ids, dtype=torch.long)
-        #     attention_mask[input_ids.eq(self.config.pad_token_id)] = 0
-
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-        positions = self.embed_positions(input, past_key_values_length)
+        positions = self.embed_positions(input_ids, past_key_values_length)
 
-        inputs_embeds = self.embed_tokens(input) * self.embed_scale
+        inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
         inputs_embeds += positions
         inputs_embeds = self.dropout(inputs_embeds)
 
@@ -915,6 +901,7 @@ class SpeechT5Attention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward with Wav2Vec2->SpeechT5
 class SpeechT5FeedForward(nn.Module):
     def __init__(self, config, intermediate_size):
         super().__init__()
@@ -1839,7 +1826,7 @@ SPEECHT5_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare SpeechT5 Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare SpeechT5 Encoder-Decoder Model outputting raw hidden-states without any specific pre- or post-nets.",
     SPEECHT5_START_DOCSTRING,
 )
 class SpeechT5Model(SpeechT5PreTrainedModel):
@@ -1984,28 +1971,28 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
 )
 class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
     _keys_to_ignore_on_load_missing = [
-        r"speech_encoder_prenet.embed_positions.weights",
+        r"speech_encoder_prenet.pos_sinusoidal_embed.weights",
     ]
     _keys_to_ignore_on_save = [
-        r"speech_encoder_prenet.embed_positions.weights",
+        r"speech_encoder_prenet.pos_sinusoidal_embed.weights",
     ]
 
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)
+
+        if config.vocab_size is None:
+            raise ValueError(
+                f"You are trying to instantiate {self.__class__} with a configuration that "
+                "does not define the vocabulary size of the language model head. Please "
+                "instantiate the model as follows: `SpeechT5ForConditionalGeneration.from_pretrained(..., vocab_size=vocab_size)`. "
+                "or define `vocab_size` of your model's configuration."
+            )
 
         speech_encoder = SpeechT5SpeechEncoder(config)
         text_decoder = SpeechT5TextDecoder(config)
         self.speecht5 = SpeechT5Model(config, speech_encoder, text_decoder)
 
         self.text_decoder_postnet = SpeechT5TextDecoderPostnet(config)
-
-        if config.vocab_size is None:
-            raise ValueError(
-                f"You are trying to instantiate {self.__class__} with a configuration that "
-                "does not define the vocabulary size of the language model head. Please "
-                "instantiate the model as follows: `SpeechT5ForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
-                "or define `vocab_size` of your model's configuration."
-            )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2163,15 +2150,15 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
 
 
 @add_start_docstrings(
-    """SpeechT5 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
+    """SpeechT5 Encoder Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     SPEECHT5_START_DOCSTRING,
 )
 class SpeechT5ForCTC(SpeechT5PreTrainedModel):
     _keys_to_ignore_on_load_missing = [
-        r"speech_encoder_prenet.embed_positions.weights",
+        r"speech_encoder_prenet.pos_sinusoidal_embed.weights",
     ]
     _keys_to_ignore_on_save = [
-        r"speech_encoder_prenet.embed_positions.weights",
+        r"speech_encoder_prenet.pos_sinusoidal_embed.weights",
     ]
 
     def __init__(self, config: SpeechT5Config):
