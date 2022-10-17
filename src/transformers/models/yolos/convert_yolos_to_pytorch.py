@@ -68,7 +68,7 @@ def get_yolos_config(yolos_name: str) -> YolosConfig:
 
 
 # we split up the matrix of each encoder layer into queries, keys and values
-def read_in_q_k_v(state_dict: dict, config: YolosConfig, base_model: Bool = False):
+def read_in_q_k_v(state_dict: dict, config: YolosConfig, base_model: bool = False):
     for i in range(config.num_hidden_layers):
         # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
         in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
