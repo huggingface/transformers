@@ -36,6 +36,7 @@ src/transformers/models/canine/configuration_canine.py
 src/transformers/models/codegen/configuration_codegen.py
 src/transformers/models/conditional_detr/configuration_conditional_detr.py
 src/transformers/models/conditional_detr/modeling_conditional_detr.py
+src/transformers/models/convbert/configuration_convbert.py
 src/transformers/models/convnext/modeling_convnext.py
 src/transformers/models/ctrl/configuration_ctrl.py
 src/transformers/models/ctrl/modeling_ctrl.py
