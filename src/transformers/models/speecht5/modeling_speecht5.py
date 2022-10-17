@@ -1386,6 +1386,40 @@ class SpeechT5EncoderWithTextPrenet(SpeechT5PreTrainedModel):
         return outputs
 
 
+class SpeechT5EncoderWithoutPrenet(SpeechT5PreTrainedModel):
+    """
+    This wrapper class is a helper class to correctly load pretrained checkpoints when used
+    in combination with [`SpeechT5Model`].
+    """
+
+    def __init__(self, config: SpeechT5Config):
+        super().__init__(config)
+        self.wrapped_encoder = SpeechT5Encoder(config)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        input_values: torch.FloatTensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutput]:
+
+        return self.wrapped_encoder(
+            hidden_states=input_values,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+
 class SpeechT5Decoder(SpeechT5PreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`SpeechT5DecoderLayer`]
@@ -1720,6 +1754,50 @@ class SpeechT5DecoderWithTextPrenet(SpeechT5PreTrainedModel):
         return outputs
 
 
+class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
+    """
+    This wrapper class is a helper class to correctly load pretrained checkpoints when used
+    in combination with [`SpeechT5Model`].
+    """
+
+    def __init__(self, config: SpeechT5Config):
+        super().__init__(config)
+        self.wrapped_decoder = SpeechT5Decoder(config)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        input_values: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+
+        return self.wrapped_decoder(
+            hidden_states=input_values,
+            attention_mask=attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            head_mask=head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+
 SPEECHT5_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1736,10 +1814,10 @@ SPEECHT5_START_DOCSTRING = r"""
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
         encoder ([`SpeechT5EncoderWithSpeechPrenet`] or [`SpeechT5EncoderWithTextPrenet`] or `None`):
             The Transformer encoder module that applies the appropiate speech or text encoder prenet. If `None`,
-            [`SpeechT5Encoder`] will be used and the `input_values` are assumed to be hidden states.
+            [`SpeechT5EncoderWithoutPrenet`] will be used and the `input_values` are assumed to be hidden states.
         decoder ([`SpeechT5DecoderWithSpeechPrenet`] or [`SpeechT5DecoderWithTextPrenet`] or `None`):
             The Transformer dencoder module that applies the appropiate speech or text decoder prenet. If `None`,
-            [`SpeechT5Decoder`] will be used and the `decoder_input_values` are assumed to be hidden states.
+            [`SpeechT5DecoderWithoutPrenet`] will be used and the `decoder_input_values` are assumed to be hidden states.
 """
 
 
@@ -1838,8 +1916,8 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
     ):
         super().__init__(config)
         self.config = config
-        self.encoder = SpeechT5Encoder(config) if encoder is None else encoder
-        self.decoder = SpeechT5Decoder(config) if decoder is None else decoder
+        self.encoder = SpeechT5EncoderWithoutPrenet(config) if encoder is None else encoder
+        self.decoder = SpeechT5DecoderWithoutPrenet(config) if decoder is None else decoder
 
         # Initialize weights and apply final processing
         self.post_init()
