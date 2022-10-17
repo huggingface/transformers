@@ -234,6 +234,69 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
                     max_new_tokens=tokenizer.model_max_length + 10,
                 )
 
+        # logprobs
+        outputs = text_generator("text", logprobs=2, max_new_tokens=1)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "generated_text": ANY(str),
+                    "logprobs": [
+                        [
+                            {"logprob": ANY(float), "token_id": ANY(int), "token_str": ANY(str)},
+                            {"logprob": ANY(float), "token_id": ANY(int), "token_str": ANY(str)},
+                        ]
+                    ]
+                    * 1,
+                }
+            ],
+        )
+
+        # logprobs + batch
+        outputs = text_generator(["text", "other"], logprobs=2, max_new_tokens=1, batch_size=2)
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {
+                        "generated_text": ANY(str),
+                        "logprobs": [
+                            [
+                                {"logprob": ANY(float), "token_id": ANY(int), "token_str": ANY(str)},
+                                {"logprob": ANY(float), "token_id": ANY(int), "token_str": ANY(str)},
+                            ]
+                        ]
+                        * 1,
+                    }
+                ]
+            ]
+            * 2,  # This is the batch size
+        )
+
+        # logprobs + batch + beams
+        outputs = text_generator(
+            ["text", "other"], logprobs=2, max_new_tokens=3, batch_size=2, num_return_sequences=2, num_beams=3
+        )
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {
+                        "generated_text": ANY(str),
+                        "logprobs": [
+                            [
+                                {"logprob": ANY(float), "token_id": ANY(int), "token_str": ANY(str)},
+                                {"logprob": ANY(float), "token_id": ANY(int), "token_str": ANY(str)},
+                            ]
+                        ]
+                        * 3,  # This is new tokens
+                    }
+                ]
+                * 4  # This is num beams
+            ]
+            * 2,  # This is the batch size
+        )
+
     @require_torch
     @require_accelerate
     @require_torch_gpu

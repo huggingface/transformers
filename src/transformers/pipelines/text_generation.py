@@ -82,6 +82,7 @@ class TextGenerationPipeline(Pipeline):
         prefix=None,
         handle_long_generation=None,
         stop_sequence=None,
+        logprobs=None,
         **generate_kwargs
     ):
         preprocess_params = {}
@@ -131,6 +132,12 @@ class TextGenerationPipeline(Pipeline):
                     " the stop sequence will be used as the stop sequence string in the interim."
                 )
             generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
+
+        if logprobs is not None:
+            # We need to modify the return type of `generate`.
+            generate_kwargs["output_scores"] = True
+            generate_kwargs["return_dict_in_generate"] = True
+            postprocess_params["logprobs"] = logprobs
 
         return preprocess_params, forward_params, postprocess_params
 
@@ -227,20 +234,42 @@ class TextGenerationPipeline(Pipeline):
         prompt_text = model_inputs.pop("prompt_text")
         # BS x SL
         generated_sequence = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
-        out_b = generated_sequence.shape[0]
+        if generate_kwargs.get("return_dict_in_generate", False):
+            scores = generated_sequence.scores
+            import torch
+
+            scores = torch.stack(scores, dim=1)
+            # Score is now batch_size, seq_length, vocab_size
+            generated_sequence = generated_sequence.sequences
+            out_b = generated_sequence.shape[0]
+        else:
+            out_b = generated_sequence.shape[0]
+            scores = None
+
         if self.framework == "pt":
             generated_sequence = generated_sequence.reshape(in_b, out_b // in_b, *generated_sequence.shape[1:])
+            if scores is not None:
+                scores = scores.reshape(in_b, out_b // in_b, *scores.shape[1:])
         elif self.framework == "tf":
             generated_sequence = tf.reshape(generated_sequence, (in_b, out_b // in_b, *generated_sequence.shape[1:]))
-        return {"generated_sequence": generated_sequence, "input_ids": input_ids, "prompt_text": prompt_text}
+            if scores is not None:
+                scores = tf.reshape(scores, (in_b, out_b // in_b, *scores.shape[1:]))
 
-    def postprocess(self, model_outputs, return_type=ReturnType.FULL_TEXT, clean_up_tokenization_spaces=True):
+        extra = {}
+        if scores is not None:
+            extra["scores"] = scores
+
+        return {"generated_sequence": generated_sequence, "input_ids": input_ids, "prompt_text": prompt_text, **extra}
+
+    def postprocess(
+        self, model_outputs, return_type=ReturnType.FULL_TEXT, clean_up_tokenization_spaces=True, logprobs=None
+    ):
         generated_sequence = model_outputs["generated_sequence"][0]
         input_ids = model_outputs["input_ids"]
         prompt_text = model_outputs["prompt_text"]
         generated_sequence = generated_sequence.numpy().tolist()
         records = []
-        for sequence in generated_sequence:
+        for (i, sequence) in enumerate(generated_sequence):
             if return_type == ReturnType.TENSORS:
                 record = {"generated_token_ids": sequence}
             elif return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
@@ -269,6 +298,23 @@ class TextGenerationPipeline(Pipeline):
                     all_text = text[prompt_length:]
 
                 record = {"generated_text": all_text}
+            if logprobs is not None:
+
+                tokens = []
+                for score in model_outputs["scores"][0]:
+                    probs = score.log_softmax(dim=-1).topk(k=logprobs)
+
+                    token_ids = probs.indices[i].tolist()
+                    token_strs = [self.tokenizer.decode(token_id) for token_id in token_ids]
+                    logprob = probs.values[i].tolist()
+                    token = [
+                        {"token_str": token_str, "token_id": token_id, "logprob": lp}
+                        for token_str, token_id, lp in zip(token_strs, token_ids, logprob)
+                    ]
+                    tokens.append(token)
+
+                record["logprobs"] = tokens
+
             records.append(record)
 
         return records
