@@ -156,7 +156,7 @@ def prepare_img() -> torch.Tensor:
 
 @torch.no_grad()
 def convert_yolos_checkpoint(
-    yolos_name: str, checkpoint_path: str, pytorch_dump_folder_path: str, push_to_hub: Bool = False
+    yolos_name: str, checkpoint_path: str, pytorch_dump_folder_path: str, push_to_hub: bool = False
 ):
     """
     Copy/paste/tweak model's weights to our YOLOS structure.
