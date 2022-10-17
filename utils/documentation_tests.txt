@@ -86,6 +86,7 @@ src/transformers/models/pegasus/modeling_pegasus.py
 src/transformers/models/perceiver/modeling_perceiver.py
 src/transformers/models/plbart/modeling_plbart.py
 src/transformers/models/poolformer/modeling_poolformer.py
+src/transformers/models/realm/configuration_realm.py
 src/transformers/models/reformer/configuration_reformer.py
 src/transformers/models/reformer/modeling_reformer.py
 src/transformers/models/regnet/modeling_regnet.py
@@ -139,4 +140,3 @@ src/transformers/models/yolos/configuration_yolos.py
 src/transformers/models/yolos/modeling_yolos.py
 src/transformers/models/x_clip/modeling_x_clip.py
 src/transformers/models/yoso/configuration_yoso.py
-src/transformers/models/realm/configuration_realm.py
