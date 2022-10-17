@@ -37,7 +37,7 @@ if is_torch_available():
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     )
 
-logger = logging.get_logger("transformers")
+logger = logging.get_logger(__name__)
 
 
 class PipelineChunkWrapIterator(PipelineChunkIterator):
