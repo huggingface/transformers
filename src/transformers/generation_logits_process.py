@@ -169,7 +169,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
 class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
     r"""
-    [`LogitsProcessor`] enforcing an exponential penalty on sequences that are not in the original input.
+    [`LogitsProcessor`] enforcing an exponential penalty on tokens that are not in the original input.
 
     Args:
         hallucination_penalty (`float`):
