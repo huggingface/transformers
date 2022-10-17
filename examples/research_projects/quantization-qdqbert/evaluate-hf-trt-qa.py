@@ -133,7 +133,7 @@ parser.add_argument(
     help="The configuration name of the dataset to use (via the datasets library).",
 )
 parser.add_argument(
-    "--preprocessing_num_workers", type=int, default=4, help="A csv or a json file containing the training data."
+    "--preprocessing_num_workers", type=int, default=1, help="A csv or a json file containing the training data."
 )
 parser.add_argument("--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets")
 parser.add_argument(
