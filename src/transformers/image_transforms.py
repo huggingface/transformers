@@ -284,7 +284,10 @@ def normalize(
             The channel dimension format of the output image. If `None`, will use the inferred format from the input.
     """
     if isinstance(image, PIL.Image.Image):
-        warnings.warn("PIL will not be supported as input in the next release. Please use numpy arrays instead.")
+        warnings.warn(
+            "PIL.Image.Image inputs are deprecated and will be removed in v4.26.0. Please use numpy arrays instead.",
+            FutureWarning,
+        )
         # Convert PIL image to numpy array with the same logic as in the previous feature extractor normalize -
         # casting to numpy array and dividing by 255.
         image = to_numpy_array(image)
