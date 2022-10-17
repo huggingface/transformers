@@ -53,7 +53,7 @@ feedback.
 
 ### Did you find a bug?
 
-The 🤗 Transformers library is robust and reliable thanks to the users who notify us of
+The 🤗 Transformers library is robust and reliable. Thanks to the users who notify us of
 the problems they encounter. So thank you for reporting an issue.
 
 First, we would really appreciate it if you could **make sure the bug was not
