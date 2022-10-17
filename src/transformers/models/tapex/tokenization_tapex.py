@@ -17,7 +17,6 @@
 import json
 import os
 import random
-from contextlib import contextmanager
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -61,12 +60,6 @@ class TapexTruncationStrategy(ExplicitEnum):
     """
 
     DROP_ROWS_TO_FIT = "drop_rows_to_fit"
-
-
-class TokenizerStrategy(ExplicitEnum):
-
-    TOKENIZE_SOURCE = "tokenize_source"
-    TOKENIZE_TARGET = "tokenize_target"
 
 
 TAPEX_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
@@ -341,9 +334,6 @@ class TapexTokenizer(PreTrainedTokenizer):
         self.max_cell_length = max_cell_length
         self.table_linearize = IndexedRowTableLinearize()
 
-        # property to decide using which call function
-        self.current_tokenizer = TokenizerStrategy.TOKENIZE_SOURCE
-
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -555,9 +545,7 @@ class TapexTokenizer(PreTrainedTokenizer):
                 Optionally, the corresponding answer to the questions as supervision.
         """
 
-        if self.current_tokenizer == TokenizerStrategy.TOKENIZE_SOURCE:
-            if table is None:
-                raise ValueError("Please ensure that the table is not empty if you use TAPEX to encode source.")
+        if table is not None:
             return self.source_call_func(
                 table=table,
                 query=query,
@@ -578,9 +566,7 @@ class TapexTokenizer(PreTrainedTokenizer):
                 verbose=verbose,
                 **kwargs,
             )
-        else:
-            if answer is None:
-                raise ValueError("Please ensure that the answer is not empty if you use TAPEX to encode target.")
+        elif answer is not None:
             return self.target_call_func(
                 answer=answer,
                 add_special_tokens=add_special_tokens,
@@ -599,6 +585,8 @@ class TapexTokenizer(PreTrainedTokenizer):
                 verbose=verbose,
                 **kwargs,
             )
+        else:
+            raise ValueError("You need to provide either a `table` or an `answer`.")
 
     def source_call_func(
         self,
@@ -1330,17 +1318,6 @@ class TapexTokenizer(PreTrainedTokenizer):
             verbose=verbose,
         )
 
-    @contextmanager
-    def as_target_tokenizer(self):
-        """
-        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
-        sequence-to-sequence models that need a slightly different processing for the labels.
-        """
-        self.current_tokenizer = TokenizerStrategy.TOKENIZE_TARGET
-        yield
-        # restore the call function
-        self.current_tokenizer = TokenizerStrategy.TOKENIZE_SOURCE
-
     def prepare_table_query(
         self,
         table,
@@ -1421,7 +1398,6 @@ class TapexTokenizer(PreTrainedTokenizer):
     ):
         """
         Args:
-
         table_content:
             {"header": xxx, "rows": xxx, "id" (Optionally): xxx}
 

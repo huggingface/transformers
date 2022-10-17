@@ -403,7 +403,7 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
                 added_label = prepared_for_class[
                     sorted(list(prepared_for_class.keys() - inputs_dict.keys()), reverse=True)[0]
                 ]
-                loss_size = tf.size(added_label)
+                expected_loss_size = added_label.shape.as_list()[:1]
 
                 # `TFXLNetLMHeadModel` doesn't cut logits/labels
                 # if model.__class__ in get_values(TF_MODEL_FOR_CAUSAL_LM_MAPPING):
@@ -417,12 +417,12 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
                 input_ids = prepared_for_class.pop(input_name)
 
                 loss = model(input_ids, **prepared_for_class)[0]
-                self.assertEqual(loss.shape, [loss_size])
+                self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
 
                 # Test that model correctly compute the loss with a dict
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
                 loss = model(prepared_for_class)[0]
-                self.assertEqual(loss.shape, [loss_size])
+                self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
 
                 # Test that model correctly compute the loss with a tuple
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
@@ -453,7 +453,7 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
                 # Send to model
                 loss = model(tuple_input[:-1])[0]
 
-                self.assertEqual(loss.shape, [loss_size])
+                self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
 
 
 @require_tf

@@ -15,6 +15,6 @@ jobs:
       commit_sha: ${{ github.sha }}
       package: transformers
       notebook_folder: transformers_doc
-      languages: en es it pt
+      languages: de en es it pt
     secrets:
       token: ${{ secrets.HUGGINGFACE_PUSH }}

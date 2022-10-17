@@ -14,22 +14,26 @@
 
 import collections
 import contextlib
+import functools
 import inspect
 import logging
 import os
 import re
 import shlex
 import shutil
+import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from collections.abc import Mapping
 from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
-from typing import Iterator, Union
+from typing import Iterator, List, Optional, Union
 from unittest import mock
 
+import huggingface_hub
 from transformers import logging as transformers_logging
 
 from .deepspeed import is_deepspeed_available
@@ -44,11 +48,13 @@ from .utils import (
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
+    is_bs4_available,
     is_detectron2_available,
     is_faiss_available,
     is_flax_available,
     is_ftfy_available,
     is_ipex_available,
+    is_jumanpp_available,
     is_librosa_available,
     is_onnx_available,
     is_pandas_available,
@@ -57,11 +63,13 @@ from .utils import (
     is_pytesseract_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
+    is_safetensors_available,
     is_scatter_available,
     is_scipy_available,
     is_sentencepiece_available,
     is_soundfile_availble,
     is_spacy_available,
+    is_sudachi_available,
     is_tensorflow_probability_available,
     is_tensorflow_text_available,
     is_tf2onnx_available,
@@ -71,6 +79,7 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
@@ -126,7 +135,6 @@ _run_pt_tf_cross_tests = parse_flag_from_env("RUN_PT_TF_CROSS_TESTS", default=Fa
 _run_pt_flax_cross_tests = parse_flag_from_env("RUN_PT_FLAX_CROSS_TESTS", default=False)
 _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
-_run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=False)
 _run_git_lfs_tests = parse_flag_from_env("RUN_GIT_LFS_TESTS", default=False)
 _tf_gpu_memory_limit = parse_int_from_env("TF_GPU_MEMORY_LIMIT", default=None)
 
@@ -167,25 +175,6 @@ def is_pt_flax_cross_test(test_case):
             return test_case
         else:
             return pytest.mark.is_pt_flax_cross_test()(test_case)
-
-
-def is_pipeline_test(test_case):
-    """
-    Decorator marking a test as a pipeline test.
-
-    Pipeline tests are skipped by default and we can run only them by setting RUN_PIPELINE_TESTS environment variable
-    to a truthy value and selecting the is_pipeline_test pytest mark.
-
-    """
-    if not _run_pipeline_tests:
-        return unittest.skip("test is pipeline test")(test_case)
-    else:
-        try:
-            import pytest  # We don't need a hard dependency on pytest in the main library
-        except ImportError:
-            return test_case
-        else:
-            return pytest.mark.is_pipeline_test()(test_case)
 
 
 def is_staging_test(test_case):
@@ -236,6 +225,13 @@ def custom_tokenizers(test_case):
     return unittest.skipUnless(_run_custom_tokenizers, "test of custom tokenizers")(test_case)
 
 
+def require_bs4(test_case):
+    """
+    Decorator marking a test that requires BeautifulSoup4. These tests are skipped when BeautifulSoup4 isn't installed.
+    """
+    return unittest.skipUnless(is_bs4_available(), "test requires BeautifulSoup4")(test_case)
+
+
 def require_git_lfs(test_case):
     """
     Decorator marking a test that requires git-lfs.
@@ -251,6 +247,13 @@ def require_accelerate(test_case):
     Decorator marking a test that requires accelerate. These tests are skipped when accelerate isn't installed.
     """
     return unittest.skipUnless(is_accelerate_available(), "test requires accelerate")(test_case)
+
+
+def require_safetensors(test_case):
+    """
+    Decorator marking a test that requires safetensors. These tests are skipped when safetensors isn't installed.
+    """
+    return unittest.skipUnless(is_safetensors_available(), "test requires safetensors")(test_case)
 
 
 def require_rjieba(test_case):
@@ -288,14 +291,31 @@ def require_torch(test_case):
     return unittest.skipUnless(is_torch_available(), "test requires PyTorch")(test_case)
 
 
+def require_torch_or_tf(test_case):
+    """
+    Decorator marking a test that requires PyTorch or TensorFlow.
+
+    These tests are skipped when neither PyTorch not TensorFlow is installed.
+
+    """
+    return unittest.skipUnless(is_torch_available() or is_tf_available(), "test requires PyTorch or TensorFlow")(
+        test_case
+    )
+
+
 def require_intel_extension_for_pytorch(test_case):
     """
     Decorator marking a test that requires Intel Extension for PyTorch.
 
-    These tests are skipped when Intel Extension for PyTorch isn't installed.
+    These tests are skipped when Intel Extension for PyTorch isn't installed or it does not match current PyTorch
+    version.
 
     """
-    return unittest.skipUnless(is_ipex_available(), "test requires Intel Extension for PyTorch")(test_case)
+    return unittest.skipUnless(
+        is_ipex_available(),
+        "test requires Intel Extension for PyTorch to be installed and match current PyTorch version, see"
+        " https://github.com/intel/intel-extension-for-pytorch",
+    )(test_case)
 
 
 def require_torch_scatter(test_case):
@@ -494,6 +514,11 @@ def require_torchdynamo(test_case):
     return unittest.skipUnless(is_torchdynamo_available(), "test requires TorchDynamo")(test_case)
 
 
+def require_torch_tensorrt_fx(test_case):
+    """Decorator marking a test that requires Torch-TensorRT FX"""
+    return unittest.skipUnless(is_torch_tensorrt_fx_available(), "test requires Torch-TensorRT FX")(test_case)
+
+
 def require_torch_gpu(test_case):
     """Decorator marking a test that requires CUDA and PyTorch."""
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
@@ -642,6 +667,20 @@ def require_usr_bin_time(test_case):
     return unittest.skipUnless(cmd_exists("/usr/bin/time"), "test requires /usr/bin/time")(test_case)
 
 
+def require_sudachi(test_case):
+    """
+    Decorator marking a test that requires sudachi
+    """
+    return unittest.skipUnless(is_sudachi_available(), "test requires sudachi")(test_case)
+
+
+def require_jumanpp(test_case):
+    """
+    Decorator marking a test that requires jumanpp
+    """
+    return unittest.skipUnless(is_jumanpp_available(), "test requires jumanpp")(test_case)
+
+
 def get_gpu_count():
     """
     Return the number of available gpus (regardless of whether torch, tf or jax is used)
@@ -759,7 +798,6 @@ class CaptureStd:
     ```"""
 
     def __init__(self, out=True, err=True, replay=True):
-
         self.replay = replay
 
         if out:
@@ -1109,7 +1147,6 @@ class TestCasePlus(unittest.TestCase):
             tmp_dir(`string`): either the same value as passed via *tmp_dir* or the path to the auto-selected tmp dir
         """
         if tmp_dir is not None:
-
             # defining the most likely desired behavior for when a custom path is provided.
             # this most likely indicates the debug mode where we want an easily locatable dir that:
             # 1. gets cleared out before the test (if it already exists)
@@ -1187,7 +1224,6 @@ class TestCasePlus(unittest.TestCase):
         return max_rss
 
     def tearDown(self):
-
         # get_auto_remove_tmp_dir feature: remove registered temp dirs
         for path in self.teardown_tmp_dirs:
             shutil.rmtree(path, ignore_errors=True)
@@ -1273,7 +1309,6 @@ def pytest_terminal_summary_main(tr, id):
     there.
 
     Args:
-
     - tr: `terminalreporter` passed from `conftest.py`
     - id: unique id like `tests` or `examples` that will be incorporated into the final reports filenames - this is
       needed as some jobs have multiple runs of pytest, so we can't have them overwrite each other.
@@ -1374,9 +1409,13 @@ def pytest_terminal_summary_main(tr, id):
         tr.summary_warnings()  # final warnings
 
     tr.reportchars = "wPpsxXEf"  # emulate -rA (used in summary_passes() and short_test_summary())
-    with open(report_files["passes"], "w") as f:
-        tr._tw = create_terminal_writer(config, f)
-        tr.summary_passes()
+
+    # Skip the `passes` report, as it starts to take more than 5 minutes, and sometimes it timeouts on CircleCI if it
+    # takes > 10 minutes (as this part doesn't generate any output on the terminal).
+    # (also, it seems there is no useful information in this report, and we rarely need to read it)
+    # with open(report_files["passes"], "w") as f:
+    #     tr._tw = create_terminal_writer(config, f)
+    #     tr.summary_passes()
 
     with open(report_files["summary_short"], "w") as f:
         tr._tw = create_terminal_writer(config, f)
@@ -1456,7 +1495,6 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
 
 
 def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False, echo=True) -> _RunOutput:
-
     loop = asyncio.get_event_loop()
     result = loop.run_until_complete(
         _stream_subprocess(cmd, env=env, stdin=stdin, timeout=timeout, quiet=quiet, echo=echo)
@@ -1550,3 +1588,85 @@ def to_2tuple(x):
     if isinstance(x, collections.abc.Iterable):
         return x
     return (x, x)
+
+
+# These utils relate to ensuring the right error message is received when running scripts
+class SubprocessCallException(Exception):
+    pass
+
+
+def run_command(command: List[str], return_stdout=False):
+    """
+    Runs `command` with `subprocess.check_output` and will potentially return the `stdout`. Will also properly capture
+    if an error occured while running `command`
+    """
+    try:
+        output = subprocess.check_output(command, stderr=subprocess.STDOUT)
+        if return_stdout:
+            if hasattr(output, "decode"):
+                output = output.decode("utf-8")
+            return output
+    except subprocess.CalledProcessError as e:
+        raise SubprocessCallException(
+            f"Command `{' '.join(command)}` failed with the following error:\n\n{e.output.decode()}"
+        ) from e
+
+
+class RequestCounter:
+    """
+    Helper class that will count all requests made online.
+    """
+
+    def __enter__(self):
+        self.head_request_count = 0
+        self.get_request_count = 0
+        self.other_request_count = 0
+        self.old_request = huggingface_hub.file_download.requests.request
+        huggingface_hub.file_download.requests.request = self.new_request
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        huggingface_hub.file_download.requests.request = self.old_request
+
+    def new_request(self, method, **kwargs):
+        if method == "GET":
+            self.get_request_count += 1
+        elif method == "HEAD":
+            self.head_request_count += 1
+        else:
+            self.other_request_count += 1
+
+        return self.old_request(method=method, **kwargs)
+
+
+def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None):
+    """
+    To decorate flaky tests. They will be retried on failures.
+
+    Args:
+        max_attempts (`int`, *optional*, defaults to 5):
+            The maximum number of attempts to retry the flaky test.
+        wait_before_retry (`float`, *optional*):
+            If provided, will wait that number of seconds before retrying the test.
+    """
+
+    def decorator(test_func_ref):
+        @functools.wraps(test_func_ref)
+        def wrapper(*args, **kwargs):
+            retry_count = 1
+
+            while retry_count < max_attempts:
+                try:
+                    return test_func_ref(*args, **kwargs)
+
+                except Exception as err:
+                    print(f"Test failed with {err} at try {retry_count}/{max_attempts}.", file=sys.stderr)
+                    if wait_before_retry is not None:
+                        time.sleep(wait_before_retry)
+                    retry_count += 1
+
+            return test_func_ref(*args, **kwargs)
+
+        return wrapper
+
+    return decorator

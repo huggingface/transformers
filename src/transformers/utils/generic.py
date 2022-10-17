@@ -16,9 +16,10 @@ Generic utilities
 """
 
 import inspect
+import tempfile
 from collections import OrderedDict, UserDict
 from collections.abc import MutableMapping
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from dataclasses import fields
 from enum import Enum
 from typing import Any, ContextManager, List, Tuple
@@ -325,3 +326,12 @@ def flatten_dict(d: MutableMapping, parent_key: str = "", delimiter: str = "."):
                 yield key, v
 
     return dict(_flatten_dict(d, parent_key, delimiter))
+
+
+@contextmanager
+def working_or_temp_dir(working_dir, use_temp_dir: bool = False):
+    if use_temp_dir:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            yield tmp_dir
+    else:
+        yield working_dir

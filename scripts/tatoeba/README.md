@@ -57,7 +57,7 @@ To upload all converted models,
 2. Login to `transformers-cli`
 
 ```bash
-transformers-cli login
+huggingface-cli login
 ```
 
 3. Run the `upload_models` script

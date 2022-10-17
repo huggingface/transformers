@@ -70,6 +70,14 @@ LOCALIZED_READMES = {
             " {paper_authors}.{supplements}"
         ),
     },
+    "README_es.md": {
+        "start_prompt": "🤗 Transformers actualmente proporciona las siguientes arquitecturas",
+        "end_prompt": "1. ¿Quieres aportar un nuevo modelo?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
 }
 
 
@@ -133,6 +141,7 @@ def find_code_in_transformers(object_name):
 
 _re_copy_warning = re.compile(r"^(\s*)#\s*Copied from\s+transformers\.(\S+\.\S+)\s*($|\S.*$)")
 _re_replace_pattern = re.compile(r"^\s*(\S+)->(\S+)(\s+.*|$)")
+_re_fill_pattern = re.compile(r"<FILL\s+[^>]*>")
 
 
 def get_indent(code):
@@ -346,6 +355,11 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
             # Add an anchor white space behind a model description string for regex.
             # If metadata cannot be captured, the English version will be directly copied.
             localized_model_index[title] = _re_capture_meta.sub(_rep, model + " ")
+        elif _re_fill_pattern.search(localized_model_index[title]) is not None:
+            update = _re_capture_meta.sub(_rep, model + " ")
+            if update != localized_model_index[title]:
+                readmes_match = False
+                localized_model_index[title] = update
         else:
             # Synchronize link
             localized_model_index[title] = _re_capture_title_link.sub(
@@ -465,6 +479,7 @@ SPECIAL_MODEL_NAMES = {
     "Data2VecAudio": "Data2Vec",
     "Data2VecText": "Data2Vec",
     "Data2VecVision": "Data2Vec",
+    "DonutSwin": "Donut",
     "Marian": "MarianMT",
     "OpenAI GPT-2": "GPT-2",
     "OpenAI GPT": "GPT",
@@ -489,8 +504,8 @@ MODELS_NOT_IN_README = [
 
 
 README_TEMPLATE = (
-    "1. **[{model_name}](https://huggingface.co/docs/transformers/model_doc/{model_type})** (from <FILL INSTITUTION>) "
-    "released with the paper [<FILL PAPER TITLE>](<FILL ARKIV LINK>) by <FILL AUTHORS>."
+    "1. **[{model_name}](https://huggingface.co/docs/main/transformers/model_doc/{model_type})** (from "
+    "<FILL INSTITUTION>) released with the paper [<FILL PAPER TITLE>](<FILL ARKIV LINK>) by <FILL AUTHORS>."
 )
 
 

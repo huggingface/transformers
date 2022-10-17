@@ -65,8 +65,10 @@ class ResNetConfig(PretrainedConfig):
 
     >>> # Initializing a ResNet resnet-50 style configuration
     >>> configuration = ResNetConfig()
-    >>> # Initializing a model from the resnet-50 style configuration
+
+    >>> # Initializing a model (with random weights) from the resnet-50 style configuration
     >>> model = ResNetModel(configuration)
+
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
@@ -105,7 +107,7 @@ class ResNetOnnxConfig(OnnxConfig):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         return OrderedDict(
             [
-                ("pixel_values", {0: "batch", 1: "sequence"}),
+                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
             ]
         )
 

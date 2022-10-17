@@ -21,16 +21,9 @@ from typing import Any, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from packaging import version
 from torch import nn
+from torch.cuda.amp import autocast
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-
-
-if version.parse(torch.__version__) >= version.parse("1.6"):
-    is_amp_available = True
-    from torch.cuda.amp import autocast
-else:
-    is_amp_available = False
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -294,12 +287,7 @@ class ImageGPTAttention(nn.Module):
             scale_factor /= float(self.layer_idx + 1)
 
         # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
-        if is_amp_available:
-            with autocast(enabled=False):
-                q, k = query.reshape(-1, q_seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, k_seq_len)
-                attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
-                attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
-        else:
+        with autocast(enabled=False):
             q, k = query.reshape(-1, q_seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, k_seq_len)
             attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
             attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
@@ -769,7 +757,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
-            # positions we want to attend and -10000.0 for masked positions.
+            # positions we want to attend and the dtype's smallest value for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
             attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility

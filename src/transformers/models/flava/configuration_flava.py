@@ -83,7 +83,7 @@ class FlavaImageConfig(PretrainedConfig):
     >>> # Initializing a FlavaImageModel with  style configuration
     >>> configuration = FlavaImageConfig()
 
-    >>> # Initializing a FlavaImageModel model from the  style configuration
+    >>> # Initializing a FlavaImageModel model from the style configuration
     >>> model = FlavaImageModel(configuration)
 
     >>> # Accessing the model configuration
@@ -212,7 +212,7 @@ class FlavaTextConfig(PretrainedConfig):
     >>> # Initializing a FlavaTextModel with  style configuration
     >>> configuration = FlavaTextConfig()
 
-    >>> # Initializing a FlavaTextConfig from the  style configuration
+    >>> # Initializing a FlavaTextConfig from the style configuration
     >>> model = FlavaTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -321,7 +321,7 @@ class FlavaMultimodalConfig(PretrainedConfig):
     >>> # Initializing a FlavaMultimodalModel with  style configuration
     >>> configuration = FlavaMultimodalConfig()
 
-    >>> # Initializing a FlavaMultimodalModel model from the  style configuration
+    >>> # Initializing a FlavaMultimodalModel model from the style configuration
     >>> model = FlavaMultimodalModel(configuration)
 
     >>> # Accessing the model configuration

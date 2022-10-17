@@ -955,7 +955,7 @@ class LxmertModel(LxmertPreTrainedModel):
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
-        # positions we want to attend and -10000.0 for masked positions.
+        # positions we want to attend and the dtype's smallest value for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
         extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)
@@ -1110,7 +1110,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
 
     def get_qa_logit_layer(self) -> nn.Module:
         """
-        Returns the the linear layer that produces question answering logits.
+        Returns the linear layer that produces question answering logits.
 
         Returns:
             `nn.Module`: A torch module mapping the question answering prediction hidden states or `None` if LXMERT
@@ -1341,7 +1341,7 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
 
     def get_qa_logit_layer(self) -> nn.Module:
         """
-        Returns the the linear layer that produces question answering logits
+        Returns the linear layer that produces question answering logits
 
         Returns:
             `nn.Module`: A torch module mapping the question answering prediction hidden states. `None`: A NoneType

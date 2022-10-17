@@ -80,7 +80,7 @@ _XVECTOR_EXPECTED_OUTPUT = 1.0
 
 
 WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/wav2vec2-conformer-large-rel-pos",
+    "facebook/wav2vec2-conformer-rel-pos-large",
     # See all Wav2Vec2Conformer models at https://huggingface.co/models?filter=wav2vec2-conformer
 ]
 
@@ -231,7 +231,7 @@ def _compute_mask_indices(
     )
     spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
 
-    # add offset to the starting indexes so that that indexes now create a span
+    # add offset to the starting indexes so that indexes now create a span
     offsets = np.arange(mask_length)[None, None, :]
     offsets = np.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
         batch_size, max_num_masked_span * mask_length
@@ -670,8 +670,8 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
             self.linear_pos = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
             # these two learnable bias are used in matrix c and matrix d
             # as described in https://arxiv.org/abs/1901.02860 Section 3.3
-            self.pos_bias_u = nn.Parameter(torch.Tensor(self.num_heads, self.head_size))
-            self.pos_bias_v = nn.Parameter(torch.Tensor(self.num_heads, self.head_size))
+            self.pos_bias_u = nn.Parameter(torch.zeros(self.num_heads, self.head_size))
+            self.pos_bias_v = nn.Parameter(torch.zeros(self.num_heads, self.head_size))
 
     def forward(
         self,
@@ -1023,7 +1023,7 @@ class Wav2Vec2ConformerGumbelVectorQuantizer(nn.Module):
             # take argmax in non-differentiable way
             # comptute hard codevector distribution (one hot)
             codevector_idx = hidden_states.argmax(dim=-1)
-            codevector_probs = hidden_states.new_zeros(*hidden_states.shape).scatter_(
+            codevector_probs = hidden_states.new_zeros(hidden_states.shape).scatter_(
                 -1, codevector_idx.view(-1, 1), 1.0
             )
             codevector_probs = codevector_probs.view(batch_size * sequence_length, self.num_groups, -1)
@@ -1226,7 +1226,7 @@ WAV2VEC2_CONFORMER_INPUTS_DOCSTRING = r"""
 
             `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
             True`. For all models whose processor has `config.return_attention_mask == False`, such as
-            [wav2vec2_conformer-base](https://huggingface.co/facebook/wav2vec2-conformer-large-rel-pos),
+            [wav2vec2-conformer-rel-pos-large](https://huggingface.co/facebook/wav2vec2-conformer-rel-pos-large),
             `attention_mask` should **not** be passed to avoid degraded performance when doing batched inference. For
             such models `input_values` should simply be padded with 0 and passed without `attention_mask`. Be aware
             that these models also yield slightly different results depending on whether `input_values` is padded or
@@ -1469,7 +1469,10 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         ```python
         >>> import torch
         >>> from transformers import AutoFeatureExtractor, Wav2Vec2ConformerForPreTraining
-        >>> from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import _compute_mask_indices
+        >>> from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
+        ...     _compute_mask_indices,
+        ...     _sample_negative_indices,
+        ... )
         >>> from datasets import load_dataset
 
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")
@@ -1480,9 +1483,19 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
 
         >>> # compute masked indices
         >>> batch_size, raw_sequence_length = input_values.shape
-        >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
-        >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2)
-        >>> mask_time_indices = torch.tensor(mask_time_indices, device=input_values.device, dtype=torch.long)
+        >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length).item()
+        >>> mask_time_indices = _compute_mask_indices(
+        ...     shape=(batch_size, sequence_length), mask_prob=0.2, mask_length=2
+        ... )
+        >>> sampled_negative_indices = _sample_negative_indices(
+        ...     features_shape=(batch_size, sequence_length),
+        ...     num_negatives=model.config.num_negatives,
+        ...     mask_time_indices=mask_time_indices,
+        ... )
+        >>> mask_time_indices = torch.tensor(data=mask_time_indices, device=input_values.device, dtype=torch.long)
+        >>> sampled_negative_indices = torch.tensor(
+        ...     data=sampled_negative_indices, device=input_values.device, dtype=torch.long
+        ... )
 
         >>> with torch.no_grad():
         ...     outputs = model(input_values, mask_time_indices=mask_time_indices)
@@ -1496,7 +1509,9 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
 
         >>> # for contrastive loss training model should be put into train mode
         >>> model = model.train()
-        >>> loss = model(input_values, mask_time_indices=mask_time_indices).loss
+        >>> loss = model(
+        ...     input_values, mask_time_indices=mask_time_indices, sampled_negative_indices=sampled_negative_indices
+        ... ).loss
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

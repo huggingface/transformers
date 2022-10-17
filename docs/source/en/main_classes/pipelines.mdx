@@ -25,10 +25,13 @@ There are two categories of pipeline abstractions to be aware about:
   - [`AudioClassificationPipeline`]
   - [`AutomaticSpeechRecognitionPipeline`]
   - [`ConversationalPipeline`]
+  - [`DepthEstimationPipeline`]
+  - [`DocumentQuestionAnsweringPipeline`]
   - [`FeatureExtractionPipeline`]
   - [`FillMaskPipeline`]
   - [`ImageClassificationPipeline`]
   - [`ImageSegmentationPipeline`]
+  - [`ImageToTextPipeline`]
   - [`ObjectDetectionPipeline`]
   - [`QuestionAnsweringPipeline`]
   - [`SummarizationPipeline`]
@@ -41,6 +44,7 @@ There are two categories of pipeline abstractions to be aware about:
   - [`VisualQuestionAnsweringPipeline`]
   - [`ZeroShotClassificationPipeline`]
   - [`ZeroShotImageClassificationPipeline`]
+  - [`ZeroShotObjectDetectionPipeline`]
 
 ## The pipeline abstraction
 
@@ -341,6 +345,16 @@ That should enable you to do all the custom code you want.
     - __call__
     - all
 
+### DepthEstimationPipeline
+[[autodoc]] DepthEstimationPipeline
+    - __call__
+    - all 
+
+### DocumentQuestionAnsweringPipeline
+
+[[autodoc]] DocumentQuestionAnsweringPipeline
+    - __call__
+    - all
 ### FeatureExtractionPipeline
 
 [[autodoc]] FeatureExtractionPipeline
@@ -362,6 +376,12 @@ That should enable you to do all the custom code you want.
 ### ImageSegmentationPipeline
 
 [[autodoc]] ImageSegmentationPipeline
+    - __call__
+    - all
+
+### ImageToTextPipeline
+
+[[autodoc]] ImageToTextPipeline
     - __call__
     - all
 
@@ -439,6 +459,12 @@ See [`TokenClassificationPipeline`] for all details.
 ### ZeroShotImageClassificationPipeline
 
 [[autodoc]] ZeroShotImageClassificationPipeline
+    - __call__
+    - all
+
+### ZeroShotObjectDetectionPipeline
+
+[[autodoc]] ZeroShotObjectDetectionPipeline
     - __call__
     - all
 

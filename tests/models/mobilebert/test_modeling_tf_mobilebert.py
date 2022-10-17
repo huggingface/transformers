@@ -17,7 +17,8 @@
 import unittest
 
 from transformers import MobileBertConfig, is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.models.auto import get_values
+from transformers.testing_utils import require_tf, slow, tooslow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
@@ -27,6 +28,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import (
+        TF_MODEL_FOR_PRETRAINING_MAPPING,
         TFMobileBertForMaskedLM,
         TFMobileBertForMultipleChoice,
         TFMobileBertForNextSentencePrediction,
@@ -57,6 +59,16 @@ class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
     )
     test_head_masking = False
     test_onnx = False
+
+    # special case for ForPreTraining model, same as BERT tests
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class in get_values(TF_MODEL_FOR_PRETRAINING_MAPPING):
+                inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+
+        return inputs_dict
 
     class TFMobileBertModelTester(object):
         def __init__(
@@ -306,8 +318,8 @@ class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
                 name = model.get_bias()
                 assert name is None
 
+    @tooslow
     def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
         pass
 
     @slow

@@ -351,32 +351,9 @@ class EncoderDecoderMixin:
             outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
         )
 
-    def check_encoder_decoder_model_output_attentions(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-        encoder_hidden_states,
-        decoder_config,
-        decoder_input_ids,
-        decoder_attention_mask,
-        labels,
-        **kwargs
+    def _check_output_with_attentions(
+        self, outputs_encoder_decoder, config, input_ids, decoder_config, decoder_input_ids
     ):
-        # make the decoder inputs a different shape from the encoder inputs to harden the test
-        decoder_input_ids = decoder_input_ids[:, :-1]
-        decoder_attention_mask = decoder_attention_mask[:, :-1]
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
-        enc_dec_model.to(torch_device)
-        outputs_encoder_decoder = enc_dec_model(
-            input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
-            attention_mask=attention_mask,
-            decoder_attention_mask=decoder_attention_mask,
-            output_attentions=True,
-        )
-
         encoder_attentions = outputs_encoder_decoder["encoder_attentions"]
         self.assertEqual(len(encoder_attentions), config.num_hidden_layers)
 
@@ -406,6 +383,85 @@ class EncoderDecoderMixin:
         self.assertEqual(
             cross_attentions[0].shape[-3:],
             (decoder_config.num_attention_heads, cross_attention_input_seq_len, input_ids.shape[-1]),
+        )
+
+    def check_encoder_decoder_model_output_attentions(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        encoder_hidden_states,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        labels,
+        **kwargs
+    ):
+        # make the decoder inputs a different shape from the encoder inputs to harden the test
+        decoder_input_ids = decoder_input_ids[:, :-1]
+        decoder_attention_mask = decoder_attention_mask[:, :-1]
+        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.to(torch_device)
+        outputs_encoder_decoder = enc_dec_model(
+            input_ids=input_ids,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+            output_attentions=True,
+        )
+        self._check_output_with_attentions(
+            outputs_encoder_decoder, config, input_ids, decoder_config, decoder_input_ids
+        )
+
+    def check_encoder_decoder_model_output_attentions_from_config(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        encoder_hidden_states,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        labels,
+        **kwargs
+    ):
+        # Similar to `check_encoder_decoder_model_output_attentions`, but with `output_attentions` triggered from the
+        # config file. Contrarily to most models, changing the model's config won't work -- the defaults are loaded
+        # from the inner models' configurations.
+
+        decoder_input_ids = decoder_input_ids[:, :-1]
+        decoder_attention_mask = decoder_attention_mask[:, :-1]
+        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.config.output_attentions = True  # model config -> won't work
+        enc_dec_model.to(torch_device)
+        outputs_encoder_decoder = enc_dec_model(
+            input_ids=input_ids,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+        )
+        self.assertTrue(
+            all(
+                key not in outputs_encoder_decoder
+                for key in ["encoder_attentions", "decoder_attentions", "cross_attentions"]
+            )
+        )
+
+        config.output_attentions = True  # inner model config -> will work
+        decoder_config.output_attentions = True
+        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.to(torch_device)
+        outputs_encoder_decoder = enc_dec_model(
+            input_ids=input_ids,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+        )
+        self._check_output_with_attentions(
+            outputs_encoder_decoder, config, input_ids, decoder_config, decoder_input_ids
         )
 
     def check_encoder_decoder_model_generate(self, input_ids, config, decoder_config, **kwargs):
@@ -542,6 +598,10 @@ class EncoderDecoderMixin:
     def test_encoder_decoder_model_output_attentions(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_output_attentions(**input_ids_dict)
+
+    def test_encoder_decoder_model_output_attentions_from_config(self):
+        input_ids_dict = self.prepare_config_and_inputs()
+        self.check_encoder_decoder_model_output_attentions_from_config(**input_ids_dict)
 
     def test_encoder_decoder_model_generate(self):
         input_ids_dict = self.prepare_config_and_inputs()
@@ -859,7 +919,7 @@ class GPT2EncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         }
 
     def get_pretrained_model(self):
-        return EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "../gpt2")
+        return EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "gpt2")
 
     def test_encoder_decoder_model_shared_weights(self):
         pass
@@ -870,7 +930,7 @@ class GPT2EncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
 
         model.to(torch_device)
         tokenizer_in = AutoTokenizer.from_pretrained("bert-base-cased")
-        tokenizer_out = AutoTokenizer.from_pretrained("../gpt2")
+        tokenizer_out = AutoTokenizer.from_pretrained("gpt2")
 
         ARTICLE_STUDENTS = """(CNN)Sigma Alpha Epsilon is under fire for a video showing party-bound fraternity members singing a racist chant. SAE's national chapter suspended the students, but University of Oklahoma President David Boren took it a step further, saying the university's affiliation with the fraternity is permanently done. The news is shocking, but it's not the first time SAE has faced controversy. SAE was founded March 9, 1856, at the University of Alabama, five years before the American Civil War, according to the fraternity website. When the war began, the group had fewer than 400 members, of which "369 went to war for the Confederate States and seven for the Union Army," the website says. The fraternity now boasts more than 200,000 living alumni, along with about 15,000 undergraduates populating 219 chapters and 20 "colonies" seeking full membership at universities. SAE has had to work hard to change recently after a string of member deaths, many blamed on the hazing of new recruits, SAE national President Bradley Cohen wrote in a message on the fraternity's website. The fraternity's website lists more than 130 chapters cited or suspended for "health and safety incidents" since 2010. At least 30 of the incidents involved hazing, and dozens more involved alcohol. However, the list is missing numerous incidents from recent months. Among them, according to various media outlets: Yale University banned the SAEs from campus activities last month after members allegedly tried to interfere with a sexual misconduct investigation connected to an initiation rite. Stanford University in December suspended SAE housing privileges after finding sorority members attending a fraternity function were subjected to graphic sexual content. And Johns Hopkins University in November suspended the fraternity for underage drinking. "The media has labeled us as the 'nation's deadliest fraternity,' " Cohen said. In 2011, for example, a student died while being coerced into excessive alcohol consumption, according to a lawsuit. SAE's previous insurer dumped the fraternity. "As a result, we are paying Lloyd's of London the highest insurance rates in the Greek-letter world," Cohen said. Universities have turned down SAE's attempts to open new chapters, and the fraternity had to close 12 in 18 months over hazing incidents."""
 

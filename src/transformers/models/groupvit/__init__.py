@@ -17,13 +17,14 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_available, is_torch_available
 
 
 _import_structure = {
     "configuration_groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroupViTConfig",
+        "GroupViTOnnxConfig",
         "GroupViTTextConfig",
         "GroupViTVisionConfig",
     ],
@@ -43,10 +44,25 @@ else:
         "GroupViTVisionModel",
     ]
 
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_groupvit"] = [
+        "TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFGroupViTModel",
+        "TFGroupViTPreTrainedModel",
+        "TFGroupViTTextModel",
+        "TFGroupViTVisionModel",
+    ]
+
 if TYPE_CHECKING:
     from .configuration_groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GroupViTConfig,
+        GroupViTOnnxConfig,
         GroupViTTextConfig,
         GroupViTVisionConfig,
     )
@@ -63,6 +79,20 @@ if TYPE_CHECKING:
             GroupViTPreTrainedModel,
             GroupViTTextModel,
             GroupViTVisionModel,
+        )
+
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_groupvit import (
+            TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFGroupViTModel,
+            TFGroupViTPreTrainedModel,
+            TFGroupViTTextModel,
+            TFGroupViTVisionModel,
         )
 
 else:

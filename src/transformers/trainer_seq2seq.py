@@ -45,8 +45,8 @@ class Seq2SeqTrainer(Trainer):
 
         Args:
             eval_dataset (`Dataset`, *optional*):
-                Pass a dataset if you wish to override `self.eval_dataset`. If it is an `datasets.Dataset`, columns not
-                accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
+                Pass a dataset if you wish to override `self.eval_dataset`. If it is an [`~datasets.Dataset`], columns
+                not accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
                 method.
             ignore_keys (`List[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
@@ -68,9 +68,8 @@ class Seq2SeqTrainer(Trainer):
         """
 
         gen_kwargs = gen_kwargs.copy()
-        gen_kwargs["max_length"] = (
-            gen_kwargs["max_length"] if gen_kwargs.get("max_length") is not None else self.args.generation_max_length
-        )
+        if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
+            gen_kwargs["max_length"] = self.args.generation_max_length
         gen_kwargs["num_beams"] = (
             gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.args.generation_num_beams
         )
@@ -93,7 +92,7 @@ class Seq2SeqTrainer(Trainer):
 
         Args:
             test_dataset (`Dataset`):
-                Dataset to run the predictions on. If it is an `datasets.Dataset`, columns not accepted by the
+                Dataset to run the predictions on. If it is a [`~datasets.Dataset`], columns not accepted by the
                 `model.forward()` method are automatically removed. Has to implement the method `__len__`
             ignore_keys (`List[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
@@ -126,9 +125,8 @@ class Seq2SeqTrainer(Trainer):
         """
 
         gen_kwargs = gen_kwargs.copy()
-        gen_kwargs["max_length"] = (
-            gen_kwargs["max_length"] if gen_kwargs.get("max_length") is not None else self.args.generation_max_length
-        )
+        if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
+            gen_kwargs["max_length"] = self.args.generation_max_length
         gen_kwargs["num_beams"] = (
             gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.args.generation_num_beams
         )
@@ -174,9 +172,8 @@ class Seq2SeqTrainer(Trainer):
 
         # XXX: adapt synced_gpus for fairscale as well
         gen_kwargs = self._gen_kwargs.copy()
-        gen_kwargs["max_length"] = (
-            gen_kwargs["max_length"] if gen_kwargs.get("max_length") is not None else self.model.config.max_length
-        )
+        if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
+            gen_kwargs["max_length"] = self.model.config.max_length
         gen_kwargs["num_beams"] = (
             gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.model.config.num_beams
         )
@@ -203,8 +200,12 @@ class Seq2SeqTrainer(Trainer):
             **gen_kwargs,
         )
         # in case the batch is shorter than max length, the output should be padded
-        if generated_tokens.shape[-1] < gen_kwargs["max_length"]:
+        if gen_kwargs.get("max_length") is not None and generated_tokens.shape[-1] < gen_kwargs["max_length"]:
             generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_length"])
+        elif gen_kwargs.get("max_new_tokens") is not None and generated_tokens.shape[-1] < (
+            gen_kwargs["max_new_tokens"] + 1
+        ):
+            generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_new_tokens"] + 1)
 
         with torch.no_grad():
             with self.compute_loss_context_manager():
@@ -222,8 +223,12 @@ class Seq2SeqTrainer(Trainer):
 
         if has_labels:
             labels = inputs["labels"]
-            if labels.shape[-1] < gen_kwargs["max_length"]:
+            if gen_kwargs.get("max_length") is not None and labels.shape[-1] < gen_kwargs["max_length"]:
                 labels = self._pad_tensors_to_max_len(labels, gen_kwargs["max_length"])
+            elif gen_kwargs.get("max_new_tokens") is not None and labels.shape[-1] < (
+                gen_kwargs["max_new_tokens"] + 1
+            ):
+                labels = self._pad_tensors_to_max_len(labels, (gen_kwargs["max_new_tokens"] + 1))
         else:
             labels = None
 
