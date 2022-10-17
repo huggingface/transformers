@@ -42,13 +42,13 @@ from .configuration_esm import EsmConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "Rocketknight1/esm2_t6_8M_UR50D"
+_CHECKPOINT_FOR_DOC = "facebook/esm2_t6_8M_UR50D"
 _CONFIG_FOR_DOC = "EsmConfig"
 _TOKENIZER_FOR_DOC = "EsmTokenizer"
 
 ESM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Rocketknight1/esm2_t6_8M_UR50D",
-    "Rocketknight1/esm2_t12_35M_UR50D",
+    "facebook/esm2_t6_8M_UR50D",
+    "facebook/esm2_t12_35M_UR50D",
     # This is not a complete list of all ESM models!
     # See all ESM models at https://huggingface.co/models?filter=esm
 ]
