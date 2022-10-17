@@ -1426,16 +1426,16 @@ class DetrForObjectDetection(DetrPreTrainedModel):
 
         >>> # convert outputs (bounding boxes and class logits) to COCO API
         >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = feature_extractor.post_process_object_detection(outputs, target_sizes=target_sizes)[0]
+        >>> results = feature_extractor.post_process_object_detection(
+        ...     outputs, threshold=0.9, target_sizes=target_sizes
+        ... )[0]
 
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
-        ...     # let's only keep detections with score > 0.9
-        ...     if score > 0.9:
-        ...         print(
-        ...             f"Detected {model.config.id2label[label.item()]} with confidence "
-        ...             f"{round(score.item(), 3)} at location {box}"
-        ...         )
+        ...     print(
+        ...         f"Detected {model.config.id2label[label.item()]} with confidence "
+        ...         f"{round(score.item(), 3)} at location {box}"
+        ...     )
         Detected remote with confidence 0.998 at location [40.16, 70.81, 175.55, 117.98]
         Detected remote with confidence 0.996 at location [333.24, 72.55, 368.33, 187.66]
         Detected couch with confidence 0.995 at location [-0.02, 1.15, 639.73, 473.76]
