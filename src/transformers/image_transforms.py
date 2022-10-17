@@ -280,7 +280,7 @@ def normalize(
             The mean to use for normalization.
         std (`float` or `Iterable[float]`):
             The standard deviation to use for normalization.
-        data_format (`ChannelDimension`, *optional*, defaults to `None`):
+        data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the output image. If `None`, will use the inferred format from the input.
     """
     if isinstance(image, PIL.Image.Image):
