@@ -118,7 +118,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
         This class method is simply calling Wav2Vec2FeatureExtractor's
         [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`], Wav2Vec2CTCTokenizer's
-        [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`], and
+        [`~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`], and
         [`pyctcdecode.BeamSearchDecoderCTC.load_from_hf_hub`].
 
         Please refer to the docstrings of the methods above for more information.
@@ -352,10 +352,9 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
                 <Tip>
 
-                Please take a look at the Example of [`~model.wav2vec2_with_lm.processing_wav2vec2_with_lm.decode`] to
-                better understand how to make use of `output_word_offsets`.
-                [`~model.wav2vec2_with_lm.processing_wav2vec2_with_lm.batch_decode`] works the same way with batched
-                output.
+                Please take a look at the Example of [`~Wav2Vec2ProcessorWithLM.decode`] to better understand how to
+                make use of `output_word_offsets`. [`~Wav2Vec2ProcessorWithLM.batch_decode`] works the same way with
+                batched output.
 
                 </Tip>
 
@@ -483,8 +482,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
                 <Tip>
 
-                Please take a look at the example of [`~models.wav2vec2_with_lm.processing_wav2vec2_with_lm.decode`] to
-                better understand how to make use of `output_word_offsets`.
+                Please take a look at the example below to better understand how to make use of `output_word_offsets`.
 
                 </Tip>
 

@@ -75,8 +75,8 @@ This model was contributed by [patrickvonplaten](https://huggingface.co/patrickv
 
 ### Decoding multiple audios
 
-If you are planning to decode multiple batches of audios, you should consider using [`~model.wav2vec2_with_lm.processing_wav2vec2_with_lm.batch_decode`] and passing an instantiated `multiprocessing.Pool`.
-Otherwise, [`~model.wav2vec2_with_lm.processing_wav2vec2_with_lm.batch_decode`] performance will be slower than calling [`~model.wav2vec2_with_lm.processing_wav2vec2_with_lm.decode`] for each audio individually, as it internally instantiates a new `Pool` for every call. See the example below:
+If you are planning to decode multiple batches of audios, you should consider using [`~Wav2Vec2ProcessorWithLM.batch_decode`] and passing an instantiated `multiprocessing.Pool`.
+Otherwise, [`~Wav2Vec2ProcessorWithLM.batch_decode`] performance will be slower than calling [`~Wav2Vec2ProcessorWithLM.decode`] for each audio individually, as it internally instantiates a new `Pool` for every call. See the example below:
 
 ```python
 >>> # Let's see how to use a user-managed pool for batch decoding multiple audios
