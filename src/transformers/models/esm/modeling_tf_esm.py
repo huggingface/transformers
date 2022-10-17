@@ -552,7 +552,6 @@ class TFEsmEncoder(Layer):
         self.config = config
         self.layer = [TFEsmLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
         self.emb_layer_norm_after = LayerNormalization(epsilon=config.layer_norm_eps, name="emb_layer_norm_after")
-        self.gradient_checkpointing = False
 
     def call(
         self,
