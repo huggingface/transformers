@@ -342,5 +342,5 @@ class FlaxDonutSwinModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = FlaxDonutSwinModel.from_pretrained(model_name)
+            model = FlaxDonutSwinModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
