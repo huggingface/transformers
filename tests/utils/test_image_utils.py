@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 
 from transformers import is_torch_available, is_vision_available
-from transformers.image_utils import ChannelDimension
+from transformers.image_utils import ChannelDimension, get_channel_dimension_axis
 from transformers.testing_utils import require_torch, require_vision
 
 
@@ -535,3 +535,26 @@ class UtilFunctionTester(unittest.TestCase):
         image = np.random.randint(0, 256, (1, 3, 4, 5))
         inferred_dim = infer_channel_dimension_format(image)
         self.assertEqual(inferred_dim, ChannelDimension.FIRST)
+
+    def test_get_channel_dimension_axis(self):
+        # Test we correctly identify the channel dimension
+        image = np.random.randint(0, 256, (3, 4, 5))
+        inferred_axis = get_channel_dimension_axis(image)
+        self.assertEqual(inferred_axis, 0)
+
+        image = np.random.randint(0, 256, (1, 4, 5))
+        inferred_axis = get_channel_dimension_axis(image)
+        self.assertEqual(inferred_axis, 0)
+
+        image = np.random.randint(0, 256, (4, 5, 3))
+        inferred_axis = get_channel_dimension_axis(image)
+        self.assertEqual(inferred_axis, 2)
+
+        image = np.random.randint(0, 256, (4, 5, 1))
+        inferred_axis = get_channel_dimension_axis(image)
+        self.assertEqual(inferred_axis, 2)
+
+        # We can take a batched array of images and find the dimension
+        image = np.random.randint(0, 256, (1, 3, 4, 5))
+        inferred_axis = get_channel_dimension_axis(image)
+        self.assertEqual(inferred_axis, 1)
