@@ -15,6 +15,7 @@
 import os
 import sys
 import unittest
+
 from git import Repo
 
 
@@ -22,6 +23,7 @@ git_repo_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(
 sys.path.append(os.path.join(git_repo_path, "utils"))
 
 transformers_path = os.path.join(git_repo_path, "src", "transformers")
+# Tests are run against this specific commit for reproducibility
 GIT_TEST_SHA = "07f6690206e39ed7a4d9dbc58824314f7089bb38"
 
 from tests_fetcher import checkout_commit, clean_code, get_module_dependencies  # noqa: E402
@@ -47,11 +49,11 @@ class CheckDummiesTester(unittest.TestCase):
     def test_get_module_dependencies(self):
         bert_module = os.path.join(transformers_path, "models", "bert", "modeling_bert.py")
         expected_deps = [
-            'activations.py',
-            'modeling_outputs.py',
-            'modeling_utils.py',
-            'pytorch_utils.py',
-            'models/bert/configuration_bert.py',
+            "activations.py",
+            "modeling_outputs.py",
+            "modeling_utils.py",
+            "pytorch_utils.py",
+            "models/bert/configuration_bert.py",
         ]
         expected_deps = set(os.path.join(transformers_path, f) for f in expected_deps)
         repo = Repo(git_repo_path)
