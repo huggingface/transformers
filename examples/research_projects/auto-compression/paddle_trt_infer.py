@@ -265,9 +265,6 @@ def main():
     is_regression = args.task_name == "stsb"
     if not is_regression:
         label_list = raw_datasets["train"].features["label"].names
-        num_labels = len(label_list)
-    else:
-        num_labels = 1
 
     label_to_id = None
     if args.task_name is None and not is_regression:
