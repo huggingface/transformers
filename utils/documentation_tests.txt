@@ -33,12 +33,15 @@ src/transformers/models/blenderbot_small/configuration_blenderbot_small.py
 src/transformers/models/blenderbot_small/modeling_blenderbot_small.py
 src/transformers/models/bloom/configuration_bloom.py
 src/transformers/models/canine/configuration_canine.py
+src/transformers/models/codegen/configuration_codegen.py
+src/transformers/models/conditional_detr/configuration_conditional_detr.py
 src/transformers/models/conditional_detr/modeling_conditional_detr.py
 src/transformers/models/convnext/modeling_convnext.py
 src/transformers/models/ctrl/configuration_ctrl.py
 src/transformers/models/ctrl/modeling_ctrl.py
 src/transformers/models/cvt/modeling_cvt.py
 src/transformers/models/data2vec/configuration_data2vec_audio.py
+src/transformers/models/data2vec/configuration_data2vec_text.py
 src/transformers/models/data2vec/modeling_data2vec_audio.py
 src/transformers/models/data2vec/modeling_data2vec_vision.py
 src/transformers/models/deberta/modeling_deberta.py
@@ -112,6 +115,8 @@ src/transformers/models/swinv2/configuration_swinv2.py
 src/transformers/models/time_series_transformer/configuration_time_series_transformer.py
 src/transformers/models/time_series_transformer/modeling_time_series_transformer.py
 src/transformers/models/trajectory_transformer/configuration_trajectory_transformer.py
+src/transformers/models/transfo_xl/configuration_transfo_xl.py
+src/transformers/models/trocr/configuration_trocr.py
 src/transformers/models/trocr/modeling_trocr.py
 src/transformers/models/unispeech/configuration_unispeech.py
 src/transformers/models/unispeech/modeling_unispeech.py
@@ -139,6 +144,7 @@ src/transformers/models/whisper/modeling_whisper.py
 src/transformers/models/whisper/modeling_tf_whisper.py
 src/transformers/models/xlm_roberta/configuration_xlm_roberta.py
 src/transformers/models/xlm_roberta_xl/configuration_xlm_roberta_xl.py
+src/transformers/models/xlnet/configuration_xlnet.py
 src/transformers/models/yolos/configuration_yolos.py
 src/transformers/models/yolos/modeling_yolos.py
 src/transformers/models/x_clip/modeling_x_clip.py
