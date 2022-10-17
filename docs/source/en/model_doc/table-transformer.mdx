@@ -32,8 +32,8 @@ special customization for these tasks.*
 Tips:
 
 - The authors released 2 models, one for [table detection](https://huggingface.co/microsoft/table-transformer-detection) in documents, one for [table structure recognition](https://huggingface.co/microsoft/table-transformer-structure-recognition) (the task of recognizing the individual rows, columns etc. in a table).
-- One can use the [`AutoFeatureExtractor`] API to prepare images and optional targets for the model.
-- Usage of Table Transformer models is identical to other object detectors in the library, such as [`DetrForObjectDetection`]. Refer to [these notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DETR).
+- One can use the [`AutoFeatureExtractor`] API to prepare images and optional targets for the model. This will load a [`DetrFeatureExtractor`] behind the scenes.
+- A demo notebook for the Table Transformer can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Table Transformer).
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be
 found [here](https://github.com/microsoft/table-transformer).
