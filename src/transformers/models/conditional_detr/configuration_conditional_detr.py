@@ -114,12 +114,12 @@ class ConditionalDetrConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import ConditionalDetrModel, ConditionalDetrConfig
+    >>> from transformers import ConditionalDetrConfig, ConditionalDetrModel
 
     >>> # Initializing a Conditional DETR microsoft/conditional-detr-resnet-50 style configuration
     >>> configuration = ConditionalDetrConfig()
 
-    >>> # Initializing a model from the microsoft/conditional-detr-resnet-50 style configuration
+    >>> # Initializing a model (with random weights) from the microsoft/conditional-detr-resnet-50 style configuration
     >>> model = ConditionalDetrModel(configuration)
 
     >>> # Accessing the model configuration
