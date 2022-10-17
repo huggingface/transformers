@@ -72,11 +72,17 @@ class BertLayerFast(nn.Module):
 
         del bert_layer
 
+        # Last step: set the last layer to `False` -> this will be set to `True` when converting the model
+        self.is_last_layer = False
+
     def forward(self, hidden_states, attention_mask, *_):
         r"""
         This is just a wrapper around the forward function proposed in:
         https://github.com/huggingface/transformers/pull/19553
         """
+        if hidden_states.is_nested:
+            attention_mask = None
+
         if attention_mask is not None:
             # attention mask comes in with values 0 and -inf. we convert to torch.nn.TransformerEncoder style bool mask
             # 0->false->keep this token -inf->true->mask this token
@@ -88,7 +94,7 @@ class BertLayerFast(nn.Module):
                 hidden_states = torch._nested_tensor_from_mask(hidden_states, ~attention_mask)
             attention_mask = None
 
-        nested_hidden_states = torch._transformer_encoder_layer_fwd(
+        hidden_states = torch._transformer_encoder_layer_fwd(
             hidden_states,
             self.embed_dim,
             self.num_heads,
@@ -109,6 +115,8 @@ class BertLayerFast(nn.Module):
             self.linear2_bias,
             attention_mask,  # TODO fix this
         )
+        if hidden_states.is_nested and self.is_last_layer:
+            hidden_states = hidden_states.to_padded_tensor(0.0)
+        return (hidden_states,)
 
-        # return nested_hidden_states.to_padded_tensor(0.0)
-        return (nested_hidden_states,)
+    # return (nested_hidden_states,)

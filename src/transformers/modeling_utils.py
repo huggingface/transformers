@@ -2378,6 +2378,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Step 3: If yes, replace the `...Layer` module with the `...LayerFast` modules
         # Step 4: If not, yield an error.
         def replace_to_fast(model):
+            r"""
+            Replaces the current model to its `Fast` implementation. Loops recursively into the model and replaces the
+            `Layer` modules with its `Fast` correspondant model
+
+            Args:
+                `model` (`torch.nn.Module`, **required**):
+                    The input model to convert
+            Returns:
+                The converted model
+            """
             for name, module in model.named_children():
                 if len(list(module.children())) > 0:
                     replace_to_fast(module)
@@ -2390,7 +2400,38 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         self = replace_to_fast(self).eval()
 
-        # Step 5: Add a class arguments, we might need to identify whether the model
+        # Step 5: Post process the potentially converted model by setting the `is_last_layer` attribute to `True`
+        # For the last `Fast` layer.
+        def set_last_layer(model):
+            r"""
+            Args:
+            Iterates over the module list containing the `LayerFast` modules. Sets the last layer's `is_last_layer`
+            attribute to `True`
+                `model` (`torch.nn.Module`, **required**):
+                    The input converted model
+            Returns:
+                Returns `True` if it has succesfully set the attribute to `True`, otherwise return `False`.
+            """
+            dict_named_module = dict(self.named_modules())
+            sort_fn = lambda list_modules: [module.__class__.__name__ for module in list_modules]  # noqa: E731
+
+            for key in dict_named_module.keys():
+                if isinstance(dict_named_module[key], torch.nn.ModuleList) and all(
+                    "LayerFast" in module_name for module_name in sort_fn(dict_named_module[key])
+                ):
+                    setattr(dict_named_module[key][-1], "is_last_layer", True)
+                    return True
+            return False
+
+        successfully_converted_model = set_last_layer(self)
+        if not successfully_converted_model:
+            raise NotImplementedError(
+                "The Better Transformers implementation for the model {self.__class__.__name__} has not been"
+                "implemented yet. Please open an issue requesting the addition of this model with its `Fast`"
+                "implementation."
+            )
+
+        # Step 6: Add a class arguments, we might need to identify whether the model
         # has been correctly converted to its `Fast` version.
         self.is_fast = True
 
