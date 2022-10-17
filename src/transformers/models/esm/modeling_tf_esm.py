@@ -136,7 +136,7 @@ class TFEsmEmbeddings(Layer):
         )
 
         if config.emb_layer_norm_before:
-            self.layer_norm = LayerNormalization(epsilon=config.layer_norm_eps)
+            self.layer_norm = LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         else:
             self.layer_norm = None
         # Matt: I think this line was copied incorrectly from BERT, disabling for now
