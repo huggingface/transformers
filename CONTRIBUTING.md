@@ -40,7 +40,7 @@ In particular there is a special [Good First
 Issue](https://github.com/huggingface/transformers/contribute) listing. It will give you a list of
 open Issues that are open to anybody to work on. Just comment in the issue that you'd like to work
 on it. In that same listing you will also find some Issues with `Good Second Issue` label. These are
-typically slightly more complicated than the Issues with just `Good First Issue` label. But if you
+typically/slightly more complicated than the Issues with just `Good First Issue` label. But if you
 feel you know what you're doing, go for it.
 
 *All are equally valuable to the community.*
