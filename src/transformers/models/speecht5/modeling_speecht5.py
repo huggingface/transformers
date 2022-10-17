@@ -2227,6 +2227,19 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
         return reordered_past
 
 
+class SpeechT5EncoderWrapper(SpeechT5PreTrainedModel):
+    """
+    This wrapper class is a helper class to correctly load pretrained checkpoints for the CTC model.
+    """
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.encoder = SpeechT5EncoderWithSpeechPrenet(config)
+
+    def forward(self, *args, **kwargs):
+        return self.encoder(*args, **kwargs)
+
+
 @add_start_docstrings(
     """SpeechT5 Encoder Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     SPEECHT5_START_DOCSTRING,
@@ -2242,7 +2255,7 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)
 
-        self.encoder = SpeechT5EncoderWithSpeechPrenet(config)
+        self.speecht5 = SpeechT5EncoderWrapper(config)
         self.dropout = nn.Dropout(config.final_dropout)
 
         if config.vocab_size is None:
@@ -2263,7 +2276,7 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        self.encoder.prenet.freeze_feature_encoder()
+        self.speecht5.encoder.prenet.freeze_feature_encoder()
 
     @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -2299,7 +2312,7 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.encoder(
+        outputs = self.speecht5(
             input_values=input_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
@@ -2322,7 +2335,7 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
             attention_mask = (
                 attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
             )
-            input_lengths = self.encoder.prenet._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+            input_lengths = self.speecht5.encoder.prenet._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
 
             # assuming that padded tokens are filled with -100
             # when not being attended to

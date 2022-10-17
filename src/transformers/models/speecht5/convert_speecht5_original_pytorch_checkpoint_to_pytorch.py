@@ -66,20 +66,20 @@ MAPPING_S2T = {
     "text_decoder_prenet.embed_tokens": "speecht5.decoder.prenet.embed_tokens",
 }
 MAPPING_CTC = {
-    "speech_encoder_prenet.layer_norm": "encoder.prenet.feature_projection.layer_norm",
-    "speech_encoder_prenet.post_extract_proj": "encoder.prenet.feature_projection.projection",
-    "speech_encoder_prenet.pos_conv.0": "encoder.prenet.pos_conv_embed.conv",
-    "speech_encoder_prenet.mask_emb": "encoder.prenet.masked_spec_embed",
-    "encoder.layers.*.self_attn.k_proj": "encoder.wrapped_encoder.layers.*.attention.k_proj",
-    "encoder.layers.*.self_attn.v_proj": "encoder.wrapped_encoder.layers.*.attention.v_proj",
-    "encoder.layers.*.self_attn.q_proj": "encoder.wrapped_encoder.layers.*.attention.q_proj",
-    "encoder.layers.*.self_attn.out_proj": "encoder.wrapped_encoder.layers.*.attention.out_proj",
-    "encoder.layers.*.self_attn_layer_norm": "encoder.wrapped_encoder.layers.*.layer_norm",
-    "encoder.layers.*.fc1": "encoder.wrapped_encoder.layers.*.feed_forward.intermediate_dense",
-    "encoder.layers.*.fc2": "encoder.wrapped_encoder.layers.*.feed_forward.output_dense",
-    "encoder.layers.*.final_layer_norm": "encoder.wrapped_encoder.layers.*.final_layer_norm",
-    "encoder.layer_norm": "encoder.wrapped_encoder.layer_norm",
-    "encoder.pos_emb.pe_k": "encoder.wrapped_encoder.embed_positions.pe_k",
+    "speech_encoder_prenet.layer_norm": "speecht5.encoder.prenet.feature_projection.layer_norm",
+    "speech_encoder_prenet.post_extract_proj": "speecht5.encoder.prenet.feature_projection.projection",
+    "speech_encoder_prenet.pos_conv.0": "speecht5.encoder.prenet.pos_conv_embed.conv",
+    "speech_encoder_prenet.mask_emb": "speecht5.encoder.prenet.masked_spec_embed",
+    "encoder.layers.*.self_attn.k_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.k_proj",
+    "encoder.layers.*.self_attn.v_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.v_proj",
+    "encoder.layers.*.self_attn.q_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.q_proj",
+    "encoder.layers.*.self_attn.out_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.out_proj",
+    "encoder.layers.*.self_attn_layer_norm": "speecht5.encoder.wrapped_encoder.layers.*.layer_norm",
+    "encoder.layers.*.fc1": "speecht5.encoder.wrapped_encoder.layers.*.feed_forward.intermediate_dense",
+    "encoder.layers.*.fc2": "speecht5.encoder.wrapped_encoder.layers.*.feed_forward.output_dense",
+    "encoder.layers.*.final_layer_norm": "speecht5.encoder.wrapped_encoder.layers.*.final_layer_norm",
+    "encoder.layer_norm": "speecht5.encoder.wrapped_encoder.layer_norm",
+    "encoder.pos_emb.pe_k": "speecht5.encoder.wrapped_encoder.embed_positions.pe_k",
     "encoder.proj": "lm_head",
 }
 TOP_LEVEL_KEYS = [
@@ -152,7 +152,7 @@ def recursively_load_weights(fairseq_dict, hf_model, task):
         feature_encoder = hf_model.speecht5.encoder.prenet.feature_encoder
         MAPPING = MAPPING_S2T
     else:
-        feature_encoder = hf_model.encoder.prenet.feature_encoder
+        feature_encoder = hf_model.speecht5.encoder.prenet.feature_encoder
         MAPPING = MAPPING_CTC
 
     for name, value in fairseq_dict.items():
