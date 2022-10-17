@@ -134,7 +134,7 @@ Many tasks have a pre-trained `pipeline` ready to go, in NLP but also in compute
 >>> image = Image.open(image_data)
 
 # Allocate a pipeline for object detection
->>> object_detector = pipeline('object_detection')
+>>> object_detector = pipeline('object-detection')
 >>> object_detector(image)
 [{'score': 0.9982201457023621,
   'label': 'remote',
