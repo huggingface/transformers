@@ -458,7 +458,7 @@ class CTRLModel(CTRLPreTrainedModel):
 
         # `self.pos_encoding` won't be sent to the correct device along the model, so we do it manually.
         self.pos_encoding = self.pos_encoding.to(device)
-        pos_embeds = self.pos_encoding.to(device)[position_ids, :].to(device)
+        pos_embeds = self.pos_encoding[position_ids, :]
 
         hidden_states = inputs_embeds + pos_embeds + token_type_embeds
 
