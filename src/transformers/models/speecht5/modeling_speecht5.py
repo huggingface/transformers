@@ -1301,7 +1301,7 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
         )
 
 
-class SpeechT5SpeechEncoder(SpeechT5PreTrainedModel):
+class SpeechT5EncoderWithSpeechPrenet(SpeechT5PreTrainedModel):
     """
     Wrapper around SpeechT5Encoder that applies SpeechT5SpeechEncoderPrenet to convert the audio waveform data to
     hidden features.
@@ -1340,7 +1340,7 @@ class SpeechT5SpeechEncoder(SpeechT5PreTrainedModel):
         return outputs
 
 
-class SpeechT5TextEncoder(SpeechT5PreTrainedModel):
+class SpeechT5EncoderWithTextPrenet(SpeechT5PreTrainedModel):
     """
     Wrapper around SpeechT5Encoder that applies SpeechT5TextEncoderPrenet to convert the input_ids to hidden features.
     """
@@ -1615,7 +1615,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         )
 
 
-class SpeechT5SpeechDecoder(SpeechT5PreTrainedModel):
+class SpeechT5DecoderWithSpeechPrenet(SpeechT5PreTrainedModel):
     """
     Wrapper around SpeechT5Decoder that applies SpeechT5SpeechDecoderPrenet to convert log-mel filterbanks to hidden
     features.
@@ -1666,7 +1666,7 @@ class SpeechT5SpeechDecoder(SpeechT5PreTrainedModel):
         return outputs
 
 
-class SpeechT5TextDecoder(SpeechT5PreTrainedModel):
+class SpeechT5DecoderWithTextPrenet(SpeechT5PreTrainedModel):
     """
     Wrapper around SpeechT5Decoder that applies SpeechT5TextDecoderPrenet to convert input tokens to hidden features.
     """
@@ -1734,10 +1734,10 @@ SPEECHT5_START_DOCSTRING = r"""
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        encoder ([`SpeechT5SpeechEncoder`] or [`SpeechT5TextEncoder`] or `None`):
+        encoder ([`SpeechT5EncoderWithSpeechPrenet`] or [`SpeechT5EncoderWithTextPrenet`] or `None`):
             The Transformer encoder module that applies the appropiate speech or text encoder prenet. If `None`,
             [`SpeechT5Encoder`] will be used and the `input_values` are assumed to be hidden states.
-        decoder ([`SpeechT5SpeechDecoder`] or [`SpeechT5TextDecoder`] or `None`):
+        decoder ([`SpeechT5DecoderWithSpeechPrenet`] or [`SpeechT5DecoderWithTextPrenet`] or `None`):
             The Transformer dencoder module that applies the appropiate speech or text decoder prenet. If `None`,
             [`SpeechT5Decoder`] will be used and the `decoder_input_values` are assumed to be hidden states.
 """
@@ -1845,16 +1845,16 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        if isinstance(self.encoder, SpeechT5TextEncoder):
+        if isinstance(self.encoder, SpeechT5EncoderWithTextPrenet):
             return self.encoder.get_input_embeddings()
-        if isinstance(self.decoder, SpeechT5TextDecoder):
+        if isinstance(self.decoder, SpeechT5DecoderWithTextPrenet):
             return self.decoder.get_input_embeddings()
         return None
 
     def set_input_embeddings(self, value):
-        if isinstance(self.encoder, SpeechT5TextEncoder):
+        if isinstance(self.encoder, SpeechT5EncoderWithTextPrenet):
             self.encoder.set_input_embeddings(value)
-        if isinstance(self.decoder, SpeechT5TextDecoder):
+        if isinstance(self.decoder, SpeechT5DecoderWithTextPrenet):
             self.decoder.set_input_embeddings(value)
 
     def get_encoder(self):
@@ -1868,7 +1868,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        if isinstance(self.encoder, SpeechT5SpeechEncoder):
+        if isinstance(self.encoder, SpeechT5EncoderWithSpeechPrenet):
             self.encoder.prenet.freeze_feature_encoder()
 
     @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
@@ -1929,7 +1929,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
             )
 
         # downsample encoder attention mask (only for speech-to-text model)
-        if attention_mask is not None and isinstance(self.encoder, SpeechT5SpeechEncoder):
+        if attention_mask is not None and isinstance(self.encoder, SpeechT5EncoderWithSpeechPrenet):
             encoder_attention_mask = self.encoder.prenet._get_feature_vector_attention_mask(
                 encoder_outputs[0].shape[1], attention_mask
             )
@@ -1988,8 +1988,8 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
                 "or define `vocab_size` of your model's configuration."
             )
 
-        speech_encoder = SpeechT5SpeechEncoder(config)
-        text_decoder = SpeechT5TextDecoder(config)
+        speech_encoder = SpeechT5EncoderWithSpeechPrenet(config)
+        text_decoder = SpeechT5DecoderWithTextPrenet(config)
         self.speecht5 = SpeechT5Model(config, speech_encoder, text_decoder)
 
         self.text_decoder_postnet = SpeechT5TextDecoderPostnet(config)
@@ -2164,7 +2164,7 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)
 
-        self.encoder = SpeechT5SpeechEncoder(config)
+        self.encoder = SpeechT5EncoderWithSpeechPrenet(config)
         self.dropout = nn.Dropout(config.final_dropout)
 
         if config.vocab_size is None:
