@@ -196,9 +196,9 @@ The model itself is a regular [Pytorch `nn.Module`](https://pytorch.org/docs/sta
     - Few user-facing abstractions with just three classes to learn.
     - A unified API for using all our pretrained models.
 
-1. Lower compute costs, smaller carbon footprint:
+1. Lower computing costs, smaller carbon footprint:
     - Researchers can share trained models instead of always retraining.
-    - Practitioners can reduce compute time and production costs.
+    - Practitioners can reduce computation time and production costs.
     - Dozens of architectures with over 60,000 pretrained models across all modalities.
 
 1. Choose the right framework for every part of a model's lifetime:
