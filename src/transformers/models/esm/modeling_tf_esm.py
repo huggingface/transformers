@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Facebook and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Meta and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -746,7 +746,7 @@ class TFEsmMainLayer(Layer):
         return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value: tf.Variable):
-        self.embeddings.weight = value
+        self.embeddings.word_embeddings.weight = value
         self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
