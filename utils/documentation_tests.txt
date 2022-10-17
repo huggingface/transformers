@@ -43,6 +43,7 @@ src/transformers/models/ctrl/modeling_ctrl.py
 src/transformers/models/cvt/modeling_cvt.py
 src/transformers/models/data2vec/configuration_data2vec_audio.py
 src/transformers/models/data2vec/configuration_data2vec_text.py
+src/transformers/models/data2vec/configuration_data2vec_vision.py
 src/transformers/models/data2vec/modeling_data2vec_audio.py
 src/transformers/models/data2vec/modeling_data2vec_vision.py
 src/transformers/models/deberta/modeling_deberta.py

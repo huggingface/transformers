@@ -103,12 +103,12 @@ class Data2VecVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Data2VecVisionModel, Data2VecVisionConfig
+    >>> from transformers import Data2VecVisionConfig, Data2VecVisionModel
 
     >>> # Initializing a Data2VecVision data2vec_vision-base-patch16-224-in22k style configuration
     >>> configuration = Data2VecVisionConfig()
 
-    >>> # Initializing a model from the data2vec_vision-base-patch16-224-in22k style configuration
+    >>> # Initializing a model (with random weights) from the data2vec_vision-base-patch16-224-in22k style configuration
     >>> model = Data2VecVisionModel(configuration)
 
     >>> # Accessing the model configuration
