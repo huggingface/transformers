@@ -24,7 +24,6 @@ from PIL import Image
 
 import requests
 from huggingface_hub import hf_hub_download
-from traitlets import Bool
 from transformers import YolosConfig, YolosFeatureExtractor, YolosForObjectDetection
 from transformers.utils import logging
 
