@@ -754,24 +754,39 @@ class YolosForObjectDetection(YolosPreTrainedModel):
         Returns:
 
         Examples:
+
         ```python
-        >>> from transformers import YolosFeatureExtractor, YolosForObjectDetection
+        >>> from transformers import AutoFeatureExtractor, AutoModelForObjectDetection
+        >>> import torch
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = YolosFeatureExtractor.from_pretrained("hustvl/yolos-small")
-        >>> model = YolosForObjectDetection.from_pretrained("hustvl/yolos-small")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("hustvl/yolos-tiny")
+        >>> model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-tiny")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
-
         >>> outputs = model(**inputs)
 
-        >>> # model predicts bounding boxes and corresponding COCO classes
-        >>> logits = outputs.logits
-        >>> bboxes = outputs.pred_boxes
+        >>> # convert outputs (bounding boxes and class logits) to COCO API
+        >>> target_sizes = torch.tensor([image.size[::-1]])
+        >>> results = feature_extractor.post_process_object_detection(
+        ...     outputs, threshold=0.9, target_sizes=target_sizes
+        ... )[0]
+
+        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+        ...     box = [round(i, 2) for i in box.tolist()]
+        ...     print(
+        ...         f"Detected {model.config.id2label[label.item()]} with confidence "
+        ...         f"{round(score.item(), 3)} at location {box}"
+        ...     )
+        Detected remote with confidence 0.994 at location [46.96, 72.61, 181.02, 119.73]
+        Detected remote with confidence 0.975 at location [340.66, 79.19, 372.59, 192.65]
+        Detected cat with confidence 0.984 at location [12.27, 54.25, 319.42, 470.99]
+        Detected remote with confidence 0.922 at location [41.66, 71.96, 178.7, 120.33]
+        Detected cat with confidence 0.914 at location [342.34, 21.48, 638.64, 372.46]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
