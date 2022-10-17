@@ -34,11 +34,19 @@ from transformers import (
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.speecht5")
 
-MAPPING_S2T = {
+MAPPING_SPEECH_ENCODER_PRENET = {
     "speech_encoder_prenet.layer_norm": "speecht5.encoder.prenet.feature_projection.layer_norm",
     "speech_encoder_prenet.post_extract_proj": "speecht5.encoder.prenet.feature_projection.projection",
     "speech_encoder_prenet.pos_conv.0": "speecht5.encoder.prenet.pos_conv_embed.conv",
     "speech_encoder_prenet.mask_emb": "speecht5.encoder.prenet.masked_spec_embed",
+}
+MAPPING_TEXT_DECODER_PRENET = {
+    "text_decoder_prenet.embed_tokens": "speecht5.decoder.prenet.embed_tokens",
+}
+MAPPING_TEXT_DECODER_POSTNET = {
+    "text_decoder_postnet.output_projection": "text_decoder_postnet.lm_head",
+}
+MAPPING_ENCODER = {
     "encoder.layers.*.self_attn.k_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.k_proj",
     "encoder.layers.*.self_attn.v_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.v_proj",
     "encoder.layers.*.self_attn.q_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.q_proj",
@@ -49,6 +57,8 @@ MAPPING_S2T = {
     "encoder.layers.*.final_layer_norm": "speecht5.encoder.wrapped_encoder.layers.*.final_layer_norm",
     "encoder.layer_norm": "speecht5.encoder.wrapped_encoder.layer_norm",
     "encoder.pos_emb.pe_k": "speecht5.encoder.wrapped_encoder.embed_positions.pe_k",
+}
+MAPPING_DECODER = {
     "decoder.layers.*.self_attn.k_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.k_proj",
     "decoder.layers.*.self_attn.v_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.v_proj",
     "decoder.layers.*.self_attn.q_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.q_proj",
@@ -62,33 +72,20 @@ MAPPING_S2T = {
     "decoder.layers.*.fc1": "speecht5.decoder.wrapped_decoder.layers.*.feed_forward.intermediate_dense",
     "decoder.layers.*.fc2": "speecht5.decoder.wrapped_decoder.layers.*.feed_forward.output_dense",
     "decoder.layers.*.final_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.final_layer_norm",
-    "text_decoder_postnet.output_projection": "text_decoder_postnet.lm_head",
-    "text_decoder_prenet.embed_tokens": "speecht5.decoder.prenet.embed_tokens",
+}
+MAPPING_S2T = {
+    **MAPPING_SPEECH_ENCODER_PRENET,
+    **MAPPING_ENCODER,
+    **MAPPING_DECODER,
+    **MAPPING_TEXT_DECODER_PRENET,
+    **MAPPING_TEXT_DECODER_POSTNET,
 }
 MAPPING_CTC = {
-    "speech_encoder_prenet.layer_norm": "speecht5.encoder.prenet.feature_projection.layer_norm",
-    "speech_encoder_prenet.post_extract_proj": "speecht5.encoder.prenet.feature_projection.projection",
-    "speech_encoder_prenet.pos_conv.0": "speecht5.encoder.prenet.pos_conv_embed.conv",
-    "speech_encoder_prenet.mask_emb": "speecht5.encoder.prenet.masked_spec_embed",
-    "encoder.layers.*.self_attn.k_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.k_proj",
-    "encoder.layers.*.self_attn.v_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.v_proj",
-    "encoder.layers.*.self_attn.q_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.q_proj",
-    "encoder.layers.*.self_attn.out_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.out_proj",
-    "encoder.layers.*.self_attn_layer_norm": "speecht5.encoder.wrapped_encoder.layers.*.layer_norm",
-    "encoder.layers.*.fc1": "speecht5.encoder.wrapped_encoder.layers.*.feed_forward.intermediate_dense",
-    "encoder.layers.*.fc2": "speecht5.encoder.wrapped_encoder.layers.*.feed_forward.output_dense",
-    "encoder.layers.*.final_layer_norm": "speecht5.encoder.wrapped_encoder.layers.*.final_layer_norm",
-    "encoder.layer_norm": "speecht5.encoder.wrapped_encoder.layer_norm",
-    "encoder.pos_emb.pe_k": "speecht5.encoder.wrapped_encoder.embed_positions.pe_k",
+    **MAPPING_SPEECH_ENCODER_PRENET,
+    **MAPPING_ENCODER,
     "encoder.proj": "lm_head",
 }
 TOP_LEVEL_KEYS = [
-    # "lm_head",
-    # "quantizer.weight_proj",
-    # "quantizer.codevectors",
-    # "project_q",
-    # "project_hid",
-    # "speech_encoder_prenet",
 ]
 IGNORE_KEYS = [
     "encoder.version",
@@ -101,8 +98,20 @@ IGNORE_KEYS = [
     "speech_encoder_prenet.embed_positions._float_tensor",
     "text_decoder_prenet.embed_positions._float_tensor",
 ]
-
-# TODO: should there be an INGORE_KEYS_S2T and IGNORE_KEYS_CTC too?
+IGNORE_KEYS_S2T = IGNORE_KEYS + [
+    "encoder.proj",
+    "text_encoder_prenet.*",
+    "speech_decoder_prenet.*",
+    "speech_decoder_postnet.*",
+]
+IGNORE_KEYS_CTC = IGNORE_KEYS + [
+    "decoder.layers.*",
+    "text_encoder_prenet.*",
+    "text_decoder_prenet.*",
+    "text_decoder_postnet.*",
+    "speech_decoder_prenet.*",
+    "speech_decoder_postnet.*",
+]
 
 
 def set_recursively(hf_pointer, key, value, full_name, weight_type):
@@ -134,9 +143,12 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     logger.info(f"{key + ('.' + weight_type if weight_type is not None else '')} was initialized from {full_name}.")
 
 
-def should_ignore(name):
-    for key in IGNORE_KEYS:
-        if "*" in key:
+def should_ignore(name, ignore_keys):
+    for key in ignore_keys:
+        if key.endswith(".*"):
+            if name.startswith(key[:-1]):
+                return True
+        elif ".*." in key:
             prefix, suffix = key.split(".*.")
             if prefix in name and suffix in name:
                 return True
@@ -151,12 +163,14 @@ def recursively_load_weights(fairseq_dict, hf_model, task):
     if task == "s2t":
         feature_encoder = hf_model.speecht5.encoder.prenet.feature_encoder
         MAPPING = MAPPING_S2T
+        IGNORE_KEYS = IGNORE_KEYS_S2T
     else:
         feature_encoder = hf_model.speecht5.encoder.prenet.feature_encoder
         MAPPING = MAPPING_CTC
+        IGNORE_KEYS = IGNORE_KEYS_CTC
 
     for name, value in fairseq_dict.items():
-        if should_ignore(name):
+        if should_ignore(name, IGNORE_KEYS):
             logger.info(f"{name} was ignored")
             continue
 
