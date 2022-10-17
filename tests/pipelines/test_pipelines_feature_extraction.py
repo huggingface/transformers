@@ -30,11 +30,13 @@ from transformers.testing_utils import nested_simplify, require_tf, require_torc
 
 from .test_pipelines_common import PipelineTestCaseMeta
 
+
 if is_torch_available():
     import torch
 
 if is_tf_available():
     import tensorflow as tf
+
 
 class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_MAPPING
