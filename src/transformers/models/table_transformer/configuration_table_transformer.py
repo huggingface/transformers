@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Conditional DETR model configuration"""
+""" Table Transformer model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -26,19 +26,20 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/conditional-detr-resnet-50": (
-        "https://huggingface.co/microsoft/conditional-detr-resnet-50/resolve/main/config.json"
+TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "microsoft/table-transformer-table-detection": (
+        "https://huggingface.co/microsoft/table-transformer-table-detection/resolve/main/config.json"
     ),
 }
 
 
-class ConditionalDetrConfig(PretrainedConfig):
+class TableTransformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ConditionalDetrModel`]. It is used to instantiate
-    a Conditional DETR model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Conditional DETR
-    [microsoft/conditional-detr-resnet-50](https://huggingface.co/microsoft/conditional-detr-resnet-50) architecture.
+    This is the configuration class to store the configuration of a [`TableTransformerModel`]. It is used to
+    instantiate a Table Transformer model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the Table Transformer
+    [microsoft/table-transformer-table-detection](https://huggingface.co/microsoft/table-transformer-table-detection)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -48,7 +49,7 @@ class ConditionalDetrConfig(PretrainedConfig):
             The number of input channels.
         num_queries (`int`, *optional*, defaults to 100):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
-            [`ConditionalDetrModel`] can detect in a single image. For COCO, we recommend 100 queries.
+            [`TableTransformerModel`] can detect in a single image. For COCO, we recommend 100 queries.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the layers.
         encoder_layers (`int`, *optional*, defaults to 6):
@@ -110,34 +111,33 @@ class ConditionalDetrConfig(PretrainedConfig):
             Relative weight of the generalized IoU loss in the object detection loss.
         eos_coefficient (`float`, *optional*, defaults to 0.1):
             Relative classification weight of the 'no-object' class in the object detection loss.
-        focal_alpha (`float`, *optional*, defaults to 0.25):
-            Alpha parameter in the focal loss.
 
     Examples:
 
     ```python
-    >>> from transformers import ConditionalDetrConfig, ConditionalDetrModel
+    >>> from transformers import TableTransformerModel, TableTransformerConfig
 
-    >>> # Initializing a Conditional DETR microsoft/conditional-detr-resnet-50 style configuration
-    >>> configuration = ConditionalDetrConfig()
+    >>> # Initializing a Table Transformer microsoft/table-transformer-table-detection style configuration
+    >>> configuration = TableTransformerConfig()
 
-    >>> # Initializing a model (with random weights) from the microsoft/conditional-detr-resnet-50 style configuration
-    >>> model = ConditionalDetrModel(configuration)
+    >>> # Initializing a model from the microsoft/table-transformer-table-detection style configuration
+    >>> model = TableTransformerModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "conditional_detr"
+    model_type = "table-transformer"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
     }
 
+    # Copied from transformers.models.detr.configuration_detr.DetrConfig.__init__
     def __init__(
         self,
         num_channels=3,
-        num_queries=300,
+        num_queries=100,
         max_position_embeddings=1024,
         encoder_layers=6,
         encoder_ffn_dim=2048,
@@ -162,15 +162,14 @@ class ConditionalDetrConfig(PretrainedConfig):
         backbone="resnet50",
         use_pretrained_backbone=True,
         dilation=False,
-        class_cost=2,
+        class_cost=1,
         bbox_cost=5,
         giou_cost=2,
         mask_loss_coefficient=1,
         dice_loss_coefficient=1,
-        cls_loss_coefficient=2,
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
-        focal_alpha=0.25,
+        eos_coefficient=0.1,
         **kwargs
     ):
         self.num_channels = num_channels
@@ -205,10 +204,9 @@ class ConditionalDetrConfig(PretrainedConfig):
         # Loss coefficients
         self.mask_loss_coefficient = mask_loss_coefficient
         self.dice_loss_coefficient = dice_loss_coefficient
-        self.cls_loss_coefficient = cls_loss_coefficient
         self.bbox_loss_coefficient = bbox_loss_coefficient
         self.giou_loss_coefficient = giou_loss_coefficient
-        self.focal_alpha = focal_alpha
+        self.eos_coefficient = eos_coefficient
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
@@ -220,7 +218,8 @@ class ConditionalDetrConfig(PretrainedConfig):
         return self.d_model
 
 
-class ConditionalDetrOnnxConfig(OnnxConfig):
+# Copied from transformers.models.detr.configuration_detr.DetrOnnxConfig
+class TableTransformerOnnxConfig(OnnxConfig):
 
     torch_onnx_minimum_version = version.parse("1.11")
 

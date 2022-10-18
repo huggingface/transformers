@@ -12,16 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Conditional DETR model. """
+""" Testing suite for the PyTorch Table Transformer model. """
 
 
 import inspect
 import math
 import unittest
 
-from transformers import ConditionalDetrConfig, is_timm_available, is_vision_available
+from huggingface_hub import hf_hub_download
+from transformers import TableTransformerConfig, is_timm_available, is_vision_available
 from transformers.testing_utils import require_timm, require_vision, slow, torch_device
-from transformers.utils import cached_property
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -31,16 +31,16 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 if is_timm_available():
     import torch
 
-    from transformers import ConditionalDetrForObjectDetection, ConditionalDetrForSegmentation, ConditionalDetrModel
+    from transformers import TableTransformerForObjectDetection, TableTransformerModel
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ConditionalDetrFeatureExtractor
+    from transformers import AutoFeatureExtractor
 
 
-class ConditionalDetrModelTester:
+class TableTransformerModelTester:
     def __init__(
         self,
         parent,
@@ -105,7 +105,7 @@ class ConditionalDetrModelTester:
         return config, pixel_values, pixel_mask, labels
 
     def get_config(self):
-        return ConditionalDetrConfig(
+        return TableTransformerConfig(
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
             decoder_layers=self.num_hidden_layers,
@@ -124,8 +124,8 @@ class ConditionalDetrModelTester:
         inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
         return config, inputs_dict
 
-    def create_and_check_conditional_detr_model(self, config, pixel_values, pixel_mask, labels):
-        model = ConditionalDetrModel(config=config)
+    def create_and_check_table_transformer_model(self, config, pixel_values, pixel_mask, labels):
+        model = TableTransformerModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -136,31 +136,30 @@ class ConditionalDetrModelTester:
             result.last_hidden_state.shape, (self.batch_size, self.decoder_seq_length, self.hidden_size)
         )
 
-    def create_and_check_conditional_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
-        model = ConditionalDetrForObjectDetection(config=config)
+    def create_and_check_table_transformer_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
+        model = TableTransformerForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
 
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(pixel_values)
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
 
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
 
 @require_timm
-class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            ConditionalDetrModel,
-            ConditionalDetrForObjectDetection,
-            ConditionalDetrForSegmentation,
+            TableTransformerModel,
+            TableTransformerForObjectDetection,
         )
         if is_timm_available()
         else ()
@@ -176,7 +175,7 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ in ["ConditionalDetrForObjectDetection", "ConditionalDetrForSegmentation"]:
+            if model_class.__name__ in ["TableTransformerForObjectDetection"]:
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}
@@ -199,33 +198,33 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = ConditionalDetrModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ConditionalDetrConfig, has_text_modality=False)
+        self.model_tester = TableTransformerModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=TableTransformerConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_conditional_detr_model(self):
+    def test_table_transformer_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_conditional_detr_model(*config_and_inputs)
+        self.model_tester.create_and_check_table_transformer_model(*config_and_inputs)
 
-    def test_conditional_detr_object_detection_head_model(self):
+    def test_table_transformer_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_conditional_detr_object_detection_head_model(*config_and_inputs)
+        self.model_tester.create_and_check_table_transformer_object_detection_head_model(*config_and_inputs)
 
-    @unittest.skip(reason="Conditional DETR does not use inputs_embeds")
+    @unittest.skip(reason="Table Transformer does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Conditional DETR does not have a get_input_embeddings method")
+    @unittest.skip(reason="Table Transformer does not have a get_input_embeddings method")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="Conditional DETR is not a generative model")
+    @unittest.skip(reason="Table Transformer is not a generative model")
     def test_generate_without_input_ids(self):
         pass
 
-    @unittest.skip(reason="Conditional DETR does not use token embeddings")
+    @unittest.skip(reason="Table Transformer does not use token embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
@@ -273,17 +272,15 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
             out_len = len(outputs)
 
             if self.is_encoder_decoder:
-                correct_outlen = 6
+                correct_outlen = 5
 
                 # loss is at first position
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
                 # Object Detection model returns pred_logits and pred_boxes
-                if model_class.__name__ == "ConditionalDetrForObjectDetection":
-                    correct_outlen += 1
-                # Panoptic Segmentation model returns pred_logits, pred_boxes, pred_masks
-                if model_class.__name__ == "ConditionalDetrForSegmentation":
+                if model_class.__name__ == "TableTransformerForObjectDetection":
                     correct_outlen += 2
+
                 if "past_key_values" in outputs:
                     correct_outlen += 1  # past_key_values have been returned
 
@@ -406,13 +403,33 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if model_class.__name__ == "ConditionalDetrForObjectDetection":
+            if model_class.__name__ == "TableTransformerForObjectDetection":
                 expected_shape = (
                     self.model_tester.batch_size,
                     self.model_tester.num_queries,
-                    self.model_tester.num_labels,
+                    self.model_tester.num_labels + 1,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
+
+            self.assertTrue(outputs)
+
+    def test_greyscale_images(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # use greyscale pixel values
+        inputs_dict["pixel_values"] = floats_tensor(
+            [self.model_tester.batch_size, 1, self.model_tester.min_size, self.model_tester.max_size]
+        )
+
+        # let's set num_channels to 1
+        config.num_channels = 1
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             self.assertTrue(outputs)
 
@@ -452,56 +469,30 @@ def prepare_img():
 @require_timm
 @require_vision
 @slow
-class ConditionalDetrModelIntegrationTests(unittest.TestCase):
-    @cached_property
-    def default_feature_extractor(self):
-        return (
-            ConditionalDetrFeatureExtractor.from_pretrained("microsoft/conditional-detr-resnet-50")
-            if is_vision_available()
-            else None
-        )
+class TableTransformerModelIntegrationTests(unittest.TestCase):
+    def test_table_detection(self):
+        feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/table-transformer-detection")
+        model = TableTransformerForObjectDetection.from_pretrained("microsoft/table-transformer-detection")
+        model.to(torch_device)
 
-    def test_inference_no_head(self):
-        model = ConditionalDetrModel.from_pretrained("microsoft/conditional-detr-resnet-50").to(torch_device)
+        file_path = hf_hub_download(repo_id="nielsr/example-pdf", repo_type="dataset", filename="example_pdf.png")
+        image = Image.open(file_path).convert("RGB")
+        inputs = feature_extractor(image, return_tensors="pt").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
-        image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-
+        # forward pass
         with torch.no_grad():
-            outputs = model(**encoding)
+            outputs = model(**inputs)
 
-        expected_shape = torch.Size((1, 300, 256))
-        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
-        expected_slice = torch.tensor(
-            [[0.4222, 0.7471, 0.8760], [0.6395, -0.2729, 0.7127], [-0.3090, 0.7642, 0.9529]]
-        ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        expected_shape = (1, 15, 3)
+        self.assertEqual(outputs.logits.shape, expected_shape)
 
-    def test_inference_object_detection_head(self):
-        model = ConditionalDetrForObjectDetection.from_pretrained("microsoft/conditional-detr-resnet-50").to(
-            torch_device
+        expected_logits = torch.tensor(
+            [[-6.7329, -16.9590, 6.7447], [-8.0038, -22.3071, 6.9288], [-7.2445, -20.9855, 7.3465]],
+            device=torch_device,
         )
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
 
-        feature_extractor = self.default_feature_extractor
-        image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-        pixel_values = encoding["pixel_values"].to(torch_device)
-        pixel_mask = encoding["pixel_mask"].to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(pixel_values, pixel_mask)
-
-        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
-        self.assertEqual(outputs.logits.shape, expected_shape_logits)
-        expected_slice_logits = torch.tensor(
-            [[-10.4372, -5.7558, -8.6764], [-10.5410, -5.8704, -8.0590], [-10.6827, -6.3469, -8.3923]]
-        ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4))
-
-        expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
-        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        expected_slice_boxes = torch.tensor(
-            [[0.7733, 0.6576, 0.4496], [0.5171, 0.1184, 0.9094], [0.8846, 0.5647, 0.2486]]
-        ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
+        expected_boxes = torch.tensor(
+            [[0.4868, 0.1764, 0.6729], [0.6674, 0.4621, 0.3864], [0.4720, 0.1757, 0.6362]], device=torch_device
+        )
+        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-3))
