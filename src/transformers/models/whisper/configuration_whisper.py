@@ -259,7 +259,7 @@ class WhisperDecoderOnnxConfig(OnnxSeq2SeqConfigWithPast):
         self,
         tokenizer: "PreTrainedTokenizerBase",
         batch_size: int = -1,
-        seq_length: int = 1,
+        seq_length: int = -1,
         is_pair: bool = False,
         framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
