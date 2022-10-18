@@ -337,12 +337,28 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
 
         from_pt = kwargs.pop("from_pt", False)
         if from_pt:
-            raise ValueError(
-                "Initializing `TFVisionEncoderDecoderModel` from a pytorch checkpoint is not supported currently. Use"
-                " a tensorflow checkpoint instead. If only the pytorch checkpoints are available, create the encoder"
-                " and decoder models separately, and use them to initialize `TFVisionEncoderDecoderModel`. Check"
-                " `TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained()` for more details."
-            )
+            import os
+            import tempfile
+            from transformers import VisionEncoderDecoderModel
+
+            # a workaround to load from pytorch checkpoint
+            _model = VisionEncoderDecoderModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                encoder_dir = os.path.join(tmpdirname, "encoder")
+                decoder_dir = os.path.join(tmpdirname, "decoder")
+                _model.encoder.save_pretrained(encoder_dir)
+                _model.decoder.save_pretrained(decoder_dir)
+                model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(encoder_dir, decoder_dir, encoder_from_pt=True, decoder_from_pt=True)
+                # This is only for copying some specific attributes of this particular model.
+                model.config = _model.config
+
+                if hasattr(_model, "enc_to_dec_proj"):
+                    model(model.dummy_inputs)
+                    model.enc_to_dec_proj.kernel.assign(tf.transpose(tf.constant(_model.enc_to_dec_proj.weight.detach().to("cpu").numpy()), perm=(1, 0)))
+                    model.enc_to_dec_proj.bias.assign(tf.constant(_model.enc_to_dec_proj.bias.detach().to("cpu").numpy()))
+
+                return model
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
