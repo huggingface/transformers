@@ -324,6 +324,18 @@ layoutlm_job = CircleCIJob(
 )
 
 
+repo_utils_job = CircleCIJob(
+    "repo_utils",
+    install_steps=[
+        "pip install --upgrade pip",
+        "pip install .[all,quality,testing]",
+    ],
+    parallelism=None,
+    pytest_num_workers=1,
+    resource_class=None,
+    tests_to_run="tests/repo_utils",
+)
+
 REGULAR_TESTS = [
     torch_and_tf_job,
     torch_and_flax_job,
@@ -344,7 +356,7 @@ PIPELINE_TESTS = [
     pipelines_torch_job,
     pipelines_tf_job,
 ]
-
+REPO_UTIL_TESTS = [repo_utils_job]
 
 def create_circleci_config(folder=None):
     if folder is None:
@@ -371,6 +383,10 @@ def create_circleci_config(folder=None):
     example_file = os.path.join(folder, "examples_test_list.txt")
     if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
         jobs.extend(EXAMPLES_TESTS)
+    
+    repo_util_file = os.path.join(folder, "test_repo_utils.txt")
+    if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
+        jobs.extend(REPO_UTIL_TESTS)
 
     if len(jobs) > 0:
         config = {"version": "2.1"}

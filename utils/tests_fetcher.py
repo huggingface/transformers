@@ -547,6 +547,7 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None, j
     # Grab the corresponding test files:
     if "setup.py" in impacted_files:
         test_files_to_run = ["tests"]
+        repo_utils_launch = True
     else:
         # Grab the corresponding test files:
         test_files_to_run = []
@@ -577,6 +578,12 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None, j
             for filter in filters:
                 filtered_files.extend([f for f in test_files_to_run if f.startswith(filter)])
             test_files_to_run = filtered_files
+        repo_utils_launch = any(f.split(os.path.sep)[1] == "repo_utils" for f in test_files_to_run)
+
+    if repo_utils_launch:
+        repo_util_file = Path(output_file).parent / "test_repo_utils.txt"
+        with open(repo_util_file, "w", encoding="utf-8") as f:
+            f.write("tests/repo_utils")
 
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
     if len(test_files_to_run) > 0:
@@ -620,20 +627,29 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None, j
                 json.dump(test_map, fp, ensure_ascii=False)
 
 
-def filter_pipeline_tests(output_file):
+def filter_tests(output_file, filters):
+    """
+    Reads the content of the output file and filters out all the tests in a list of given folders.
+
+    Args:
+        output_file (`str` or `os.PathLike`): The path to the output file of the tests fetcher.
+        filters (`List[str]`): A list of folders to filter.
+    """
     if not os.path.isfile(output_file):
         print("No test file found.")
         return
     with open(output_file, "r", encoding="utf-8") as f:
         test_files = f.read().split(" ")
 
-    if len(test_files) == 0:
+    if len(test_files) == 0 or test_files == [""]:
         print("No tests to filter.")
         return
+
+    print(test_files)
     if test_files == ["tests"]:
-        test_files = [os.path.join("tests", f) for f in os.listdir("tests") if f not in ["__init__.py", "pipelines"]]
+        test_files = [os.path.join("tests", f) for f in os.listdir("tests") if f not in ["__init__.py"] + filters]
     else:
-        test_files = [f for f in test_files if not f.startswith(os.path.join("tests", "pipelines"))]
+        test_files = [f for f in test_files if f.split(os.path.sep)[1] not in filters]
 
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(" ".join(test_files))
@@ -666,9 +682,9 @@ if __name__ == "__main__":
         help="Only keep the test files matching one of those filters.",
     )
     parser.add_argument(
-        "--filter_pipeline_tests",
+        "--filter_tests",
         action="store_true",
-        help="Will filter the pipeline tests outside of the generated list of tests.",
+        help="Will filter the pipeline/repo utils tests outside of the generated list of tests.",
     )
     parser.add_argument(
         "--print_dependencies_of",
@@ -681,8 +697,8 @@ if __name__ == "__main__":
         print_tree_deps_of(args.print_dependencies_of)
     elif args.sanity_check:
         sanity_check()
-    elif args.filter_pipeline_tests:
-        filter_pipeline_tests(args.output_file)
+    elif args.filter_tests:
+        filter_tests(args.output_file, ["pipelines", "repo_utils"])
     else:
         repo = Repo(PATH_TO_TRANFORMERS)
 
@@ -698,6 +714,7 @@ if __name__ == "__main__":
                 filters=args.filters,
                 json_output_file=args.json_output_file,
             )
+            filter_tests(args.output_file, ["repo_utils"])
         except Exception as e:
             print(f"\nError when trying to grab the relevant tests: {e}\n\nRunning all tests.")
             with open(args.output_file, "w", encoding="utf-8") as f:
