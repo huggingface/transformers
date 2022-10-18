@@ -642,10 +642,10 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
         # combine all token representations
 
         # this is just for visualizing; forward pass doesn't depend on following code
-        attention_probs = tf.zeros((batch_size, n_heads, from_seq_len, to_seq_len), dtype=tf.float32)
+        attention_probs = np.zeros((batch_size, n_heads, from_seq_len, to_seq_len), dtype=np.float32)
 
         if not output_attentions:
-            return context_layer, attention_probs
+            return context_layer, tf.convert_to_tensor(attention_probs)
 
         # 1st query block
         # corresponding to `first_context_layer`
@@ -659,102 +659,71 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
         attention_probs[:, :, from_block_size : 2 * from_block_size, -to_block_size:] = second_attn_weights[
             :, :, :, 3 * to_block_size : 4 * to_block_size
         ]  # last key block (global)
+
         # random keys
+        attention_probs_view = attention_probs.reshape((
+            batch_size,
+            n_heads,
+            from_seq_len // from_block_size,
+            from_block_size,
+            to_seq_len // to_block_size,
+            to_block_size,
+        ))
         for p1, i1, w1 in zip(range(batch_size), rand_attn, second_attn_weights):
             # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
             for p2, i2, w2 in zip(range(n_heads), i1, w1):
                 # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
-                attn_probs_view = attention_probs.view(
-                    batch_size,
-                    n_heads,
-                    from_seq_len // from_block_size,
-                    from_block_size,
-                    to_seq_len // to_block_size,
-                    to_block_size,
-                )
-                right_slice = w2[:, 4 * to_block_size :]
-                attn_probs_view[p1, p2, 1, :, i2[0]] = right_slice.view(from_block_size, n_rand_blocks, to_block_size)
+                right_slice = tf.reshape(w2[:, 4 * to_block_size:], (n_rand_blocks, from_block_size, to_block_size))
+                attention_probs_view[p1, p2, 1, :, i2[0]] = right_slice
 
         # Middle query blocks
         # corresponding to `context_layer`
         # sliding keys
         for q_idx in range(from_seq_len // from_block_size - 4):
-            attn_probs_view = attention_probs.view(
-                batch_size,
-                n_heads,
-                from_seq_len // from_block_size,
-                from_block_size,
-                to_seq_len // to_block_size,
-                to_block_size,
-            )[:, :, 2:-2, :, 1:-1, :]
-            right_slice = attn_weights[:, :, q_idx, :, to_block_size : 4 * to_block_size]
-            attn_probs_view[:, :, q_idx, :, q_idx : q_idx + 3, :] = right_slice.view(
-                batch_size, n_heads, from_block_size, 3, to_block_size
-            )  # inner_band_product
+            sub_view = attention_probs_view[:, :, 2:-2, :, 1:-1, :]
+            right_slice = tf.reshape(attn_weights[:, :, q_idx, :, to_block_size : 4 * to_block_size], (batch_size, n_heads, from_block_size, 3, to_block_size))
+            sub_view[:, :, q_idx, :, q_idx : q_idx + 3, :] = right_slice  # inner_band_product
+
         # global keys (corresponding to 1st key block)
-        attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, :to_block_size] = attn_weights[
-            :, :, :, :, :to_block_size
-        ].view(
-            batch_size, n_heads, -1, to_block_size
-        )  # first_band_product
+        # reshape to normal after random keys
+        first_band_view = tf.reshape(attn_weights[:, :, :, :, :to_block_size], ( batch_size, n_heads, -1, to_block_size))
+        attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, :to_block_size] = first_band_view  # first_band_product
+
         # global keys (corresponding to last key block)
-        attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, -to_block_size:] = attn_weights[
-            :, :, :, :, -to_block_size:
-        ].view(
-            batch_size, n_heads, -1, to_block_size
-        )  # last_band_product
+        last_band_view = attn_weights[:, :, :, :, -to_block_size:]
+        last_band_view = tf.reshape(last_band_view, (batch_size, n_heads, -1, to_block_size))
+        attention_probs[:, :, 2 * from_block_size: -2 * from_block_size, -to_block_size:] = last_band_view # last_band_product
+
         # random keys
         for p1, i1, w1 in zip(range(batch_size), rand_attn, attn_weights):
             # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
             for p2, i2, w2 in zip(range(n_heads), i1, w1):
                 # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
                 for q_idx in range(1, len(i2) - 1):
-                    attn_probs_view = attention_probs.view(
-                        batch_size,
-                        n_heads,
-                        from_seq_len // from_block_size,
-                        from_block_size,
-                        to_seq_len // to_block_size,
-                        to_block_size,
-                    )
-                    right_slice = w2[q_idx - 1, :, 4 * to_block_size : -to_block_size]
-                    attn_probs_view[p1, p2, q_idx + 1, :, i2[q_idx]] = right_slice.view(
-                        from_block_size, n_rand_blocks, to_block_size
-                    )
+                    right_slice = tf.reshape(w2[q_idx - 1, :, 4 * to_block_size : -to_block_size],(
+                        n_rand_blocks, from_block_size, to_block_size
+                    ))
+                    attention_probs_view[p1, p2, q_idx + 1, :, i2[q_idx]] = right_slice
+
 
         # Second-last query block
         # corresponding to `second_last_context_layer`
-        attention_probs[:, :, -2 * from_block_size : -from_block_size, :to_block_size] = second_last_attn_weights[
-            :, :, :, :to_block_size
-        ]  # 1st key block (global)
-        attention_probs[
-            :, :, -2 * from_block_size : -from_block_size, -3 * to_block_size :
-        ] = second_last_attn_weights[
-            :, :, :, to_block_size : 4 * to_block_size
-        ]  # last three blocks (global + sliding)
+        attention_probs[:, :, -2 * from_block_size : -from_block_size, :to_block_size] = second_last_attn_weights[:, :, :, :to_block_size ] # 1st key block (global)
+        attention_probs[:, :, -2 * from_block_size : -from_block_size, -3 * to_block_size :] = second_last_attn_weights[:, :, :, to_block_size : 4 * to_block_size]  # last three blocks (global + sliding)
+
         # random keys
         for p1, i1, w1 in zip(range(batch_size), rand_attn, second_last_attn_weights):
             # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
             for p2, i2, w2 in zip(range(n_heads), i1, w1):
                 # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
-                attn_probs_view = attention_probs.view(
-                    batch_size,
-                    n_heads,
-                    from_seq_len // from_block_size,
-                    from_block_size,
-                    to_seq_len // to_block_size,
-                    to_block_size,
-                )
-                right_slice = w2[:, 4 * to_block_size :]
-                attn_probs_view[p1, p2, -2, :, i2[-1]] = right_slice.view(
-                    from_block_size, n_rand_blocks, to_block_size
-                )
+                right_slice = tf.reshape(w2[:, 4 * to_block_size :], (n_rand_blocks, from_block_size, to_block_size))
+                attention_probs_view[p1, p2, -2, :, i2[-1]] = right_slice
 
         # last query block
         # corresponding to `last_context_layer`
-        attention_probs[:, :, -from_block_size:, :] = last_attn_weights  # all keys global
+        attention_probs[:, :, -from_block_size:, :] = last_attn_weights # all keys global
 
-        return context_layer, attention_probs
+        return context_layer, tf.convert_to_tensor(attention_probs)
 
     @staticmethod
     def _get_rand_attn_plan(from_seq_length, from_block_size, num_rand_blocks):
