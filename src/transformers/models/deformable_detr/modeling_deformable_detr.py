@@ -2063,9 +2063,9 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
 
 class DeformableDetrLoss(nn.Module):
     """
-    This class computes the losses for `DeformableDetrForObjectDetection`. The process
-    happens in two steps: 1) we compute hungarian assignment between ground truth boxes and the outputs of the model 2)
-    we supervise each pair of matched ground-truth / prediction (supervise class and box).
+    This class computes the losses for `DeformableDetrForObjectDetection`. The process happens in two steps: 1) we
+    compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair of
+    matched ground-truth / prediction (supervise class and box).
 
     Args:
         matcher (`DeformableDetrHungarianMatcher`):
@@ -2175,13 +2175,11 @@ class DeformableDetrLoss(nn.Module):
         target_idx = torch.cat([target for (_, target) in indices])
         return batch_idx, target_idx
 
-    # Copied from transformers.models.detr.modeling_detr.DetrLoss.get_loss
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
             "labels": self.loss_labels,
             "cardinality": self.loss_cardinality,
             "boxes": self.loss_boxes,
-            "masks": self.loss_masks,
         }
         if loss not in loss_map:
             raise ValueError(f"Loss {loss} not supported")
