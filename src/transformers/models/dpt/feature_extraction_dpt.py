@@ -19,6 +19,8 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -76,7 +78,7 @@ class DPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         size=384,
         keep_aspect_ratio=False,
         ensure_multiple_of=1,
-        resample=Image.Resampling.BILINEAR,
+        resample=PILImageResampling.BILINEAR,
         do_normalize=True,
         image_mean=None,
         image_std=None,

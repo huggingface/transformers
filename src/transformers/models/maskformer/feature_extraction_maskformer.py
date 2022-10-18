@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import ImageFeatureExtractionMixin, ImageInput, is_torch_tensor
 from ...utils import TensorType, is_torch_available, logging
@@ -233,7 +235,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         do_resize=True,
         size=800,
         max_size=1333,
-        resample=Image.Resampling.BILINEAR,
+        resample=PILImageResampling.BILINEAR,
         size_divisibility=32,
         do_normalize=True,
         image_mean=None,

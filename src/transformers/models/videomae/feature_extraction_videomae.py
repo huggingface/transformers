@@ -19,6 +19,8 @@ from typing import Optional, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import ImageFeatureExtractionMixin, ImageInput, is_torch_tensor
 from ...utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, TensorType, logging
@@ -60,7 +62,7 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         self,
         do_resize=True,
         size=224,
-        resample=Image.Resampling.BILINEAR,
+        resample=PILImageResampling.BILINEAR,
         do_center_crop=True,
         do_normalize=True,
         image_mean=None,

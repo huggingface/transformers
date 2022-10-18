@@ -19,6 +19,8 @@ from typing import Optional, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -66,7 +68,7 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self,
         do_resize=True,
         size=224,
-        resample=Image.Resampling.BILINEAR,
+        resample=PILImageResampling.BILINEAR,
         do_normalize=True,
         image_mean=None,
         image_std=None,

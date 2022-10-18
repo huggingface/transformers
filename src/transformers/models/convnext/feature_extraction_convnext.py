@@ -19,6 +19,8 @@ from typing import Optional, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -69,7 +71,7 @@ class ConvNextFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         self,
         do_resize=True,
         size=224,
-        resample=Image.Resampling.BICUBIC,
+        resample=PILImageResampling.BICUBIC,
         crop_pct=None,
         do_normalize=True,
         image_mean=None,

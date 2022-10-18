@@ -17,6 +17,7 @@ import os
 from typing import TYPE_CHECKING, List, Tuple, Union
 
 import numpy as np
+from packaging import version
 
 import requests
 
@@ -34,6 +35,10 @@ if is_vision_available():
     import PIL.Image
     import PIL.ImageOps
 
+    if version.parse(version.parse(PIL.__version__).base_version) >= version.parse("9.1.0"):
+        PILImageResampling = PIL.Image.Resampling
+    else:
+        PILImageResampling = PIL.Image
 
 if TYPE_CHECKING:
     if is_torch_available():
@@ -361,7 +366,7 @@ class ImageFeatureExtractionMixin:
         Returns:
             image: A resized `PIL.Image.Image`.
         """
-        resample = resample if resample is not None else PIL.Image.Resampling.BILINEAR
+        resample = resample if resample is not None else PILImageResampling.BILINEAR
 
         self._ensure_format_supported(image)
 

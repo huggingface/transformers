@@ -22,6 +22,8 @@ from typing import Any, List, Optional, Tuple, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import TensorType, logging
@@ -188,7 +190,7 @@ class FlavaFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         self,
         do_resize: bool = True,
         size: Union[int, Tuple[int, int]] = 224,
-        resample: int = Image.Resampling.BICUBIC,
+        resample: int = PILImageResampling.BICUBIC,
         do_center_crop: bool = True,
         crop_size: Union[int, Tuple[int, int]] = 224,
         do_normalize: bool = True,
@@ -204,7 +206,7 @@ class FlavaFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         # Codebook related params
         codebook_do_resize: bool = True,
         codebook_size: bool = 112,
-        codebook_resample: int = Image.LANCZOS,
+        codebook_resample: int = PILImageResampling.LANCZOS,
         codebook_do_center_crop: bool = True,
         codebook_crop_size: int = 112,
         codebook_do_map_pixels: bool = True,

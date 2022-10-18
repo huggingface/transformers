@@ -19,6 +19,8 @@ from typing import List, Optional, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -73,7 +75,7 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         do_resize=True,
         size=384,
         size_divisor=32,
-        resample=Image.Resampling.BICUBIC,
+        resample=PILImageResampling.BICUBIC,
         do_normalize=True,
         image_mean=None,
         image_std=None,
@@ -88,7 +90,7 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
-    def _resize(self, image, shorter=800, longer=1333, size_divisor=32, resample=Image.Resampling.BICUBIC):
+    def _resize(self, image, shorter=800, longer=1333, size_divisor=32, resample=PILImageResampling.BICUBIC):
         """
         Resizes the shorter edge of `image` to `shorter` and limits the longer edge to under `longer`, while preserving
         the aspect ratio. Also makes sure that both the height and width can be divided by `size_divisor`.

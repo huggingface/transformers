@@ -19,6 +19,8 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import ImageFeatureExtractionMixin, ImageInput, is_torch_tensor
 from ...utils import TensorType, is_torch_available, logging
@@ -64,7 +66,7 @@ class MobileViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         self,
         do_resize=True,
         size=288,
-        resample=Image.Resampling.BILINEAR,
+        resample=PILImageResampling.BILINEAR,
         do_center_crop=True,
         crop_size=256,
         do_flip_channel_order=True,

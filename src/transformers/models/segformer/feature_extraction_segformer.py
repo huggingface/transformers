@@ -19,6 +19,8 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -74,7 +76,7 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         self,
         do_resize=True,
         size=512,
-        resample=Image.Resampling.BILINEAR,
+        resample=PILImageResampling.BILINEAR,
         do_normalize=True,
         image_mean=None,
         image_std=None,

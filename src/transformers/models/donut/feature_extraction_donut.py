@@ -19,6 +19,8 @@ from typing import Optional, Tuple, Union
 import numpy as np
 from PIL import Image, ImageOps
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -72,7 +74,7 @@ class DonutFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         self,
         do_resize=True,
         size=[1920, 2560],
-        resample=Image.Resampling.BILINEAR,
+        resample=PILImageResampling.BILINEAR,
         do_thumbnail=True,
         do_align_long_axis=False,
         do_pad=True,

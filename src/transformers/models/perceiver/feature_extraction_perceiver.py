@@ -19,6 +19,8 @@ from typing import Optional, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -73,7 +75,7 @@ class PerceiverFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         crop_size=256,
         do_resize=True,
         size=224,
-        resample=Image.Resampling.BICUBIC,
+        resample=PILImageResampling.BICUBIC,
         do_normalize=True,
         image_mean=None,
         image_std=None,

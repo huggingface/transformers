@@ -19,6 +19,8 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -78,7 +80,7 @@ class BeitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self,
         do_resize=True,
         size=256,
-        resample=Image.Resampling.BICUBIC,
+        resample=PILImageResampling.BICUBIC,
         do_center_crop=True,
         crop_size=224,
         do_normalize=True,

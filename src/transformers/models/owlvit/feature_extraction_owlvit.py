@@ -19,6 +19,8 @@ from typing import List, Optional, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import TensorType, is_torch_available, logging
@@ -78,7 +80,7 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
         self,
         do_resize=True,
         size=(768, 768),
-        resample=Image.Resampling.BICUBIC,
+        resample=PILImageResampling.BICUBIC,
         crop_size=768,
         do_center_crop=False,
         do_normalize=True,

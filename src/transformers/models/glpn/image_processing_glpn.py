@@ -19,6 +19,7 @@ from typing import List, Optional, Union
 import numpy as np
 import PIL.Image
 
+from transformers.image_utils import PILImageResampling
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
@@ -54,7 +55,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size_divisor: int = 32,
-        resample=PIL.Image.Resampling.BILINEAR,
+        resample=PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         **kwargs
     ) -> None:

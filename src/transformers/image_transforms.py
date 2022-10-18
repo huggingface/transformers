@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
 
+from transformers.image_utils import PILImageResampling
 from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
 
 
@@ -213,7 +214,7 @@ def get_resize_output_image_size(
 def resize(
     image,
     size: Tuple[int, int],
-    resample=PIL.Image.Resampling.BILINEAR,
+    resample=PILImageResampling.BILINEAR,
     data_format: Optional[ChannelDimension] = None,
     return_numpy: bool = True,
 ) -> np.ndarray:

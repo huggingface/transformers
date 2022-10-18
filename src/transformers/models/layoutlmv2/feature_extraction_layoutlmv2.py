@@ -21,6 +21,8 @@ from typing import List, Optional, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import TensorType, is_pytesseract_available, logging, requires_backends
@@ -120,7 +122,7 @@ class LayoutLMv2FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         self,
         do_resize=True,
         size=224,
-        resample=Image.Resampling.BILINEAR,
+        resample=PILImageResampling.BILINEAR,
         apply_ocr=True,
         ocr_lang=None,
         tesseract_config="",

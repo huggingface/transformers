@@ -19,6 +19,8 @@ from typing import List, Optional, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import TensorType, logging
@@ -72,7 +74,7 @@ class ImageGPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
     model_input_names = ["input_ids"]
 
     def __init__(
-        self, clusters, do_resize=True, size=32, resample=Image.Resampling.BILINEAR, do_normalize=True, **kwargs
+        self, clusters, do_resize=True, size=32, resample=PILImageResampling.BILINEAR, do_normalize=True, **kwargs
     ):
         super().__init__(**kwargs)
         self.clusters = np.asarray(clusters)
