@@ -186,12 +186,12 @@ class CLIPVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CLIPVisionConfig, CLIPVisionModel
+    >>> from transformers import CLIPVisionModel, CLIPVisionConfig
 
     >>> # Initializing a CLIPVisionModel with openai/clip-vit-base-patch32 style configuration
     >>> configuration = CLIPVisionConfig()
 
-    >>> # Initializing a CLIPVisionModel model  (with random weights) from the openai/clip-vit-base-patch32 style configuration
+    >>> # Initializing a CLIPVisionModel model from the openai/clip-vit-base-patch32 style configuration
     >>> model = CLIPVisionModel(configuration)
 
     >>> # Accessing the model configuration
