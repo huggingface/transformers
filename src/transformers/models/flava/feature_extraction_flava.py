@@ -22,6 +22,8 @@ from typing import Any, List, Optional, Tuple, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import TensorType, logging
@@ -129,9 +131,11 @@ class FlavaFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             Whether to resize the input to a certain `size`.
         size (`int`, *optional*, defaults to 224):
             Resize the input to the given size. Only has an effect if `do_resize` is set to `True`.
-        resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
-            An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
-            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
+        resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BICUBIC`):
+            An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
+            `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
+            `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
+            to `True`.
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to crop the input at the center. If the input size is smaller than `crop_size` along any edge, the
             image is padded with 0's and then center cropped.
@@ -160,9 +164,11 @@ class FlavaFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         codebook_size (`int`, *optional*, defaults to 224):
             Resize the input for codebook to the given size. Only has an effect if `codebook_do_resize` is set to
             `True`.
-        codebook_resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
-            An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
-            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
+        codebook_resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BICUBIC`):
+            An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
+            `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
+            `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
+            to `True`.
         codebook_do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to crop the input for codebook at the center. If the input size is smaller than
             `codebook_crop_size` along any edge, the image is padded with 0's and then center cropped.
@@ -184,7 +190,7 @@ class FlavaFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         self,
         do_resize: bool = True,
         size: Union[int, Tuple[int, int]] = 224,
-        resample: int = Image.BICUBIC,
+        resample: int = PILImageResampling.BICUBIC,
         do_center_crop: bool = True,
         crop_size: Union[int, Tuple[int, int]] = 224,
         do_normalize: bool = True,
@@ -200,7 +206,7 @@ class FlavaFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         # Codebook related params
         codebook_do_resize: bool = True,
         codebook_size: bool = 112,
-        codebook_resample: int = Image.LANCZOS,
+        codebook_resample: int = PILImageResampling.LANCZOS,
         codebook_do_center_crop: bool = True,
         codebook_crop_size: int = 112,
         codebook_do_map_pixels: bool = True,

@@ -32,6 +32,7 @@ from transformers import (
     BeitForMaskedImageModeling,
     BeitForSemanticSegmentation,
 )
+from transformers.image_utils import PILImageResampling
 from transformers.utils import logging
 
 
@@ -269,7 +270,9 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
         image = Image.open(ds[0]["file"])
     else:
-        feature_extractor = BeitFeatureExtractor(size=config.image_size, resample=Image.BILINEAR, do_center_crop=False)
+        feature_extractor = BeitFeatureExtractor(
+            size=config.image_size, resample=PILImageResampling.BILINEAR, do_center_crop=False
+        )
         image = prepare_img()
 
     encoding = feature_extractor(images=image, return_tensors="pt")

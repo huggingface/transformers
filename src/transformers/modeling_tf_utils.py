@@ -605,7 +605,7 @@ def dtype_byte_size(dtype):
     """
     if dtype == tf.bool:
         return 1 / 8
-    bit_search = re.search("[^\d](\d+)$", dtype.name)
+    bit_search = re.search(r"[^\d](\d+)$", dtype.name)
     if bit_search is None:
         raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
     bit_size = int(bit_search.groups()[0])
