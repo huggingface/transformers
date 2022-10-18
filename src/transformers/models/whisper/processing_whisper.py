@@ -76,11 +76,9 @@ class WhisperProcessor(ProcessorMixin):
 
     def __call__(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to WhisperFeatureExtractor's
-        [`~WhisperFeatureExtractor.__call__`] and returns its output. If used in the context
-        [`~WhisperProcessor.as_target_processor`] this method forwards all its arguments to WhisperTokenizer's
-        [`~WhisperTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more information.
-
+        Forwards the `audio` argument to WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] and the `text`
+        argument to [`~WhisperTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more
+        information.
         """
         # For backward compatibility
         if self._in_target_context_manager:
