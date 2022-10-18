@@ -776,15 +776,23 @@ class FlaxWhisperEncoder(nn.Module):
             last_hidden_state = self.layer_norm(last_hidden_state)
             outputs["last_hidden_state"] = last_hidden_state
         else:
+            outputs = list(outputs)
             last_hidden_state = outputs[0]
             last_hidden_state = self.layer_norm(last_hidden_state)
             outputs[0] = last_hidden_state
+            outputs = tuple(outputs)
 
         if output_hidden_states:
             if return_dict:
-                outputs["hidden_states"][-1] = last_hidden_state
+                hidden_states = list(outputs["hidden_states"])
+                hidden_states[-1] = last_hidden_state
+                outputs["hidden_states"] = hidden_states
             else:
-                outputs[1][-1] = last_hidden_state
+                hidden_states = list(outputs[1])
+                hidden_states[-1] = last_hidden_state
+                outputs = list(outputs)
+                outputs[1] = hidden_states
+                outputs = tuple(outputs)
 
         if not return_dict:
             return outputs
@@ -862,15 +870,23 @@ class FlaxWhisperDecoder(nn.Module):
             last_hidden_state = self.layer_norm(last_hidden_state)
             outputs["last_hidden_state"] = last_hidden_state
         else:
+            outputs = list(outputs)
             last_hidden_state = outputs[0]
             last_hidden_state = self.layer_norm(last_hidden_state)
             outputs[0] = last_hidden_state
+            outputs = tuple(outputs)
 
         if output_hidden_states:
             if return_dict:
-                outputs["hidden_states"][-1] = last_hidden_state
+                hidden_states = list(outputs["hidden_states"])
+                hidden_states[-1] = last_hidden_state
+                outputs["hidden_states"] = hidden_states
             else:
-                outputs[1][-1] = last_hidden_state
+                hidden_states = list(outputs[1])
+                hidden_states[-1] = last_hidden_state
+                outputs = list(outputs)
+                outputs[1] = hidden_states
+                outputs = tuple(outputs)
 
         if not return_dict:
             return outputs
@@ -902,7 +918,7 @@ class FlaxWhisperModule(nn.Module):
         self,
         input_features,
         decoder_input_ids,
-        decoder_attention_mask,
+        decoder_attention_mask: Optional[jnp.ndarray] = None,
         past_key_values_length: Optional[int] = 0,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -945,6 +961,7 @@ class FlaxWhisperModule(nn.Module):
 class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
     config_class = WhisperConfig
     base_model_prefix: str = "model"
+    main_input_name = "input_features"
     module_class: nn.Module = None
 
     def __init__(
@@ -1253,7 +1270,7 @@ class FlaxWhisperForConditionalGenerationModule(nn.Module):
         self,
         input_features,
         decoder_input_ids,
-        decoder_attention_mask,
+        decoder_attention_mask: Optional[jnp.ndarray] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
