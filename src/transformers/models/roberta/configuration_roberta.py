@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" RoBERTa configuration """
+""" RoBERTa configuration"""
 from collections import OrderedDict
 from typing import Mapping
 
@@ -36,30 +36,31 @@ ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class RobertaConfig(BertConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.RobertaModel` or a
-    :class:`~transformers.TFRobertaModel`. It is used to instantiate a RoBERTa model according to the specified
-    arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`RobertaModel`] or a [`TFRobertaModel`]. It is
+    used to instantiate a RoBERTa model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the RoBERTa
+    [roberta-base](https://huggingface.co/roberta-base) architecture.
 
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
-    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
-    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+    The [`RobertaConfig`] class directly inherits [`BertConfig`]. It reuses the same defaults. Please check the parent
+    class for more information.
 
-    The :class:`~transformers.RobertaConfig` class directly inherits :class:`~transformers.BertConfig`. It reuses the
-    same defaults. Please check the parent class for more information.
+    Examples:
 
-    Examples::
+    ```python
+    >>> from transformers import RobertaConfig, RobertaModel
 
-        >>> from transformers import RobertaConfig, RobertaModel
+    >>> # Initializing a RoBERTa configuration
+    >>> configuration = RobertaConfig()
 
-        >>> # Initializing a RoBERTa configuration
-        >>> configuration = RobertaConfig()
+    >>> # Initializing a model (with random weights) from the configuration
+    >>> model = RobertaModel(configuration)
 
-        >>> # Initializing a model from the configuration
-        >>> model = RobertaModel(configuration)
-
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-    """
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
     model_type = "roberta"
 
     def __init__(self, pad_token_id=1, bos_token_id=0, eos_token_id=2, **kwargs):
@@ -70,13 +71,13 @@ class RobertaConfig(BertConfig):
 class RobertaOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.task == "multiple-choice":
+            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
+        else:
+            dynamic_axis = {0: "batch", 1: "sequence"}
         return OrderedDict(
             [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
+                ("input_ids", dynamic_axis),
+                ("attention_mask", dynamic_axis),
             ]
         )
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict([("last_hidden_state", {0: "batch", 1: "sequence"}), ("pooler_output", {0: "batch"})])

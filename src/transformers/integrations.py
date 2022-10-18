@@ -16,18 +16,27 @@ Integrations with other Python libraries.
 """
 import functools
 import importlib.util
+import json
 import numbers
 import os
+import pickle
+import shutil
 import sys
 import tempfile
+from dataclasses import asdict
 from pathlib import Path
+from typing import TYPE_CHECKING, Dict, Optional
 
-from .file_utils import is_datasets_available
-from .utils import logging
+import numpy as np
+
+from . import __version__ as version
+from .utils import flatten_dict, is_datasets_available, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
 
+if is_torch_available():
+    import torch
 
 # comet_ml requires to be imported before any ML frameworks
 _has_comet = importlib.util.find_spec("comet_ml") is not None and os.getenv("COMET_MODE", "").upper() != "DISABLED"
@@ -44,9 +53,14 @@ if _has_comet:
     except (ImportError, ValueError):
         _has_comet = False
 
-from .file_utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
+_has_neptune = importlib.util.find_spec("neptune") is not None
+if TYPE_CHECKING and _has_neptune:
+    from neptune.new.metadata_containers.run import Run
+
 from .trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
+from .training_args import ParallelMode  # noqa: E402
+from .utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
 
 
 # Integration functions:
@@ -54,7 +68,7 @@ def is_wandb_available():
     # any value of WANDB_DISABLED disables wandb
     if os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES:
         logger.warning(
-            "Using the `WAND_DISABLED` environment variable is deprecated and will be removed in v5. Use the "
+            "Using the `WANDB_DISABLED` environment variable is deprecated and will be removed in v5. Use the "
             "--report_to flag to control the integrations used for logging result (for instance --report_to none)."
         )
         return False
@@ -96,6 +110,8 @@ def is_azureml_available():
 
 
 def is_mlflow_available():
+    if os.getenv("DISABLE_MLFLOW_INTEGRATION", "FALSE").upper() == "TRUE":
+        return False
     return importlib.util.find_spec("mlflow") is not None
 
 
@@ -104,7 +120,7 @@ def is_fairscale_available():
 
 
 def is_neptune_available():
-    return importlib.util.find_spec("neptune") is not None
+    return _has_neptune
 
 
 def is_codecarbon_available():
@@ -125,6 +141,10 @@ def hp_params(trial):
         if isinstance(trial, dict):
             return trial
 
+    if is_wandb_available():
+        if isinstance(trial, dict):
+            return trial
+
     raise RuntimeError(f"Unknown type for trial {trial.__class__}")
 
 
@@ -140,26 +160,52 @@ def default_hp_search_backend():
 def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     import optuna
 
-    def _objective(trial, checkpoint_dir=None):
-        checkpoint = None
-        if checkpoint_dir:
-            for subdir in os.listdir(checkpoint_dir):
-                if subdir.startswith(PREFIX_CHECKPOINT_DIR):
-                    checkpoint = os.path.join(checkpoint_dir, subdir)
-        trainer.objective = None
-        trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
-        # If there hasn't been any evaluation during the training loop.
-        if getattr(trainer, "objective", None) is None:
-            metrics = trainer.evaluate()
-            trainer.objective = trainer.compute_objective(metrics)
-        return trainer.objective
+    if trainer.args.process_index == 0:
 
-    timeout = kwargs.pop("timeout", None)
-    n_jobs = kwargs.pop("n_jobs", 1)
-    study = optuna.create_study(direction=direction, **kwargs)
-    study.optimize(_objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs)
-    best_trial = study.best_trial
-    return BestRun(str(best_trial.number), best_trial.value, best_trial.params)
+        def _objective(trial, checkpoint_dir=None):
+            checkpoint = None
+            if checkpoint_dir:
+                for subdir in os.listdir(checkpoint_dir):
+                    if subdir.startswith(PREFIX_CHECKPOINT_DIR):
+                        checkpoint = os.path.join(checkpoint_dir, subdir)
+            trainer.objective = None
+            if trainer.args.world_size > 1:
+                if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
+                    raise RuntimeError("only support DDP optuna HPO for ParallelMode.DISTRIBUTED currently.")
+                trainer._hp_search_setup(trial)
+                torch.distributed.broadcast_object_list(pickle.dumps(trainer.args), src=0)
+                trainer.train(resume_from_checkpoint=checkpoint)
+            else:
+                trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
+            # If there hasn't been any evaluation during the training loop.
+            if getattr(trainer, "objective", None) is None:
+                metrics = trainer.evaluate()
+                trainer.objective = trainer.compute_objective(metrics)
+            return trainer.objective
+
+        timeout = kwargs.pop("timeout", None)
+        n_jobs = kwargs.pop("n_jobs", 1)
+        study = optuna.create_study(direction=direction, **kwargs)
+        study.optimize(_objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs)
+        best_trial = study.best_trial
+        return BestRun(str(best_trial.number), best_trial.value, best_trial.params)
+    else:
+        for i in range(n_trials):
+            trainer.objective = None
+            args_main_rank = list(pickle.dumps(trainer.args))
+            if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
+                raise RuntimeError("only support DDP optuna HPO for ParallelMode.DISTRIBUTED currently.")
+            torch.distributed.broadcast_object_list(args_main_rank, src=0)
+            args = pickle.loads(bytes(args_main_rank))
+            for key, value in asdict(args).items():
+                if key != "local_rank":
+                    setattr(trainer.args, key, value)
+            trainer.train(resume_from_checkpoint=None)
+            # If there hasn't been any evaluation during the training loop.
+            if getattr(trainer, "objective", None) is None:
+                metrics = trainer.evaluate()
+                trainer.objective = trainer.compute_objective(metrics)
+        return None
 
 
 def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
@@ -264,11 +310,11 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
     @functools.wraps(trainable)
     def dynamic_modules_import_trainable(*args, **kwargs):
         """
-        Wrapper around ``tune.with_parameters`` to ensure datasets_modules are loaded on each Actor.
+        Wrapper around `tune.with_parameters` to ensure datasets_modules are loaded on each Actor.
 
         Without this, an ImportError will be thrown. See https://github.com/huggingface/transformers/issues/11565.
 
-        Assumes that ``_objective``, defined above, is a function.
+        Assumes that `_objective`, defined above, is a function.
         """
         if is_datasets_available():
             import datasets.load
@@ -291,7 +337,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         num_samples=n_trials,
         **kwargs,
     )
-    best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3])
+    best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3], scope=trainer.args.ray_scope)
     best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
     if _tb_writer is not None:
         trainer.add_callback(_tb_writer)
@@ -299,42 +345,171 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
 
 def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
+    import sigopt
+    from transformers.utils.versions import importlib_metadata
 
-    from sigopt import Connection
+    if trainer.args.process_index == 0:
+        if importlib_metadata.version("sigopt") >= "8.0.0":
+            sigopt.set_project("huggingface")
 
-    conn = Connection()
-    proxies = kwargs.pop("proxies", None)
-    if proxies is not None:
-        conn.set_proxies(proxies)
+            experiment = sigopt.create_experiment(
+                name="huggingface-tune",
+                type="offline",
+                parameters=trainer.hp_space(None),
+                metrics=[dict(name="objective", objective=direction, strategy="optimize")],
+                parallel_bandwidth=1,
+                budget=n_trials,
+            )
 
-    experiment = conn.experiments().create(
-        name="huggingface-tune",
-        parameters=trainer.hp_space(None),
-        metrics=[dict(name="objective", objective=direction, strategy="optimize")],
-        parallel_bandwidth=1,
-        observation_budget=n_trials,
-        project="huggingface",
-    )
-    logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
+            logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
 
-    while experiment.progress.observation_count < experiment.observation_budget:
-        suggestion = conn.experiments(experiment.id).suggestions().create()
+            for run in experiment.loop():
+                with run:
+                    trainer.objective = None
+                    if trainer.args.world_size > 1:
+                        if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
+                            raise RuntimeError("only support DDP Sigopt HPO for ParallelMode.DISTRIBUTED currently.")
+                        trainer._hp_search_setup(run.run)
+                        torch.distributed.broadcast_object_list(pickle.dumps(trainer.args), src=0)
+                        trainer.train(resume_from_checkpoint=None)
+                    else:
+                        trainer.train(resume_from_checkpoint=None, trial=run.run)
+                    # If there hasn't been any evaluation during the training loop.
+                    if getattr(trainer, "objective", None) is None:
+                        metrics = trainer.evaluate()
+                        trainer.objective = trainer.compute_objective(metrics)
+                    run.log_metric("objective", trainer.objective)
+
+            best = list(experiment.get_best_runs())[0]
+            best_run = BestRun(best.id, best.values["objective"].value, best.assignments)
+        else:
+            from sigopt import Connection
+
+            conn = Connection()
+            proxies = kwargs.pop("proxies", None)
+            if proxies is not None:
+                conn.set_proxies(proxies)
+
+            experiment = conn.experiments().create(
+                name="huggingface-tune",
+                parameters=trainer.hp_space(None),
+                metrics=[dict(name="objective", objective=direction, strategy="optimize")],
+                parallel_bandwidth=1,
+                observation_budget=n_trials,
+                project="huggingface",
+            )
+            logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
+
+            while experiment.progress.observation_count < experiment.observation_budget:
+                suggestion = conn.experiments(experiment.id).suggestions().create()
+                trainer.objective = None
+                if trainer.args.world_size > 1:
+                    if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
+                        raise RuntimeError("only support DDP Sigopt HPO for ParallelMode.DISTRIBUTED currently.")
+                    trainer._hp_search_setup(suggestion)
+                    torch.distributed.broadcast_object_list(pickle.dumps(trainer.args), src=0)
+                    trainer.train(resume_from_checkpoint=None)
+                else:
+                    trainer.train(resume_from_checkpoint=None, trial=suggestion)
+                # If there hasn't been any evaluation during the training loop.
+                if getattr(trainer, "objective", None) is None:
+                    metrics = trainer.evaluate()
+                    trainer.objective = trainer.compute_objective(metrics)
+
+                values = [dict(name="objective", value=trainer.objective)]
+                obs = conn.experiments(experiment.id).observations().create(suggestion=suggestion.id, values=values)
+                logger.info(f"[suggestion_id, observation_id]: [{suggestion.id}, {obs.id}]")
+                experiment = conn.experiments(experiment.id).fetch()
+
+            best = list(conn.experiments(experiment.id).best_assignments().fetch().iterate_pages())[0]
+            best_run = BestRun(best.id, best.value, best.assignments)
+        return best_run
+    else:
+        for i in range(n_trials):
+            trainer.objective = None
+            args_main_rank = list(pickle.dumps(trainer.args))
+            if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
+                raise RuntimeError("only support DDP Sigopt HPO for ParallelMode.DISTRIBUTED currently.")
+            torch.distributed.broadcast_object_list(args_main_rank, src=0)
+            args = pickle.loads(bytes(args_main_rank))
+            for key, value in asdict(args).items():
+                if key != "local_rank":
+                    setattr(trainer.args, key, value)
+            trainer.train(resume_from_checkpoint=None)
+            # If there hasn't been any evaluation during the training loop.
+            if getattr(trainer, "objective", None) is None:
+                metrics = trainer.evaluate()
+                trainer.objective = trainer.compute_objective(metrics)
+        return None
+
+
+def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
+    from .integrations import is_wandb_available
+
+    if not is_wandb_available():
+        raise ImportError("This function needs wandb installed: `pip install wandb`")
+    import wandb
+
+    # add WandbCallback if not already added in trainer callbacks
+    reporting_to_wandb = False
+    for callback in trainer.callback_handler.callbacks:
+        if isinstance(callback, WandbCallback):
+            reporting_to_wandb = True
+            break
+    if not reporting_to_wandb:
+        trainer.add_callback(WandbCallback())
+    trainer.args.report_to = "wandb"
+    best_trial = {"run_id": None, "objective": None, "hyperparameters": None}
+    sweep_id = kwargs.pop("sweep_id", None)
+    project = kwargs.pop("project", None)
+    name = kwargs.pop("name", None)
+    entity = kwargs.pop("entity", None)
+    metric = kwargs.pop("metric", "eval/loss")
+
+    sweep_config = trainer.hp_space(None)
+    sweep_config["metric"]["goal"] = direction
+    sweep_config["metric"]["name"] = metric
+    if name:
+        sweep_config["name"] = name
+
+    def _objective():
+        run = wandb.run if wandb.run else wandb.init()
+        trainer.state.trial_name = run.name
+        run.config.update({"assignments": {}, "metric": metric})
+        config = wandb.config
+
         trainer.objective = None
-        trainer.train(resume_from_checkpoint=None, trial=suggestion)
+
+        trainer.train(resume_from_checkpoint=None, trial=vars(config)["_items"])
         # If there hasn't been any evaluation during the training loop.
         if getattr(trainer, "objective", None) is None:
             metrics = trainer.evaluate()
             trainer.objective = trainer.compute_objective(metrics)
+            format_metrics = rewrite_logs(metrics)
+            if metric not in format_metrics:
+                logger.warning(
+                    f"Provided metric {metric} not found. This might result in unexpected sweeps charts. The available"
+                    f" metrics are {format_metrics.keys()}"
+                )
+        best_score = False
+        if best_trial["run_id"] is not None:
+            if direction == "minimize":
+                best_score = trainer.objective < best_trial["objective"]
+            elif direction == "maximize":
+                best_score = trainer.objective > best_trial["objective"]
 
-        values = [dict(name="objective", value=trainer.objective)]
-        obs = conn.experiments(experiment.id).observations().create(suggestion=suggestion.id, values=values)
-        logger.info(f"[suggestion_id, observation_id]: [{suggestion.id}, {obs.id}]")
-        experiment = conn.experiments(experiment.id).fetch()
+        if best_score or best_trial["run_id"] is None:
+            best_trial["run_id"] = run.id
+            best_trial["objective"] = trainer.objective
+            best_trial["hyperparameters"] = dict(config)
 
-    best = list(conn.experiments(experiment.id).best_assignments().fetch().iterate_pages())[0]
-    best_run = BestRun(best.id, best.value, best.assignments)
+        return trainer.objective
 
-    return best_run
+    sweep_id = wandb.sweep(sweep_config, project=project, entity=entity) if not sweep_id else sweep_id
+    logger.info(f"wandb sweep id - {sweep_id}")
+    wandb.agent(sweep_id, function=_objective, count=n_trials)
+
+    return BestRun(best_trial["run_id"], best_trial["objective"], best_trial["hyperparameters"])
 
 
 def get_available_reporting_integrations():
@@ -345,6 +520,8 @@ def get_available_reporting_integrations():
         integrations.append("comet_ml")
     if is_mlflow_available():
         integrations.append("mlflow")
+    if is_neptune_available():
+        integrations.append("neptune")
     if is_tensorboard_available():
         integrations.append("tensorboard")
     if is_wandb_available():
@@ -372,11 +549,10 @@ def rewrite_logs(d):
 
 class TensorBoardCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `TensorBoard
-    <https://www.tensorflow.org/tensorboard>`__.
+    A [`TrainerCallback`] that sends the logs to [TensorBoard](https://www.tensorflow.org/tensorboard).
 
     Args:
-        tb_writer (:obj:`SummaryWriter`, `optional`):
+        tb_writer (`SummaryWriter`, *optional*):
             The writer to use. Will instantiate one if not set.
     """
 
@@ -384,7 +560,8 @@ class TensorBoardCallback(TrainerCallback):
         has_tensorboard = is_tensorboard_available()
         if not has_tensorboard:
             raise RuntimeError(
-                "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or install tensorboardX."
+                "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or"
+                " install tensorboardX."
             )
         if has_tensorboard:
             try:
@@ -461,7 +638,7 @@ class TensorBoardCallback(TrainerCallback):
 
 class WandbCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `Weight and Biases <https://www.wandb.com/>`__.
+    A [`TrainerCallback`] that sends the logs to [Weight and Biases](https://www.wandb.com/).
     """
 
     def __init__(self):
@@ -478,22 +655,23 @@ class WandbCallback(TrainerCallback):
 
     def setup(self, args, state, model, **kwargs):
         """
-        Setup the optional Weights & Biases (`wandb`) integration.
+        Setup the optional Weights & Biases (*wandb*) integration.
 
-        One can subclass and override this method to customize the setup if needed. Find more information `here
-        <https://docs.wandb.ai/integrations/huggingface>`__. You can also override the following environment variables:
+        One can subclass and override this method to customize the setup if needed. Find more information
+        [here](https://docs.wandb.ai/integrations/huggingface). You can also override the following environment
+        variables:
 
         Environment:
-            WANDB_LOG_MODEL (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            WANDB_LOG_MODEL (`bool`, *optional*, defaults to `False`):
                 Whether or not to log model as artifact at the end of training. Use along with
-                `TrainingArguments.load_best_model_at_end` to upload best model.
-            WANDB_WATCH (:obj:`str`, `optional` defaults to :obj:`"gradients"`):
-                Can be :obj:`"gradients"`, :obj:`"all"` or :obj:`"false"`. Set to :obj:`"false"` to disable gradient
-                logging or :obj:`"all"` to log gradients and parameters.
-            WANDB_PROJECT (:obj:`str`, `optional`, defaults to :obj:`"huggingface"`):
+                *TrainingArguments.load_best_model_at_end* to upload best model.
+            WANDB_WATCH (`str`, *optional* defaults to `"gradients"`):
+                Can be `"gradients"`, `"all"` or `"false"`. Set to `"false"` to disable gradient logging or `"all"` to
+                log gradients and parameters.
+            WANDB_PROJECT (`str`, *optional*, defaults to `"huggingface"`):
                 Set this to a custom string to store results in a different project.
-            WANDB_DISABLED (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to disable wandb entirely. Set `WANDB_DISABLED=true` to disable.
+            WANDB_DISABLED (`bool`, *optional*, defaults to `False`):
+                Whether or not to disable wandb entirely. Set *WANDB_DISABLED=true* to disable.
         """
         if self._wandb is None:
             return
@@ -542,6 +720,7 @@ class WandbCallback(TrainerCallback):
         if hp_search:
             self._wandb.finish()
             self._initialized = False
+            args.run_name = None
         if not self._initialized:
             self.setup(args, state, model, **kwargs)
 
@@ -585,7 +764,7 @@ class WandbCallback(TrainerCallback):
 
 class CometCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `Comet ML <https://www.comet.ml/site/>`__.
+    A [`TrainerCallback`] that sends the logs to [Comet ML](https://www.comet.ml/site/).
     """
 
     def __init__(self):
@@ -599,19 +778,19 @@ class CometCallback(TrainerCallback):
         Setup the optional Comet.ml integration.
 
         Environment:
-            COMET_MODE (:obj:`str`, `optional`):
+            COMET_MODE (`str`, *optional*):
                 Whether to create an online, offline experiment or disable Comet logging. Can be "OFFLINE", "ONLINE",
                 or "DISABLED". Defaults to "ONLINE".
-            COMET_PROJECT_NAME (:obj:`str`, `optional`):
+            COMET_PROJECT_NAME (`str`, *optional*):
                 Comet project name for experiments
-            COMET_OFFLINE_DIRECTORY (:obj:`str`, `optional`):
-                Folder to use for saving offline experiments when :obj:`COMET_MODE` is "OFFLINE"
-            COMET_LOG_ASSETS (:obj:`str`, `optional`):
+            COMET_OFFLINE_DIRECTORY (`str`, *optional*):
+                Folder to use for saving offline experiments when `COMET_MODE` is "OFFLINE"
+            COMET_LOG_ASSETS (`str`, *optional*):
                 Whether or not to log training assets (tf event logs, checkpoints, etc), to Comet. Can be "TRUE", or
                 "FALSE". Defaults to "TRUE".
 
-        For a number of configurable items in the environment, see `here
-        <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__.
+        For a number of configurable items in the environment, see
+        [here](https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables).
         """
         self._initialized = True
         log_assets = os.getenv("COMET_LOG_ASSETS", "FALSE").upper()
@@ -651,18 +830,18 @@ class CometCallback(TrainerCallback):
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
             experiment = comet_ml.config.get_global_experiment()
-            if (experiment is not None) and (self._log_assets is True):
-                logger.info("Logging checkpoints. This may take time.")
-                experiment.log_asset_folder(
-                    args.output_dir, recursive=True, log_file_name=True, step=state.global_step
-                )
-            experiment.end()
+            if experiment is not None:
+                if self._log_assets is True:
+                    logger.info("Logging checkpoints. This may take time.")
+                    experiment.log_asset_folder(
+                        args.output_dir, recursive=True, log_file_name=True, step=state.global_step
+                    )
+                experiment.end()
 
 
 class AzureMLCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `AzureML
-    <https://pypi.org/project/azureml-sdk/>`__.
+    A [`TrainerCallback`] that sends the logs to [AzureML](https://pypi.org/project/azureml-sdk/).
     """
 
     def __init__(self, azureml_run=None):
@@ -685,7 +864,8 @@ class AzureMLCallback(TrainerCallback):
 
 class MLflowCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `MLflow <https://www.mlflow.org/>`__.
+    A [`TrainerCallback`] that sends the logs to [MLflow](https://www.mlflow.org/). Can be disabled by setting
+    environment variable `DISABLE_MLFLOW_INTEGRATION = TRUE`.
     """
 
     def __init__(self):
@@ -697,6 +877,7 @@ class MLflowCallback(TrainerCallback):
         self._MAX_PARAMS_TAGS_PER_BATCH = mlflow.utils.validation.MAX_PARAMS_TAGS_PER_BATCH
 
         self._initialized = False
+        self._auto_end_run = False
         self._log_artifacts = False
         self._ml_flow = mlflow
 
@@ -705,37 +886,70 @@ class MLflowCallback(TrainerCallback):
         Setup the optional MLflow integration.
 
         Environment:
-            HF_MLFLOW_LOG_ARTIFACTS (:obj:`str`, `optional`):
-                Whether to use MLflow .log_artifact() facility to log artifacts.
-
-                This only makes sense if logging to a remote server, e.g. s3 or GCS. If set to `True` or `1`, will copy
-                whatever is in :class:`~transformers.TrainingArguments`'s ``output_dir`` to the local or remote
-                artifact storage. Using it without a remote storage will just copy the files to your artifact location.
+            HF_MLFLOW_LOG_ARTIFACTS (`str`, *optional*):
+                Whether to use MLflow .log_artifact() facility to log artifacts. This only makes sense if logging to a
+                remote server, e.g. s3 or GCS. If set to `True` or *1*, will copy each saved checkpoint on each save in
+                [`TrainingArguments`]'s `output_dir` to the local or remote artifact storage. Using it without a remote
+                storage will just copy the files to your artifact location.
+            MLFLOW_EXPERIMENT_NAME (`str`, *optional*):
+                Whether to use an MLflow experiment_name under which to launch the run. Default to "None" which will
+                point to the "Default" experiment in MLflow. Otherwise, it is a case sensitive name of the experiment
+                to be activated. If an experiment with this name does not exist, a new experiment with this name is
+                created.
+            MLFLOW_TAGS (`str`, *optional*):
+                A string dump of a dictionary of key/value pair to be added to the MLflow run as tags. Example:
+                os.environ['MLFLOW_TAGS']='{"release.candidate": "RC1", "release.version": "2.2.0"}'
+            MLFLOW_NESTED_RUN (`str`, *optional*):
+                Whether to use MLflow nested runs. If set to `True` or *1*, will create a nested run inside the current
+                run.
+            MLFLOW_RUN_ID (`str`, *optional*):
+                Allow to reattach to an existing run which can be usefull when resuming training from a checkpoint.
+                When MLFLOW_RUN_ID environment variable is set, start_run attempts to resume a run with the specified
+                run ID and other parameters are ignored.
+            MLFLOW_FLATTEN_PARAMS (`str`, *optional*):
+                Whether to flatten the parameters dictionary before logging. Default to `False`.
         """
-        log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper()
-        if log_artifacts in {"TRUE", "1"}:
-            self._log_artifacts = True
+        self._log_artifacts = os.getenv("HF_MLFLOW_LOG_ARTIFACTS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
+        self._nested_run = os.getenv("MLFLOW_NESTED_RUN", "FALSE").upper() in ENV_VARS_TRUE_VALUES
+        self._experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", None)
+        self._flatten_params = os.getenv("MLFLOW_FLATTEN_PARAMS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
+        self._run_id = os.getenv("MLFLOW_RUN_ID", None)
+        logger.debug(
+            f"MLflow experiment_name={self._experiment_name}, run_name={args.run_name}, nested={self._nested_run},"
+            f" tags={self._nested_run}"
+        )
         if state.is_world_process_zero:
-            self._ml_flow.start_run()
+            if self._ml_flow.active_run() is None or self._nested_run or self._run_id:
+                if self._experiment_name:
+                    # Use of set_experiment() ensure that Experiment is created if not exists
+                    self._ml_flow.set_experiment(self._experiment_name)
+                self._ml_flow.start_run(run_name=args.run_name, nested=self._nested_run)
+                logger.debug(f"MLflow run started with run_id={self._ml_flow.active_run().info.run_id}")
+                self._auto_end_run = True
             combined_dict = args.to_dict()
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config.to_dict()
                 combined_dict = {**model_config, **combined_dict}
+            combined_dict = flatten_dict(combined_dict) if self._flatten_params else combined_dict
             # remove params that are too long for MLflow
             for name, value in list(combined_dict.items()):
                 # internally, all values are converted to str in MLflow
                 if len(str(value)) > self._MAX_PARAM_VAL_LENGTH:
                     logger.warning(
-                        f"Trainer is attempting to log a value of "
-                        f'"{value}" for key "{name}" as a parameter. '
-                        f"MLflow's log_param() only accepts values no longer than "
-                        f"250 characters so we dropped this attribute."
+                        f'Trainer is attempting to log a value of "{value}" for key "{name}" as a parameter. MLflow\'s'
+                        " log_param() only accepts values no longer than 250 characters so we dropped this attribute."
+                        " You can use `MLFLOW_FLATTEN_PARAMS` environment variable to flatten the parameters and"
+                        " avoid this message."
                     )
                     del combined_dict[name]
             # MLflow cannot log more than 100 values in one go, so we have to split it
             combined_dict_items = list(combined_dict.items())
             for i in range(0, len(combined_dict_items), self._MAX_PARAMS_TAGS_PER_BATCH):
                 self._ml_flow.log_params(dict(combined_dict_items[i : i + self._MAX_PARAMS_TAGS_PER_BATCH]))
+            mlflow_tags = os.getenv("MLFLOW_TAGS", None)
+            if mlflow_tags:
+                mlflow_tags = json.loads(mlflow_tags)
+                self._ml_flow.set_tags(mlflow_tags)
         self._initialized = True
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
@@ -752,100 +966,313 @@ class MLflowCallback(TrainerCallback):
                     metrics[k] = v
                 else:
                     logger.warning(
-                        f"Trainer is attempting to log a value of "
-                        f'"{v}" of type {type(v)} for key "{k}" as a metric. '
-                        f"MLflow's log_metric() only accepts float and "
-                        f"int types so we dropped this attribute."
+                        f'Trainer is attempting to log a value of "{v}" of type {type(v)} for key "{k}" as a metric. '
+                        "MLflow's log_metric() only accepts float and int types so we dropped this attribute."
                     )
             self._ml_flow.log_metrics(metrics=metrics, step=state.global_step)
 
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
-            if self._log_artifacts:
-                logger.info("Logging artifacts. This may take time.")
-                self._ml_flow.log_artifacts(args.output_dir)
+            if self._auto_end_run and self._ml_flow.active_run():
+                self._ml_flow.end_run()
+
+    def on_save(self, args, state, control, **kwargs):
+        if self._initialized and state.is_world_process_zero and self._log_artifacts:
+            ckpt_dir = f"checkpoint-{state.global_step}"
+            artifact_path = os.path.join(args.output_dir, ckpt_dir)
+            logger.info(f"Logging checkpoint artifacts in {ckpt_dir}. This may take time.")
+            self._ml_flow.pyfunc.log_model(
+                ckpt_dir,
+                artifacts={"model_path": artifact_path},
+                python_model=self._ml_flow.pyfunc.PythonModel(),
+            )
 
     def __del__(self):
         # if the previous run is not terminated correctly, the fluent API will
         # not let you start a new run before the previous one is killed
-        if self._ml_flow.active_run is not None:
+        if (
+            self._auto_end_run
+            and callable(getattr(self._ml_flow, "active_run", None))
+            and self._ml_flow.active_run() is not None
+        ):
             self._ml_flow.end_run()
 
 
+class NeptuneMissingConfiguration(Exception):
+    def __init__(self):
+        super().__init__(
+            """
+        ------ Unsupported ---- We were not able to create new runs. You provided a custom Neptune run to
+        `NeptuneCallback` with the `run` argument. For the integration to work fully, provide your `api_token` and
+        `project` by saving them as environment variables or passing them to the callback.
+        """
+        )
+
+
 class NeptuneCallback(TrainerCallback):
-    """
-    A :class:`~transformers.TrainerCallback` that sends the logs to `Neptune <https://neptune.ai>`.
+    """TrainerCallback that sends the logs to [Neptune](https://neptune.ai).
+
+    Args:
+        api_token (`str`, optional):
+            Neptune API token obtained upon registration. You can leave this argument out if you have saved your token
+            to the `NEPTUNE_API_TOKEN` environment variable (strongly recommended). See full setup instructions in the
+            [docs](https://docs.neptune.ai/getting-started/installation).
+        project (`str`, optional):
+            Name of an existing Neptune project, in the form: "workspace-name/project-name". You can find and copy the
+            name from the project Settings -> Properties in Neptune. If None (default), the value of the
+            `NEPTUNE_PROJECT` environment variable will be used.
+        name (`str`, optional): Custom name for the run.
+        base_namespace (`str`, optional, defaults to "finetuning"): In the Neptune run, the root namespace
+            that will contain all of the logged metadata.
+        log_parameters (`bool`, optional, defaults to True):
+            If True, logs all Trainer arguments and model parameters provided by the Trainer.
+        log_checkpoints (`str`, optional, defaults to None):
+            If "same", uploads checkpoints whenever they are saved by the Trainer. If "last", uploads only the most
+            recently saved checkpoint. If "best", uploads the best checkpoint (among the ones saved by the Trainer). If
+            None, does not upload checkpoints.
+        run (`Run`, optional):
+            Pass a Neptune run object if you want to continue logging to an existing run. Read more about resuming runs
+            in the [docs](https://docs.neptune.ai/how-to-guides/neptune-api/resume-run).
+        **neptune_run_kwargs (optional):
+            Additional keyword arguments to be passed directly to the
+            [neptune.init_run()](https://docs.neptune.ai/api-reference/neptune#.init_run) function when a new run is
+            created.
     """
 
-    def __init__(self):
+    integration_version_key = "source_code/integrations/transformers"
+    model_parameters_key = "model_parameters"
+    trial_name_key = "trial"
+    trial_params_key = "trial_params"
+    trainer_parameters_key = "trainer_parameters"
+    flat_metrics = {"train/epoch"}
+
+    def __init__(
+        self,
+        *,
+        api_token: Optional[str] = None,
+        project: Optional[str] = None,
+        name: Optional[str] = None,
+        base_namespace: str = "finetuning",
+        run: Optional["Run"] = None,
+        log_parameters: bool = True,
+        log_checkpoints: Optional[str] = None,
+        **neptune_run_kwargs
+    ):
         if not is_neptune_available():
             raise ValueError(
-                "NeptuneCallback requires neptune-client to be installed. Run `pip install neptune-client`."
+                "NeptuneCallback requires the Neptune client library to be installed. "
+                "To install the library, run `pip install neptune-client`."
             )
-        import neptune.new as neptune
 
-        self._neptune = neptune
-        self._initialized = False
-        self._log_artifacts = False
+        from neptune.new.metadata_containers.run import Run
 
-    def setup(self, args, state, model):
-        """
-        Setup the Neptune integration.
+        try:
+            from neptune.new.integrations.utils import verify_type
+        except ImportError:
+            from neptune.new.internal.utils import verify_type
 
-        Environment:
-            NEPTUNE_PROJECT (:obj:`str`, `required`):
-                The project ID for neptune.ai account. Should be in format `workspace_name/project_name`
-            NEPTUNE_API_TOKEN (:obj:`str`, `required`):
-                API-token for neptune.ai account
-            NEPTUNE_CONNECTION_MODE (:obj:`str`, `optional`):
-                Neptune connection mode. `async` by default
-            NEPTUNE_RUN_NAME (:obj:`str`, `optional`):
-                The name of run process on Neptune dashboard
-        """
-        if state.is_world_process_zero:
-            self._neptune_run = self._neptune.init(
-                project=os.getenv("NEPTUNE_PROJECT"),
-                api_token=os.getenv("NEPTUNE_API_TOKEN"),
-                mode=os.getenv("NEPTUNE_CONNECTION_MODE", "async"),
-                name=os.getenv("NEPTUNE_RUN_NAME", None),
-                run=os.getenv("NEPTUNE_RUN_ID", None),
-            )
-            combined_dict = args.to_dict()
-            if hasattr(model, "config") and model.config is not None:
-                model_config = model.config.to_dict()
-                combined_dict = {**model_config, **combined_dict}
-            self._neptune_run["parameters"] = combined_dict
-        self._initialized = True
+        verify_type("api_token", api_token, (str, type(None)))
+        verify_type("project", project, (str, type(None)))
+        verify_type("name", name, (str, type(None)))
+        verify_type("base_namespace", base_namespace, str)
+        verify_type("run", run, (Run, type(None)))
+        verify_type("log_parameters", log_parameters, bool)
+        verify_type("log_checkpoints", log_checkpoints, (str, type(None)))
+
+        self._base_namespace_path = base_namespace
+        self._log_parameters = log_parameters
+        self._log_checkpoints = log_checkpoints
+        self._initial_run: Optional[Run] = run
+
+        self._run = None
+        self._is_monitoring_run = False
+        self._run_id = None
+        self._force_reset_monitoring_run = False
+        self._init_run_kwargs = {"api_token": api_token, "project": project, "name": name, **neptune_run_kwargs}
+
+        self._volatile_checkpoints_dir = None
+        self._should_upload_checkpoint = self._log_checkpoints is not None
+        self._recent_checkpoint_path = None
+
+        if self._log_checkpoints in {"last", "best"}:
+            self._target_checkpoints_namespace = f"checkpoints/{self._log_checkpoints}"
+            self._should_clean_recently_uploaded_checkpoint = True
+        else:
+            self._target_checkpoints_namespace = "checkpoints"
+            self._should_clean_recently_uploaded_checkpoint = False
+
+    def _stop_run_if_exists(self):
+        if self._run:
+            self._run.stop()
+            del self._run
+            self._run = None
+
+    def _initialize_run(self, **additional_neptune_kwargs):
+        from neptune.new import init_run
+        from neptune.new.exceptions import NeptuneMissingApiTokenException, NeptuneMissingProjectNameException
+
+        self._stop_run_if_exists()
+
+        try:
+            self._run = init_run(**self._init_run_kwargs, **additional_neptune_kwargs)
+            self._run_id = self._run["sys/id"].fetch()
+        except (NeptuneMissingProjectNameException, NeptuneMissingApiTokenException) as e:
+            raise NeptuneMissingConfiguration() from e
+
+    def _use_initial_run(self):
+        self._run = self._initial_run
+        self._is_monitoring_run = True
+        self._run_id = self._run["sys/id"].fetch()
+        self._initial_run = None
+
+    def _ensure_run_with_monitoring(self):
+        if self._initial_run is not None:
+            self._use_initial_run()
+        else:
+            if not self._force_reset_monitoring_run and self._is_monitoring_run:
+                return
+
+            if self._run and not self._is_monitoring_run and not self._force_reset_monitoring_run:
+                self._initialize_run(run=self._run_id)
+                self._is_monitoring_run = True
+            else:
+                self._initialize_run()
+                self._force_reset_monitoring_run = False
+
+    def _ensure_at_least_run_without_monitoring(self):
+        if self._initial_run is not None:
+            self._use_initial_run()
+        else:
+            if not self._run:
+                self._initialize_run(
+                    run=self._run_id,
+                    capture_stdout=False,
+                    capture_stderr=False,
+                    capture_hardware_metrics=False,
+                    capture_traceback=False,
+                )
+                self._is_monitoring_run = False
+
+    @property
+    def run(self):
+        if self._run is None:
+            self._ensure_at_least_run_without_monitoring()
+        return self._run
+
+    @property
+    def _metadata_namespace(self):
+        return self.run[self._base_namespace_path]
+
+    def _log_integration_version(self):
+        self.run[NeptuneCallback.integration_version_key] = version
+
+    def _log_trainer_parameters(self, args):
+        self._metadata_namespace[NeptuneCallback.trainer_parameters_key] = args.to_sanitized_dict()
+
+    def _log_model_parameters(self, model):
+        if model and hasattr(model, "config") and model.config is not None:
+            self._metadata_namespace[NeptuneCallback.model_parameters_key] = model.config.to_dict()
+
+    def _log_hyper_param_search_parameters(self, state):
+        if state and hasattr(state, "trial_name"):
+            self._metadata_namespace[NeptuneCallback.trial_name_key] = state.trial_name
+
+        if state and hasattr(state, "trial_params") and state.trial_params is not None:
+            self._metadata_namespace[NeptuneCallback.trial_params_key] = state.trial_params
+
+    def _log_model_checkpoint(self, source_directory: str, checkpoint: str):
+        target_path = relative_path = os.path.join(source_directory, checkpoint)
+
+        if self._volatile_checkpoints_dir is not None:
+            consistent_checkpoint_path = os.path.join(self._volatile_checkpoints_dir, checkpoint)
+            try:
+                shutil.copytree(relative_path, os.path.join(consistent_checkpoint_path, relative_path))
+                target_path = consistent_checkpoint_path
+            except IOError as e:
+                logger.warning(
+                    "NeptuneCallback was unable to made a copy of checkpoint due to I/O exception: '{}'."
+                    "Could fail trying to upload.".format(e)
+                )
+
+        self._metadata_namespace[self._target_checkpoints_namespace].upload_files(target_path)
+
+        if self._should_clean_recently_uploaded_checkpoint and self._recent_checkpoint_path is not None:
+            self._metadata_namespace[self._target_checkpoints_namespace].delete_files(self._recent_checkpoint_path)
+
+        self._recent_checkpoint_path = relative_path
+
+    def on_init_end(self, args, state, control, **kwargs):
+        self._volatile_checkpoints_dir = None
+        if self._log_checkpoints and (args.overwrite_output_dir or args.save_total_limit is not None):
+            self._volatile_checkpoints_dir = tempfile.TemporaryDirectory().name
+
+        if self._log_checkpoints == "best" and not args.load_best_model_at_end:
+            raise ValueError("To save the best model checkpoint, the load_best_model_at_end argument must be enabled.")
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
-        if not self._initialized:
-            self.setup(args, state, model)
+        if not state.is_world_process_zero:
+            return
 
-    def on_log(self, args, state, control, logs, model=None, **kwargs):
-        if not self._initialized:
-            self.setup(args, state, model)
-        if state.is_world_process_zero:
-            for k, v in logs.items():
-                self._neptune_run[k].log(v, step=state.global_step)
+        self._ensure_run_with_monitoring()
+        self._force_reset_monitoring_run = True
+
+        self._log_integration_version()
+        if self._log_parameters:
+            self._log_trainer_parameters(args)
+            self._log_model_parameters(model)
+
+        if state.is_hyper_param_search:
+            self._log_hyper_param_search_parameters(state)
+
+    def on_train_end(self, args, state, control, **kwargs):
+        self._stop_run_if_exists()
 
     def __del__(self):
-        """
-        Environment:
-            NEPTUNE_STOP_TIMEOUT (:obj:`int`, `optional`):
-                Number of seconsds to wait for all Neptune.ai tracking calls to finish, before stopping the tracked
-                run. If not set it will wait for all tracking calls to finish.
-        """
-        try:
-            stop_timeout = os.getenv("NEPTUNE_STOP_TIMEOUT")
-            stop_timeout = int(stop_timeout) if stop_timeout else None
-            self._neptune_run.stop(seconds=stop_timeout)
-        except AttributeError:
-            pass
+        if self._volatile_checkpoints_dir is not None:
+            shutil.rmtree(self._volatile_checkpoints_dir, ignore_errors=True)
+
+        self._stop_run_if_exists()
+
+    def on_save(self, args, state, control, **kwargs):
+        if self._should_upload_checkpoint:
+            self._log_model_checkpoint(args.output_dir, f"checkpoint-{state.global_step}")
+
+    def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+        if self._log_checkpoints == "best":
+            best_metric_name = args.metric_for_best_model
+            if not best_metric_name.startswith("eval_"):
+                best_metric_name = f"eval_{best_metric_name}"
+
+            metric_value = metrics.get(best_metric_name)
+
+            operator = np.greater if args.greater_is_better else np.less
+
+            self._should_upload_checkpoint = state.best_metric is None or operator(metric_value, state.best_metric)
+
+    @classmethod
+    def get_run(cls, trainer):
+        for callback in trainer.callback_handler.callbacks:
+            if isinstance(callback, cls):
+                return callback.run
+
+        raise Exception("The trainer doesn't have a NeptuneCallback configured.")
+
+    def on_log(self, args, state, control, logs: Optional[Dict[str, float]] = None, **kwargs):
+        if not state.is_world_process_zero:
+            return
+
+        if logs is not None:
+            for name, value in rewrite_logs(logs).items():
+                if isinstance(value, (int, float)):
+                    if name in NeptuneCallback.flat_metrics:
+                        self._metadata_namespace[name] = value
+                    else:
+                        self._metadata_namespace[name].log(value, step=state.global_step)
 
 
 class CodeCarbonCallback(TrainerCallback):
     """
-    A :class:`~transformers.TrainerCallback` that tracks the CO2 emission of training.
+    A [`TrainerCallback`] that tracks the CO2 emission of training.
     """
 
     def __init__(self):

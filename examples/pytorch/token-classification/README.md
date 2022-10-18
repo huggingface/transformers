@@ -55,13 +55,15 @@ uses special features of those tokenizers. You can check if your favorite model 
 [this table](https://huggingface.co/transformers/index.html#supported-frameworks), if it doesn't you can still use the old version
 of the script.
 
+> If your model classification head dimensions do not fit the number of labels in the dataset, you can specify `--ignore_mismatched_sizes` to adapt it.
+
 ## Old version of the script
 
-You can find the old version of the PyTorch script [here](https://github.com/huggingface/transformers/blob/master/examples/legacy/token-classification/run_ner.py).
+You can find the old version of the PyTorch script [here](https://github.com/huggingface/transformers/blob/main/examples/legacy/token-classification/run_ner.py).
 
 ## Pytorch version, no Trainer
 
-Based on the script [run_ner_no_trainer.py](https://github.com/huggingface/transformers/blob/master/examples/pytorch/token-classification/run_ner_no_trainer.py).
+Based on the script [run_ner_no_trainer.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/token-classification/run_ner_no_trainer.py).
 
 Like `run_ner.py`, this script allows you to fine-tune any of the models on the [hub](https://huggingface.co/models) on a
 token classification task, either NER, POS or CHUNKS tasks or your own data in a csv or a JSON file. The main difference is that this
@@ -73,7 +75,7 @@ the mean of the [🤗 `Accelerate`](https://github.com/huggingface/accelerate) l
 after installing it:
 
 ```bash
-pip install accelerate
+pip install git+https://github.com/huggingface/accelerate
 ```
 
 then

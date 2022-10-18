@@ -16,6 +16,7 @@
 """ Fine-tuning the library models for sequence classification."""
 # You can also adapt this script on your own text classification task. Pointers for this are left as comments.
 
+import json
 import logging
 import os
 import sys
@@ -31,11 +32,13 @@ from transformers import (
     AutoTokenizer,
     HfArgumentParser,
     PretrainedConfig,
+    PushToHubCallback,
     TFAutoModelForSequenceClassification,
     TFTrainingArguments,
+    create_optimizer,
     set_seed,
 )
-from transformers.file_utils import CONFIG_NAME, TF2_WEIGHTS_NAME
+from transformers.utils import CONFIG_NAME, TF2_WEIGHTS_NAME, send_example_telemetry
 
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"  # Reduce the amount of console output from TF
@@ -56,47 +59,6 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         self.model.save_pretrained(self.output_dir)
-
-
-def convert_dataset_for_tensorflow(
-    dataset, non_label_column_names, batch_size, dataset_mode="variable_batch", shuffle=True, drop_remainder=True
-):
-    """Converts a Hugging Face dataset to a Tensorflow Dataset. The dataset_mode controls whether we pad all batches
-    to the maximum sequence length, or whether we only pad to the maximum length within that batch. The former
-    is most useful when training on TPU, as a new graph compilation is required for each sequence length.
-    """
-
-    def densify_ragged_batch(features, label=None):
-        features = {
-            feature: ragged_tensor.to_tensor(shape=batch_shape[feature]) for feature, ragged_tensor in features.items()
-        }
-        if label is None:
-            return features
-        else:
-            return features, label
-
-    feature_keys = list(set(dataset.features.keys()) - set(non_label_column_names + ["label"]))
-    if dataset_mode == "variable_batch":
-        batch_shape = {key: None for key in feature_keys}
-        data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
-    elif dataset_mode == "constant_batch":
-        data = {key: tf.ragged.constant(dataset[key]) for key in feature_keys}
-        batch_shape = {
-            key: tf.concat(([batch_size], ragged_tensor.bounding_shape()[1:]), axis=0)
-            for key, ragged_tensor in data.items()
-        }
-    else:
-        raise ValueError("Unknown dataset mode!")
-
-    if "label" in dataset.features:
-        labels = tf.convert_to_tensor(np.array(dataset["label"]))
-        tf_dataset = tf.data.Dataset.from_tensor_slices((data, labels))
-    else:
-        tf_dataset = tf.data.Dataset.from_tensor_slices(data)
-    if shuffle:
-        tf_dataset = tf_dataset.shuffle(buffer_size=len(dataset))
-    tf_dataset = tf_dataset.batch(batch_size=batch_size, drop_remainder=drop_remainder).map(densify_ragged_batch)
-    return tf_dataset
 
 
 # endregion
@@ -124,8 +86,10 @@ class DataTrainingArguments:
     max_seq_length: int = field(
         default=128,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            )
         },
     )
     overwrite_cache: bool = field(
@@ -134,30 +98,38 @@ class DataTrainingArguments:
     pad_to_max_length: bool = field(
         default=False,
         metadata={
-            "help": "Whether to pad all samples to `max_seq_length`. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
-            "Data will always be padded when using TPUs."
+            "help": (
+                "Whether to pad all samples to `max_seq_length`. "
+                "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+                "Data will always be padded when using TPUs."
+            )
         },
     )
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_val_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of validation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of validation examples to this "
+                "value if set."
+            )
         },
     )
     max_test_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of test examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of test examples to this "
+                "value if set."
+            )
         },
     )
 
@@ -201,8 +173,10 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+            "help": (
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
     )
 
@@ -223,6 +197,11 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_text_classification", model_args, data_args, framework="tensorflow")
+
     output_dir = Path(training_args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     # endregion
@@ -275,7 +254,12 @@ def main():
 
     if data_args.input_file_extension == "csv":
         # Loading a dataset from local csv files
-        datasets = load_dataset("csv", data_files=data_files, cache_dir=model_args.cache_dir)
+        datasets = load_dataset(
+            "csv",
+            data_files=data_files,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     else:
         # Loading a dataset from local json files
         datasets = load_dataset("json", data_files=data_files, cache_dir=model_args.cache_dir)
@@ -364,8 +348,8 @@ def main():
             else:
                 logger.warning(
                     "Your model seems to have been trained with labels, but they don't match the dataset: ",
-                    f"model labels: {list(sorted(label_name_to_id.keys()))}, dataset labels: {list(sorted(label_list))}."
-                    "\nIgnoring the model labels as a result.",
+                    f"model labels: {list(sorted(label_name_to_id.keys()))}, dataset labels:"
+                    f" {list(sorted(label_list))}.\nIgnoring the model labels as a result.",
                 )
                 label_to_id = {v: i for i, v in enumerate(label_list)}
         elif not is_regression:
@@ -399,6 +383,7 @@ def main():
         return result
 
     datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
+
     # endregion
 
     with training_args.strategy.scope():
@@ -421,24 +406,10 @@ def main():
         )
         # endregion
 
-        # region Optimizer, loss and compilation
-        optimizer = tf.keras.optimizers.Adam(
-            learning_rate=training_args.learning_rate,
-            beta_1=training_args.adam_beta1,
-            beta_2=training_args.adam_beta2,
-            epsilon=training_args.adam_epsilon,
-            clipnorm=training_args.max_grad_norm,
-        )
-        if is_regression:
-            loss_fn = tf.keras.losses.MeanSquaredError()
-            metrics = []
-        else:
-            loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-            metrics = ["accuracy"]
-        model.compile(optimizer=optimizer, loss=loss_fn, metrics=metrics)
-        # endregion
-
         # region Convert data to a tf.data.Dataset
+        dataset_options = tf.data.Options()
+        dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+        num_replicas = training_args.strategy.num_replicas_in_sync
 
         tf_data = dict()
         max_samples = {
@@ -450,54 +421,121 @@ def main():
             if key not in datasets:
                 tf_data[key] = None
                 continue
+            if (
+                (key == "train" and not training_args.do_train)
+                or (key == "validation" and not training_args.do_eval)
+                or (key == "test" and not training_args.do_predict)
+            ):
+                tf_data[key] = None
+                continue
             if key in ("train", "validation"):
                 assert "label" in datasets[key].features, f"Missing labels from {key} data!"
             if key == "train":
                 shuffle = True
-                batch_size = training_args.per_device_train_batch_size
-                drop_remainder = True  # Saves us worrying about scaling gradients for the last batch
+                batch_size = training_args.per_device_train_batch_size * num_replicas
             else:
                 shuffle = False
-                batch_size = training_args.per_device_eval_batch_size
-                drop_remainder = False
+                batch_size = training_args.per_device_eval_batch_size * num_replicas
             samples_limit = max_samples[key]
             dataset = datasets[key]
             if samples_limit is not None:
                 dataset = dataset.select(range(samples_limit))
-            if isinstance(training_args.strategy, tf.distribute.TPUStrategy) or data_args.pad_to_max_length:
-                logger.info("Padding all batches to max length because argument was set or we're on TPU.")
-                dataset_mode = "constant_batch"
-            else:
-                dataset_mode = "variable_batch"
-            data = convert_dataset_for_tensorflow(
+
+            # model.prepare_tf_dataset() wraps a Hugging Face dataset in a tf.data.Dataset which is ready to use in
+            # training. This is the recommended way to use a Hugging Face dataset when training with Keras. You can also
+            # use the lower-level dataset.to_tf_dataset() method, but you will have to specify things like column names
+            # yourself if you use this method, whereas they are automatically inferred from the model input names when
+            # using model.prepare_tf_dataset()
+            # For more info see the docs:
+            # https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.TFPreTrainedModel.prepare_tf_dataset
+            # https://huggingface.co/docs/datasets/main/en/package_reference/main_classes#datasets.Dataset.to_tf_dataset
+
+            data = model.prepare_tf_dataset(
                 dataset,
-                non_label_column_names,
-                batch_size=batch_size,
-                dataset_mode=dataset_mode,
-                drop_remainder=drop_remainder,
                 shuffle=shuffle,
+                batch_size=batch_size,
+                tokenizer=tokenizer,
             )
+            data = data.with_options(dataset_options)
             tf_data[key] = data
+        # endregion
+
+        # region Optimizer, loss and compilation
+
+        if training_args.do_train:
+            num_train_steps = len(tf_data["train"]) * training_args.num_train_epochs
+            if training_args.warmup_steps > 0:
+                num_warmup_steps = training_args.warmup_steps
+            elif training_args.warmup_ratio > 0:
+                num_warmup_steps = int(num_train_steps * training_args.warmup_ratio)
+            else:
+                num_warmup_steps = 0
+
+            optimizer, schedule = create_optimizer(
+                init_lr=training_args.learning_rate,
+                num_train_steps=num_train_steps,
+                num_warmup_steps=num_warmup_steps,
+                adam_beta1=training_args.adam_beta1,
+                adam_beta2=training_args.adam_beta2,
+                adam_epsilon=training_args.adam_epsilon,
+                weight_decay_rate=training_args.weight_decay,
+                adam_global_clipnorm=training_args.max_grad_norm,
+            )
+        else:
+            optimizer = None
+        if is_regression:
+            metrics = []
+        else:
+            metrics = ["accuracy"]
+        model.compile(optimizer=optimizer, metrics=metrics)
+        # endregion
+
+        # region Preparing push_to_hub and model card
+        push_to_hub_model_id = training_args.push_to_hub_model_id
+        model_name = model_args.model_name_or_path.split("/")[-1]
+        if not push_to_hub_model_id:
+            push_to_hub_model_id = f"{model_name}-finetuned-text-classification"
+
+        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "text-classification"}
+
+        if training_args.push_to_hub:
+            callbacks = [
+                PushToHubCallback(
+                    output_dir=training_args.output_dir,
+                    model_id=push_to_hub_model_id,
+                    organization=training_args.push_to_hub_organization,
+                    token=training_args.push_to_hub_token,
+                    tokenizer=tokenizer,
+                    **model_card_kwargs,
+                )
+            ]
+        else:
+            callbacks = []
         # endregion
 
         # region Training and validation
         if tf_data["train"] is not None:
-            callbacks = [SavePretrainedCallback(output_dir=training_args.output_dir)]
             model.fit(
                 tf_data["train"],
                 validation_data=tf_data["validation"],
                 epochs=int(training_args.num_train_epochs),
                 callbacks=callbacks,
             )
-        elif tf_data["validation"] is not None:
-            # If there's a validation dataset but no training set, just evaluate the metrics
+        if tf_data["validation"] is not None:
             logger.info("Computing metrics on validation data...")
             if is_regression:
                 loss = model.evaluate(tf_data["validation"])
-                logger.info(f"Loss: {loss:.5f}")
+                logger.info(f"Eval loss: {loss:.5f}")
             else:
                 loss, accuracy = model.evaluate(tf_data["validation"])
-                logger.info(f"Loss: {loss:.5f}, Accuracy: {accuracy * 100:.4f}%")
+                logger.info(f"Eval loss: {loss:.5f}, Eval accuracy: {accuracy * 100:.4f}%")
+            if training_args.output_dir is not None:
+                output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+                eval_dict = {"eval_loss": loss}
+                if not is_regression:
+                    eval_dict["eval_accuracy"] = accuracy
+                with open(output_eval_file, "w") as writer:
+                    writer.write(json.dumps(eval_dict))
         # endregion
 
         # region Prediction
@@ -517,14 +555,9 @@ def main():
             logger.info(f"Wrote predictions to {output_test_file}!")
         # endregion
 
-    # region Prediction losses
-    # This section is outside the scope() because it's very quick to compute, but behaves badly inside it
-    if "test" in datasets and "label" in datasets["test"].features:
-        print("Computing prediction loss on test labels...")
-        labels = datasets["test"]["label"]
-        loss = float(loss_fn(labels, predictions).numpy())
-        print(f"Test loss: {loss:.4f}")
-    # endregion
+        if training_args.output_dir is not None and not training_args.push_to_hub:
+            # If we're not pushing to hub, at least save a local copy when we're done
+            model.save_pretrained(training_args.output_dir)
 
 
 if __name__ == "__main__":

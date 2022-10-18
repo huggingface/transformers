@@ -17,9 +17,11 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import (
+from ...utils import (
+    OptionalDependencyNotAvailable,
     _LazyModule,
     is_flax_available,
+    is_tf_available,
     is_tokenizers_available,
     is_torch_available,
     is_vision_available,
@@ -27,18 +29,39 @@ from ...file_utils import (
 
 
 _import_structure = {
-    "configuration_clip": ["CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "CLIPConfig", "CLIPTextConfig", "CLIPVisionConfig"],
+    "configuration_clip": [
+        "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CLIPConfig",
+        "CLIPOnnxConfig",
+        "CLIPTextConfig",
+        "CLIPVisionConfig",
+    ],
+    "processing_clip": ["CLIPProcessor"],
     "tokenization_clip": ["CLIPTokenizer"],
 }
 
-if is_tokenizers_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_clip_fast"] = ["CLIPTokenizerFast"]
 
-if is_vision_available():
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["feature_extraction_clip"] = ["CLIPFeatureExtractor"]
-    _import_structure["processing_clip"] = ["CLIPProcessor"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_clip"] = [
         "CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "CLIPModel",
@@ -47,7 +70,26 @@ if is_torch_available():
         "CLIPVisionModel",
     ]
 
-if is_flax_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_clip"] = [
+        "TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFCLIPModel",
+        "TFCLIPPreTrainedModel",
+        "TFCLIPTextModel",
+        "TFCLIPVisionModel",
+    ]
+
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_flax_clip"] = [
         "FlaxCLIPModel",
         "FlaxCLIPPreTrainedModel",
@@ -59,17 +101,38 @@ if is_flax_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_clip import CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, CLIPConfig, CLIPTextConfig, CLIPVisionConfig
+    from .configuration_clip import (
+        CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CLIPConfig,
+        CLIPOnnxConfig,
+        CLIPTextConfig,
+        CLIPVisionConfig,
+    )
+    from .processing_clip import CLIPProcessor
     from .tokenization_clip import CLIPTokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_clip_fast import CLIPTokenizerFast
 
-    if is_vision_available():
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .feature_extraction_clip import CLIPFeatureExtractor
-        from .processing_clip import CLIPProcessor
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             CLIPModel,
@@ -78,7 +141,26 @@ if TYPE_CHECKING:
             CLIPVisionModel,
         )
 
-    if is_flax_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_clip import (
+            TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFCLIPModel,
+            TFCLIPPreTrainedModel,
+            TFCLIPTextModel,
+            TFCLIPVisionModel,
+        )
+
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_flax_clip import (
             FlaxCLIPModel,
             FlaxCLIPPreTrainedModel,
@@ -92,4 +174,4 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

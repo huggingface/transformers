@@ -8,6 +8,10 @@
         "min_loss_scale": 1
     },
 
+    "bf16": {
+        "enabled": "auto"
+    },
+
     "optimizer": {
         "type": "AdamW",
         "params": {

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Auto Model class. """
+""" Auto Model class."""
 
 
 from collections import OrderedDict
@@ -28,28 +28,33 @@ logger = logging.get_logger(__name__)
 FLAX_MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
-        ("blenderbot-small", "FlaxBlenderbotSmallModel"),
-        ("pegasus", "FlaxPegasusModel"),
-        ("vision-text-dual-encoder", "FlaxVisionTextDualEncoderModel"),
-        ("distilbert", "FlaxDistilBertModel"),
         ("albert", "FlaxAlbertModel"),
-        ("roberta", "FlaxRobertaModel"),
-        ("bert", "FlaxBertModel"),
-        ("beit", "FlaxBeitModel"),
-        ("big_bird", "FlaxBigBirdModel"),
         ("bart", "FlaxBartModel"),
+        ("beit", "FlaxBeitModel"),
+        ("bert", "FlaxBertModel"),
+        ("big_bird", "FlaxBigBirdModel"),
+        ("blenderbot", "FlaxBlenderbotModel"),
+        ("blenderbot-small", "FlaxBlenderbotSmallModel"),
+        ("clip", "FlaxCLIPModel"),
+        ("distilbert", "FlaxDistilBertModel"),
+        ("electra", "FlaxElectraModel"),
         ("gpt2", "FlaxGPT2Model"),
         ("gpt_neo", "FlaxGPTNeoModel"),
         ("gptj", "FlaxGPTJModel"),
-        ("electra", "FlaxElectraModel"),
-        ("clip", "FlaxCLIPModel"),
-        ("vit", "FlaxViTModel"),
-        ("mbart", "FlaxMBartModel"),
-        ("t5", "FlaxT5Model"),
-        ("mt5", "FlaxMT5Model"),
-        ("wav2vec2", "FlaxWav2Vec2Model"),
+        ("longt5", "FlaxLongT5Model"),
         ("marian", "FlaxMarianModel"),
-        ("blenderbot", "FlaxBlenderbotModel"),
+        ("mbart", "FlaxMBartModel"),
+        ("mt5", "FlaxMT5Model"),
+        ("opt", "FlaxOPTModel"),
+        ("pegasus", "FlaxPegasusModel"),
+        ("roberta", "FlaxRobertaModel"),
+        ("roformer", "FlaxRoFormerModel"),
+        ("t5", "FlaxT5Model"),
+        ("vision-text-dual-encoder", "FlaxVisionTextDualEncoderModel"),
+        ("vit", "FlaxViTModel"),
+        ("wav2vec2", "FlaxWav2Vec2Model"),
+        ("xglm", "FlaxXGLMModel"),
+        ("xlm-roberta", "FlaxXLMRobertaModel"),
     ]
 )
 
@@ -57,52 +62,58 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
     [
         # Model for pre-training mapping
         ("albert", "FlaxAlbertForPreTraining"),
-        ("roberta", "FlaxRobertaForMaskedLM"),
+        ("bart", "FlaxBartForConditionalGeneration"),
         ("bert", "FlaxBertForPreTraining"),
         ("big_bird", "FlaxBigBirdForPreTraining"),
-        ("bart", "FlaxBartForConditionalGeneration"),
         ("electra", "FlaxElectraForPreTraining"),
+        ("longt5", "FlaxLongT5ForConditionalGeneration"),
         ("mbart", "FlaxMBartForConditionalGeneration"),
-        ("t5", "FlaxT5ForConditionalGeneration"),
         ("mt5", "FlaxMT5ForConditionalGeneration"),
+        ("roberta", "FlaxRobertaForMaskedLM"),
+        ("roformer", "FlaxRoFormerForMaskedLM"),
+        ("t5", "FlaxT5ForConditionalGeneration"),
         ("wav2vec2", "FlaxWav2Vec2ForPreTraining"),
+        ("xlm-roberta", "FlaxXLMRobertaForMaskedLM"),
     ]
 )
 
 FLAX_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
-        ("distilbert", "FlaxDistilBertForMaskedLM"),
         ("albert", "FlaxAlbertForMaskedLM"),
-        ("roberta", "FlaxRobertaForMaskedLM"),
+        ("bart", "FlaxBartForConditionalGeneration"),
         ("bert", "FlaxBertForMaskedLM"),
         ("big_bird", "FlaxBigBirdForMaskedLM"),
-        ("bart", "FlaxBartForConditionalGeneration"),
+        ("distilbert", "FlaxDistilBertForMaskedLM"),
         ("electra", "FlaxElectraForMaskedLM"),
         ("mbart", "FlaxMBartForConditionalGeneration"),
+        ("roberta", "FlaxRobertaForMaskedLM"),
+        ("roformer", "FlaxRoFormerForMaskedLM"),
+        ("xlm-roberta", "FlaxXLMRobertaForMaskedLM"),
     ]
 )
 
 FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
-        ("blenderbot-small", "FlaxBlenderbotSmallForConditionalGeneration"),
-        ("pegasus", "FlaxPegasusForConditionalGeneration"),
         ("bart", "FlaxBartForConditionalGeneration"),
-        ("mbart", "FlaxMBartForConditionalGeneration"),
-        ("t5", "FlaxT5ForConditionalGeneration"),
-        ("mt5", "FlaxMT5ForConditionalGeneration"),
-        ("marian", "FlaxMarianMTModel"),
-        ("encoder-decoder", "FlaxEncoderDecoderModel"),
         ("blenderbot", "FlaxBlenderbotForConditionalGeneration"),
+        ("blenderbot-small", "FlaxBlenderbotSmallForConditionalGeneration"),
+        ("encoder-decoder", "FlaxEncoderDecoderModel"),
+        ("longt5", "FlaxLongT5ForConditionalGeneration"),
+        ("marian", "FlaxMarianMTModel"),
+        ("mbart", "FlaxMBartForConditionalGeneration"),
+        ("mt5", "FlaxMT5ForConditionalGeneration"),
+        ("pegasus", "FlaxPegasusForConditionalGeneration"),
+        ("t5", "FlaxT5ForConditionalGeneration"),
     ]
 )
 
 FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image-classsification
-        ("vit", "FlaxViTForImageClassification"),
         ("beit", "FlaxBeitForImageClassification"),
+        ("vit", "FlaxViTForImageClassification"),
     ]
 )
 
@@ -115,67 +126,88 @@ FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("bart", "FlaxBartForCausalLM"),
+        ("bert", "FlaxBertForCausalLM"),
+        ("big_bird", "FlaxBigBirdForCausalLM"),
+        ("electra", "FlaxElectraForCausalLM"),
         ("gpt2", "FlaxGPT2LMHeadModel"),
         ("gpt_neo", "FlaxGPTNeoForCausalLM"),
         ("gptj", "FlaxGPTJForCausalLM"),
+        ("opt", "FlaxOPTForCausalLM"),
+        ("roberta", "FlaxRobertaForCausalLM"),
+        ("xglm", "FlaxXGLMForCausalLM"),
     ]
 )
 
 FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
-        ("distilbert", "FlaxDistilBertForSequenceClassification"),
         ("albert", "FlaxAlbertForSequenceClassification"),
-        ("roberta", "FlaxRobertaForSequenceClassification"),
+        ("bart", "FlaxBartForSequenceClassification"),
         ("bert", "FlaxBertForSequenceClassification"),
         ("big_bird", "FlaxBigBirdForSequenceClassification"),
-        ("bart", "FlaxBartForSequenceClassification"),
+        ("distilbert", "FlaxDistilBertForSequenceClassification"),
         ("electra", "FlaxElectraForSequenceClassification"),
         ("mbart", "FlaxMBartForSequenceClassification"),
+        ("roberta", "FlaxRobertaForSequenceClassification"),
+        ("roformer", "FlaxRoFormerForSequenceClassification"),
+        ("xlm-roberta", "FlaxXLMRobertaForSequenceClassification"),
     ]
 )
 
 FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
-        ("distilbert", "FlaxDistilBertForQuestionAnswering"),
         ("albert", "FlaxAlbertForQuestionAnswering"),
-        ("roberta", "FlaxRobertaForQuestionAnswering"),
+        ("bart", "FlaxBartForQuestionAnswering"),
         ("bert", "FlaxBertForQuestionAnswering"),
         ("big_bird", "FlaxBigBirdForQuestionAnswering"),
-        ("bart", "FlaxBartForQuestionAnswering"),
+        ("distilbert", "FlaxDistilBertForQuestionAnswering"),
         ("electra", "FlaxElectraForQuestionAnswering"),
         ("mbart", "FlaxMBartForQuestionAnswering"),
+        ("roberta", "FlaxRobertaForQuestionAnswering"),
+        ("roformer", "FlaxRoFormerForQuestionAnswering"),
+        ("xlm-roberta", "FlaxXLMRobertaForQuestionAnswering"),
     ]
 )
 
 FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
-        ("distilbert", "FlaxDistilBertForTokenClassification"),
         ("albert", "FlaxAlbertForTokenClassification"),
-        ("roberta", "FlaxRobertaForTokenClassification"),
         ("bert", "FlaxBertForTokenClassification"),
         ("big_bird", "FlaxBigBirdForTokenClassification"),
+        ("distilbert", "FlaxDistilBertForTokenClassification"),
         ("electra", "FlaxElectraForTokenClassification"),
+        ("roberta", "FlaxRobertaForTokenClassification"),
+        ("roformer", "FlaxRoFormerForTokenClassification"),
+        ("xlm-roberta", "FlaxXLMRobertaForTokenClassification"),
     ]
 )
 
 FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Multiple Choice mapping
-        ("distilbert", "FlaxDistilBertForMultipleChoice"),
         ("albert", "FlaxAlbertForMultipleChoice"),
-        ("roberta", "FlaxRobertaForMultipleChoice"),
         ("bert", "FlaxBertForMultipleChoice"),
         ("big_bird", "FlaxBigBirdForMultipleChoice"),
+        ("distilbert", "FlaxDistilBertForMultipleChoice"),
         ("electra", "FlaxElectraForMultipleChoice"),
+        ("roberta", "FlaxRobertaForMultipleChoice"),
+        ("roformer", "FlaxRoFormerForMultipleChoice"),
+        ("xlm-roberta", "FlaxXLMRobertaForMultipleChoice"),
     ]
 )
 
 FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES = OrderedDict(
     [
         ("bert", "FlaxBertForNextSentencePrediction"),
+    ]
+)
+
+FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
+    [
+        ("speech-encoder-decoder", "FlaxSpeechEncoderDecoderModel"),
     ]
 )
 
@@ -205,6 +237,9 @@ FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = _LazyAutoMapping(
 )
 FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES
+)
+FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES
 )
 
 
@@ -300,3 +335,12 @@ class FlaxAutoModelForVision2Seq(_BaseAutoModelClass):
 
 
 FlaxAutoModelForVision2Seq = auto_class_update(FlaxAutoModelForVision2Seq, head_doc="vision-to-text modeling")
+
+
+class FlaxAutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
+    _model_mapping = FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
+
+
+FlaxAutoModelForSpeechSeq2Seq = auto_class_update(
+    FlaxAutoModelForSpeechSeq2Seq, head_doc="sequence-to-sequence speech-to-text modeling"
+)

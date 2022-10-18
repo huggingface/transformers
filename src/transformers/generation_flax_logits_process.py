@@ -14,13 +14,12 @@
 # limitations under the License.
 
 import inspect
-from abc import ABC
 
 import jax
 import jax.lax as lax
 import jax.numpy as jnp
 
-from .file_utils import add_start_docstrings
+from .utils import add_start_docstrings
 from .utils.logging import get_logger
 
 
@@ -29,27 +28,26 @@ logger = get_logger(__name__)
 
 LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.PreTrainedTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
+            Indices can be obtained using [`PreTrainedTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        scores (:obj:`jnp.ndarray` of shape :obj:`(batch_size, config.vocab_size)`):
+            [What are input IDs?](../glossary#input-ids)
+        scores (`jnp.ndarray` of shape `(batch_size, config.vocab_size)`):
             Prediction scores of a language modeling head. These can be logits for each vocabulary when not using beam
             search or log softmax for each vocabulary token when using beam search
         kwargs:
             Additional logits processor specific kwargs.
 
     Return:
-        :obj:`jnp.ndarray` of shape :obj:`(batch_size, config.vocab_size)`: The processed prediction scores.
+        `jnp.ndarray` of shape `(batch_size, config.vocab_size)`: The processed prediction scores.
 
 """
 
 
-class FlaxLogitsProcessor(ABC):
+class FlaxLogitsProcessor:
     """Abstract base class for all logit processors that can be applied during generation."""
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -60,7 +58,7 @@ class FlaxLogitsProcessor(ABC):
         )
 
 
-class FlaxLogitsWarper(ABC):
+class FlaxLogitsWarper:
     """Abstract base class for all logit warpers that can be applied during generation with multinomial sampling."""
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -73,10 +71,9 @@ class FlaxLogitsWarper(ABC):
 
 class FlaxLogitsProcessorList(list):
     """
-    This class can be used to create a list of :class:`~transformers.FlaxLogitsProcessor` or
-    :class:`~transformers.FlaxLogitsWarper` to subsequently process a :obj:`scores` input tensor. This class inherits
-    from list and adds a specific `__call__` method to apply each :class:`~transformers.FlaxLogitsProcessor` or
-    :class:`~transformers.FlaxLogitsWarper` to the inputs.
+    This class can be used to create a list of [`FlaxLogitsProcessor`] or [`FlaxLogitsWarper`] to subsequently process
+    a `scores` input tensor. This class inherits from list and adds a specific *__call__* method to apply each
+    [`FlaxLogitsProcessor`] or [`FlaxLogitsWarper`] to the inputs.
     """
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -97,10 +94,10 @@ class FlaxLogitsProcessorList(list):
 
 class FlaxTemperatureLogitsWarper(FlaxLogitsWarper):
     r"""
-    :class:`transformers.LogitsWarper` for temperature (exponential scaling output probability distribution).
+    [`FlaxLogitsWarper`] for temperature (exponential scaling output probability distribution).
 
     Args:
-        temperature (:obj:`float`):
+        temperature (`float`):
             The value used to module the logits distribution.
     """
 
@@ -117,16 +114,15 @@ class FlaxTemperatureLogitsWarper(FlaxLogitsWarper):
 
 class FlaxTopPLogitsWarper(FlaxLogitsWarper):
     """
-    :class:`transformers.LogitsWarper` that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <=
-    prob_cut_off.
+    [`FlaxLogitsWarper`] that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off.
 
     Args:
-        top_p (:obj:`float`):
-            If set to < 1, only the most probable tokens with probabilities that add up to :obj:`top_p` or higher are
-            kept for generation.
-        filter_value (:obj:`float`, `optional`, defaults to :obj:`-float("Inf")`):
+        top_p (`float`):
+            If set to < 1, only the smallest set of most probable tokens with probabilities that add up to `top_p` or
+            higher are kept for generation.
+        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
             All filtered values will be set to this float value.
-        min_tokens_to_keep (:obj:`int`, `optional`, defaults to 1):
+        min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
     """
 
@@ -146,10 +142,11 @@ class FlaxTopPLogitsWarper(FlaxLogitsWarper):
         score_mask = cumulative_probs < self.top_p
 
         # include the token that is higher than top_p as well
-        score_mask |= jax.ops.index_update(jnp.roll(score_mask, 1), jax.ops.index[:, 0], True)
+        score_mask = jnp.roll(score_mask, 1)
+        score_mask |= score_mask.at[:, 0].set(True)
 
         # min tokens to keep
-        score_mask = jax.ops.index_update(score_mask, jax.ops.index[:, : self.min_tokens_to_keep], True)
+        score_mask = score_mask.at[:, : self.min_tokens_to_keep].set(True)
 
         topk_next_scores = jnp.where(score_mask, topk_scores, mask_scores)
         next_scores = jax.lax.sort_key_val(topk_indices, topk_next_scores)[-1]
@@ -159,14 +156,14 @@ class FlaxTopPLogitsWarper(FlaxLogitsWarper):
 
 class FlaxTopKLogitsWarper(FlaxLogitsWarper):
     r"""
-    :class:`transformers.LogitsWarper` that performs top-k, i.e. restricting to the k highest probability elements.
+    [`FlaxLogitsWarper`] that performs top-k, i.e. restricting to the k highest probability elements.
 
     Args:
-        top_k (:obj:`int`):
+        top_k (`int`):
             The number of highest probability vocabulary tokens to keep for top-k-filtering.
-        filter_value (:obj:`float`, `optional`, defaults to :obj:`-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
             All filtered values will be set to this float value.
-        min_tokens_to_keep (:obj:`int`, `optional`, defaults to 1):
+        min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
     """
 
@@ -188,17 +185,17 @@ class FlaxTopKLogitsWarper(FlaxLogitsWarper):
         topk_scores_flat = topk_scores.flatten()
         topk_indices_flat = topk_indices.flatten() + shift
 
-        next_scores_flat = jax.ops.index_update(next_scores_flat, topk_indices_flat, topk_scores_flat)
+        next_scores_flat = next_scores_flat.at[topk_indices_flat].set(topk_scores_flat)
         next_scores = next_scores_flat.reshape(batch_size, vocab_size)
         return next_scores
 
 
 class FlaxForcedBOSTokenLogitsProcessor(FlaxLogitsProcessor):
     r"""
-    :class:`~transformers.FlaxLogitsProcessor` that enforces the specified token as the first generated token.
+    [`FlaxLogitsProcessor`] that enforces the specified token as the first generated token.
 
     Args:
-        bos_token_id (:obj:`int`):
+        bos_token_id (`int`):
             The id of the token to force as the first generated token.
     """
 
@@ -210,23 +207,20 @@ class FlaxForcedBOSTokenLogitsProcessor(FlaxLogitsProcessor):
 
         apply_penalty = 1 - jnp.bool_(cur_len - 1)
 
-        scores = jnp.where(
-            apply_penalty, jax.ops.index_update(new_scores, jax.ops.index[:, self.bos_token_id], 0), scores
-        )
+        scores = jnp.where(apply_penalty, new_scores.at[:, self.bos_token_id].set(0), scores)
 
         return scores
 
 
 class FlaxForcedEOSTokenLogitsProcessor(FlaxLogitsProcessor):
     r"""
-    :class:`~transformers.FlaxLogitsProcessor` that enforces the specified token as the last generated token when
-    :obj:`max_length` is reached.
+    [`FlaxLogitsProcessor`] that enforces the specified token as the last generated token when `max_length` is reached.
 
     Args:
-        max_length (:obj:`int`):
+        max_length (`int`):
             The maximum length of the sequence to be generated.
-        eos_token_id (:obj:`int`):
-            The id of the token to force as the last generated token when :obj:`max_length` is reached.
+        eos_token_id (`int`):
+            The id of the token to force as the last generated token when `max_length` is reached.
     """
 
     def __init__(self, max_length: int, eos_token_id: int):
@@ -238,22 +232,20 @@ class FlaxForcedEOSTokenLogitsProcessor(FlaxLogitsProcessor):
 
         apply_penalty = 1 - jnp.bool_(cur_len - self.max_length + 1)
 
-        scores = jnp.where(
-            apply_penalty, jax.ops.index_update(new_scores, jax.ops.index[:, self.eos_token_id], 0), scores
-        )
+        scores = jnp.where(apply_penalty, new_scores.at[:, self.eos_token_id].set(0), scores)
 
         return scores
 
 
 class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
     r"""
-    :class:`transformers.FlaxLogitsProcessor` enforcing a min-length by setting EOS probability to 0.
+    [`FlaxLogitsProcessor`] enforcing a min-length by setting EOS probability to 0.
 
     Args:
-        min_length (:obj:`int`):
-            The minimum length below which the score of :obj:`eos_token_id` is set to :obj:`-float("Inf")`.
-        eos_token_id (:obj:`int`):
-            The id of the `end-of-sequence` token.
+        min_length (`int`):
+            The minimum length below which the score of `eos_token_id` is set to `-float("Inf")`.
+        eos_token_id (`int`):
+            The id of the *end-of-sequence* token.
     """
 
     def __init__(self, min_length: int, eos_token_id: int):
@@ -271,8 +263,6 @@ class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
         # create boolean flag to decide if min length penalty should be applied
         apply_penalty = 1 - jnp.clip(cur_len - self.min_length, 0, 1)
 
-        scores = jnp.where(
-            apply_penalty, jax.ops.index_update(scores, jax.ops.index[:, self.eos_token_id], -float("inf")), scores
-        )
+        scores = jnp.where(apply_penalty, scores.at[:, self.eos_token_id].set(-float("inf")), scores)
 
         return scores

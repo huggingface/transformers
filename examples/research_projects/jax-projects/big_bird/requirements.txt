@@ -1,4 +1,4 @@
-git+https://github.com/huggingface/transformers@master
+git+https://github.com/huggingface/transformers@main
 datasets
 sentencepiece
 wandb

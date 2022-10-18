@@ -21,27 +21,27 @@ import json
 import os
 import re
 import warnings
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from packaging import version
 
 from . import __version__
-from .file_utils import (
+from .dynamic_module_utils import custom_object_save
+from .utils import (
     CONFIG_NAME,
     PushToHubMixin,
-    cached_path,
+    cached_file,
     copy_func,
-    get_list_of_files,
-    hf_bucket_url,
-    is_offline_mode,
+    download_url,
+    extract_commit_hash,
     is_remote_url,
     is_torch_available,
+    logging,
 )
-from .utils import logging
 
 
 logger = logging.get_logger(__name__)
-FULL_CONFIGURATION_FILE = "config.json"
+
 _re_configuration_file = re.compile(r"config\.(.*)\.json")
 
 
@@ -79,36 +79,36 @@ class PretrainedConfig(PushToHubMixin):
     - **num_hidden_layers** (`int`) -- The number of blocks in the model.
 
     Arg:
-        name_or_path (`str`, _optional_, defaults to `""`):
+        name_or_path (`str`, *optional*, defaults to `""`):
             Store the string that was passed to [`PreTrainedModel.from_pretrained`] or
             [`TFPreTrainedModel.from_pretrained`] as `pretrained_model_name_or_path` if the configuration was created
             with such a method.
-        output_hidden_states (`bool`, _optional_, defaults to `False`):
+        output_hidden_states (`bool`, *optional*, defaults to `False`):
             Whether or not the model should return all hidden-states.
-        output_attentions (`bool`, _optional_, defaults to `False`):
+        output_attentions (`bool`, *optional*, defaults to `False`):
             Whether or not the model should returns all attentions.
-        return_dict (`bool`, _optional_, defaults to `True`):
-            Whether or not the model should return a [`~transformers.file_utils.ModelOutput`] instead of a plain tuple.
-        is_encoder_decoder (`bool`, _optional_, defaults to `False`):
+        return_dict (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return a [`~transformers.utils.ModelOutput`] instead of a plain tuple.
+        is_encoder_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as an encoder/decoder or not.
-        is_decoder (`bool`, _optional_, defaults to `False`):
+        is_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as decoder or not (in which case it's used as an encoder).
-        cross_attention_hidden_size** (`bool`, _optional_):
+        cross_attention_hidden_size** (`bool`, *optional*):
             The hidden size of the cross-attention layer in case the model is used as a decoder in an encoder-decoder
             setting and the cross-attention hidden dimension differs from `self.config.hidden_size`.
-        add_cross_attention (`bool`, _optional_, defaults to `False`):
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
             Whether cross-attention layers should be added to the model. Note, this option is only relevant for models
             that can be used as decoder models within the [`EncoderDecoderModel`] class, which consists of all models
             in `AUTO_MODELS_FOR_CAUSAL_LM`.
-        tie_encoder_decoder (`bool`, _optional_, defaults to `False`):
+        tie_encoder_decoder (`bool`, *optional*, defaults to `False`):
             Whether all encoder weights should be tied to their equivalent decoder weights. This requires the encoder
             and decoder model to have the exact same parameter names.
-        prune_heads (`Dict[int, List[int]]`, _optional_, defaults to `{}`):
+        prune_heads (`Dict[int, List[int]]`, *optional*, defaults to `{}`):
             Pruned heads of the model. The keys are the selected layer indices and the associated values, the list of
             heads to prune in said layer.
 
             For instance `{1: [0, 2], 2: [2, 3]}` will prune heads 0 and 2 on layer 1 and heads 2 and 3 on layer 2.
-        chunk_size_feed_forward (`int`, _optional_, defaults to `0`):
+        chunk_size_feed_forward (`int`, *optional*, defaults to `0`):
             The chunk size of all feed forward layers in the residual attention blocks. A chunk size of `0` means that
             the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
             sequence_length embeddings at a time. For more information on feed forward chunking, see [How does Feed
@@ -116,105 +116,109 @@ class PretrainedConfig(PushToHubMixin):
 
         > Parameters for sequence generation
 
-        max_length (`int`, _optional_, defaults to 20):
+        max_length (`int`, *optional*, defaults to 20):
             Maximum length that will be used by default in the `generate` method of the model.
-        min_length (`int`, _optional_, defaults to 10):
+        min_length (`int`, *optional*, defaults to 10):
             Minimum length that will be used by default in the `generate` method of the model.
-        do_sample (`bool`, _optional_, defaults to `False`):
+        do_sample (`bool`, *optional*, defaults to `False`):
             Flag that will be used by default in the `generate` method of the model. Whether or not to use sampling ;
             use greedy decoding otherwise.
-        early_stopping (`bool`, _optional_, defaults to `False`):
+        early_stopping (`bool`, *optional*, defaults to `False`):
             Flag that will be used by default in the `generate` method of the model. Whether to stop the beam search
             when at least `num_beams` sentences are finished per batch or not.
-        num_beams (`int`, _optional_, defaults to 1):
+        num_beams (`int`, *optional*, defaults to 1):
             Number of beams for beam search that will be used by default in the `generate` method of the model. 1 means
             no beam search.
-        num_beam_groups (`int`, _optional_, defaults to 1):
+        num_beam_groups (`int`, *optional*, defaults to 1):
             Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams
             that will be used by default in the `generate` method of the model. 1 means no group beam search.
-        diversity_penalty (`float`, _optional_, defaults to 0.0):
+        diversity_penalty (`float`, *optional*, defaults to 0.0):
             Value to control diversity for group beam search. that will be used by default in the `generate` method of
             the model. 0 means no diversity penalty. The higher the penalty, the more diverse are the outputs.
-        temperature (`float`, _optional_, defaults to 1):
+        temperature (`float`, *optional*, defaults to 1):
             The value used to module the next token probabilities that will be used by default in the `generate` method
             of the model. Must be strictly positive.
-        top_k (`int`, _optional_, defaults to 50):
+        top_k (`int`, *optional*, defaults to 50):
             Number of highest probability vocabulary tokens to keep for top-k-filtering that will be used by default in
             the `generate` method of the model.
-        top_p (`float`, _optional_, defaults to 1):
+        top_p (`float`, *optional*, defaults to 1):
             Value that will be used by default in the `generate` method of the model for `top_p`. If set to float < 1,
             only the most probable tokens with probabilities that add up to `top_p` or higher are kept for generation.
-        repetition_penalty (`float`, _optional_, defaults to 1):
+        repetition_penalty (`float`, *optional*, defaults to 1):
             Parameter for repetition penalty that will be used by default in the `generate` method of the model. 1.0
             means no penalty.
-        length_penalty (`float`, _optional_, defaults to 1):
-            Exponential penalty to the length that will be used by default in the `generate` method of the model.
-        no_repeat_ngram_size (`int`, _optional_, defaults to 0) -- Value that will be used by default in the
+        length_penalty (`float`, *optional*, defaults to 1):
+            Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent to
+            the sequence length, which in turn is used to divide the score of the sequence. Since the score is the log
+            likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences, while
+            `length_penalty` < 0.0 encourages shorter sequences.
+        no_repeat_ngram_size (`int`, *optional*, defaults to 0) -- Value that will be used by default in the
             `generate` method of the model for `no_repeat_ngram_size`. If set to int > 0, all ngrams of that size can
             only occur once.
-        encoder_no_repeat_ngram_size (`int`, _optional_, defaults to 0) -- Value that will be used by
+        encoder_no_repeat_ngram_size (`int`, *optional*, defaults to 0) -- Value that will be used by
             default in the `generate` method of the model for `encoder_no_repeat_ngram_size`. If set to int > 0, all
             ngrams of that size that occur in the `encoder_input_ids` cannot occur in the `decoder_input_ids`.
-        bad_words_ids (`List[int]`, _optional_):
+        bad_words_ids (`List[int]`, *optional*):
             List of token ids that are not allowed to be generated that will be used by default in the `generate`
             method of the model. In order to get the tokens of the words that should not appear in the generated text,
             use `tokenizer.encode(bad_word, add_prefix_space=True)`.
-        num_return_sequences (`int`, _optional_, defaults to 1):
+        num_return_sequences (`int`, *optional*, defaults to 1):
             Number of independently computed returned sequences for each element in the batch that will be used by
             default in the `generate` method of the model.
-        output_scores (`bool`, _optional_, defaults to `False`):
+        output_scores (`bool`, *optional*, defaults to `False`):
             Whether the model should return the logits when used for generation.
-        return_dict_in_generate (`bool`, _optional_, defaults to `False`):
-            Whether the model should return a [`~transformers.file_utils.ModelOutput`] instead of a `torch.LongTensor`.
-        forced_bos_token_id (`int`, _optional_):
+        return_dict_in_generate (`bool`, *optional*, defaults to `False`):
+            Whether the model should return a [`~transformers.utils.ModelOutput`] instead of a `torch.LongTensor`.
+        forced_bos_token_id (`int`, *optional*):
             The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful for
             multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be the target
             language token.
-        forced_eos_token_id (`int`, _optional_):
+        forced_eos_token_id (`int`, *optional*):
             The id of the token to force as the last generated token when `max_length` is reached.
-        remove_invalid_values (`bool`, _optional_):
+        remove_invalid_values (`bool`, *optional*):
             Whether to remove possible _nan_ and _inf_ outputs of the model to prevent the generation method to crash.
             Note that using `remove_invalid_values` can slow down generation.
 
         > Parameters for fine-tuning tasks
 
-        architectures (`List[str]`, _optional_): Model architectures that can be used with the model pretrained weights.
-        finetuning_task (`str`, _optional_):
+        architectures (`List[str]`, *optional*):
+            Model architectures that can be used with the model pretrained weights.
+        finetuning_task (`str`, *optional*):
             Name of the task used to fine-tune the model. This can be used when converting from an original (TensorFlow
             or PyTorch) checkpoint.
-        id2label (`Dict[int, str]`, _optional_):
+        id2label (`Dict[int, str]`, *optional*):
             A map from index (for instance prediction index, or target index) to label.
-        label2id (`Dict[str, int]`, _optional_): A map from label to index for the model.
-        num_labels (`int`, _optional_):
+        label2id (`Dict[str, int]`, *optional*): A map from label to index for the model.
+        num_labels (`int`, *optional*):
             Number of labels to use in the last layer added to the model, typically for a classification task.
-        task_specific_params (`Dict[str, Any]`, _optional_):
+        task_specific_params (`Dict[str, Any]`, *optional*):
             Additional keyword arguments to store for the current task.
-        problem_type (`str`, _optional_):
+        problem_type (`str`, *optional*):
             Problem type for `XxxForSequenceClassification` models. Can be one of `"regression"`,
             `"single_label_classification"` or `"multi_label_classification"`.
 
         > Parameters linked to the tokenizer
 
-        tokenizer_class (`str`, _optional_):
+        tokenizer_class (`str`, *optional*):
             The name of the associated tokenizer class to use (if none is set, will use the tokenizer associated to the
             model by default).
-        prefix (`str`, _optional_):
+        prefix (`str`, *optional*):
             A specific prompt that should be added at the beginning of each text before calling the model.
-        bos_token_id (`int`, _optional_): The id of the _beginning-of-stream_ token.
-        pad_token_id (`int`, _optional_): The id of the _padding_ token.
-        eos_token_id (`int`, _optional_): The id of the _end-of-stream_ token.
-        decoder_start_token_id (`int`, _optional_):
+        bos_token_id (`int`, *optional*): The id of the _beginning-of-stream_ token.
+        pad_token_id (`int`, *optional*): The id of the _padding_ token.
+        eos_token_id (`int`, *optional*): The id of the _end-of-stream_ token.
+        decoder_start_token_id (`int`, *optional*):
             If an encoder-decoder model starts decoding with a different token than _bos_, the id of that token.
-        sep_token_id (`int`, _optional_): The id of the _separation_ token.
+        sep_token_id (`int`, *optional*): The id of the _separation_ token.
 
         > PyTorch specific parameters
 
-        torchscript (`bool`, _optional_, defaults to `False`):
+        torchscript (`bool`, *optional*, defaults to `False`):
             Whether or not the model should be used with Torchscript.
-        tie_word_embeddings (`bool`, _optional_, defaults to `True`):
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the
             model has a output word embedding layer.
-        torch_dtype (`str`, _optional_):
+        torch_dtype (`str`, *optional*):
             The `dtype` of the weights. This attribute can be used to initialize the model to a non-default `dtype`
             (which is normally `float32`) and thus allow for optimal storage allocation. For example, if the saved
             model is `float16`, ideally we want to load it back using the minimal amount of memory needed to load
@@ -227,12 +231,17 @@ class PretrainedConfig(PushToHubMixin):
 
         > TensorFlow specific parameters
 
-        use_bfloat16 (`bool`, _optional_, defaults to `False`):
+        use_bfloat16 (`bool`, *optional*, defaults to `False`):
             Whether or not the model should use BFloat16 scalars (only used by some TensorFlow models).
+        tf_legacy_loss (`bool`, *optional*, defaults to `False`):
+            Whether the model should use legacy TensorFlow losses. Legacy losses have variable output shapes and may
+            not be XLA-compatible. This option is here for backward compatibility and will be removed in Transformers
+            v5.
     """
     model_type: str = ""
     is_composition: bool = False
     attribute_map: Dict[str, str] = {}
+    _auto_class: Optional[str] = None
 
     def __setattr__(self, key, value):
         if key in super().__getattribute__("attribute_map"):
@@ -252,6 +261,7 @@ class PretrainedConfig(PushToHubMixin):
         self.torchscript = kwargs.pop("torchscript", False)  # Only used by PyTorch models
         self.torch_dtype = kwargs.pop("torch_dtype", None)  # Only used by PyTorch models
         self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
+        self.tf_legacy_loss = kwargs.pop("tf_legacy_loss", False)  # Only used by TensorFlow models
         self.pruned_heads = kwargs.pop("pruned_heads", {})
         self.tie_word_embeddings = kwargs.pop(
             "tie_word_embeddings", True
@@ -275,6 +285,7 @@ class PretrainedConfig(PushToHubMixin):
         self.temperature = kwargs.pop("temperature", 1.0)
         self.top_k = kwargs.pop("top_k", 50)
         self.top_p = kwargs.pop("top_p", 1.0)
+        self.typical_p = kwargs.pop("typical_p", 1.0)
         self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
         self.length_penalty = kwargs.pop("length_penalty", 1.0)
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
@@ -287,6 +298,9 @@ class PretrainedConfig(PushToHubMixin):
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
         self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
+        self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
+        self.suppress_tokens = kwargs.pop("suppress_tokens", None)
+        self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
@@ -294,7 +308,12 @@ class PretrainedConfig(PushToHubMixin):
         self.id2label = kwargs.pop("id2label", None)
         self.label2id = kwargs.pop("label2id", None)
         if self.id2label is not None:
-            kwargs.pop("num_labels", None)
+            num_labels = kwargs.pop("num_labels", None)
+            if num_labels is not None and len(self.id2label) != num_labels:
+                logger.warning(
+                    f"You passed along `num_labels={num_labels}` with an incompatible id to label map: "
+                    f"{self.id2label}. The number of labels wil be overwritten to {self.num_labels}."
+                )
             self.id2label = dict((int(key), value) for key, value in self.id2label.items())
             # Keys are always strings in JSON so convert ids to int here.
         else:
@@ -339,6 +358,8 @@ class PretrainedConfig(PushToHubMixin):
 
         # Name or path to the pretrained checkpoint
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
+        # Config hash
+        self._commit_hash = kwargs.pop("_commit_hash", None)
 
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
@@ -361,7 +382,7 @@ class PretrainedConfig(PushToHubMixin):
 
     @property
     def name_or_path(self) -> str:
-        return self._name_or_path
+        return getattr(self, "_name_or_path", None)
 
     @name_or_path.setter
     def name_or_path(self, value):
@@ -370,7 +391,7 @@ class PretrainedConfig(PushToHubMixin):
     @property
     def use_return_dict(self) -> bool:
         """
-        :obj:`bool`: Whether or not return :class:`~transformers.file_utils.ModelOutput` instead of tuples.
+        `bool`: Whether or not return [`~utils.ModelOutput`] instead of tuples.
         """
         # If torchscript is set, force `return_dict=False` to avoid jit errors
         return self.return_dict and not self.torchscript
@@ -378,7 +399,7 @@ class PretrainedConfig(PushToHubMixin):
     @property
     def num_labels(self) -> int:
         """
-        :obj:`int`: The number of labels for classification models.
+        `int`: The number of labels for classification models.
         """
         return len(self.id2label)
 
@@ -390,34 +411,35 @@ class PretrainedConfig(PushToHubMixin):
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
-        Save a configuration object to the directory ``save_directory``, so that it can be re-loaded using the
-        :func:`~transformers.PretrainedConfig.from_pretrained` class method.
+        Save a configuration object to the directory `save_directory`, so that it can be re-loaded using the
+        [`~PretrainedConfig.from_pretrained`] class method.
 
         Args:
-            save_directory (:obj:`str` or :obj:`os.PathLike`):
+            save_directory (`str` or `os.PathLike`):
                 Directory where the configuration JSON file will be saved (will be created if it does not exist).
-            push_to_hub (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to push your model to the Hugging Face model hub after saving it.
-
-                .. warning::
-
-                    Using :obj:`push_to_hub=True` will synchronize the repository you are pushing to with
-                    :obj:`save_directory`, which requires :obj:`save_directory` to be a local clone of the repo you are
-                    pushing to if it's an existing folder. Pass along :obj:`temp_dir=True` to use a temporary directory
-                    instead.
-
+            push_to_hub (`bool`, *optional*, defaults to `False`):
+                Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
+                repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
+                namespace).
             kwargs:
-                Additional key word arguments passed along to the
-                :meth:`~transformers.file_utils.PushToHubMixin.push_to_hub` method.
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
+        os.makedirs(save_directory, exist_ok=True)
+
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
-            repo = self._create_or_get_repo(save_directory, **kwargs)
+            repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            repo_id, token = self._create_repo(repo_id, **kwargs)
+            files_timestamps = self._get_files_timestamps(save_directory)
 
-        os.makedirs(save_directory, exist_ok=True)
+        # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
+        # loaded from the Hub.
+        if self._auto_class is not None:
+            custom_object_save(self, save_directory, config=self)
+
         # If we save using the predefined names, we can load using `from_pretrained`
         output_config_file = os.path.join(save_directory, CONFIG_NAME)
 
@@ -425,82 +447,90 @@ class PretrainedConfig(PushToHubMixin):
         logger.info(f"Configuration saved in {output_config_file}")
 
         if push_to_hub:
-            url = self._push_to_hub(repo, commit_message=commit_message)
-            logger.info(f"Configuration pushed to the hub in this commit: {url}")
+            self._upload_modified_files(
+                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
+            )
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         r"""
-        Instantiate a :class:`~transformers.PretrainedConfig` (or a derived class) from a pretrained model
-        configuration.
+        Instantiate a [`PretrainedConfig`] (or a derived class) from a pretrained model configuration.
 
         Args:
-            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
+            pretrained_model_name_or_path (`str` or `os.PathLike`):
                 This can be either:
 
-                - a string, the `model id` of a pretrained model configuration hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
-                  namespaced under a user or organization name, like ``dbmdz/bert-base-german-cased``.
-                - a path to a `directory` containing a configuration file saved using the
-                  :func:`~transformers.PretrainedConfig.save_pretrained` method, e.g., ``./my_model_directory/``.
-                - a path or url to a saved configuration JSON `file`, e.g.,
-                  ``./my_model_directory/configuration.json``.
-            cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
+                - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
+                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
+                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                - a path to a *directory* containing a configuration file saved using the
+                  [`~PretrainedConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
+                - a path or url to a saved configuration JSON *file*, e.g., `./my_model_directory/configuration.json`.
+            cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
-            force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the configuration files and override the cached versions if
                 they exist.
-            resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            resume_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to delete incompletely received file. Attempts to resume the download if such a file
                 exists.
-            proxies (:obj:`Dict[str, str]`, `optional`):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
+            proxies (`Dict[str, str]`, *optional*):
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-            use_auth_token (:obj:`str` or `bool`, `optional`):
-                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
-                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
-            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+            use_auth_token (`str` or *bool*, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+                when running `huggingface-cli login` (stored in `~/.huggingface`).
+            revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+                git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
-            return_unused_kwargs (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                If :obj:`False`, then this function returns just the final configuration object.
+            return_unused_kwargs (`bool`, *optional*, defaults to `False`):
+                If `False`, then this function returns just the final configuration object.
 
-                If :obj:`True`, then this functions returns a :obj:`Tuple(config, unused_kwargs)` where `unused_kwargs`
-                is a dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e.,
-                the part of ``kwargs`` which has not been used to update ``config`` and is otherwise ignored.
-            kwargs (:obj:`Dict[str, Any]`, `optional`):
+                If `True`, then this functions returns a `Tuple(config, unused_kwargs)` where *unused_kwargs* is a
+                dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e., the
+                part of `kwargs` which has not been used to update `config` and is otherwise ignored.
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+                specify the folder name here.
+            kwargs (`Dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
-                by the ``return_unused_kwargs`` keyword parameter.
+                by the `return_unused_kwargs` keyword parameter.
 
-        .. note::
+        <Tip>
 
-            Passing :obj:`use_auth_token=True` is required when you want to use a private model.
+        Passing `use_auth_token=True` is required when you want to use a private model.
 
+        </Tip>
 
         Returns:
-            :class:`PretrainedConfig`: The configuration object instantiated from this pretrained model.
+            [`PretrainedConfig`]: The configuration object instantiated from this pretrained model.
 
-        Examples::
+        Examples:
 
-            # We can't instantiate directly the base class `PretrainedConfig` so let's show the examples on a
-            # derived class: BertConfig
-            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from huggingface.co and cache.
-            config = BertConfig.from_pretrained('./test/saved_model/')  # E.g. config (or model) was saved using `save_pretrained('./test/saved_model/')`
-            config = BertConfig.from_pretrained('./test/saved_model/my_configuration.json')
-            config = BertConfig.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
-            assert config.output_attentions == True
-            config, unused_kwargs = BertConfig.from_pretrained('bert-base-uncased', output_attentions=True,
-                                                               foo=False, return_unused_kwargs=True)
-            assert config.output_attentions == True
-            assert unused_kwargs == {'foo': False}
-
-        """
+        ```python
+        # We can't instantiate directly the base class *PretrainedConfig* so let's show the examples on a
+        # derived class: BertConfig
+        config = BertConfig.from_pretrained(
+            "bert-base-uncased"
+        )  # Download configuration from huggingface.co and cache.
+        config = BertConfig.from_pretrained(
+            "./test/saved_model/"
+        )  # E.g. config (or model) was saved using *save_pretrained('./test/saved_model/')*
+        config = BertConfig.from_pretrained("./test/saved_model/my_configuration.json")
+        config = BertConfig.from_pretrained("bert-base-uncased", output_attentions=True, foo=False)
+        assert config.output_attentions == True
+        config, unused_kwargs = BertConfig.from_pretrained(
+            "bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
+        )
+        assert config.output_attentions == True
+        assert unused_kwargs == {"foo": False}
+        ```"""
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warn(
+            logger.warning(
                 f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
             )
@@ -512,19 +542,36 @@ class PretrainedConfig(PushToHubMixin):
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
     ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """
-        From a ``pretrained_model_name_or_path``, resolve to a dictionary of parameters, to be used for instantiating a
-        :class:`~transformers.PretrainedConfig` using ``from_dict``.
-
-
+        From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
+        [`PretrainedConfig`] using `from_dict`.
 
         Parameters:
-            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
+            pretrained_model_name_or_path (`str` or `os.PathLike`):
                 The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
 
         Returns:
-            :obj:`Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the configuration object.
+            `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the configuration object.
 
         """
+        original_kwargs = copy.deepcopy(kwargs)
+        # Get config dict associated with the base config file
+        config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
+        if "_commit_hash" in config_dict:
+            original_kwargs["_commit_hash"] = config_dict["_commit_hash"]
+
+        # That config file may point us toward another config file to use.
+        if "configuration_files" in config_dict:
+            configuration_file = get_configuration_file(config_dict["configuration_files"])
+            config_dict, kwargs = cls._get_config_dict(
+                pretrained_model_name_or_path, _configuration_file=configuration_file, **original_kwargs
+            )
+
+        return config_dict, kwargs
+
+    @classmethod
+    def _get_config_dict(
+        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
@@ -532,96 +579,104 @@ class PretrainedConfig(PushToHubMixin):
         use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
+        trust_remote_code = kwargs.pop("trust_remote_code", None)
+        subfolder = kwargs.pop("subfolder", "")
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
+        commit_hash = kwargs.pop("_commit_hash", None)
+
+        if trust_remote_code is True:
+            logger.warning(
+                "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
+                " ignored."
+            )
 
         user_agent = {"file_type": "config", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
 
-        if is_offline_mode() and not local_files_only:
-            logger.info("Offline mode: forcing local_files_only=True")
-            local_files_only = True
-
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-        if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
-            config_file = pretrained_model_name_or_path
-        else:
-            configuration_file = get_configuration_file(
-                pretrained_model_name_or_path,
-                revision=revision,
-                use_auth_token=use_auth_token,
-                local_files_only=local_files_only,
-            )
 
-            if os.path.isdir(pretrained_model_name_or_path):
-                config_file = os.path.join(pretrained_model_name_or_path, configuration_file)
-            else:
-                config_file = hf_bucket_url(
-                    pretrained_model_name_or_path, filename=configuration_file, revision=revision, mirror=None
+        is_local = os.path.isdir(pretrained_model_name_or_path)
+        if os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)):
+            # Special case when pretrained_model_name_or_path is a local file
+            resolved_config_file = pretrained_model_name_or_path
+            is_local = True
+        elif is_remote_url(pretrained_model_name_or_path):
+            configuration_file = pretrained_model_name_or_path
+            resolved_config_file = download_url(pretrained_model_name_or_path)
+        else:
+            configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME)
+
+            try:
+                # Load from local folder or from cache or download from model Hub and cache
+                resolved_config_file = cached_file(
+                    pretrained_model_name_or_path,
+                    configuration_file,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
+                    use_auth_token=use_auth_token,
+                    user_agent=user_agent,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _commit_hash=commit_hash,
+                )
+                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
+            except EnvironmentError:
+                # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
+                # the original exception.
+                raise
+            except Exception:
+                # For any other exception, we throw a generic error.
+                raise EnvironmentError(
+                    f"Can't load the configuration of '{pretrained_model_name_or_path}'. If you were trying to load it"
+                    " from 'https://huggingface.co/models', make sure you don't have a local directory with the same"
+                    f" name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory"
+                    f" containing a {configuration_file} file"
                 )
 
         try:
-            # Load from URL or cache if already cached
-            resolved_config_file = cached_path(
-                config_file,
-                cache_dir=cache_dir,
-                force_download=force_download,
-                proxies=proxies,
-                resume_download=resume_download,
-                local_files_only=local_files_only,
-                use_auth_token=use_auth_token,
-                user_agent=user_agent,
-            )
             # Load config dict
             config_dict = cls._dict_from_json_file(resolved_config_file)
-
-        except EnvironmentError as err:
-            logger.error(err)
-            msg = (
-                f"Can't load config for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n"
-                f"  (make sure '{pretrained_model_name_or_path}' is not a path to a local directory with something else, in that case)\n\n"
-                f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a {CONFIG_NAME} file\n\n"
-            )
-
-            if revision is not None:
-                msg += f"- or '{revision}' is a valid git identifier (branch name, a tag name, or a commit id) that exists for this model name as listed on its model page on 'https://huggingface.co/models'\n\n"
-
-            raise EnvironmentError(msg)
-
+            config_dict["_commit_hash"] = commit_hash
         except (json.JSONDecodeError, UnicodeDecodeError):
-            msg = (
-                f"Couldn't reach server at '{config_file}' to download configuration file or "
-                "configuration file is not a valid JSON file. "
-                f"Please check network or file content here: {resolved_config_file}."
+            raise EnvironmentError(
+                f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file."
             )
-            raise EnvironmentError(msg)
 
-        if resolved_config_file == config_file:
-            logger.info(f"loading configuration file {config_file}")
+        if is_local:
+            logger.info(f"loading configuration file {resolved_config_file}")
         else:
-            logger.info(f"loading configuration file {config_file} from cache at {resolved_config_file}")
+            logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
 
         return config_dict, kwargs
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any], **kwargs) -> "PretrainedConfig":
         """
-        Instantiates a :class:`~transformers.PretrainedConfig` from a Python dictionary of parameters.
+        Instantiates a [`PretrainedConfig`] from a Python dictionary of parameters.
 
         Args:
-            config_dict (:obj:`Dict[str, Any]`):
+            config_dict (`Dict[str, Any]`):
                 Dictionary that will be used to instantiate the configuration object. Such a dictionary can be
-                retrieved from a pretrained checkpoint by leveraging the
-                :func:`~transformers.PretrainedConfig.get_config_dict` method.
-            kwargs (:obj:`Dict[str, Any]`):
+                retrieved from a pretrained checkpoint by leveraging the [`~PretrainedConfig.get_config_dict`] method.
+            kwargs (`Dict[str, Any]`):
                 Additional parameters from which to initialize the configuration object.
 
         Returns:
-            :class:`PretrainedConfig`: The configuration object instantiated from those parameters.
+            [`PretrainedConfig`]: The configuration object instantiated from those parameters.
         """
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+        # Those arguments may be passed along for our internal telemetry.
+        # We remove them so they don't appear in `return_unused_kwargs`.
+        kwargs.pop("_from_auto", None)
+        kwargs.pop("_from_pipeline", None)
+        # The commit hash might have been updated in the `config_dict`, we don't want the kwargs to erase that update.
+        if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
+            kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
         config = cls(**config_dict)
 
@@ -629,6 +684,15 @@ class PretrainedConfig(PushToHubMixin):
             config.pruned_heads = dict((int(key), value) for key, value in config.pruned_heads.items())
 
         # Update config with kwargs if needed
+        if "num_labels" in kwargs and "id2label" in kwargs:
+            num_labels = kwargs["num_labels"]
+            id2label = kwargs["id2label"] if kwargs["id2label"] is not None else []
+            if len(id2label) != num_labels:
+                raise ValueError(
+                    f"You passed along `num_labels={num_labels }` with an incompatible id to label map: "
+                    f"{kwargs['id2label']}. Since those arguments are inconsistent with each other, you should remove "
+                    "one of them."
+                )
         to_remove = []
         for key, value in kwargs.items():
             if hasattr(config, key):
@@ -647,14 +711,14 @@ class PretrainedConfig(PushToHubMixin):
     @classmethod
     def from_json_file(cls, json_file: Union[str, os.PathLike]) -> "PretrainedConfig":
         """
-        Instantiates a :class:`~transformers.PretrainedConfig` from the path to a JSON file of parameters.
+        Instantiates a [`PretrainedConfig`] from the path to a JSON file of parameters.
 
         Args:
-            json_file (:obj:`str` or :obj:`os.PathLike`):
+            json_file (`str` or `os.PathLike`):
                 Path to the JSON file containing the parameters.
 
         Returns:
-            :class:`PretrainedConfig`: The configuration object instantiated from that JSON file.
+            [`PretrainedConfig`]: The configuration object instantiated from that JSON file.
 
         """
         config_dict = cls._dict_from_json_file(json_file)
@@ -678,7 +742,7 @@ class PretrainedConfig(PushToHubMixin):
         serializes to a Python dictionary.
 
         Returns:
-            :obj:`Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         config_dict = self.to_dict()
 
@@ -709,11 +773,15 @@ class PretrainedConfig(PushToHubMixin):
         Serializes this instance to a Python dictionary.
 
         Returns:
-            :obj:`Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         output = copy.deepcopy(self.__dict__)
         if hasattr(self.__class__, "model_type"):
             output["model_type"] = self.__class__.model_type
+        if "_auto_class" in output:
+            del output["_auto_class"]
+        if "_commit_hash" in output:
+            del output["_commit_hash"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
@@ -727,12 +795,12 @@ class PretrainedConfig(PushToHubMixin):
         Serializes this instance to a JSON string.
 
         Args:
-            use_diff (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                If set to ``True``, only the difference between the config instance and the default
-                ``PretrainedConfig()`` is serialized to JSON string.
+            use_diff (`bool`, *optional*, defaults to `True`):
+                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
+                is serialized to JSON string.
 
         Returns:
-            :obj:`str`: String containing all the attributes that make up this configuration instance in JSON format.
+            `str`: String containing all the attributes that make up this configuration instance in JSON format.
         """
         if use_diff is True:
             config_dict = self.to_diff_dict()
@@ -745,36 +813,36 @@ class PretrainedConfig(PushToHubMixin):
         Save this instance to a JSON file.
 
         Args:
-            json_file_path (:obj:`str` or :obj:`os.PathLike`):
+            json_file_path (`str` or `os.PathLike`):
                 Path to the JSON file in which this configuration instance's parameters will be saved.
-            use_diff (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                If set to ``True``, only the difference between the config instance and the default
-                ``PretrainedConfig()`` is serialized to JSON file.
+            use_diff (`bool`, *optional*, defaults to `True`):
+                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
+                is serialized to JSON file.
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string(use_diff=use_diff))
 
     def update(self, config_dict: Dict[str, Any]):
         """
-        Updates attributes of this class with attributes from ``config_dict``.
+        Updates attributes of this class with attributes from `config_dict`.
 
         Args:
-            config_dict (:obj:`Dict[str, Any]`): Dictionary of attributes that should be updated for this class.
+            config_dict (`Dict[str, Any]`): Dictionary of attributes that should be updated for this class.
         """
         for key, value in config_dict.items():
             setattr(self, key, value)
 
     def update_from_string(self, update_str: str):
         """
-        Updates attributes of this class with attributes from ``update_str``.
+        Updates attributes of this class with attributes from `update_str`.
 
-        The expected format is ints, floats and strings as is, and for booleans use ``true`` or ``false``. For example:
+        The expected format is ints, floats and strings as is, and for booleans use `true` or `false`. For example:
         "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
 
         The keys to change have to already exist in the config object.
 
         Args:
-            update_str (:obj:`str`): String with attributes that should be updated for this class.
+            update_str (`str`): String with attributes that should be updated for this class.
 
         """
 
@@ -804,45 +872,55 @@ class PretrainedConfig(PushToHubMixin):
 
     def dict_torch_dtype_to_str(self, d: Dict[str, Any]) -> None:
         """
-        Checks whether the passed dictionary has a `torch_dtype` key and if it's not None, converts torch.dtype to a
-        string of just the type. For example, :obj:`torch.float32` get converted into `"float32"` string, which can
-        then be stored in the json format.
+        Checks whether the passed dictionary and its nested dicts have a *torch_dtype* key and if it's not None,
+        converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
+        string, which can then be stored in the json format.
         """
         if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
             d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
+        for value in d.values():
+            if isinstance(value, dict):
+                self.dict_torch_dtype_to_str(value)
+
+    @classmethod
+    def register_for_auto_class(cls, auto_class="AutoConfig"):
+        """
+        Register this class with a given auto class. This should only be used for custom configurations as the ones in
+        the library are already mapped with `AutoConfig`.
+
+        <Tip warning={true}>
+
+        This API is experimental and may have some slight breaking changes in the next releases.
+
+        </Tip>
+
+        Args:
+            auto_class (`str` or `type`, *optional*, defaults to `"AutoConfig"`):
+                The auto class to register this new configuration with.
+        """
+        if not isinstance(auto_class, str):
+            auto_class = auto_class.__name__
+
+        import transformers.models.auto as auto_module
+
+        if not hasattr(auto_module, auto_class):
+            raise ValueError(f"{auto_class} is not a valid auto class.")
+
+        cls._auto_class = auto_class
 
 
-def get_configuration_file(
-    path_or_repo: Union[str, os.PathLike],
-    revision: Optional[str] = None,
-    use_auth_token: Optional[Union[bool, str]] = None,
-    local_files_only: bool = False,
-) -> str:
+def get_configuration_file(configuration_files: List[str]) -> str:
     """
     Get the configuration file to use for this version of transformers.
 
     Args:
-        path_or_repo (:obj:`str` or :obj:`os.PathLike`):
-            Can be either the id of a repo on huggingface.co or a path to a `directory`.
-        revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
-            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-            git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
-            identifier allowed by git.
-        use_auth_token (:obj:`str` or `bool`, `optional`):
-            The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
-            generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
-        local_files_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to only rely on local files and not to attempt to download any files.
+        configuration_files (`List[str]`): The list of available configuration files.
 
     Returns:
-        :obj:`str`: The configuration file to use.
+        `str`: The configuration file to use.
     """
-    # Inspect all files from the repo/folder.
-    all_files = get_list_of_files(
-        path_or_repo, revision=revision, use_auth_token=use_auth_token, local_files_only=local_files_only
-    )
     configuration_files_map = {}
-    for file_name in all_files:
+    for file_name in configuration_files:
         search = _re_configuration_file.search(file_name)
         if search is not None:
             v = search.groups()[0]
@@ -850,7 +928,7 @@ def get_configuration_file(
     available_versions = sorted(configuration_files_map.keys())
 
     # Defaults to FULL_CONFIGURATION_FILE and then try to look at some newer versions.
-    configuration_file = FULL_CONFIGURATION_FILE
+    configuration_file = CONFIG_NAME
     transformers_version = version.parse(__version__)
     for v in available_versions:
         if version.parse(v) <= transformers_version:

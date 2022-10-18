@@ -14,16 +14,14 @@
 # limitations under the License.
 
 import os
-from contextlib import contextmanager
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
 from tokenizers import processors
 
-from ...file_utils import is_sentencepiece_available
 from ...tokenization_utils import AddedToken, BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import logging
+from ...utils import is_sentencepiece_available, logging
 
 
 if is_sentencepiece_available():
@@ -38,10 +36,14 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": 
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/mbart-large-50-one-to-many-mmt": "https://huggingface.co/facebook/mbart-large-50-one-to-many-mmt/resolve/main/sentencepiece.bpe.model",
+        "facebook/mbart-large-50-one-to-many-mmt": (
+            "https://huggingface.co/facebook/mbart-large-50-one-to-many-mmt/resolve/main/sentencepiece.bpe.model"
+        ),
     },
     "tokenizer_file": {
-        "facebook/mbart-large-50-one-to-many-mmt": "https://huggingface.co/facebook/mbart-large-50-one-to-many-mmt/resolve/main/tokenizer.json",
+        "facebook/mbart-large-50-one-to-many-mmt": (
+            "https://huggingface.co/facebook/mbart-large-50-one-to-many-mmt/resolve/main/tokenizer.json"
+        ),
     },
 }
 
@@ -56,48 +58,48 @@ FAIRSEQ_LANGUAGE_CODES = ["ar_AR", "cs_CZ", "de_DE", "en_XX", "es_XX", "et_EE", 
 
 class MBart50TokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" MBART tokenizer for mBART-50 (backed by HuggingFace's `tokenizers` library). Based on `BPE
-    <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models>`__.
+    Construct a "fast" MBART tokenizer for mBART-50 (backed by HuggingFace's *tokenizers* library). Based on
+    [BPE](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models).
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             Path to the vocabulary file.
-        src_lang (:obj:`str`, `optional`):
+        src_lang (`str`, *optional*):
             A string representing the source language.
-        tgt_lang (:obj:`str`, `optional`):
+        tgt_lang (`str`, *optional*):
             A string representing the target language.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
-        sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+        sep_token (`str`, *optional*, defaults to `"</s>"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
             token of a sequence built with special tokens.
-        cls_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+        cls_token (`str`, *optional*, defaults to `"<s>"`):
             The classifier token which is used when doing sequence classification (classification of the whole sequence
             instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
+        mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
 
-    Examples::
+    Examples:
 
-        >>> from transformers import MBart50TokenizerFast
-        >>> tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50", src_lang="en_XX", tgt_lang="ro_RO")
-        >>> src_text = " UN Chief Says There Is No Military Solution in Syria"
-        >>> tgt_text =  "Şeful ONU declară că nu există o soluţie militară în Siria"
-        >>> model_inputs = tokenizer(src_text, return_tensors="pt")
-        >>> with tokenizer.as_target_tokenizer():
-        ...    labels = tokenizer(tgt_text, return_tensors="pt").input_ids
-        >>> # model(**model_inputs, labels=labels) should work
-    """
+    ```python
+    >>> from transformers import MBart50TokenizerFast
+
+    >>> tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50", src_lang="en_XX", tgt_lang="ro_RO")
+    >>> src_text = " UN Chief Says There Is No Military Solution in Syria"
+    >>> tgt_text = "Şeful ONU declară că nu există o soluţie militară în Siria"
+    >>> model_inputs = tokenizer(src_text, text_target=tgt_text, return_tensors="pt")
+    >>> # model(**model_inputs) should work
+    ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
@@ -172,22 +174,22 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. The special tokens depend on calling set_lang.
 
-        An MBART-50 sequence has the following format, where ``X`` represents the sequence:
+        An MBART-50 sequence has the following format, where `X` represents the sequence:
 
-        - ``input_ids`` (for encoder) ``[src_lang_code] X [eos]``
-        - ``labels``: (for decoder) ``[tgt_lang_code] X [eos]``
+        - `input_ids` (for encoder) `[src_lang_code] X [eos]`
+        - `labels`: (for decoder) `[tgt_lang_code] X [eos]`
 
         BOS is never used. Pairs of sequences are not the expected use case, but they will be handled without a
         separator.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return self.prefix_tokens + token_ids_0 + self.suffix_tokens
@@ -206,15 +208,11 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
         self.tgt_lang = tgt_lang
         return super().prepare_seq2seq_batch(src_texts, tgt_texts, **kwargs)
 
-    @contextmanager
-    def as_target_tokenizer(self):
-        """
-        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
-        sequence-to-sequence models that need a slightly different processing for the labels.
-        """
-        self.set_tgt_lang_special_tokens(self.tgt_lang)
-        yield
-        self.set_src_lang_special_tokens(self.src_lang)
+    def _switch_to_input_mode(self):
+        return self.set_src_lang_special_tokens(self.src_lang)
+
+    def _switch_to_target_mode(self):
+        return self.set_tgt_lang_special_tokens(self.tgt_lang)
 
     def set_src_lang_special_tokens(self, src_lang: str) -> None:
         """Reset the special tokens to the source lang setting. prefix=[src_lang_code] and suffix=[eos]."""

@@ -16,6 +16,22 @@
 
 ####################################################################################################
 
+#
+# Note: If when running this conversion script you're getting an exception:
+#     ModuleNotFoundError: No module named 'megatron.model.enums'
+# you need to tell python where to find the clone of Megatron-LM, e.g.:
+#
+# cd /tmp
+# git clone https://github.com/NVIDIA/Megatron-LM
+# PYTHONPATH=/tmp/Megatron-LM python src/transformers/models/megatron_gpt2/convert_megatron_gpt2_checkpoint.py ...
+#
+# if you already have it cloned elsewhere, simply adjust the path to the existing path
+#
+# If the training was done using a Megatron-LM fork, e.g.,
+# https://github.com/microsoft/Megatron-DeepSpeed/ then chances are that you need to have that one
+# in your path, i.e., /path/to/Megatron-DeepSpeed/
+#
+
 import argparse
 import os
 import re
@@ -121,9 +137,10 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
     pos_embeddings = embeddings["position_embeddings"]["weight"]
     # Read the causal mask dimension (seqlen). [max_sequence_length, hidden_size]
     n_positions = pos_embeddings.size(0)
-    assert (
-        n_positions == config.n_positions
-    ), f"pos_embeddings.max_sequence_length={n_positions} and config.n_positions={config.n_positions} don't match"
+    if n_positions != config.n_positions:
+        raise ValueError(
+            f"pos_embeddings.max_sequence_length={n_positions} and config.n_positions={config.n_positions} don't match"
+        )
     # Store the position embeddings.
     output_state_dict["transformer.wpe.weight"] = pos_embeddings
 

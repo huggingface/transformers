@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 DeBERTa model. """
+""" TF 2.0 DeBERTa model."""
 
 
 import math
@@ -22,7 +22,6 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFMaskedLMOutput,
@@ -38,10 +37,10 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
-    input_processing,
-    shape_list,
+    unpack_inputs,
 )
-from ...utils import logging
+from ...tf_utils import shape_list, stable_softmax
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_deberta import DebertaConfig
 
 
@@ -84,8 +83,8 @@ class TFDebertaXSoftmax(tf.keras.layers.Layer):
     Masked Softmax which is optimized for saving memory
 
     Args:
-        input (:obj:`tf.Tensor`): The input tensor that will apply softmax.
-        mask (:obj:`tf.Tensor`): The mask matrix where 0 indicate that element will be ignored in the softmax calculation.
+        input (`tf.Tensor`): The input tensor that will apply softmax.
+        mask (`tf.Tensor`): The mask matrix where 0 indicate that element will be ignored in the softmax calculation.
         dim (int): The dimension that will apply softmax
     """
 
@@ -97,30 +96,9 @@ class TFDebertaXSoftmax(tf.keras.layers.Layer):
 
         rmask = tf.logical_not(tf.cast(mask, tf.bool))
         output = tf.where(rmask, float("-inf"), inputs)
-        output = tf.nn.softmax(output, self.axis)
+        output = stable_softmax(output, self.axis)
         output = tf.where(rmask, 0.0, output)
         return output
-
-
-def get_mask(input, dropout):
-    mask = tf.cast(
-        1 - tf.compat.v1.distributions.Bernoulli(probs=1 - dropout).sample(sample_shape=shape_list(input)), tf.bool
-    )
-    return mask, dropout
-
-
-@tf.custom_gradient
-def TFDebertaXDropout(input, local_ctx):
-    mask, dropout = get_mask(input, local_ctx)
-    scale = tf.convert_to_tensor(1.0 / (1 - dropout), dtype=tf.float32)
-    input = tf.cond(dropout > 0, lambda: tf.where(mask, 0.0, input) * scale, lambda: input)
-
-    def custom_grad(upstream_grad):
-        return tf.cond(
-            scale > 1, lambda: (tf.where(mask, 0.0, upstream_grad) * scale, None), lambda: (upstream_grad, None)
-        )
-
-    return input, custom_grad
 
 
 class TFDebertaStableDropout(tf.keras.layers.Layer):
@@ -133,11 +111,33 @@ class TFDebertaStableDropout(tf.keras.layers.Layer):
 
     def __init__(self, drop_prob, **kwargs):
         super().__init__(**kwargs)
-        self.drop_prob = tf.convert_to_tensor(drop_prob, dtype=tf.float32)
+        self.drop_prob = drop_prob
+
+    @tf.custom_gradient
+    def xdropout(self, inputs):
+        """
+        Applies dropout to the inputs, as vanilla dropout, but also scales the remaining elements up by 1/drop_prob.
+        """
+        mask = tf.cast(
+            1
+            - tf.compat.v1.distributions.Bernoulli(probs=1.0 - self.drop_prob).sample(sample_shape=shape_list(inputs)),
+            tf.bool,
+        )
+        scale = tf.convert_to_tensor(1.0 / (1 - self.drop_prob), dtype=tf.float32)
+        if self.drop_prob > 0:
+            inputs = tf.where(mask, 0.0, inputs) * scale
+
+        def grad(upstream):
+            if self.drop_prob > 0:
+                return tf.where(mask, 0.0, upstream) * scale
+            else:
+                return upstream
+
+        return inputs, grad
 
     def call(self, inputs: tf.Tensor, training: tf.Tensor = False):
-        if training and self.drop_prob > 0:
-            return TFDebertaXDropout(inputs, self.drop_prob)
+        if training:
+            return self.xdropout(inputs)
         return inputs
 
 
@@ -394,16 +394,16 @@ def build_relative_position(query_size, key_size):
     """
     Build relative position according to the query and key
 
-    We assume the absolute position of query :math:`P_q` is range from (0, query_size) and the absolute position of key
-    :math:`P_k` is range from (0, key_size), The relative positions from query to key is :math:`R_{q \\rightarrow k} =
-    P_q - P_k`
+    We assume the absolute position of query \\(P_q\\) is range from (0, query_size) and the absolute position of key
+    \\(P_k\\) is range from (0, key_size), The relative positions from query to key is \\(R_{q \\rightarrow k} = P_q -
+    P_k\\)
 
     Args:
         query_size (int): the length of query
         key_size (int): the length of key
 
     Return:
-        :obj:`tf.Tensor`: A tensor with shape [1, query_size, key_size]
+        `tf.Tensor`: A tensor with shape [1, query_size, key_size]
 
     """
     q_ids = tf.range(query_size, dtype=tf.int32)
@@ -468,9 +468,9 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
     Disentangled self-attention module
 
     Parameters:
-        config (:obj:`str`):
+        config (`str`):
             A model config class instance with the configuration to build a new model. The schema is similar to
-            `BertConfig`, for more details, please refer :class:`~transformers.DebertaConfig`
+            *BertConfig*, for more details, please refer [`DebertaConfig`]
 
     """
 
@@ -516,14 +516,14 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
             if self.max_relative_positions < 1:
                 self.max_relative_positions = config.max_position_embeddings
             self.pos_dropout = TFDebertaStableDropout(config.hidden_dropout_prob, name="pos_dropout")
-            if "c2p" in self.pos_att_type or "p2p" in self.pos_att_type:
+            if "c2p" in self.pos_att_type:
                 self.pos_proj = tf.keras.layers.Dense(
                     self.all_head_size,
                     kernel_initializer=get_initializer(config.initializer_range),
                     name="pos_proj",
                     use_bias=False,
                 )
-            if "p2c" in self.pos_att_type or "p2p" in self.pos_att_type:
+            if "p2c" in self.pos_att_type:
                 self.pos_q_proj = tf.keras.layers.Dense(
                     self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="pos_q_proj"
                 )
@@ -561,28 +561,28 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
         Call the module
 
         Args:
-            hidden_states (:obj:`tf.Tensor`):
+            hidden_states (`tf.Tensor`):
                 Input states to the module usually the output from previous layer, it will be the Q,K and V in
-                `Attention(Q,K,V)`
+                *Attention(Q,K,V)*
 
-            attention_mask (:obj:`tf.Tensor`):
-                An attention mask matrix of shape [`B`, `N`, `N`] where `B` is the batch size, `N` is the maximum
-                sequence length in which element [i,j] = `1` means the `i` th token in the input can attend to the `j`
+            attention_mask (`tf.Tensor`):
+                An attention mask matrix of shape [*B*, *N*, *N*] where *B* is the batch size, *N* is the maximum
+                sequence length in which element [i,j] = *1* means the *i* th token in the input can attend to the *j*
                 th token.
 
-            return_att (:obj:`bool`, optional):
+            return_att (`bool`, optional):
                 Whether return the attention matrix.
 
-            query_states (:obj:`tf.Tensor`, optional):
-                The `Q` state in `Attention(Q,K,V)`.
+            query_states (`tf.Tensor`, optional):
+                The *Q* state in *Attention(Q,K,V)*.
 
-            relative_pos (:obj:`tf.Tensor`):
-                The relative position encoding between the tokens in the sequence. It's of shape [`B`, `N`, `N`] with
-                values ranging in [`-max_relative_positions`, `max_relative_positions`].
+            relative_pos (`tf.Tensor`):
+                The relative position encoding between the tokens in the sequence. It's of shape [*B*, *N*, *N*] with
+                values ranging in [*-max_relative_positions*, *max_relative_positions*].
 
-            rel_embeddings (:obj:`tf.Tensor`):
-                The embedding of relative distances. It's a tensor of shape [:math:`2 \\times
-                \\text{max_relative_positions}`, `hidden_size`].
+            rel_embeddings (`tf.Tensor`):
+                The embedding of relative distances. It's a tensor of shape [\\(2 \\times
+                \\text{max_relative_positions}\\), *hidden_size*].
 
 
         """
@@ -649,7 +649,12 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
 
         context_layer = tf.matmul(attention_probs, value_layer)
         context_layer = tf.transpose(context_layer, [0, 2, 1, 3])
-        new_context_layer_shape = shape_list(context_layer)[:-2] + [-1]
+        context_layer_shape = shape_list(context_layer)
+        # Set the final dimension here explicitly.
+        # Calling tf.reshape(context_layer, (*context_layer_shape[:-2], -1)) raises an error when executing
+        # the model in graph mode as context_layer is reshaped to (None, 7, None) and Dense layer in TFDebertaV2SelfOutput
+        # requires final input dimension to be defined
+        new_context_layer_shape = context_layer_shape[:-2] + [context_layer_shape[-2] * context_layer_shape[-1]]
         context_layer = tf.reshape(context_layer, new_context_layer_shape)
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         return outputs
@@ -677,32 +682,28 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
         rel_embeddings = tf.expand_dims(
             rel_embeddings[self.max_relative_positions - att_span : self.max_relative_positions + att_span, :], 0
         )
-        if "c2p" in self.pos_att_type or "p2p" in self.pos_att_type:
-            pos_key_layer = self.pos_proj(rel_embeddings)
-            pos_key_layer = self.transpose_for_scores(pos_key_layer)
-
-        if "p2c" in self.pos_att_type or "p2p" in self.pos_att_type:
-            pos_query_layer = self.pos_q_proj(rel_embeddings)
-            pos_query_layer = self.transpose_for_scores(pos_query_layer)
 
         score = 0
+
         # content->position
         if "c2p" in self.pos_att_type:
+            pos_key_layer = self.pos_proj(rel_embeddings)
+            pos_key_layer = self.transpose_for_scores(pos_key_layer)
             c2p_att = tf.matmul(query_layer, tf.transpose(pos_key_layer, [0, 1, 3, 2]))
             c2p_pos = tf.clip_by_value(relative_pos + att_span, 0, att_span * 2 - 1)
             c2p_att = torch_gather(c2p_att, c2p_dynamic_expand(c2p_pos, query_layer, relative_pos), -1)
             score += c2p_att
 
         # position->content
-        if "p2c" in self.pos_att_type or "p2p" in self.pos_att_type:
+        if "p2c" in self.pos_att_type:
+            pos_query_layer = self.pos_q_proj(rel_embeddings)
+            pos_query_layer = self.transpose_for_scores(pos_query_layer)
             pos_query_layer /= tf.math.sqrt(tf.cast(shape_list(pos_query_layer)[-1] * scale_factor, dtype=tf.float32))
             if shape_list(query_layer)[-2] != shape_list(key_layer)[-2]:
                 r_pos = build_relative_position(shape_list(key_layer)[-2], shape_list(key_layer)[-2])
             else:
                 r_pos = relative_pos
             p2c_pos = tf.clip_by_value(-r_pos + att_span, 0, att_span * 2 - 1)
-
-        if "p2c" in self.pos_att_type:
             p2c_att = tf.matmul(key_layer, tf.transpose(pos_query_layer, [0, 1, 3, 2]))
             p2c_att = tf.transpose(
                 torch_gather(p2c_att, p2c_dynamic_expand(p2c_pos, query_layer, key_layer), -1), [0, 1, 3, 2]
@@ -729,7 +730,7 @@ class TFDebertaEmbeddings(tf.keras.layers.Layer):
         self.position_biased_input = getattr(config, "position_biased_input", True)
         self.initializer_range = config.initializer_range
         if self.embedding_size != config.hidden_size:
-            self.embed_proj = tf.keras.layers.Dense(config.hidden_size, bias=False)
+            self.embed_proj = tf.keras.layers.Dense(config.hidden_size, use_bias=False)
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = TFDebertaStableDropout(config.hidden_dropout_prob, name="dropout")
 
@@ -776,11 +777,22 @@ class TFDebertaEmbeddings(tf.keras.layers.Layer):
         Applies embedding based on inputs tensor.
 
         Returns:
-            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
+            final_embeddings (`tf.Tensor`): output embedding tensor.
         """
-        assert not (input_ids is None and inputs_embeds is None)
+        if input_ids is None and inputs_embeds is None:
+            raise ValueError("Need to provide either `input_ids` or `input_embeds`.")
 
         if input_ids is not None:
+            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+            tf.debugging.assert_less(
+                input_ids,
+                tf.cast(self.vocab_size, dtype=input_ids.dtype),
+                message=(
+                    "input_ids must be smaller than the embedding layer's input dimension (got"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                ),
+            )
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
         input_shape = shape_list(inputs_embeds)[:-1]
@@ -921,6 +933,7 @@ class TFDebertaMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
+    @unpack_inputs
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -932,59 +945,44 @@ class TFDebertaMainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
 
-        if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
+        if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif inputs["input_ids"] is not None:
-            input_shape = shape_list(inputs["input_ids"])
-        elif inputs["inputs_embeds"] is not None:
-            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
+        elif input_ids is not None:
+            input_shape = shape_list(input_ids)
+        elif inputs_embeds is not None:
+            input_shape = shape_list(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        if inputs["attention_mask"] is None:
-            inputs["attention_mask"] = tf.fill(dims=input_shape, value=1)
+        if attention_mask is None:
+            attention_mask = tf.fill(dims=input_shape, value=1)
 
-        if inputs["token_type_ids"] is None:
-            inputs["token_type_ids"] = tf.fill(dims=input_shape, value=0)
+        if token_type_ids is None:
+            token_type_ids = tf.fill(dims=input_shape, value=0)
 
         embedding_output = self.embeddings(
-            input_ids=inputs["input_ids"],
-            position_ids=inputs["position_ids"],
-            token_type_ids=inputs["token_type_ids"],
-            inputs_embeds=inputs["inputs_embeds"],
-            mask=inputs["attention_mask"],
-            training=inputs["training"],
+            input_ids=input_ids,
+            position_ids=position_ids,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            mask=attention_mask,
+            training=training,
         )
 
         encoder_outputs = self.encoder(
             hidden_states=embedding_output,
-            attention_mask=inputs["attention_mask"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
         )
 
         sequence_output = encoder_outputs[0]
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
 
         return TFBaseModelOutput(
@@ -1005,85 +1003,88 @@ class TFDebertaPreTrainedModel(TFPreTrainedModel):
 
 
 DEBERTA_START_DOCSTRING = r"""
-    The DeBERTa model was proposed in `DeBERTa: Decoding-enhanced BERT with Disentangled Attention
-    <https://arxiv.org/abs/2006.03654>`_ by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen. It's build on top of
-    BERT/RoBERTa with two improvements, i.e. disentangled attention and enhanced mask decoder. With those two
+    The DeBERTa model was proposed in [DeBERTa: Decoding-enhanced BERT with Disentangled
+    Attention](https://arxiv.org/abs/2006.03654) by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen. It's build
+    on top of BERT/RoBERTa with two improvements, i.e. disentangled attention and enhanced mask decoder. With those two
     improvements, it out perform BERT/RoBERTa on a majority of tasks with 80GB pretraining data.
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
-    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
-    and behavior.
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
+    behavior.
 
-    .. note::
+    <Tip>
 
-        TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
-        - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
-        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
-        the first positional argument :
+    - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
+    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+    `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
+    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+    `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
 
-        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
-        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
-        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
-
+    </Tip>
 
     Parameters:
-        config (:class:`~transformers.DebertaConfig`): Model configuration class with all the parameters of the model.
+        config ([`DebertaConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 DEBERTA_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`({0})`)
+        input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.DebertaTokenizer`. See
-            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
-            details.
+            Indices can be obtained using [`DebertaTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
+            [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`_
-        inputs_embeds (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0}, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            [What are position IDs?](../glossary#position-ids)
+        inputs_embeds (`np.ndarray` or `tf.Tensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput``] instead of a plain tuple.
 """
 
 
@@ -1097,6 +1098,7 @@ class TFDebertaModel(TFDebertaPreTrainedModel):
 
         self.deberta = TFDebertaMainLayer(config, name="deberta")
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1115,11 +1117,8 @@ class TFDebertaModel(TFDebertaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
+        outputs = self.deberta(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1129,18 +1128,6 @@ class TFDebertaModel(TFDebertaPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            kwargs_call=kwargs,
-        )
-        outputs = self.deberta(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
 
         return outputs
@@ -1152,7 +1139,7 @@ class TFDebertaModel(TFDebertaPreTrainedModel):
         return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
 
 
-@add_start_docstrings("""DeBERTa Model with a `language modeling` head on top. """, DEBERTA_START_DOCSTRING)
+@add_start_docstrings("""DeBERTa Model with a `language modeling` head on top.""", DEBERTA_START_DOCSTRING)
 class TFDebertaForMaskedLM(TFDebertaPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config: DebertaConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1169,6 +1156,7 @@ class TFDebertaForMaskedLM(TFDebertaPreTrainedModel, TFMaskedLanguageModelingLos
     def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.mlm.predictions
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1188,17 +1176,14 @@ class TFDebertaForMaskedLM(TFDebertaPreTrainedModel, TFMaskedLanguageModelingLos
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
-            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
+        outputs = self.deberta(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1207,28 +1192,13 @@ class TFDebertaForMaskedLM(TFDebertaPreTrainedModel, TFMaskedLanguageModelingLos
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            labels=labels,
             training=training,
-            kwargs_call=kwargs,
-        )
-        outputs = self.deberta(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
         sequence_output = outputs[0]
-        prediction_scores = self.mlm(sequence_output=sequence_output, training=inputs["training"])
-        loss = (
-            None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=prediction_scores)
-        )
+        prediction_scores = self.mlm(sequence_output=sequence_output, training=training)
+        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=prediction_scores)
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             output = (prediction_scores,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1271,6 +1241,7 @@ class TFDebertaForSequenceClassification(TFDebertaPreTrainedModel, TFSequenceCla
             name="classifier",
         )
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1290,17 +1261,14 @@ class TFDebertaForSequenceClassification(TFDebertaPreTrainedModel, TFSequenceCla
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
+        outputs = self.deberta(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1309,28 +1277,15 @@ class TFDebertaForSequenceClassification(TFDebertaPreTrainedModel, TFSequenceCla
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            labels=labels,
             training=training,
-            kwargs_call=kwargs,
-        )
-        outputs = self.deberta(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
         sequence_output = outputs[0]
-        pooled_output = self.pooler(sequence_output, training=inputs["training"])
-        pooled_output = self.dropout(pooled_output, training=inputs["training"])
+        pooled_output = self.pooler(sequence_output, training=training)
+        pooled_output = self.dropout(pooled_output, training=training)
         logits = self.classifier(pooled_output)
-        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=logits)
+        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             output = (logits,) + outputs[1:]
 
             return ((loss,) + output) if loss is not None else output
@@ -1368,6 +1323,7 @@ class TFDebertaForTokenClassification(TFDebertaPreTrainedModel, TFTokenClassific
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1387,16 +1343,12 @@ class TFDebertaForTokenClassification(TFDebertaPreTrainedModel, TFTokenClassific
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
-            1]``.
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
+        outputs = self.deberta(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1405,27 +1357,14 @@ class TFDebertaForTokenClassification(TFDebertaPreTrainedModel, TFTokenClassific
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            labels=labels,
             training=training,
-            kwargs_call=kwargs,
-        )
-        outputs = self.deberta(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
         sequence_output = outputs[0]
-        sequence_output = self.dropout(sequence_output, training=inputs["training"])
+        sequence_output = self.dropout(sequence_output, training=training)
         logits = self.classifier(inputs=sequence_output)
-        loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=logits)
+        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1461,6 +1400,7 @@ class TFDebertaForQuestionAnswering(TFDebertaPreTrainedModel, TFQuestionAnswerin
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1481,21 +1421,18 @@ class TFDebertaForQuestionAnswering(TFDebertaPreTrainedModel, TFQuestionAnswerin
         start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
         end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
-        **kwargs,
     ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
         r"""
-        start_positions (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
+        start_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
-        end_positions (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size,)`, `optional`):
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+        end_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
+        outputs = self.deberta(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1504,21 +1441,7 @@ class TFDebertaForQuestionAnswering(TFDebertaPreTrainedModel, TFQuestionAnswerin
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            start_positions=start_positions,
-            end_positions=end_positions,
             training=training,
-            kwargs_call=kwargs,
-        )
-        outputs = self.deberta(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
         )
         sequence_output = outputs[0]
         logits = self.qa_outputs(inputs=sequence_output)
@@ -1527,12 +1450,12 @@ class TFDebertaForQuestionAnswering(TFDebertaPreTrainedModel, TFQuestionAnswerin
         end_logits = tf.squeeze(input=end_logits, axis=-1)
         loss = None
 
-        if inputs["start_positions"] is not None and inputs["end_positions"] is not None:
-            labels = {"start_position": inputs["start_positions"]}
-            labels["end_position"] = inputs["end_positions"]
-            loss = self.compute_loss(labels=labels, logits=(start_logits, end_logits))
+        if start_positions is not None and end_positions is not None:
+            labels = {"start_position": start_positions}
+            labels["end_position"] = end_positions
+            loss = self.hf_compute_loss(labels=labels, logits=(start_logits, end_logits))
 
-        if not inputs["return_dict"]:
+        if not return_dict:
             output = (start_logits, end_logits) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 

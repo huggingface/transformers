@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax PEGASUS model. """
+""" Flax PEGASUS model."""
 
 
 import math
@@ -25,13 +25,13 @@ import numpy as np
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict, unfreeze
+from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
+from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
@@ -47,7 +47,7 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
-from ...utils import logging
+from ...utils import add_start_docstrings, logging, replace_return_docstrings
 from .configuration_pegasus import PegasusConfig
 
 
@@ -58,162 +58,156 @@ _CONFIG_FOR_DOC = "PegasusConfig"
 _TOKENIZER_FOR_DOC = "PegasusTokenizer"
 
 PEGASUS_START_DOCSTRING = r"""
-    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
+    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a Flax Linen `flax.nn.Module
-    <https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html>`__ subclass. Use it as a regular Flax
-    Module and refer to the Flax documentation for all matter related to general usage and behavior.
+    This model is also a Flax Linen
+    [flax.nn.Module](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html) subclass. Use it as a
+    regular Flax Module and refer to the Flax documentation for all matter related to general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
-    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
-    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
-    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
-    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
+    - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
+    - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
+    - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
+    - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
 
     Parameters:
-        config (:class:`~transformers.PegasusConfig`): Model configuration class with all the parameters of the model.
+        config ([`PegasusConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
-            model weights.
-        dtype (:obj:`jax.numpy.dtype`, `optional`, defaults to :obj:`jax.numpy.float32`):
-            The data type of the computation. Can be one of :obj:`jax.numpy.float32`, :obj:`jax.numpy.float16` (on
-            GPUs) and :obj:`jax.numpy.bfloat16` (on TPUs).
+            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
+        dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
+            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on GPUs) and
+            `jax.numpy.bfloat16` (on TPUs).
 
             This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
-            specified all the computation will be performed with the given ``dtype``.
+            specified all the computation will be performed with the given `dtype`.
 
             **Note that this only specifies the dtype of the computation and does not influence the dtype of model
             parameters.**
 
-            If you wish to change the dtype of the model parameters, see
-            :meth:`~transformers.FlaxPreTrainedModel.to_fp16` and :meth:`~transformers.FlaxPreTrainedModel.to_bf16`.
+            If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
+            [`~FlaxPreTrainedModel.to_bf16`].
 """
 
 PEGASUS_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.PegasusTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
+            Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        decoder_input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
+            [What are attention masks?](../glossary#attention-mask)
+        decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.PegasusTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
+            Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
-        decoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
-            also be used by default.
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
+        decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
 
-            If you want to change padding behavior, you should modify to your needs. See diagram 1 in `the paper
-            <https://arxiv.org/abs/1910.13461>`__ for more information on the default strategy.
-        position_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
-        decoder_position_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            If you want to change padding behavior, you should modify to your needs. See diagram 1 in [the
+            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+        position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+        decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
-            range ``[0, config.max_position_embeddings - 1]``.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            range `[0, config.max_position_embeddings - 1]`.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
 PEGASUS_ENCODE_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.PegasusTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
+            Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        position_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 PEGASUS_DECODE_INPUTS_DOCSTRING = r"""
     Args:
-        decoder_input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`):
+        decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.PegasusTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
+            Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
-        encoder_outputs (:obj:`tuple(tuple(jnp.ndarray)`):
-            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
-            :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
-            `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
-            cross-attention of the decoder.
-        encoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
+        encoder_outputs (`tuple(tuple(jnp.ndarray)`):
+            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+        encoder_attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        decoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
-            also be used by default.
+            [What are attention masks?](../glossary#attention-mask)
+        decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
 
-            If you want to change padding behavior, you should modify to your needs. See diagram 1 in `the paper
-            <https://arxiv.org/abs/1910.13461>`__ for more information on the default strategy.
-        decoder_position_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            If you want to change padding behavior, you should modify to your needs. See diagram 1 in [the
+            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+        decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
-            range ``[0, config.max_position_embeddings - 1]``.
-        past_key_values (:obj:`Dict[str, np.ndarray]`, `optional`, returned by ``init_cache`` or when passing previous ``past_key_values``):
+            range `[0, config.max_position_embeddings - 1]`.
+        past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
             Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
-            auto-regressive decoding. Pre-computed key and value hidden-states are of shape `[batch_size, max_length]`.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -550,7 +544,7 @@ class FlaxPegasusDecoderLayer(nn.Module):
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
         self.fc1 = nn.Dense(
-            self.config.encoder_ffn_dim,
+            self.config.decoder_ffn_dim,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
@@ -683,8 +677,8 @@ class FlaxPegasusDecoderLayerCollection(nn.Module):
 
 class FlaxPegasusEncoder(nn.Module):
     config: PegasusConfig
+    embed_tokens: nn.Embed
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    embed_tokens: Optional[nn.Embed] = None
 
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
@@ -693,13 +687,6 @@ class FlaxPegasusEncoder(nn.Module):
         self.padding_idx = self.config.pad_token_id
         self.max_source_positions = self.config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if self.config.scale_embedding else 1.0
-
-        if self.embed_tokens is None:
-            self.embed_tokens = nn.Embed(
-                self.config.vocab_size,
-                embed_dim,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std),
-            )
 
         self.embed_positions = create_sinusoidal_positions(
             self.config.max_position_embeddings, embed_dim, dtype=self.dtype
@@ -740,20 +727,27 @@ class FlaxPegasusEncoder(nn.Module):
         last_hidden_state = outputs[0]
         last_hidden_state = self.layer_norm(last_hidden_state)
 
+        # update the last element in `hidden_states` after applying `layernorm` above
+        hidden_states = None
+        if output_hidden_states:
+            hidden_states = outputs[1]
+            hidden_states = hidden_states[:-1] + (last_hidden_state,)
+
         if not return_dict:
-            return (last_hidden_state,) + outputs[1:]
+            outputs = (last_hidden_state, hidden_states) + (outputs[2:] if output_hidden_states else outputs[1:])
+            return tuple(v for v in outputs if v is not None)
 
         return FlaxBaseModelOutput(
             last_hidden_state=last_hidden_state,
-            hidden_states=outputs.hidden_states,
+            hidden_states=hidden_states,
             attentions=outputs.attentions,
         )
 
 
 class FlaxPegasusDecoder(nn.Module):
     config: PegasusConfig
+    embed_tokens: nn.Embed
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    embed_tokens: Optional[nn.Embed] = None
 
     def setup(self):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
@@ -762,13 +756,6 @@ class FlaxPegasusDecoder(nn.Module):
         self.padding_idx = self.config.pad_token_id
         self.max_target_positions = self.config.max_position_embeddings
         self.embed_scale = math.sqrt(self.config.d_model) if self.config.scale_embedding else 1.0
-
-        if self.embed_tokens is None:
-            self.embed_tokens = nn.Embed(
-                self.config.vocab_size,
-                embed_dim,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std),
-            )
 
         self.embed_positions = create_sinusoidal_positions(
             self.config.max_position_embeddings, embed_dim, dtype=self.dtype
@@ -816,12 +803,19 @@ class FlaxPegasusDecoder(nn.Module):
         last_hidden_state = outputs[0]
         last_hidden_state = self.layer_norm(last_hidden_state)
 
+        # update the last element in `hidden_states` after applying `layernorm` above
+        hidden_states = None
+        if output_hidden_states:
+            hidden_states = outputs[1]
+            hidden_states = hidden_states[:-1] + (last_hidden_state,)
+
         if not return_dict:
-            return (last_hidden_state,) + outputs[1:]
+            outputs = (last_hidden_state, hidden_states) + (outputs[2:] if output_hidden_states else outputs[1:])
+            return tuple(v for v in outputs if v is not None)
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=last_hidden_state,
-            hidden_states=outputs.hidden_states,
+            hidden_states=hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
@@ -908,12 +902,13 @@ class FlaxPegasusPreTrainedModel(FlaxPreTrainedModel):
         input_shape: Tuple[int] = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
+        _do_init: bool = True,
         **kwargs
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         attention_mask = jnp.ones_like(input_ids)
@@ -927,7 +922,7 @@ class FlaxPegasusPreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(
+        random_params = self.module.init(
             rngs,
             input_ids,
             attention_mask,
@@ -937,19 +932,29 @@ class FlaxPegasusPreTrainedModel(FlaxPreTrainedModel):
             decoder_position_ids,
         )["params"]
 
+        if params is not None:
+            random_params = flatten_dict(unfreeze(random_params))
+            params = flatten_dict(unfreeze(params))
+            for missing_key in self._missing_keys:
+                params[missing_key] = random_params[missing_key]
+            self._missing_keys = set()
+            return freeze(unflatten_dict(params))
+        else:
+            return random_params
+
     def init_cache(self, batch_size, max_length, encoder_outputs):
         r"""
         Args:
-            batch_size (:obj:`int`):
+            batch_size (`int`):
                 batch_size used for fast auto-regressive decoding. Defines the batch size of the initialized cache.
-            max_length (:obj:`int`):
+            max_length (`int`):
                 maximum possible length for auto-regressive decoding. Defines the sequence length of the initialized
                 cache.
-            encoder_outputs (:obj:`Union[FlaxBaseModelOutput, tuple(tuple(jnp.ndarray)]`):
-                ``encoder_outputs`` consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`,
-                `optional`: :obj:`attentions`). :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length,
-                hidden_size)`, `optional`) is a sequence of hidden-states at the output of the last layer of the
-                encoder. Used in the cross-attention of the decoder.
+            encoder_outputs (`Union[FlaxBaseModelOutput, tuple(tuple(jnp.ndarray)]`):
+                `encoder_outputs` consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*:
+                `attentions`). `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*)
+                is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
+                cross-attention of the decoder.
         """
         # init input variables to retrieve cache
         decoder_input_ids = jnp.ones((batch_size, max_length), dtype="i4")
@@ -995,17 +1000,18 @@ class FlaxPegasusPreTrainedModel(FlaxPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
+        ```python
+        >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
 
-            >>> model = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
-            >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-large')
+        >>> model = FlaxPegasusForConditionalGeneration.from_pretrained("google/pegasus-large")
+        >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-large")
 
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
-            >>> encoder_outputs = model.encode(**inputs)
-        """
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors="np")
+        >>> encoder_outputs = model.encode(**inputs)
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1060,23 +1066,25 @@ class FlaxPegasusPreTrainedModel(FlaxPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
+        ```python
+        >>> import jax.numpy as jnp
+        >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
 
-            >>> model = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
-            >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-large')
+        >>> model = FlaxPegasusForConditionalGeneration.from_pretrained("google/pegasus-large")
+        >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-large")
 
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
-            >>> encoder_outputs = model.encode(**inputs)
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors="np")
+        >>> encoder_outputs = model.encode(**inputs)
 
-            >>> decoder_start_token_id = model.config.decoder_start_token_id
-            >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+        >>> decoder_start_token_id = model.config.decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
-            >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> last_decoder_hidden_states = outputs.last_hidden_state
-        """
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> last_decoder_hidden_states = outputs.last_hidden_state
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1284,7 +1292,7 @@ class FlaxPegasusForConditionalGenerationModule(nn.Module):
         else:
             lm_logits = self.lm_head(hidden_states)
 
-        lm_logits += self.final_logits_bias.astype(self.dtype)
+        lm_logits += jax.lax.stop_gradient(self.final_logits_bias.astype(self.dtype))
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
@@ -1328,23 +1336,25 @@ class FlaxPegasusForConditionalGeneration(FlaxPegasusPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
+        ```python
+        >>> import jax.numpy as jnp
+        >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
 
-            >>> model = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
-            >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-large')
+        >>> model = FlaxPegasusForConditionalGeneration.from_pretrained("google/pegasus-large")
+        >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-large")
 
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, max_length=1024, return_tensors='np')
-            >>> encoder_outputs = model.encode(**inputs)
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors="np")
+        >>> encoder_outputs = model.encode(**inputs)
 
-            >>> decoder_start_token_id = model.config.decoder_start_token_id
-            >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+        >>> decoder_start_token_id = model.config.decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
-            >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> logits = outputs.logits
-        """
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> logits = outputs.logits
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1483,33 +1493,30 @@ class FlaxPegasusForConditionalGeneration(FlaxPegasusPreTrainedModel):
 FLAX_PEGASUS_CONDITIONAL_GENERATION_DOCSTRING = """
     Returns:
 
-    Summarization example::
+    Summarization example:
 
         >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
 
-        >>> model = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
-        >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-large')
+        >>> model = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large') >>> tokenizer =
+        PegasusTokenizer.from_pretrained('google/pegasus-large')
 
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='np')
+        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs." >>> inputs =
+        tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='np')
 
-        >>> # Generate Summary
-        >>> summary_ids = model.generate(inputs['input_ids']).sequences
-        >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+        >>> # Generate Summary >>> summary_ids = model.generate(inputs['input_ids']).sequences >>>
+        print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
 
-    Mask filling example::
+    Mask filling example:
 
-        >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration
-        >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-large')
-        >>> TXT = "My friends are <mask> but they eat too many carbs."
+        >>> from transformers import PegasusTokenizer, FlaxPegasusForConditionalGeneration >>> tokenizer =
+        PegasusTokenizer.from_pretrained('google/pegasus-large') >>> TXT = "My friends are <mask> but they eat too many
+        carbs."
 
-        >>> model = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
-        >>> input_ids = tokenizer([TXT], return_tensors='np')['input_ids']
-        >>> logits = model(input_ids).logits
+        >>> model = FlaxPegasusForConditionalGeneration.from_pretrained('google/pegasus-large') >>> input_ids =
+        tokenizer([TXT], return_tensors='np')['input_ids'] >>> logits = model(input_ids).logits
 
-        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-        >>> probs = jax.nn.softmax(logits[0, masked_index], axis=0)
-        >>> values, predictions = jax.lax.top_k(probs)
+        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item() >>> probs =
+        jax.nn.softmax(logits[0, masked_index], axis=0) >>> values, predictions = jax.lax.top_k(probs)
 
         >>> tokenizer.decode(predictions).split()
 """

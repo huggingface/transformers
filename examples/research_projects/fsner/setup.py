@@ -12,7 +12,7 @@ setuptools.setup(
     description="Few-shot Named Entity Recognition",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/huggingface/transformers/tree/master/examples/research_projects/fsner",
+    url="https://github.com/huggingface/transformers/tree/main/examples/research_projects/fsner",
     project_urls={
         "Bug Tracker": "https://github.com/huggingface/transformers/issues",
     },

@@ -78,10 +78,10 @@ def bytes_to_unicode():
     )
     cs = bs[:]
     n = 0
-    for b in range(2 ** 8):
+    for b in range(2**8):
         if b not in bs:
             bs.append(b)
-            cs.append(2 ** 8 + n)
+            cs.append(2**8 + n)
             n += 1
     cs = [chr(n) for n in cs]
     return dict(zip(bs, cs))
@@ -108,42 +108,43 @@ class GPT2Tokenizer(PreTrainedTokenizer):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ::
+    ```
+    >>> from transformers import GPT2Tokenizer
+    >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+    >>> tokenizer("Hello world")['input_ids']
+    [15496, 995]
+    >>> tokenizer(" Hello world")['input_ids']
+    [18435, 995]
+    ```
 
-        >>> from transformers import GPT2Tokenizer
-        >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        >>> tokenizer("Hello world")['input_ids']
-        [15496, 995]
-        >>> tokenizer(" Hello world")['input_ids']
-        [18435, 995]
-
-    You can get around that behavior by passing ``add_prefix_space=True`` when instantiating this tokenizer or when you
+    You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you
     call it on some text, but since the model was not pretrained this way, it might yield a decrease in performance.
 
-    .. note::
+    <Tip>
 
-        When used with ``is_split_into_words=True``, this tokenizer will add a space before each word (even the first
-        one).
+    When used with `is_split_into_words=True`, this tokenizer will add a space before each word (even the first one).
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    </Tip>
+
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             Path to the vocabulary file.
-        merges_file (:obj:`str`):
+        merges_file (`str`):
             Path to the merges file.
-        errors (:obj:`str`, `optional`, defaults to :obj:`"replace"`):
-            Paradigm to follow when decoding bytes to UTF-8. See `bytes.decode
-            <https://docs.python.org/3/library/stdtypes.html#bytes.decode>`__ for more information.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`<|endoftext|>`):
+        errors (`str`, *optional*, defaults to `"replace"`):
+            Paradigm to follow when decoding bytes to UTF-8. See
+            [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
+        unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`<|endoftext|>`):
+        bos_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The beginning of sequence token.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`<|endoftext|>`):
+        eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The end of sequence token.
-        add_prefix_space (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (GPT2 tokenizer detect beginning of words by the preceding space).
     """
@@ -161,20 +162,26 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         unk_token="<|endoftext|>",
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
+        pad_token=None,
         add_prefix_space=False,
+        add_bos_token=False,
         **kwargs
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
+        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
         super().__init__(
             errors=errors,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
+            pad_token=pad_token,
             add_prefix_space=add_prefix_space,
+            add_bos_token=add_bos_token,
             **kwargs,
         )
+        self.add_bos_token = add_bos_token
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -241,6 +248,51 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+        if self.add_bos_token:
+            bos_token_ids = [self.bos_token_id]
+        else:
+            bos_token_ids = []
+
+        output = bos_token_ids + token_ids_0
+
+        if token_ids_1 is None:
+            return output
+
+        return output + bos_token_ids + token_ids_1
+
+    def get_special_tokens_mask(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+    ) -> List[int]:
+        """
+        Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
+        special tokens using the tokenizer `prepare_for_model` or `encode_plus` methods.
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not the token list is already formatted with special tokens for the model.
+
+        Returns:
+            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+        """
+        if already_has_special_tokens:
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+            )
+
+        if not self.add_bos_token:
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=False
+            )
+
+        if token_ids_1 is None:
+            return [1] + ([0] * len(token_ids_0))
+        return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
+
     def _tokenize(self, text):
         """Tokenize a string."""
         bpe_tokens = []
@@ -277,7 +329,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, ensure_ascii=False))
+            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         index = 0
         with open(merge_file, "w", encoding="utf-8") as writer:

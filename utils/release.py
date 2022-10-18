@@ -17,7 +17,6 @@ import argparse
 import os
 import re
 
-import git
 import packaging.version
 
 
@@ -33,8 +32,6 @@ REPLACE_FILES = {
     "setup": "setup.py",
 }
 README_FILE = "README.md"
-CUSTOM_JS_FILE = "docs/source/_static/js/custom.js"
-DEPLOY_SH_FILE = ".circleci/deploy.sh"
 
 
 def update_version_in_file(fname, version, pattern):
@@ -69,8 +66,8 @@ def global_version_update(version, patch=False):
         update_version_in_examples(version)
 
 
-def clean_master_ref_in_model_list():
-    """Replace the links from master doc tp stable doc in the model list of the README."""
+def clean_main_ref_in_model_list():
+    """Replace the links from main doc tp stable doc in the model list of the README."""
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
     _start_prompt = "🤗 Transformers currently provides the following architectures"
     _end_prompt = "1. Want to contribute a new model?"
@@ -88,8 +85,8 @@ def clean_master_ref_in_model_list():
     while not lines[index].startswith(_end_prompt):
         if lines[index].startswith("1."):
             lines[index] = lines[index].replace(
-                "https://huggingface.co/transformers/master/model_doc",
-                "https://huggingface.co/transformers/model_doc",
+                "https://huggingface.co/docs/transformers/main/model_doc",
+                "https://huggingface.co/docs/transformers/model_doc",
             )
         index += 1
 
@@ -126,8 +123,8 @@ def pre_release_work(patch=False):
     print(f"Updating version to {version}.")
     global_version_update(version, patch=patch)
     if not patch:
-        print("Cleaning main README")
-        clean_master_ref_in_model_list()
+        print("Cleaning main README, don't forget to run `make fix-copies`.")
+        clean_main_ref_in_model_list()
 
 
 def post_release_work():
@@ -136,50 +133,16 @@ def post_release_work():
     current_version = get_version()
     dev_version = f"{current_version.major}.{current_version.minor + 1}.0.dev0"
     current_version = current_version.base_version
-    # Get the current commit hash
-    repo = git.Repo(".", search_parent_directories=True)
-    version_commit = repo.head.object.hexsha[:7]
 
     # Check with the user we got that right.
     version = input(f"Which version are we developing now? [{dev_version}]")
-    commit = input(f"Commit hash to associate to v{current_version}? [{version_commit}]")
     if len(version) == 0:
         version = dev_version
-    if len(commit) == 0:
-        commit = version_commit
 
     print(f"Updating version to {version}.")
     global_version_update(version)
-
-
-def post_patch_work():
-    """Do all the necesarry post-patch steps."""
-    # Try to guess the right info: last patch in the minor release before current version and its commit hash.
-    current_version = get_version()
-    repo = git.Repo(".", search_parent_directories=True)
-    repo_tags = repo.tags
-    default_version = None
-    version_commit = None
-    for tag in repo_tags:
-        if str(tag).startswith(f"v{current_version.major}.{current_version.minor - 1}"):
-            if default_version is None:
-                default_version = packaging.version.parse(str(tag)[1:])
-                version_commit = str(tag.commit)[:7]
-            elif packaging.version.parse(str(tag)[1:]) > default_version:
-                default_version = packaging.version.parse(str(tag)[1:])
-                version_commit = str(tag.commit)[:7]
-
-    # Confirm with the user or ask for the info if not found.
-    if default_version is None:
-        version = input("Which patch version was just released?")
-        commit = input("Commit hash to associated to it?")
-    else:
-        version = input(f"Which patch version was just released? [{default_version}]")
-        commit = input(f"Commit hash to associated to it? [{version_commit}]")
-        if len(version) == 0:
-            version = default_version
-        if len(commit) == 0:
-            commit = version_commit
+    print("Cleaning main README, don't forget to run `make fix-copies`.")
+    clean_main_ref_in_model_list()
 
 
 if __name__ == "__main__":
@@ -190,6 +153,6 @@ if __name__ == "__main__":
     if not args.post_release:
         pre_release_work(patch=args.patch)
     elif args.patch:
-        post_patch_work()
+        print("Nothing to do after a patch :-)")
     else:
         post_release_work()

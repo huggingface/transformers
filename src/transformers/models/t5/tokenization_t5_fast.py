@@ -16,12 +16,12 @@
 
 
 import os
+import warnings
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
-from ...file_utils import is_sentencepiece_available
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import logging
+from ...utils import is_sentencepiece_available, logging
 
 
 if is_sentencepiece_available():
@@ -51,6 +51,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
     },
 }
 
+
+# TODO(PVP) - this should be removed in Transformers v5
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "t5-small": 512,
     "t5-base": 512,
@@ -62,35 +64,38 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class T5TokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" T5 tokenizer (backed by HuggingFace's `tokenizers` library). Based on `Unigram
-    <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models>`__.
+    Construct a "fast" T5 tokenizer (backed by HuggingFace's *tokenizers* library). Based on
+    [Unigram](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models).
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (:obj:`str`):
-            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
+        vocab_file (`str`):
+            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
 
-            .. note::
+            <Tip>
 
-                When building a sequence using special tokens, this is not the token that is used for the end of
-                sequence. The token used is the :obj:`sep_token`.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            The token used is the `sep_token`.
+
+            </Tip>
+
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        extra_ids (:obj:`int`, `optional`, defaults to 100):
+        extra_ids (`int`, *optional*, defaults to 100):
             Add a number of extra ids added to the end of the vocabulary for use as sentinels. These tokens are
             accessible as "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1. Extra tokens are
             indexed from the end of the vocabulary up to beginning ("<extra_id_0>" is the last token in the vocabulary
-            like in T5 preprocessing see `here
-            <https://github.com/google-research/text-to-text-transfer-transformer/blob/9fd7b14a769417be33bc6c850f9598764913c833/t5/data/preprocessors.py#L2117>`__).
-        additional_special_tokens (:obj:`List[str]`, `optional`):
+            like in T5 preprocessing see
+            [here](https://github.com/google-research/text-to-text-transfer-transformer/blob/9fd7b14a769417be33bc6c850f9598764913c833/t5/data/preprocessors.py#L2117)).
+        additional_special_tokens (`List[str]`, *optional*):
             Additional special tokens used by the tokenizer.
     """
 
@@ -121,8 +126,9 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
             extra_tokens = len(set(filter(lambda x: bool("extra_id_" in str(x)), additional_special_tokens)))
             if extra_tokens != extra_ids:
                 raise ValueError(
-                    f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are provided to T5Tokenizer. "
-                    "In this case the additional_special_tokens must include the extra_ids tokens"
+                    f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are"
+                    " provided to T5Tokenizer. In this case the additional_special_tokens must include the extra_ids"
+                    " tokens"
                 )
 
         super().__init__(
@@ -139,6 +145,28 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         self.vocab_file = vocab_file
         self.can_save_slow_tokenizer = False if not self.vocab_file else True
         self._extra_ids = extra_ids
+
+    @staticmethod
+    def _eventually_correct_t5_max_length(pretrained_model_name_or_path, max_model_length, init_max_model_length):
+        if pretrained_model_name_or_path in T5TokenizerFast.max_model_input_sizes:
+            deprecated_max_model_length = T5TokenizerFast.max_model_input_sizes[pretrained_model_name_or_path]
+            if init_max_model_length is not None and init_max_model_length != max_model_length:
+                return init_max_model_length
+            elif init_max_model_length is None:
+                warnings.warn(
+                    "This tokenizer was incorrectly instantiated with a model max length of"
+                    f" {deprecated_max_model_length} which will be corrected in Transformers v5.\nFor now, this"
+                    " behavior is kept to avoid breaking backwards compatibility when padding/encoding with"
+                    " `truncation is True`.\n- Be aware that you SHOULD NOT rely on"
+                    f" {pretrained_model_name_or_path} automatically truncating your input to"
+                    f" {deprecated_max_model_length} when padding/encoding.\n- If you want to encode/pad to sequences"
+                    f" longer than {deprecated_max_model_length} you can either instantiate this tokenizer with"
+                    " `model_max_length` or pass `max_length` when encoding/padding.\n- To avoid this warning, please"
+                    " instantiate this tokenizer with `model_max_length` set to your preferred value.",
+                    FutureWarning,
+                )
+
+        return max_model_length
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
@@ -167,17 +195,17 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A sequence has the following format:
 
-        - single sequence: ``X </s>``
-        - pair of sequences: ``A </s> B </s>``
+        - single sequence: `X </s>`
+        - pair of sequences: `A </s> B </s>`
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         token_ids_0 = token_ids_0 + [self.eos_token_id]
         if token_ids_1 is None:
@@ -194,13 +222,13 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         use of token type ids, therefore a list of zeros is returned.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of zeros.
+            `List[int]`: List of zeros.
         """
         eos = [self.eos_token_id]
 

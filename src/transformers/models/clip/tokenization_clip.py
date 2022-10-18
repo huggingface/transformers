@@ -16,13 +16,13 @@
 
 import json
 import os
+import unicodedata
 from functools import lru_cache
 from typing import List, Optional, Tuple
 
 import regex as re
-from transformers.models.bert.tokenization_bert import BasicTokenizer
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
 
 
@@ -48,7 +48,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "openai/clip-vit-base-patch32": {"do_lower_case": True},
+    "openai/clip-vit-base-patch32": {},
 }
 
 
@@ -68,10 +68,10 @@ def bytes_to_unicode():
     )
     cs = bs[:]
     n = 0
-    for b in range(2 ** 8):
+    for b in range(2**8):
         if b not in bs:
             bs.append(b)
-            cs.append(2 ** 8 + n)
+            cs.append(2**8 + n)
             n += 1
     cs = [chr(n) for n in cs]
     return dict(zip(bs, cs))
@@ -97,43 +97,188 @@ def whitespace_clean(text):
     return text
 
 
+# Copied from transformers.models.bert.tokenization_bert.whitespace_tokenize
+def whitespace_tokenize(text):
+    """Runs basic whitespace cleaning and splitting on a piece of text."""
+    text = text.strip()
+    if not text:
+        return []
+    tokens = text.split()
+    return tokens
+
+
+# Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
+class BasicTokenizer(object):
+    """
+    Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
+
+    Args:
+        do_lower_case (`bool`, *optional*, defaults to `True`):
+            Whether or not to lowercase the input when tokenizing.
+        never_split (`Iterable`, *optional*):
+            Collection of tokens which will never be split during tokenization. Only has an effect when
+            `do_basic_tokenize=True`
+        tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
+            Whether or not to tokenize Chinese characters.
+
+            This should likely be deactivated for Japanese (see this
+            [issue](https://github.com/huggingface/transformers/issues/328)).
+        strip_accents (`bool`, *optional*):
+            Whether or not to strip all accents. If this option is not specified, then it will be determined by the
+            value for `lowercase` (as in the original BERT).
+    """
+
+    def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
+        if never_split is None:
+            never_split = []
+        self.do_lower_case = do_lower_case
+        self.never_split = set(never_split)
+        self.tokenize_chinese_chars = tokenize_chinese_chars
+        self.strip_accents = strip_accents
+
+    def tokenize(self, text, never_split=None):
+        """
+        Basic Tokenization of a piece of text. Split on "white spaces" only, for sub-word tokenization, see
+        WordPieceTokenizer.
+
+        Args:
+            never_split (`List[str]`, *optional*)
+                Kept for backward compatibility purposes. Now implemented directly at the base class level (see
+                [`PreTrainedTokenizer.tokenize`]) List of token not to split.
+        """
+        # union() returns a new set by concatenating the two sets.
+        never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
+        text = self._clean_text(text)
+
+        # This was added on November 1st, 2018 for the multilingual and Chinese
+        # models. This is also applied to the English models now, but it doesn't
+        # matter since the English models were not trained on any Chinese data
+        # and generally don't have any Chinese data in them (there are Chinese
+        # characters in the vocabulary because Wikipedia does have some Chinese
+        # words in the English Wikipedia.).
+        if self.tokenize_chinese_chars:
+            text = self._tokenize_chinese_chars(text)
+        orig_tokens = whitespace_tokenize(text)
+        split_tokens = []
+        for token in orig_tokens:
+            if token not in never_split:
+                if self.do_lower_case:
+                    token = token.lower()
+                    if self.strip_accents is not False:
+                        token = self._run_strip_accents(token)
+                elif self.strip_accents:
+                    token = self._run_strip_accents(token)
+            split_tokens.extend(self._run_split_on_punc(token, never_split))
+
+        output_tokens = whitespace_tokenize(" ".join(split_tokens))
+        return output_tokens
+
+    def _run_strip_accents(self, text):
+        """Strips accents from a piece of text."""
+        text = unicodedata.normalize("NFD", text)
+        output = []
+        for char in text:
+            cat = unicodedata.category(char)
+            if cat == "Mn":
+                continue
+            output.append(char)
+        return "".join(output)
+
+    def _run_split_on_punc(self, text, never_split=None):
+        """Splits punctuation on a piece of text."""
+        if never_split is not None and text in never_split:
+            return [text]
+        chars = list(text)
+        i = 0
+        start_new_word = True
+        output = []
+        while i < len(chars):
+            char = chars[i]
+            if _is_punctuation(char):
+                output.append([char])
+                start_new_word = True
+            else:
+                if start_new_word:
+                    output.append([])
+                start_new_word = False
+                output[-1].append(char)
+            i += 1
+
+        return ["".join(x) for x in output]
+
+    def _tokenize_chinese_chars(self, text):
+        """Adds whitespace around any CJK character."""
+        output = []
+        for char in text:
+            cp = ord(char)
+            if self._is_chinese_char(cp):
+                output.append(" ")
+                output.append(char)
+                output.append(" ")
+            else:
+                output.append(char)
+        return "".join(output)
+
+    def _is_chinese_char(self, cp):
+        """Checks whether CP is the codepoint of a CJK character."""
+        # This defines a "chinese character" as anything in the CJK Unicode block:
+        #   https://en.wikipedia.org/wiki/CJK_Unified_Ideographs_(Unicode_block)
+        #
+        # Note that the CJK Unicode block is NOT all Japanese and Korean characters,
+        # despite its name. The modern Korean Hangul alphabet is a different block,
+        # as is Japanese Hiragana and Katakana. Those alphabets are used to write
+        # space-separated words, so they are not treated specially and handled
+        # like the all of the other languages.
+        if (
+            (cp >= 0x4E00 and cp <= 0x9FFF)
+            or (cp >= 0x3400 and cp <= 0x4DBF)  #
+            or (cp >= 0x20000 and cp <= 0x2A6DF)  #
+            or (cp >= 0x2A700 and cp <= 0x2B73F)  #
+            or (cp >= 0x2B740 and cp <= 0x2B81F)  #
+            or (cp >= 0x2B820 and cp <= 0x2CEAF)  #
+            or (cp >= 0xF900 and cp <= 0xFAFF)
+            or (cp >= 0x2F800 and cp <= 0x2FA1F)  #
+        ):  #
+            return True
+
+        return False
+
+    def _clean_text(self, text):
+        """Performs invalid character removal and whitespace cleanup on text."""
+        output = []
+        for char in text:
+            cp = ord(char)
+            if cp == 0 or cp == 0xFFFD or _is_control(char):
+                continue
+            if _is_whitespace(char):
+                output.append(" ")
+            else:
+                output.append(char)
+        return "".join(output)
+
+
 class CLIPTokenizer(PreTrainedTokenizer):
     """
     Construct a CLIP tokenizer. Based on byte-level Byte-Pair-Encoding.
 
-    This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
-    be encoded differently whether it is at the beginning of the sentence (without space) or not:
-
-
-    You can get around that behavior by passing ``add_prefix_space=True`` when instantiating this tokenizer or when you
-    call it on some text, but since the model was not pretrained this way, it might yield a decrease in performance.
-
-    .. note::
-
-        When used with ``is_split_into_words=True``, this tokenizer will add a space before each word (even the first
-        one).
-
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (:obj:`str`):
+        vocab_file (`str`):
             Path to the vocabulary file.
-        merges_file (:obj:`str`):
+        merges_file (`str`):
             Path to the merges file.
-        errors (:obj:`str`, `optional`, defaults to :obj:`"replace"`):
-            Paradigm to follow when decoding bytes to UTF-8. See `bytes.decode
-            <https://docs.python.org/3/library/stdtypes.html#bytes.decode>`__ for more information.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`<|endoftext|>`):
+        errors (`str`, *optional*, defaults to `"replace"`):
+            Paradigm to follow when decoding bytes to UTF-8. See
+            [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
+        unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`<|endoftext|>`):
+        bos_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The beginning of sequence token.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`<|endoftext|>`):
+        eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The end of sequence token.
-        add_prefix_space (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. (CLIP tokenizer detect beginning of words by the preceding space).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -150,8 +295,6 @@ class CLIPTokenizer(PreTrainedTokenizer):
         bos_token="<|startoftext|>",
         eos_token="<|endoftext|>",
         pad_token="<|endoftext|>",  # hack to enable padding
-        add_prefix_space=False,
-        do_lower_case=True,
         **kwargs
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
@@ -164,8 +307,6 @@ class CLIPTokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
-            add_prefix_space=add_prefix_space,
-            do_lower_case=do_lower_case,
             **kwargs,
         )
 
@@ -185,25 +326,15 @@ class CLIPTokenizer(PreTrainedTokenizer):
         self.byte_encoder = bytes_to_unicode()
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
         with open(merges_file, encoding="utf-8") as merges_handle:
-            bpe_merges = merges_handle.read().split("\n")[1 : 49152 - 256 - 2 + 1]
+            bpe_merges = merges_handle.read().strip().split("\n")[1 : 49152 - 256 - 2 + 1]
         bpe_merges = [tuple(merge.split()) for merge in bpe_merges]
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
         self.cache = {"<|startoftext|>": "<|startoftext|>", "<|endoftext|>": "<|endoftext|>"}
-        self.add_prefix_space = add_prefix_space
 
         self.pat = re.compile(
             r"""<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+""",
             re.IGNORECASE,
         )
-
-    # Very ugly hack to enable padding
-    @property
-    def pad_token_id(self) -> Optional[int]:
-        """
-        :obj:`Optional[int]`: Id of the padding token in the vocabulary. Returns :obj:`None` if the token has not been
-        set.
-        """
-        return 0
 
     @property
     def vocab_size(self):
@@ -219,40 +350,43 @@ class CLIPTokenizer(PreTrainedTokenizer):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A CLIP sequence has the following format:
 
-        - single sequence: ``<|startoftext|> X <|endoftext|>``
+        - single sequence: `<|startoftext|> X <|endoftext|>`
 
         Pairs of sequences are not the expected use case, but they will be handled without a separator.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
+        bos_token = [self.bos_token_id]
+        eos_token = [self.eos_token_id]
+
         if token_ids_1 is None:
-            return [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
-        return [self.bos_token_id] + token_ids_0 + token_ids_1 + [self.eos_token_id]
+            return bos_token + token_ids_0 + eos_token
+        return bos_token + token_ids_0 + eos_token + eos_token + token_ids_1 + eos_token
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
+        special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (:obj:`List[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -262,7 +396,30 @@ class CLIPTokenizer(PreTrainedTokenizer):
 
         if token_ids_1 is None:
             return [1] + ([0] * len(token_ids_0)) + [1]
-        return [1] + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + [1]
+        return [1] + ([0] * len(token_ids_0)) + [1] + [1] + ([0] * len(token_ids_1)) + [1]
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed. CLIP does not make use of token type ids, therefore a list of
+        zeros is returned.
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of zeros.
+        """
+        bos_token = [self.bos_token_id]
+        eos_token = [self.eos_token_id]
+
+        if token_ids_1 is None:
+            return len(bos_token + token_ids_0 + eos_token) * [0]
+        return len(bos_token + token_ids_0 + eos_token + eos_token + token_ids_1 + eos_token) * [0]
 
     def bpe(self, token):
         if token in self.cache:
@@ -332,7 +489,8 @@ class CLIPTokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
-        text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors).replace("</w>", " ")
+        byte_array = bytearray([self.byte_decoder[c] for c in text])
+        text = byte_array.decode("utf-8", errors=self.errors).replace("</w>", " ").strip()
         return text
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
@@ -347,7 +505,7 @@ class CLIPTokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, ensure_ascii=False))
+            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         index = 0
         with open(merge_file, "w", encoding="utf-8") as writer:
@@ -363,9 +521,3 @@ class CLIPTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
-
-    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
-        add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
-        if is_split_into_words or add_prefix_space:
-            text = " " + text
-        return (text, kwargs)

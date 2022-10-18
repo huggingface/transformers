@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax T5 model. """
+""" Flax T5 model."""
 
 
 import copy
@@ -23,12 +23,13 @@ import numpy as np
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict, unfreeze
+from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
+from flax.linen import partitioning as nn_partitioning
 from flax.linen.attention import dot_product_attention_weights
+from flax.traverse_util import flatten_dict, unflatten_dict
 from jax.random import PRNGKey
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
@@ -43,7 +44,7 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
-from ...utils import logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_t5 import T5Config
 
 
@@ -52,6 +53,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "t5-small"
 _CONFIG_FOR_DOC = "T5Config"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"
+
+remat = nn_partitioning.remat
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.shift_tokens_right
@@ -87,13 +90,13 @@ class FlaxT5LayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-class FlaxT5DenseReluDense(nn.Module):
+class FlaxT5DenseActDense(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        wi_init_std = self.config.initializer_factor * (self.config.d_model ** -0.5)
-        wo_init_std = self.config.initializer_factor * (self.config.d_ff ** -0.5)
+        wi_init_std = self.config.initializer_factor * (self.config.d_model**-0.5)
+        wo_init_std = self.config.initializer_factor * (self.config.d_ff**-0.5)
 
         self.wi = nn.Dense(
             self.config.d_ff,
@@ -108,22 +111,23 @@ class FlaxT5DenseReluDense(nn.Module):
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
+        self.act = ACT2FN[self.config.dense_act_fn]
 
     def __call__(self, hidden_states, deterministic=True):
         hidden_states = self.wi(hidden_states)
-        hidden_states = jax.nn.relu(hidden_states)
+        hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
 
-class FlaxT5DenseGatedGeluDense(nn.Module):
+class FlaxT5DenseGatedActDense(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        wi_init_std = self.config.initializer_factor * (self.config.d_model ** -0.5)
-        wo_init_std = self.config.initializer_factor * (self.config.d_ff ** -0.5)
+        wi_init_std = self.config.initializer_factor * (self.config.d_model**-0.5)
+        wo_init_std = self.config.initializer_factor * (self.config.d_ff**-0.5)
 
         self.wi_0 = nn.Dense(
             self.config.d_ff,
@@ -144,10 +148,10 @@ class FlaxT5DenseGatedGeluDense(nn.Module):
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
-        self.gelu_act = ACT2FN["gelu_new"]
+        self.act = ACT2FN[self.config.dense_act_fn]
 
     def __call__(self, hidden_states, deterministic):
-        hidden_gelu = self.gelu_act(self.wi_0(hidden_states))
+        hidden_gelu = self.act(self.wi_0(hidden_states))
         hidden_linear = self.wi_1(hidden_states)
         hidden_states = hidden_gelu * hidden_linear
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
@@ -160,14 +164,10 @@ class FlaxT5LayerFF(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        if self.config.feed_forward_proj == "relu":
-            self.DenseReluDense = FlaxT5DenseReluDense(self.config, dtype=self.dtype)
-        elif self.config.feed_forward_proj == "gated-gelu":
-            self.DenseReluDense = FlaxT5DenseGatedGeluDense(self.config, dtype=self.dtype)
+        if self.config.is_gated_act:
+            self.DenseReluDense = FlaxT5DenseGatedActDense(self.config, dtype=self.dtype)
         else:
-            raise ValueError(
-                f"{self.config.feed_forward_proj} is not supported. Choose between `relu` and `gated-gelu`"
-            )
+            self.DenseReluDense = FlaxT5DenseActDense(self.config, dtype=self.dtype)
 
         self.layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
         self.dropout = nn.Dropout(self.config.dropout_rate)
@@ -187,6 +187,7 @@ class FlaxT5Attention(nn.Module):
 
     def setup(self):
         self.relative_attention_num_buckets = self.config.relative_attention_num_buckets
+        self.relative_attention_max_distance = self.config.relative_attention_max_distance
         self.d_model = self.config.d_model
         self.key_value_proj_dim = self.config.d_kv
         self.n_heads = self.config.num_heads
@@ -194,8 +195,8 @@ class FlaxT5Attention(nn.Module):
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
         q_init_std = self.config.initializer_factor * ((self.inner_dim * self.key_value_proj_dim) ** -0.5)
-        kv_init_std = self.config.initializer_factor * (self.inner_dim ** -0.5)
-        o_init_std = self.config.initializer_factor * (self.inner_dim ** -0.5)
+        kv_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
+        o_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
 
         self.q = nn.Dense(
             self.inner_dim,
@@ -275,6 +276,7 @@ class FlaxT5Attention(nn.Module):
             relative_position,
             bidirectional=(not self.causal),
             num_buckets=self.relative_attention_num_buckets,
+            max_distance=self.relative_attention_max_distance,
         )
 
         values = self.relative_attention_bias(relative_position_bucket)
@@ -410,10 +412,11 @@ class FlaxT5Attention(nn.Module):
 
         # replace masked positions with -10_000
         if attention_mask is not None:
+            mask_value = jnp.finfo(self.dtype).min
             attention_mask = jax.lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, -1e4).astype(self.dtype),
+                jnp.full(attention_mask.shape, mask_value).astype(self.dtype),
             )
 
         if position_bias is None:
@@ -622,7 +625,6 @@ class FlaxT5LayerCollection(nn.Module):
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
         output_attentions=False,
-        return_dict=True,
         deterministic=True,
         init_cache=False,
     ):
@@ -642,13 +644,31 @@ class FlaxT5LayerCollection(nn.Module):
 class FlaxT5BlockCollection(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    gradient_checkpointing: bool = False
 
     def setup(self):
         self.causal = self.config.causal
-        self.blocks = [
-            FlaxT5LayerCollection(self.config, has_relative_attention_bias=(i == 0), dtype=self.dtype, name=str(i))
-            for i in range(self.config.num_layers)
-        ]
+        if self.gradient_checkpointing:
+            FlaxT5CheckpointLayer = remat(FlaxT5LayerCollection, static_argnums=(6, 7, 8))
+            self.blocks = [
+                FlaxT5CheckpointLayer(
+                    self.config,
+                    has_relative_attention_bias=(i == 0),
+                    dtype=self.dtype,
+                    name=str(i),
+                )
+                for i in range(self.config.num_layers)
+            ]
+        else:
+            self.blocks = [
+                FlaxT5LayerCollection(
+                    self.config,
+                    has_relative_attention_bias=(i == 0),
+                    dtype=self.dtype,
+                    name=str(i),
+                )
+                for i in range(self.config.num_layers)
+            ]
 
     def __call__(
         self,
@@ -674,14 +694,14 @@ class FlaxT5BlockCollection(nn.Module):
 
             layer_outputs = layer_module(
                 hidden_states,
-                attention_mask=attention_mask,
-                position_bias=position_bias,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-                encoder_decoder_position_bias=encoder_decoder_position_bias,
-                output_attentions=output_attentions,
-                deterministic=deterministic,
-                init_cache=init_cache,
+                attention_mask,
+                position_bias,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                encoder_decoder_position_bias,
+                output_attentions,
+                deterministic,
+                init_cache,
             )
 
             hidden_states = layer_outputs[0]
@@ -709,20 +729,16 @@ class FlaxT5BlockCollection(nn.Module):
 
 class FlaxT5Stack(nn.Module):
     config: T5Config
-    embed_tokens: Optional[nn.Embed] = None
+    embed_tokens: nn.Embed
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    gradient_checkpointing: bool = False
 
     def setup(self):
         self.causal = self.config.causal
 
-        if self.embed_tokens is None:
-            self.embed_tokens = nn.Embed(
-                self.config.vocab_size,
-                self.config.d_model,
-                embedding_init=jax.nn.initializers.normal(self.config.init_std),
-            )
-
-        self.block = FlaxT5BlockCollection(self.config, dtype=self.dtype)
+        self.block = FlaxT5BlockCollection(
+            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
         self.final_layer_norm = FlaxT5LayerNorm(
             self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
         )
@@ -784,137 +800,128 @@ class FlaxT5Stack(nn.Module):
 
 T5_ENCODE_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
             should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using :class:`~transformers.T5Tokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            detail.
+            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for detail.
 
-            To know more on how to prepare :obj:`input_ids` for pretraining take a look a `T5 Training
-            <./t5.html#training>`__.
-        attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
+        attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            [What are attention masks?](../glossary#attention-mask)
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 T5_DECODE_INPUTS_DOCSTRING = r"""
     Args:
-        decoder_input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`):
+        decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.T5Tokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
+            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            For training, :obj:`decoder_input_ids` should be provided.
-        encoder_outputs (:obj:`tuple(tuple(jnp.ndarray)`):
-            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
-            :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
-            `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
-            cross-attention of the decoder.
-        encoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            For training, `decoder_input_ids` should be provided.
+        encoder_outputs (`tuple(tuple(jnp.ndarray)`):
+            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+        encoder_attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        decoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
-            also be used by default.
+            [What are attention masks?](../glossary#attention-mask)
+        decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
 
-            If you want to change padding behavior, you should modify to your needs. See diagram 1 in `the paper
-            <https://arxiv.org/abs/1910.13461>`__ for more information on the default strategy.
-        past_key_values (:obj:`Dict[str, np.ndarray]`, `optional`, returned by ``init_cache`` or when passing previous ``past_key_values``):
+            If you want to change padding behavior, you should modify to your needs. See diagram 1 in [the
+            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+        past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
             Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
-            auto-regressive decoding. Pre-computed key and value hidden-states are of shape `[batch_size, max_length]`.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
 T5_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
             should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using :class:`~transformers.T5Tokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            detail.
+            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for detail.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
+            [What are input IDs?](../glossary#input-ids)
 
-            To know more on how to prepare :obj:`input_ids` for pretraining take a look a `T5 Training
-            <./t5.html#training>`__.
-        attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
+        attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        decoder_input_ids (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
+            [What are attention masks?](../glossary#attention-mask)
+        decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.T5Tokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
+            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            `What are decoder input IDs? <../glossary.html#decoder-input-ids>`__
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            T5 uses the :obj:`pad_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
-            :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
-            :obj:`past_key_values`).
+            T5 uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
 
-            To know more on how to prepare :obj:`decoder_input_ids` for pretraining take a look at `T5 Training
-            <./t5.html#training>`__.
-        decoder_attention_mask (:obj:`jnp.ndarray` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
-            also be used by default.
-        encoder_outputs (:obj:`tuple(tuple(jnp.ndarray)`, `optional`):
-            Tuple consists of (:obj:`last_hidden_state`, :obj:`optional`: `hidden_states`, :obj:`optional`:
-            `attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)` is a
-            sequence of hidden states at the output of the last layer of the encoder. Used in the cross-attention of
-            the decoder.
-        past_key_values (:obj:`tuple(tuple(jnp.ndarray))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [T5
+            Training](./t5#training).
+        decoder_attention_mask (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        encoder_outputs (`tuple(tuple(jnp.ndarray)`, *optional*):
+            Tuple consists of (`last_hidden_state`, `optional`: *hidden_states*, `optional`: *attentions*)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a sequence of hidden states at
+            the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+        past_key_values (`tuple(tuple(jnp.ndarray))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
 
-            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
-            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
 
 
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -934,29 +941,48 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         input_shape: Tuple[int] = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
+        _do_init: bool = True,
+        gradient_checkpointing: bool = False,
         **kwargs
     ):
-        module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+        module = self.module_class(config=config, dtype=dtype, gradient_checkpointing=gradient_checkpointing, **kwargs)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+    def enable_gradient_checkpointing(self):
+        self._module = self.module_class(
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=True,
+        )
+
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
 
         attention_mask = jnp.ones_like(input_ids)
-        decoder_input_ids = jnp.ones_like(input_ids)
-        decoder_attention_mask = jnp.ones_like(input_ids)
+        args = [input_ids, attention_mask]
+        if self.module_class not in [FlaxT5EncoderModule]:
+            decoder_input_ids = jnp.ones_like(input_ids)
+            decoder_attention_mask = jnp.ones_like(input_ids)
+            args.extend([decoder_input_ids, decoder_attention_mask])
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(
+        random_params = self.module.init(
             rngs,
-            input_ids,
-            attention_mask,
-            decoder_input_ids,
-            decoder_attention_mask,
+            *args,
         )["params"]
+
+        if params is not None:
+            random_params = flatten_dict(unfreeze(random_params))
+            params = flatten_dict(unfreeze(params))
+            for missing_key in self._missing_keys:
+                params[missing_key] = random_params[missing_key]
+            self._missing_keys = set()
+            return freeze(unflatten_dict(params))
+        else:
+            return random_params
 
     @add_start_docstrings_to_model_forward(T5_INPUTS_DOCSTRING)
     def __call__(
@@ -980,7 +1006,8 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
 
         if decoder_input_ids is None:
             raise ValueError(
-                "Make sure to provide both `input_ids` and `decoder_input_ids`. `decoder_input_ids` is not passed here."
+                "Make sure to provide both `input_ids` and `decoder_input_ids`. `decoder_input_ids` is not passed"
+                " here."
             )
 
         # prepare encoder inputs
@@ -1010,16 +1037,16 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
     def init_cache(self, batch_size, max_length, encoder_outputs):
         r"""
         Args:
-            batch_size (:obj:`int`):
+            batch_size (`int`):
                 batch_size used for fast auto-regressive decoding. Defines the batch size of the initialized cache.
-            max_length (:obj:`int`):
+            max_length (`int`):
                 maximum possible length for auto-regressive decoding. Defines the sequence length of the initialized
                 cache.
-            encoder_outputs (:obj:`Union[FlaxBaseModelOutput, tuple(tuple(jnp.ndarray)]`):
-                ``encoder_outputs`` consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`,
-                `optional`: :obj:`attentions`). :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length,
-                hidden_size)`, `optional`) is a sequence of hidden-states at the output of the last layer of the
-                encoder. Used in the cross-attention of the decoder.
+            encoder_outputs (`Union[FlaxBaseModelOutput, tuple(tuple(jnp.ndarray)]`):
+                `encoder_outputs` consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*:
+                `attentions`). `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*)
+                is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
+                cross-attention of the decoder.
         """
         # init input variables to retrieve cache
         decoder_input_ids = jnp.ones((batch_size, max_length), dtype="i4")
@@ -1059,17 +1086,18 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
+        ```python
+        >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
 
-            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-            >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        >>> model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small")
 
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, return_tensors='np')
-            >>> encoder_outputs = model.encode(**inputs)
-        """
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer(text, return_tensors="np")
+        >>> encoder_outputs = model.encode(**inputs)
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1119,24 +1147,25 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
-            >>> import jax.numpy as jnp
+        ```python
+        >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
+        >>> import jax.numpy as jnp
 
-            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-            >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        >>> model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small")
 
-            >>> text = "My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, return_tensors='np')
-            >>> encoder_outputs = model.encode(**inputs)
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer(text, return_tensors="np")
+        >>> encoder_outputs = model.encode(**inputs)
 
-            >>> decoder_start_token_id = model.config.decoder_start_token_id
-            >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+        >>> decoder_start_token_id = model.config.decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
-            >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> logits = outputs.logits
-        """
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> logits = outputs.logits
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1204,53 +1233,53 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
 
 
 T5_START_DOCSTRING = r"""
-    The T5 model was proposed in `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer
-    <https://arxiv.org/abs/1910.10683>`__ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
-    Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a text-to-text
-    denoising generative setting.
+    The T5 model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text
+    Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan
+    Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a
+    text-to-text denoising generative setting.
 
-    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
+    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a Flax Linen `flax.nn.Module
-    <https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html>`__ subclass. Use it as a regular Flax
-    Module and refer to the Flax documentation for all matter related to general usage and behavior.
+    This model is also a Flax Linen
+    [flax.nn.Module](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html) subclass. Use it as a
+    regular Flax Module and refer to the Flax documentation for all matter related to general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
-    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
-    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
-    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
-    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
+    - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
+    - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
+    - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
+    - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
 
     Parameters:
-        config (:class:`~transformers.T5Config`): Model configuration class with all the parameters of the model.
+        config ([`T5Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
-            model weights.
-        dtype (:obj:`jax.numpy.dtype`, `optional`, defaults to :obj:`jax.numpy.float32`):
-            The data type of the computation. Can be one of :obj:`jax.numpy.float32`, :obj:`jax.numpy.float16` (on
-            GPUs) and :obj:`jax.numpy.bfloat16` (on TPUs).
+            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
+        dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
+            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on GPUs) and
+            `jax.numpy.bfloat16` (on TPUs).
 
             This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
-            specified all the computation will be performed with the given ``dtype``.
+            specified all the computation will be performed with the given `dtype`.
 
             **Note that this only specifies the dtype of the computation and does not influence the dtype of model
             parameters.**
 
-            If you wish to change the dtype of the model parameters, see
-            :meth:`~transformers.FlaxPreTrainedModel.to_fp16` and :meth:`~transformers.FlaxPreTrainedModel.to_bf16`.
+            If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
+            [`~FlaxPreTrainedModel.to_bf16`].
 """
 
 
 @add_start_docstrings(
-    "The bare T5 Model transformer outputting raw hidden-states" "without any specific head on top.",
+    "The bare T5 Model transformer outputting raw hidden-stateswithout any specific head on top.",
     T5_START_DOCSTRING,
 )
 class FlaxT5Module(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    gradient_checkpointing: bool = False
 
     def _get_encoder_module(self):
         return self.encoder
@@ -1267,12 +1296,22 @@ class FlaxT5Module(nn.Module):
 
         encoder_config = copy.deepcopy(self.config)
         encoder_config.causal = False
-        self.encoder = FlaxT5Stack(encoder_config, embed_tokens=self.shared, dtype=self.dtype)
+        self.encoder = FlaxT5Stack(
+            encoder_config,
+            embed_tokens=self.shared,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+        )
 
         decoder_config = copy.deepcopy(self.config)
         decoder_config.causal = True
         decoder_config.num_layers = self.config.num_decoder_layers
-        self.decoder = FlaxT5Stack(decoder_config, embed_tokens=self.shared, dtype=self.dtype)
+        self.decoder = FlaxT5Stack(
+            decoder_config,
+            embed_tokens=self.shared,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+        )
 
     def __call__(
         self,
@@ -1336,19 +1375,27 @@ append_call_sample_docstring(
 FLAX_T5_MODEL_DOCSTRING = """
     Returns:
 
-    Example::
+    Example:
 
-        >>> from transformers import T5Tokenizer, FlaxT5Model
+    ```python
+    >>> from transformers import T5Tokenizer, FlaxT5Model
 
-        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        >>> model = FlaxT5Model.from_pretrained('t5-small')
+    >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+    >>> model = FlaxT5Model.from_pretrained("t5-small")
 
-        >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="np").input_ids
-        >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="np").input_ids
+    >>> input_ids = tokenizer(
+    ...     "Studies have been shown that owning a dog is good for you", return_tensors="np"
+    ... ).input_ids
+    >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="np").input_ids
 
-        >>> # forward pass
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
-        >>> last_hidden_states = outputs.last_hidden_state
+    >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for T5Model.
+    >>> # This is not needed for torch's T5ForConditionalGeneration as it does this internally using labels arg.
+    >>> decoder_input_ids = model._shift_right(decoder_input_ids)
+
+    >>> # forward pass
+    >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+    >>> last_hidden_states = outputs.last_hidden_state
+    ```
 """
 
 
@@ -1356,10 +1403,101 @@ overwrite_call_docstring(FlaxT5Model, T5_INPUTS_DOCSTRING + FLAX_T5_MODEL_DOCSTR
 append_replace_return_docstrings(FlaxT5Model, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
 
 
-@add_start_docstrings("""T5 Model with a `language modeling` head on top. """, T5_START_DOCSTRING)
+@add_start_docstrings(
+    "The bare T5 Model transformer outputting encoder's raw hidden-states without any specific head on top.",
+    T5_START_DOCSTRING,
+)
+class FlaxT5EncoderModule(nn.Module):
+    config: T5Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    gradient_checkpointing: bool = False
+
+    def setup(self):
+        self.shared = nn.Embed(
+            self.config.vocab_size,
+            self.config.d_model,
+            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor * 1.0),
+        )
+
+        encoder_config = copy.deepcopy(self.config)
+        encoder_config.is_decoder = False
+        encoder_config.is_encoder_decoder = False
+        encoder_config.causal = False
+        self.encoder = FlaxT5Stack(
+            encoder_config,
+            embed_tokens=self.shared,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
+        )
+
+    def __call__(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict: bool = True,
+        deterministic: bool = True,
+    ):
+
+        # Encode if needed (training, first prediction pass)
+        encoder_outputs = self.encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=deterministic,
+        )
+
+        return encoder_outputs
+
+
+class FlaxT5EncoderModel(FlaxT5PreTrainedModel):
+    module_class = FlaxT5EncoderModule
+
+    @add_start_docstrings_to_model_forward(T5_ENCODE_INPUTS_DOCSTRING)
+    def __call__(
+        self,
+        input_ids: jnp.ndarray,
+        attention_mask: Optional[jnp.ndarray] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        train: bool = False,
+        params: dict = None,
+        dropout_rng: PRNGKey = None,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        # prepare encoder inputs
+        if attention_mask is None:
+            attention_mask = jnp.ones_like(input_ids)
+
+        # Handle any PRNG if needed
+        rngs = {"dropout": dropout_rng} if dropout_rng is not None else {}
+
+        return self.module.apply(
+            {"params": params or self.params},
+            input_ids=jnp.array(input_ids, dtype="i4"),
+            attention_mask=jnp.array(attention_mask, dtype="i4"),
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            deterministic=not train,
+            rngs=rngs,
+        )
+
+
+@add_start_docstrings("""T5 Model with a `language modeling` head on top.""", T5_START_DOCSTRING)
 class FlaxT5ForConditionalGenerationModule(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    gradient_checkpointing: bool = False
 
     def _get_encoder_module(self):
         return self.encoder
@@ -1380,13 +1518,17 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         encoder_config.causal = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = FlaxT5Stack(encoder_config, self.shared, dtype=self.dtype)
+        self.encoder = FlaxT5Stack(
+            encoder_config, self.shared, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
 
         decoder_config = copy.deepcopy(self.config)
         decoder_config.causal = True
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = self.config.num_decoder_layers
-        self.decoder = FlaxT5Stack(decoder_config, self.shared, dtype=self.dtype)
+        self.decoder = FlaxT5Stack(
+            decoder_config, self.shared, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+        )
 
         self.lm_head = nn.Dense(
             self.config.vocab_size,
@@ -1438,7 +1580,7 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         if self.config.tie_word_embeddings:
             # Rescale output before projecting on vocab
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
-            sequence_output = sequence_output * (self.model_dim ** -0.5)
+            sequence_output = sequence_output * (self.model_dim**-0.5)
 
         if self.config.tie_word_embeddings:
             shared_embedding = self.shared.variables["params"]["embedding"]
@@ -1483,24 +1625,25 @@ class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
         r"""
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
-            >>> import jax.numpy as jnp
+        ```python
+        >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
+        >>> import jax.numpy as jnp
 
-            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-            >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        >>> model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small")
 
-            >>> text = "summarize: My friends are cool but they eat too many carbs."
-            >>> inputs = tokenizer(text, return_tensors='np')
-            >>> encoder_outputs = model.encode(**inputs)
+        >>> text = "summarize: My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer(text, return_tensors="np")
+        >>> encoder_outputs = model.encode(**inputs)
 
-            >>> decoder_start_token_id = model.config.decoder_start_token_id
-            >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+        >>> decoder_start_token_id = model.config.decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
 
-            >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-            >>> logits = outputs.logits
-        """
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> logits = outputs.logits
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1545,7 +1688,7 @@ class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
             if self.config.tie_word_embeddings:
                 # Rescale output before projecting on vocab
                 # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
-                sequence_output = sequence_output * (self.config.d_model ** -0.5)
+                sequence_output = sequence_output * (self.config.d_model**-0.5)
 
             if self.config.tie_word_embeddings:
                 shared_embedding = module.shared.variables["params"]["embedding"]
@@ -1631,19 +1774,21 @@ class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
 FLAX_T5_CONDITIONAL_GENERATION_DOCSTRING = """
     Returns:
 
-    Example::
+    Example:
 
-        >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
+    ```python
+    >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
 
-        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        >>> model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
+    >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+    >>> model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small")
 
-        >>> ARTICLE_TO_SUMMARIZE = "summarize: My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], return_tensors='np')
+    >>> ARTICLE_TO_SUMMARIZE = "summarize: My friends are cool but they eat too many carbs."
+    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], return_tensors="np")
 
-        >>> # Generate Summary
-        >>> summary_ids = model.generate(inputs['input_ids']).sequences
-        >>> print(tokenizer.decode(summary_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    >>> # Generate Summary
+    >>> summary_ids = model.generate(inputs["input_ids"]).sequences
+    >>> print(tokenizer.decode(summary_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    ```
 """
 
 

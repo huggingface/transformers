@@ -25,11 +25,17 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "distilbert-base-uncased": "https://huggingface.co/distilbert-base-uncased/resolve/main/vocab.txt",
-        "distilbert-base-uncased-distilled-squad": "https://huggingface.co/distilbert-base-uncased-distilled-squad/resolve/main/vocab.txt",
+        "distilbert-base-uncased-distilled-squad": (
+            "https://huggingface.co/distilbert-base-uncased-distilled-squad/resolve/main/vocab.txt"
+        ),
         "distilbert-base-cased": "https://huggingface.co/distilbert-base-cased/resolve/main/vocab.txt",
-        "distilbert-base-cased-distilled-squad": "https://huggingface.co/distilbert-base-cased-distilled-squad/resolve/main/vocab.txt",
+        "distilbert-base-cased-distilled-squad": (
+            "https://huggingface.co/distilbert-base-cased-distilled-squad/resolve/main/vocab.txt"
+        ),
         "distilbert-base-german-cased": "https://huggingface.co/distilbert-base-german-cased/resolve/main/vocab.txt",
-        "distilbert-base-multilingual-cased": "https://huggingface.co/distilbert-base-multilingual-cased/resolve/main/vocab.txt",
+        "distilbert-base-multilingual-cased": (
+            "https://huggingface.co/distilbert-base-multilingual-cased/resolve/main/vocab.txt"
+        ),
     }
 }
 
@@ -57,11 +63,10 @@ class DistilBertTokenizer(BertTokenizer):
     r"""
     Construct a DistilBERT tokenizer.
 
-    :class:`~transformers.DistilBertTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting and wordpiece.
+    [`DistilBertTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end tokenization: punctuation splitting
+    and wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

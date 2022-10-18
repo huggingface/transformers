@@ -18,10 +18,10 @@ from typing import Optional, Tuple
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict
+from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen.attention import dot_product_attention_weights
+from flax.traverse_util import flatten_dict, unflatten_dict
 
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxBaseModelOutputWithPooling, FlaxSequenceClassifierOutput
 from ...modeling_flax_utils import (
     ACT2FN,
@@ -29,63 +29,62 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from .configuration_vit import ViTConfig
 
 
 VIT_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading, saving and converting weights from
-    PyTorch models)
+    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
 
-    This model is also a Flax Linen `flax.linen.Module
-    <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`__ subclass. Use it as a regular Flax linen Module
-    and refer to the Flax documentation for all matter related to general usage and behavior.
+    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
+    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
+    general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
-    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
-    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
-    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
-    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
+    - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
+    - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
+    - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
+    - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
 
     Parameters:
-        config (:class:`~transformers.ViTConfig`): Model configuration class with all the parameters of the model.
+        config ([`ViTConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
-            model weights.
-        dtype (:obj:`jax.numpy.dtype`, `optional`, defaults to :obj:`jax.numpy.float32`):
-            The data type of the computation. Can be one of :obj:`jax.numpy.float32`, :obj:`jax.numpy.float16` (on
-            GPUs) and :obj:`jax.numpy.bfloat16` (on TPUs).
+            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
+        dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
+            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on GPUs) and
+            `jax.numpy.bfloat16` (on TPUs).
 
             This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
-            specified all the computation will be performed with the given ``dtype``.
+            specified all the computation will be performed with the given `dtype`.
 
             **Note that this only specifies the dtype of the computation and does not influence the dtype of model
             parameters.**
 
-            If you wish to change the dtype of the model parameters, see
-            :meth:`~transformers.FlaxPreTrainedModel.to_fp16` and :meth:`~transformers.FlaxPreTrainedModel.to_bf16`.
+            If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
+            [`~FlaxPreTrainedModel.to_bf16`].
 """
 
 VIT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (:obj:`numpy.ndarray` of shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using :class:`~transformers.ViTFeatureExtractor`. See
-            :meth:`transformers.ViTFeatureExtractor.__call__` for details.
+        pixel_values (`numpy.ndarray` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`ViTFeatureExtractor`]. See
+            [`ViTFeatureExtractor.__call__`] for details.
 
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
-class FlaxPatchEmbeddings(nn.Module):
+class FlaxViTPatchEmbeddings(nn.Module):
 
     config: ViTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -95,19 +94,27 @@ class FlaxPatchEmbeddings(nn.Module):
         patch_size = self.config.patch_size
         num_patches = (image_size // patch_size) * (image_size // patch_size)
         self.num_patches = num_patches
+        self.num_channels = self.config.num_channels
         self.projection = nn.Conv(
             self.config.hidden_size,
             kernel_size=(patch_size, patch_size),
             strides=(patch_size, patch_size),
             padding="VALID",
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+            kernel_init=jax.nn.initializers.variance_scaling(
+                self.config.initializer_range**2, "fan_in", "truncated_normal"
+            ),
         )
 
     def __call__(self, pixel_values):
-        x = self.projection(pixel_values)
-        batch_size, _, _, channels = x.shape
-        return jnp.reshape(x, (batch_size, -1, channels))
+        num_channels = pixel_values.shape[-1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        embeddings = self.projection(pixel_values)
+        batch_size, _, _, channels = embeddings.shape
+        return jnp.reshape(embeddings, (batch_size, -1, channels))
 
 
 class FlaxViTEmbeddings(nn.Module):
@@ -117,11 +124,17 @@ class FlaxViTEmbeddings(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.cls_token = self.param("cls_token", nn.initializers.zeros, (1, 1, self.config.hidden_size))
-        self.patch_embeddings = FlaxPatchEmbeddings(self.config, dtype=self.dtype)
+        self.cls_token = self.param(
+            "cls_token",
+            jax.nn.initializers.variance_scaling(self.config.initializer_range**2, "fan_in", "truncated_normal"),
+            (1, 1, self.config.hidden_size),
+        )
+        self.patch_embeddings = FlaxViTPatchEmbeddings(self.config, dtype=self.dtype)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = self.param(
-            "position_embeddings", nn.initializers.zeros, (1, num_patches + 1, self.config.hidden_size)
+            "position_embeddings",
+            jax.nn.initializers.variance_scaling(self.config.initializer_range**2, "fan_in", "truncated_normal"),
+            (1, num_patches + 1, self.config.hidden_size),
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
@@ -144,25 +157,32 @@ class FlaxViTSelfAttention(nn.Module):
     def setup(self):
         if self.config.hidden_size % self.config.num_attention_heads != 0:
             raise ValueError(
-                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads`: {self.config.num_attention_heads}"
+                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads`:"
+                " {self.config.num_attention_heads}"
             )
 
         self.query = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+            kernel_init=jax.nn.initializers.variance_scaling(
+                self.config.initializer_range**2, mode="fan_in", distribution="truncated_normal"
+            ),
             use_bias=self.config.qkv_bias,
         )
         self.key = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+            kernel_init=jax.nn.initializers.variance_scaling(
+                self.config.initializer_range**2, mode="fan_in", distribution="truncated_normal"
+            ),
             use_bias=self.config.qkv_bias,
         )
         self.value = nn.Dense(
             self.config.hidden_size,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+            kernel_init=jax.nn.initializers.variance_scaling(
+                self.config.initializer_range**2, mode="fan_in", distribution="truncated_normal"
+            ),
             use_bias=self.config.qkv_bias,
         )
 
@@ -208,7 +228,9 @@ class FlaxViTSelfOutput(nn.Module):
     def setup(self):
         self.dense = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+            kernel_init=jax.nn.initializers.variance_scaling(
+                self.config.initializer_range**2, "fan_in", "truncated_normal"
+            ),
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
@@ -247,7 +269,9 @@ class FlaxViTIntermediate(nn.Module):
     def setup(self):
         self.dense = nn.Dense(
             self.config.intermediate_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+            kernel_init=jax.nn.initializers.variance_scaling(
+                self.config.initializer_range**2, "fan_in", "truncated_normal"
+            ),
             dtype=self.dtype,
         )
         self.activation = ACT2FN[self.config.hidden_act]
@@ -265,7 +289,9 @@ class FlaxViTOutput(nn.Module):
     def setup(self):
         self.dense = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+            kernel_init=jax.nn.initializers.variance_scaling(
+                self.config.initializer_range**2, "fan_in", "truncated_normal"
+            ),
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
@@ -388,7 +414,9 @@ class FlaxViTPooler(nn.Module):
     def setup(self):
         self.dense = nn.Dense(
             self.config.hidden_size,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+            kernel_init=jax.nn.initializers.variance_scaling(
+                self.config.initializer_range**2, "fan_in", "truncated_normal"
+            ),
             dtype=self.dtype,
         )
 
@@ -406,22 +434,41 @@ class FlaxViTPreTrainedModel(FlaxPreTrainedModel):
 
     config_class = ViTConfig
     base_model_prefix = "vit"
+    main_input_name = "pixel_values"
     module_class: nn.Module = None
 
-    def __init__(self, config: ViTConfig, input_shape=None, seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):
+    def __init__(
+        self,
+        config: ViTConfig,
+        input_shape=None,
+        seed: int = 0,
+        dtype: jnp.dtype = jnp.float32,
+        _do_init: bool = True,
+        **kwargs
+    ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         if input_shape is None:
-            input_shape = (1, config.image_size, config.image_size, 3)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+            input_shape = (1, config.image_size, config.image_size, config.num_channels)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         pixel_values = jnp.zeros(input_shape, dtype=self.dtype)
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(rngs, pixel_values, return_dict=False)["params"]
+        random_params = self.module.init(rngs, pixel_values, return_dict=False)["params"]
+
+        if params is not None:
+            random_params = flatten_dict(unfreeze(random_params))
+            params = flatten_dict(unfreeze(params))
+            for missing_key in self._missing_keys:
+                params[missing_key] = random_params[missing_key]
+            self._missing_keys = set()
+            return freeze(unflatten_dict(params))
+        else:
+            return random_params
 
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
@@ -515,21 +562,23 @@ class FlaxViTModel(FlaxViTPreTrainedModel):
 FLAX_VISION_MODEL_DOCSTRING = """
     Returns:
 
-    Examples::
+    Examples:
 
-        >>> from transformers import ViTFeatureExtractor, FlaxViTModel
-        >>> from PIL import Image
-        >>> import requests
+    ```python
+    >>> from transformers import ViTFeatureExtractor, FlaxViTModel
+    >>> from PIL import Image
+    >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
-        >>> model = FlaxViTModel.from_pretrained('google/vit-base-patch16-224-in21k')
+    >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
+    >>> model = FlaxViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="np")
-        >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.last_hidden_state
+    >>> inputs = feature_extractor(images=image, return_tensors="np")
+    >>> outputs = model(**inputs)
+    >>> last_hidden_states = outputs.last_hidden_state
+    ```
 """
 
 overwrite_call_docstring(FlaxViTModel, FLAX_VISION_MODEL_DOCSTRING)
@@ -545,7 +594,9 @@ class FlaxViTForImageClassificationModule(nn.Module):
         self.classifier = nn.Dense(
             self.config.num_labels,
             dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+            kernel_init=jax.nn.initializers.variance_scaling(
+                self.config.initializer_range**2, "fan_in", "truncated_normal"
+            ),
         )
 
     def __call__(
@@ -594,26 +645,28 @@ class FlaxViTForImageClassification(FlaxViTPreTrainedModel):
 FLAX_VISION_CLASSIF_DOCSTRING = """
     Returns:
 
-    Example::
+    Example:
 
-        >>> from transformers import ViTFeatureExtractor, FlaxViTForImageClassification
-        >>> from PIL import Image
-        >>> import jax
-        >>> import requests
+    ```python
+    >>> from transformers import ViTFeatureExtractor, FlaxViTForImageClassification
+    >>> from PIL import Image
+    >>> import jax
+    >>> import requests
 
-        >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
-        >>> model = FlaxViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
+    >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
+    >>> model = FlaxViTForImageClassification.from_pretrained("google/vit-base-patch16-224")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="np")
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
+    >>> inputs = feature_extractor(images=image, return_tensors="np")
+    >>> outputs = model(**inputs)
+    >>> logits = outputs.logits
 
-        >>> # model predicts one of the 1000 ImageNet classes
-        >>> predicted_class_idx = jax.numpy.argmax(logits, axis=-1)
-        >>> print("Predicted class:", model.config.id2label[predicted_class_idx.item()])
+    >>> # model predicts one of the 1000 ImageNet classes
+    >>> predicted_class_idx = jax.numpy.argmax(logits, axis=-1)
+    >>> print("Predicted class:", model.config.id2label[predicted_class_idx.item()])
+    ```
 """
 
 overwrite_call_docstring(FlaxViTForImageClassification, FLAX_VISION_CLASSIF_DOCSTRING)

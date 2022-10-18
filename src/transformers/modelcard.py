@@ -26,22 +26,9 @@ from typing import Any, Dict, List, Optional, Union
 import requests
 import yaml
 from huggingface_hub import model_info
+from huggingface_hub.utils import HFValidationError
 
 from . import __version__
-from .file_utils import (
-    CONFIG_NAME,
-    MODEL_CARD_NAME,
-    TF2_WEIGHTS_NAME,
-    WEIGHTS_NAME,
-    cached_path,
-    hf_bucket_url,
-    is_datasets_available,
-    is_offline_mode,
-    is_remote_url,
-    is_tf_available,
-    is_tokenizers_available,
-    is_torch_available,
-)
 from .models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
@@ -56,7 +43,16 @@ from .models.auto.modeling_auto import (
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
 )
 from .training_args import ParallelMode
-from .utils import logging
+from .utils import (
+    MODEL_CARD_NAME,
+    cached_file,
+    is_datasets_available,
+    is_offline_mode,
+    is_tf_available,
+    is_tokenizers_available,
+    is_torch_available,
+    logging,
+)
 
 
 TASK_MAPPING = {
@@ -85,8 +81,6 @@ class ModelCard:
     Inioluwa Deborah Raji and Timnit Gebru for the proposal behind model cards. Link: https://arxiv.org/abs/1810.03993
 
     Note: A model card can be loaded and saved to disk.
-
-    Parameters:
     """
 
     def __init__(self, **kwargs):
@@ -126,59 +120,52 @@ class ModelCard:
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         r"""
-        Instantiate a :class:`~transformers.ModelCard` from a pre-trained model model card.
+        Instantiate a [`ModelCard`] from a pre-trained model model card.
 
         Parameters:
             pretrained_model_name_or_path: either:
 
-                - a string, the `model id` of a pretrained model card hosted inside a model repo on huggingface.co.
-                  Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under a
-                  user or organization name, like ``dbmdz/bert-base-german-cased``.
-                - a path to a `directory` containing a model card file saved using the
-                  :func:`~transformers.ModelCard.save_pretrained` method, e.g.: ``./my_model_directory/``.
-                - a path or url to a saved model card JSON `file`, e.g.: ``./my_model_directory/modelcard.json``.
+                - a string, the *model id* of a pretrained model card hosted inside a model repo on huggingface.co.
+                  Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
+                  user or organization name, like `dbmdz/bert-base-german-cased`.
+                - a path to a *directory* containing a model card file saved using the [`~ModelCard.save_pretrained`]
+                  method, e.g.: `./my_model_directory/`.
+                - a path or url to a saved model card JSON *file*, e.g.: `./my_model_directory/modelcard.json`.
 
-            cache_dir: (`optional`) string:
+            cache_dir: (*optional*) string:
                 Path to a directory in which a downloaded pre-trained model card should be cached if the standard cache
                 should not be used.
 
-            kwargs: (`optional`) dict: key/value pairs with which to update the ModelCard object after loading.
+            kwargs: (*optional*) dict: key/value pairs with which to update the ModelCard object after loading.
 
                 - The values in kwargs of any keys which are model card attributes will be used to override the loaded
                   values.
                 - Behavior concerning key/value pairs whose keys are *not* model card attributes is controlled by the
-                  `return_unused_kwargs` keyword parameter.
+                  *return_unused_kwargs* keyword parameter.
 
-            proxies: (`optional`) dict, default None:
+            proxies: (*optional*) dict, default None:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}. The proxies are used on each request.
 
-            find_from_standard_name: (`optional`) boolean, default True:
-                If the pretrained_model_name_or_path ends with our standard model or config filenames, replace them
-                with our standard modelcard filename. Can be used to directly feed a model/config url and access the
-                colocated modelcard.
-
-            return_unused_kwargs: (`optional`) bool:
+            return_unused_kwargs: (*optional*) bool:
 
                 - If False, then this function returns just the final model card object.
-                - If True, then this functions returns a tuple `(model card, unused_kwargs)` where `unused_kwargs` is a
+                - If True, then this functions returns a tuple *(model card, unused_kwargs)* where *unused_kwargs* is a
                   dictionary consisting of the key/value pairs whose keys are not model card attributes: ie the part of
-                  kwargs which has not been used to update `ModelCard` and is otherwise ignored.
+                  kwargs which has not been used to update *ModelCard* and is otherwise ignored.
 
-        Examples::
+        Examples:
 
-            modelcard = ModelCard.from_pretrained('bert-base-uncased')    # Download model card from huggingface.co and cache.
-            modelcard = ModelCard.from_pretrained('./test/saved_model/')  # E.g. model card was saved using `save_pretrained('./test/saved_model/')`
-            modelcard = ModelCard.from_pretrained('./test/saved_model/modelcard.json')
-            modelcard = ModelCard.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
-
-        """
-        # This imports every model so let's do it dynamically here.
-        from transformers.models.auto.configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
-
+        ```python
+        # Download model card from huggingface.co and cache.
+        modelcard = ModelCard.from_pretrained("bert-base-uncased")
+        # Model card was saved using *save_pretrained('./test/saved_model/')*
+        modelcard = ModelCard.from_pretrained("./test/saved_model/")
+        modelcard = ModelCard.from_pretrained("./test/saved_model/modelcard.json")
+        modelcard = ModelCard.from_pretrained("bert-base-uncased", output_attentions=True, foo=False)
+        ```"""
         cache_dir = kwargs.pop("cache_dir", None)
         proxies = kwargs.pop("proxies", None)
-        find_from_standard_name = kwargs.pop("find_from_standard_name", True)
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
         from_pipeline = kwargs.pop("_from_pipeline", None)
 
@@ -186,37 +173,30 @@ class ModelCard:
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
 
-        if pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
-            # For simplicity we use the same pretrained url than the configuration files
-            # but with a different suffix (modelcard.json). This suffix is replaced below.
-            model_card_file = ALL_PRETRAINED_CONFIG_ARCHIVE_MAP[pretrained_model_name_or_path]
-        elif os.path.isdir(pretrained_model_name_or_path):
-            model_card_file = os.path.join(pretrained_model_name_or_path, MODEL_CARD_NAME)
-        elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
-            model_card_file = pretrained_model_name_or_path
+        is_local = os.path.isdir(pretrained_model_name_or_path)
+        if os.path.isfile(pretrained_model_name_or_path):
+            resolved_model_card_file = pretrained_model_name_or_path
+            is_local = True
         else:
-            model_card_file = hf_bucket_url(pretrained_model_name_or_path, filename=MODEL_CARD_NAME, mirror=None)
+            try:
+                # Load from URL or cache if already cached
+                resolved_model_card_file = cached_file(
+                    pretrained_model_name_or_path,
+                    filename=MODEL_CARD_NAME,
+                    cache_dir=cache_dir,
+                    proxies=proxies,
+                    user_agent=user_agent,
+                )
+                if is_local:
+                    logger.info(f"loading model card file {resolved_model_card_file}")
+                else:
+                    logger.info(f"loading model card file {MODEL_CARD_NAME} from cache at {resolved_model_card_file}")
+                # Load model card
+                modelcard = cls.from_json_file(resolved_model_card_file)
 
-        if find_from_standard_name or pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
-            model_card_file = model_card_file.replace(CONFIG_NAME, MODEL_CARD_NAME)
-            model_card_file = model_card_file.replace(WEIGHTS_NAME, MODEL_CARD_NAME)
-            model_card_file = model_card_file.replace(TF2_WEIGHTS_NAME, MODEL_CARD_NAME)
-
-        try:
-            # Load from URL or cache if already cached
-            resolved_model_card_file = cached_path(
-                model_card_file, cache_dir=cache_dir, proxies=proxies, user_agent=user_agent
-            )
-            if resolved_model_card_file == model_card_file:
-                logger.info(f"loading model card file {model_card_file}")
-            else:
-                logger.info(f"loading model card file {model_card_file} from cache at {resolved_model_card_file}")
-            # Load model card
-            modelcard = cls.from_json_file(resolved_model_card_file)
-
-        except (EnvironmentError, json.JSONDecodeError):
-            # We fall back on creating an empty model card
-            modelcard = cls()
+            except (EnvironmentError, json.JSONDecodeError):
+                # We fall back on creating an empty model card
+                modelcard = cls()
 
         # Update model card with kwargs if needed
         to_remove = []
@@ -380,6 +360,7 @@ class TrainingSummary:
     dataset: Optional[Union[str, List[str]]] = None
     dataset_tags: Optional[Union[str, List[str]]] = None
     dataset_args: Optional[Union[str, List[str]]] = None
+    dataset_metadata: Optional[Dict[str, Any]] = None
     eval_results: Optional[Dict[str, float]] = None
     eval_lines: Optional[List[str]] = None
     hyperparameters: Optional[Dict[str, Any]] = None
@@ -398,7 +379,7 @@ class TrainingSummary:
                 for tag in info.tags:
                     if tag.startswith("license:"):
                         self.license = tag[8:]
-            except requests.exceptions.HTTPError:
+            except (requests.exceptions.HTTPError, HFValidationError):
                 pass
 
     def create_model_index(self, metric_mapping):
@@ -408,10 +389,12 @@ class TrainingSummary:
         dataset_names = _listify(self.dataset)
         dataset_tags = _listify(self.dataset_tags)
         dataset_args = _listify(self.dataset_args)
+        dataset_metadata = _listify(self.dataset_metadata)
         if len(dataset_args) < len(dataset_tags):
             dataset_args = dataset_args + [None] * (len(dataset_tags) - len(dataset_args))
         dataset_mapping = {tag: name for tag, name in zip(dataset_tags, dataset_names)}
         dataset_arg_mapping = {tag: arg for tag, arg in zip(dataset_tags, dataset_args)}
+        dataset_metadata_mapping = {tag: metadata for tag, metadata in zip(dataset_tags, dataset_metadata)}
 
         task_mapping = {
             task: TASK_TAG_TO_NAME_MAPPING[task] for task in _listify(self.tasks) if task in TASK_TAG_TO_NAME_MAPPING
@@ -434,7 +417,12 @@ class TrainingSummary:
                 result["task"] = {"name": task_mapping[task_tag], "type": task_tag}
 
             if ds_tag is not None:
-                result["dataset"] = {"name": dataset_mapping[ds_tag], "type": ds_tag}
+                metadata = dataset_metadata_mapping.get(ds_tag, {})
+                result["dataset"] = {
+                    "name": dataset_mapping[ds_tag],
+                    "type": ds_tag,
+                    **metadata,
+                }
                 if dataset_arg_mapping[ds_tag] is not None:
                     result["dataset"]["args"] = dataset_arg_mapping[ds_tag]
 
@@ -488,7 +476,10 @@ class TrainingSummary:
         if self.finetuned_from is None:
             model_card += "This model was trained from scratch on "
         else:
-            model_card += f"This model is a fine-tuned version of [{self.finetuned_from}](https://huggingface.co/{self.finetuned_from}) on "
+            model_card += (
+                "This model is a fine-tuned version of"
+                f" [{self.finetuned_from}](https://huggingface.co/{self.finetuned_from}) on "
+            )
 
         if self.dataset is None:
             model_card += "an unknown dataset."
@@ -558,6 +549,7 @@ class TrainingSummary:
         finetuned_from=None,
         tasks=None,
         dataset_tags=None,
+        dataset_metadata=None,
         dataset=None,
         dataset_args=None,
     ):
@@ -567,6 +559,8 @@ class TrainingSummary:
             default_tag = one_dataset.builder_name
             # Those are not real datasets from the Hub so we exclude them.
             if default_tag not in ["csv", "json", "pandas", "parquet", "text"]:
+                if dataset_metadata is None:
+                    dataset_metadata = [{"config": one_dataset.config_name, "split": str(one_dataset.split)}]
                 if dataset_tags is None:
                     dataset_tags = [default_tag]
                 if dataset_args is None:
@@ -611,9 +605,10 @@ class TrainingSummary:
             model_name=model_name,
             finetuned_from=finetuned_from,
             tasks=tasks,
-            dataset_tags=dataset_tags,
             dataset=dataset,
+            dataset_tags=dataset_tags,
             dataset_args=dataset_args,
+            dataset_metadata=dataset_metadata,
             eval_results=eval_results,
             eval_lines=eval_lines,
             hyperparameters=hyperparameters,
@@ -668,7 +663,7 @@ class TrainingSummary:
             tags = ["generated_from_keras_callback"]
         elif isinstance(tags, str) and tags != "generated_from_keras_callback":
             tags = [tags, "generated_from_keras_callback"]
-        elif "generated_from_trainer" not in tags:
+        elif "generated_from_keras_callback" not in tags:
             tags.append("generated_from_keras_callback")
 
         if keras_history is not None:
@@ -702,6 +697,9 @@ def parse_keras_history(logs):
     """
     if hasattr(logs, "history"):
         # This looks like a `History` object
+        if not hasattr(logs, "epoch"):
+            # This history looks empty, return empty results
+            return None, [], dict()
         logs.history["epoch"] = logs.epoch
         logs = logs.history
     else:
@@ -741,7 +739,7 @@ def parse_log_history(log_history):
         while idx >= 0 and "eval_loss" not in log_history[idx]:
             idx -= 1
 
-        if idx > 0:
+        if idx >= 0:
             return None, None, log_history[idx]
         else:
             return None, None, None
@@ -868,9 +866,10 @@ def extract_hyperparameters_from_trainer(trainer):
     if trainer.args.adafactor:
         hyperparameters["optimizer"] = "Adafactor"
     else:
-        hyperparameters[
-            "optimizer"
-        ] = f"Adam with betas=({trainer.args.adam_beta1},{trainer.args.adam_beta2}) and epsilon={trainer.args.adam_epsilon}"
+        hyperparameters["optimizer"] = (
+            f"Adam with betas=({trainer.args.adam_beta1},{trainer.args.adam_beta2}) and"
+            f" epsilon={trainer.args.adam_epsilon}"
+        )
 
     hyperparameters["lr_scheduler_type"] = trainer.args.lr_scheduler_type.value
     if trainer.args.warmup_ratio != 0.0:
@@ -883,7 +882,7 @@ def extract_hyperparameters_from_trainer(trainer):
         hyperparameters["num_epochs"] = trainer.args.num_train_epochs
 
     if trainer.args.fp16:
-        if trainer.use_amp:
+        if trainer.use_cuda_amp:
             hyperparameters["mixed_precision_training"] = "Native AMP"
         elif trainer.use_apex:
             hyperparameters["mixed_precision_training"] = f"Apex, opt level {trainer.args.fp16_opt_level}"

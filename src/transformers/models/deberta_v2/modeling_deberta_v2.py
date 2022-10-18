@@ -12,27 +12,28 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch DeBERTa-v2 model. """
+""" PyTorch DeBERTa-v2 model."""
 
-import math
 from collections.abc import Sequence
+from typing import Optional, Tuple, Union
 
-import numpy as np
 import torch
-from torch import _softmax_backward_data, nn
+import torch.utils.checkpoint
+from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
+    MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...pytorch_utils import softmax_backward_data
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_deberta_v2 import DebertaV2Config
 
 
@@ -41,6 +42,31 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DebertaV2Config"
 _TOKENIZER_FOR_DOC = "DebertaV2Tokenizer"
 _CHECKPOINT_FOR_DOC = "microsoft/deberta-v2-xlarge"
+
+# Masked LM docstring
+_CHECKPOINT_FOR_MASKED_LM = "hf-internal-testing/tiny-random-deberta-v2"
+_MASKED_LM_EXPECTED_OUTPUT = "'enberry'"
+_MASKED_LM_EXPECTED_LOSS = "11.85"
+
+# TokenClassification docstring
+_CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "hf-internal-testing/tiny-random-deberta-v2"
+_TOKEN_CLASS_EXPECTED_OUTPUT = (
+    "['LABEL_0', 'LABEL_0', 'LABEL_1', 'LABEL_0', 'LABEL_0', 'LABEL_1', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0',"
+    " 'LABEL_0', 'LABEL_0']"
+)
+_TOKEN_CLASS_EXPECTED_LOSS = 0.61
+
+# QuestionAnswering docstring
+_CHECKPOINT_FOR_QA = "hf-internal-testing/tiny-random-deberta-v2"
+_QA_EXPECTED_OUTPUT = "'was Jim Henson? Jim Henson was'"
+_QA_EXPECTED_LOSS = 2.47
+_QA_TARGET_START_INDEX = 2
+_QA_TARGET_END_INDEX = 9
+
+# SequenceClassification docstring
+_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "hf-internal-testing/tiny-random-deberta-v2"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
+_SEQ_CLASS_EXPECTED_LOSS = "0.69"
 
 DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/deberta-v2-xlarge",
@@ -79,30 +105,35 @@ class XSoftmax(torch.autograd.Function):
     Masked Softmax which is optimized for saving memory
 
     Args:
-        input (:obj:`torch.tensor`): The input tensor that will apply softmax.
-        mask (:obj:`torch.IntTensor`): The mask matrix where 0 indicate that element will be ignored in the softmax calculation.
+        input (`torch.tensor`): The input tensor that will apply softmax.
+        mask (`torch.IntTensor`):
+            The mask matrix where 0 indicate that element will be ignored in the softmax calculation.
         dim (int): The dimension that will apply softmax
 
-    Example::
+    Example:
 
-          >>> import torch
-          >>> from transformers.models.deberta_v2.modeling_deberta_v2 import XSoftmax
+    ```python
+    >>> import torch
+    >>> from transformers.models.deberta_v2.modeling_deberta_v2 import XSoftmax
 
-          >>> # Make a tensor
-          >>> x = torch.randn([4,20,100])
+    >>> # Make a tensor
+    >>> x = torch.randn([4, 20, 100])
 
-          >>> # Create a mask
-          >>> mask = (x>0).int()
+    >>> # Create a mask
+    >>> mask = (x > 0).int()
 
-          >>> y = XSoftmax.apply(x, mask, dim=-1)
-    """
+    >>> # Specify the dimension to apply softmax
+    >>> dim = -1
+
+    >>> y = XSoftmax.apply(x, mask, dim)
+    ```"""
 
     @staticmethod
     def forward(self, input, mask, dim):
         self.dim = dim
-        rmask = ~(mask.bool())
+        rmask = ~(mask.to(torch.bool))
 
-        output = input.masked_fill(rmask, float("-inf"))
+        output = input.masked_fill(rmask, torch.tensor(torch.finfo(input.dtype).min))
         output = torch.softmax(output, self.dim)
         output.masked_fill_(rmask, 0)
         self.save_for_backward(output)
@@ -111,7 +142,7 @@ class XSoftmax(torch.autograd.Function):
     @staticmethod
     def backward(self, grad_output):
         (output,) = self.saved_tensors
-        inputGrad = _softmax_backward_data(grad_output, output, self.dim, output)
+        inputGrad = softmax_backward_data(self, grad_output, output, self.dim, output)
         return inputGrad, None, None
 
     @staticmethod
@@ -125,7 +156,9 @@ class XSoftmax(torch.autograd.Function):
             g.op("Sub", g.op("Constant", value_t=torch.tensor(1, dtype=torch.int64)), mask_cast_value),
             to_i=sym_help.cast_pytorch_to_onnx["Byte"],
         )
-        output = masked_fill(g, self, r_mask, g.op("Constant", value_t=torch.tensor(float("-inf"))))
+        output = masked_fill(
+            g, self, r_mask, g.op("Constant", value_t=torch.tensor(torch.finfo(self.type().dtype()).min))
+        )
         output = softmax(g, output, dim)
         return masked_fill(g, output, r_mask, g.op("Constant", value_t=torch.tensor(0, dtype=torch.uint8)))
 
@@ -150,7 +183,7 @@ def get_mask(input, local_context):
         mask = local_context.mask if local_context.reuse_mask else None
 
     if dropout > 0 and mask is None:
-        mask = (1 - torch.empty_like(input).bernoulli_(1 - dropout)).bool()
+        mask = (1 - torch.empty_like(input).bernoulli_(1 - dropout)).to(torch.bool)
 
     if isinstance(local_context, DropoutContext):
         if local_context.mask is None:
@@ -181,6 +214,23 @@ class XDropout(torch.autograd.Function):
         else:
             return grad_output, None
 
+    @staticmethod
+    def symbolic(g: torch._C.Graph, input: torch._C.Value, local_ctx: Union[float, DropoutContext]) -> torch._C.Value:
+        from torch.onnx import symbolic_opset12
+
+        dropout_p = local_ctx
+        if isinstance(local_ctx, DropoutContext):
+            dropout_p = local_ctx.dropout
+        # StableDropout only calls this function when training.
+        train = True
+        # TODO: We should check if the opset_version being used to export
+        # is > 12 here, but there's no good way to do that. As-is, if the
+        # opset_version < 12, export will fail with a CheckerError.
+        # Once https://github.com/pytorch/pytorch/issues/78391 is fixed, do something like:
+        # if opset_version < 12:
+        #   return torch.onnx.symbolic_opset9.dropout(g, input, dropout_p, train)
+        return symbolic_opset12.dropout(g, input, dropout_p, train)
+
 
 # Copied from transformers.models.deberta.modeling_deberta.StableDropout
 class StableDropout(nn.Module):
@@ -202,7 +252,7 @@ class StableDropout(nn.Module):
         Call the module
 
         Args:
-            x (:obj:`torch.tensor`): The input tensor to apply dropout
+            x (`torch.tensor`): The input tensor to apply dropout
         """
         if self.training and self.drop_prob > 0:
             return XDropout.apply(x, self.get_context())
@@ -294,7 +344,7 @@ class DebertaV2Intermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
@@ -525,11 +575,17 @@ class DebertaV2Encoder(nn.Module):
 
 
 def make_log_bucket_position(relative_pos, bucket_size, max_position):
-    sign = np.sign(relative_pos)
+    sign = torch.sign(relative_pos)
     mid = bucket_size // 2
-    abs_pos = np.where((relative_pos < mid) & (relative_pos > -mid), mid - 1, np.abs(relative_pos))
-    log_pos = np.ceil(np.log(abs_pos / mid) / np.log((max_position - 1) / mid) * (mid - 1)) + mid
-    bucket_pos = np.where(abs_pos <= mid, relative_pos, log_pos * sign).astype(np.int)
+    abs_pos = torch.where(
+        (relative_pos < mid) & (relative_pos > -mid),
+        torch.tensor(mid - 1).type_as(relative_pos),
+        torch.abs(relative_pos),
+    )
+    log_pos = (
+        torch.ceil(torch.log(abs_pos / mid) / torch.log(torch.tensor((max_position - 1) / mid)) * (mid - 1)) + mid
+    )
+    bucket_pos = torch.where(abs_pos <= mid, relative_pos.type_as(log_pos), log_pos * sign)
     return bucket_pos
 
 
@@ -537,9 +593,9 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
     """
     Build relative position according to the query and key
 
-    We assume the absolute position of query :math:`P_q` is range from (0, query_size) and the absolute position of key
-    :math:`P_k` is range from (0, key_size), The relative positions from query to key is :math:`R_{q \\rightarrow k} =
-    P_q - P_k`
+    We assume the absolute position of query \\(P_q\\) is range from (0, query_size) and the absolute position of key
+    \\(P_k\\) is range from (0, key_size), The relative positions from query to key is \\(R_{q \\rightarrow k} = P_q -
+    P_k\\)
 
     Args:
         query_size (int): the length of query
@@ -548,15 +604,15 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
         max_position (int): the maximum allowed absolute position
 
     Return:
-        :obj:`torch.LongTensor`: A tensor with shape [1, query_size, key_size]
+        `torch.LongTensor`: A tensor with shape [1, query_size, key_size]
 
     """
-    q_ids = np.arange(0, query_size)
-    k_ids = np.arange(0, key_size)
-    rel_pos_ids = q_ids[:, None] - np.tile(k_ids, (q_ids.shape[0], 1))
+    q_ids = torch.arange(0, query_size)
+    k_ids = torch.arange(0, key_size)
+    rel_pos_ids = q_ids[:, None] - k_ids[None, :]
     if bucket_size > 0 and max_position > 0:
         rel_pos_ids = make_log_bucket_position(rel_pos_ids, bucket_size, max_position)
-    rel_pos_ids = torch.tensor(rel_pos_ids, dtype=torch.long)
+    rel_pos_ids = rel_pos_ids.to(torch.long)
     rel_pos_ids = rel_pos_ids[:query_size, :]
     rel_pos_ids = rel_pos_ids.unsqueeze(0)
     return rel_pos_ids
@@ -585,9 +641,9 @@ class DisentangledSelfAttention(nn.Module):
     Disentangled self-attention module
 
     Parameters:
-        config (:obj:`DebertaV2Config`):
+        config (`DebertaV2Config`):
             A model config class instance with the configuration to build a new model. The schema is similar to
-            `BertConfig`, for more details, please refer :class:`~transformers.DebertaV2Config`
+            *BertConfig*, for more details, please refer [`DebertaV2Config`]
 
     """
 
@@ -622,16 +678,16 @@ class DisentangledSelfAttention(nn.Module):
             self.pos_dropout = StableDropout(config.hidden_dropout_prob)
 
             if not self.share_att_key:
-                if "c2p" in self.pos_att_type or "p2p" in self.pos_att_type:
+                if "c2p" in self.pos_att_type:
                     self.pos_key_proj = nn.Linear(config.hidden_size, self.all_head_size, bias=True)
-                if "p2c" in self.pos_att_type or "p2p" in self.pos_att_type:
+                if "p2c" in self.pos_att_type:
                     self.pos_query_proj = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = StableDropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x, attention_heads):
         new_x_shape = x.size()[:-1] + (attention_heads, -1)
-        x = x.view(*new_x_shape)
+        x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3).contiguous().view(-1, x.size(1), x.size(-1))
 
     def forward(
@@ -647,28 +703,28 @@ class DisentangledSelfAttention(nn.Module):
         Call the module
 
         Args:
-            hidden_states (:obj:`torch.FloatTensor`):
+            hidden_states (`torch.FloatTensor`):
                 Input states to the module usually the output from previous layer, it will be the Q,K and V in
-                `Attention(Q,K,V)`
+                *Attention(Q,K,V)*
 
-            attention_mask (:obj:`torch.ByteTensor`):
-                An attention mask matrix of shape [`B`, `N`, `N`] where `B` is the batch size, `N` is the maximum
-                sequence length in which element [i,j] = `1` means the `i` th token in the input can attend to the `j`
+            attention_mask (`torch.ByteTensor`):
+                An attention mask matrix of shape [*B*, *N*, *N*] where *B* is the batch size, *N* is the maximum
+                sequence length in which element [i,j] = *1* means the *i* th token in the input can attend to the *j*
                 th token.
 
-            output_attentions (:obj:`bool`, optional):
+            output_attentions (`bool`, optional):
                 Whether return the attention matrix.
 
-            query_states (:obj:`torch.FloatTensor`, optional):
-                The `Q` state in `Attention(Q,K,V)`.
+            query_states (`torch.FloatTensor`, optional):
+                The *Q* state in *Attention(Q,K,V)*.
 
-            relative_pos (:obj:`torch.LongTensor`):
-                The relative position encoding between the tokens in the sequence. It's of shape [`B`, `N`, `N`] with
-                values ranging in [`-max_relative_positions`, `max_relative_positions`].
+            relative_pos (`torch.LongTensor`):
+                The relative position encoding between the tokens in the sequence. It's of shape [*B*, *N*, *N*] with
+                values ranging in [*-max_relative_positions*, *max_relative_positions*].
 
-            rel_embeddings (:obj:`torch.FloatTensor`):
-                The embedding of relative distances. It's a tensor of shape [:math:`2 \\times
-                \\text{max_relative_positions}`, `hidden_size`].
+            rel_embeddings (`torch.FloatTensor`):
+                The embedding of relative distances. It's a tensor of shape [\\(2 \\times
+                \\text{max_relative_positions}\\), *hidden_size*].
 
 
         """
@@ -685,10 +741,8 @@ class DisentangledSelfAttention(nn.Module):
             scale_factor += 1
         if "p2c" in self.pos_att_type:
             scale_factor += 1
-        if "p2p" in self.pos_att_type:
-            scale_factor += 1
-        scale = math.sqrt(query_layer.size(-1) * scale_factor)
-        attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2)) / scale
+        scale = torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
+        attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2)) / scale.to(dtype=query_layer.dtype)
         if self.relative_attention:
             rel_embeddings = self.pos_dropout(rel_embeddings)
             rel_att = self.disentangled_attention_bias(
@@ -714,7 +768,7 @@ class DisentangledSelfAttention(nn.Module):
             .contiguous()
         )
         new_context_layer_shape = context_layer.size()[:-2] + (-1,)
-        context_layer = context_layer.view(*new_context_layer_shape)
+        context_layer = context_layer.view(new_context_layer_shape)
         if output_attentions:
             return (context_layer, attention_probs)
         else:
@@ -737,7 +791,7 @@ class DisentangledSelfAttention(nn.Module):
         att_span = self.pos_ebd_size
         relative_pos = relative_pos.long().to(query_layer.device)
 
-        rel_embeddings = rel_embeddings[self.pos_ebd_size - att_span : self.pos_ebd_size + att_span, :].unsqueeze(0)
+        rel_embeddings = rel_embeddings[0 : att_span * 2, :].unsqueeze(0)
         if self.share_att_key:
             pos_query_layer = self.transpose_for_scores(
                 self.query_proj(rel_embeddings), self.num_attention_heads
@@ -746,13 +800,13 @@ class DisentangledSelfAttention(nn.Module):
                 query_layer.size(0) // self.num_attention_heads, 1, 1
             )
         else:
-            if "c2p" in self.pos_att_type or "p2p" in self.pos_att_type:
+            if "c2p" in self.pos_att_type:
                 pos_key_layer = self.transpose_for_scores(
                     self.pos_key_proj(rel_embeddings), self.num_attention_heads
                 ).repeat(
                     query_layer.size(0) // self.num_attention_heads, 1, 1
                 )  # .split(self.all_head_size, dim=-1)
-            if "p2c" in self.pos_att_type or "p2p" in self.pos_att_type:
+            if "p2c" in self.pos_att_type:
                 pos_query_layer = self.transpose_for_scores(
                     self.pos_query_proj(rel_embeddings), self.num_attention_heads
                 ).repeat(
@@ -762,7 +816,7 @@ class DisentangledSelfAttention(nn.Module):
         score = 0
         # content->position
         if "c2p" in self.pos_att_type:
-            scale = math.sqrt(pos_key_layer.size(-1) * scale_factor)
+            scale = torch.sqrt(torch.tensor(pos_key_layer.size(-1), dtype=torch.float) * scale_factor)
             c2p_att = torch.bmm(query_layer, pos_key_layer.transpose(-1, -2))
             c2p_pos = torch.clamp(relative_pos + att_span, 0, att_span * 2 - 1)
             c2p_att = torch.gather(
@@ -770,11 +824,11 @@ class DisentangledSelfAttention(nn.Module):
                 dim=-1,
                 index=c2p_pos.squeeze(0).expand([query_layer.size(0), query_layer.size(1), relative_pos.size(-1)]),
             )
-            score += c2p_att / scale
+            score += c2p_att / scale.to(dtype=c2p_att.dtype)
 
         # position->content
-        if "p2c" in self.pos_att_type or "p2p" in self.pos_att_type:
-            scale = math.sqrt(pos_query_layer.size(-1) * scale_factor)
+        if "p2c" in self.pos_att_type:
+            scale = torch.sqrt(torch.tensor(pos_query_layer.size(-1), dtype=torch.float) * scale_factor)
             if key_layer.size(-2) != query_layer.size(-2):
                 r_pos = build_relative_position(
                     key_layer.size(-2),
@@ -787,29 +841,13 @@ class DisentangledSelfAttention(nn.Module):
                 r_pos = relative_pos
 
             p2c_pos = torch.clamp(-r_pos + att_span, 0, att_span * 2 - 1)
-
-        if "p2c" in self.pos_att_type:
             p2c_att = torch.bmm(key_layer, pos_query_layer.transpose(-1, -2))
             p2c_att = torch.gather(
                 p2c_att,
                 dim=-1,
                 index=p2c_pos.squeeze(0).expand([query_layer.size(0), key_layer.size(-2), key_layer.size(-2)]),
             ).transpose(-1, -2)
-            score += p2c_att / scale
-
-        # position->position
-        if "p2p" in self.pos_att_type:
-            pos_query = pos_query_layer[:, :, att_span:, :]
-            p2p_att = torch.matmul(pos_query, pos_key_layer.transpose(-1, -2))
-            p2p_att = p2p_att.expand(query_layer.size()[:2] + p2p_att.size()[2:])
-            p2p_att = torch.gather(
-                p2p_att,
-                dim=-1,
-                index=c2p_pos.expand(
-                    [query_layer.size(0), query_layer.size(1), query_layer.size(2), relative_pos.size(-1)]
-                ),
-            )
-            score += p2p_att
+            score += p2c_att / scale.to(dtype=p2c_att.dtype)
 
         return score
 
@@ -921,65 +959,63 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
 
 
 DEBERTA_START_DOCSTRING = r"""
-    The DeBERTa model was proposed in `DeBERTa: Decoding-enhanced BERT with Disentangled Attention
-    <https://arxiv.org/abs/2006.03654>`_ by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen. It's build on top of
-    BERT/RoBERTa with two improvements, i.e. disentangled attention and enhanced mask decoder. With those two
+    The DeBERTa model was proposed in [DeBERTa: Decoding-enhanced BERT with Disentangled
+    Attention](https://arxiv.org/abs/2006.03654) by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen. It's build
+    on top of BERT/RoBERTa with two improvements, i.e. disentangled attention and enhanced mask decoder. With those two
     improvements, it out perform BERT/RoBERTa on a majority of tasks with 80GB pretraining data.
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.```
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
 
 
     Parameters:
-        config (:class:`~transformers.DebertaV2Config`): Model configuration class with all the parameters of the model.
+        config ([`DebertaV2Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 DEBERTA_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
+        input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.DebertaV2Tokenizer`. See
-            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
-            details.
+            Indices can be obtained using [`DebertaV2Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
+            [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`_
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`({0}, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            [What are position IDs?](../glossary#position-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -1016,20 +1052,20 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutput,
+        output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1099,7 +1135,7 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
         )
 
 
-@add_start_docstrings("""DeBERTa Model with a `language modeling` head on top. """, DEBERTA_START_DOCSTRING)
+@add_start_docstrings("""DeBERTa Model with a `language modeling` head on top.""", DEBERTA_START_DOCSTRING)
 # Copied from transformers.models.deberta.modeling_deberta.DebertaForMaskedLM with Deberta->DebertaV2
 class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1123,27 +1159,30 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_MASKED_LM,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        mask="[MASK]",
+        expected_output=_MASKED_LM_EXPECTED_OUTPUT,
+        expected_loss=_MASKED_LM_EXPECTED_LOSS,
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, MaskedLMOutput]:
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
-            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1265,27 +1304,29 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1374,26 +1415,27 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_TOKEN_CLASSIFICATION,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_TOKEN_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_TOKEN_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
-            1]``.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1416,16 +1458,7 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            # Only keep active parts of the loss
-            if attention_mask is not None:
-                active_loss = attention_mask.view(-1) == 1
-                active_logits = logits.view(-1, self.num_labels)
-                active_labels = torch.where(
-                    active_loss, labels.view(-1), torch.tensor(loss_fct.ignore_index).type_as(labels)
-                )
-                loss = loss_fct(active_logits, active_labels)
-            else:
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1460,32 +1493,36 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_QA,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_QA_EXPECTED_OUTPUT,
+        expected_loss=_QA_EXPECTED_LOSS,
+        qa_target_start_index=_QA_TARGET_START_INDEX,
+        qa_target_end_index=_QA_TARGET_END_INDEX,
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        inputs_embeds=None,
-        start_positions=None,
-        end_positions=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        start_positions: Optional[torch.Tensor] = None,
+        end_positions: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
         r"""
-        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
-        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1532,6 +1569,109 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
             loss=total_loss,
             start_logits=start_logits,
             end_logits=end_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    DeBERTa Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
+    """,
+    DEBERTA_START_DOCSTRING,
+)
+class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        num_labels = getattr(config, "num_labels", 2)
+        self.num_labels = num_labels
+
+        self.deberta = DebertaV2Model(config)
+        self.pooler = ContextPooler(config)
+        output_dim = self.pooler.output_dim
+
+        self.classifier = nn.Linear(output_dim, 1)
+        drop_out = getattr(config, "cls_dropout", None)
+        drop_out = self.config.hidden_dropout_prob if drop_out is None else drop_out
+        self.dropout = StableDropout(drop_out)
+
+        self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.deberta.get_input_embeddings()
+
+    def set_input_embeddings(self, new_embeddings):
+        self.deberta.set_input_embeddings(new_embeddings)
+
+    @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=MultipleChoiceModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, MultipleChoiceModelOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
+            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
+            `input_ids` above)
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+
+        flat_input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
+        flat_position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
+        flat_token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
+        flat_attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
+        flat_inputs_embeds = (
+            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
+            if inputs_embeds is not None
+            else None
+        )
+
+        outputs = self.deberta(
+            flat_input_ids,
+            position_ids=flat_position_ids,
+            token_type_ids=flat_token_type_ids,
+            attention_mask=flat_attention_mask,
+            inputs_embeds=flat_inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        encoder_layer = outputs[0]
+        pooled_output = self.pooler(encoder_layer)
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
+        reshaped_logits = logits.view(-1, num_choices)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(reshaped_logits, labels)
+
+        if not return_dict:
+            output = (reshaped_logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return MultipleChoiceModelOutput(
+            loss=loss,
+            logits=reshaped_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

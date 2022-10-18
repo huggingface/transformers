@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
@@ -26,12 +26,21 @@ _import_structure = {
     "tokenization_luke": ["LukeTokenizer"],
 }
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_luke"] = [
         "LUKE_PRETRAINED_MODEL_ARCHIVE_LIST",
         "LukeForEntityClassification",
         "LukeForEntityPairClassification",
         "LukeForEntitySpanClassification",
+        "LukeForMultipleChoice",
+        "LukeForQuestionAnswering",
+        "LukeForSequenceClassification",
+        "LukeForTokenClassification",
         "LukeForMaskedLM",
         "LukeModel",
         "LukePreTrainedModel",
@@ -42,13 +51,22 @@ if TYPE_CHECKING:
     from .configuration_luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig
     from .tokenization_luke import LukeTokenizer
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_luke import (
             LUKE_PRETRAINED_MODEL_ARCHIVE_LIST,
             LukeForEntityClassification,
             LukeForEntityPairClassification,
             LukeForEntitySpanClassification,
             LukeForMaskedLM,
+            LukeForMultipleChoice,
+            LukeForQuestionAnswering,
+            LukeForSequenceClassification,
+            LukeForTokenClassification,
             LukeModel,
             LukePreTrainedModel,
         )
@@ -56,4 +74,4 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

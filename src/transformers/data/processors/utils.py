@@ -20,8 +20,7 @@ import json
 from dataclasses import dataclass
 from typing import List, Optional, Union
 
-from ...file_utils import is_tf_available, is_torch_available
-from ...utils import logging
+from ...utils import is_tf_available, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -60,7 +59,7 @@ class InputFeatures:
     Args:
         input_ids: Indices of input sequence tokens in the vocabulary.
         attention_mask: Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``: Usually ``1`` for tokens that are NOT MASKED, ``0`` for MASKED (padded)
+            Mask values selected in `[0, 1]`: Usually `1` for tokens that are NOT MASKED, `0` for MASKED (padded)
             tokens.
         token_type_ids: (Optional) Segment token indices to indicate first and second
             portions of the inputs. Only some models use them.
@@ -92,15 +91,15 @@ class DataProcessor:
         raise NotImplementedError()
 
     def get_train_examples(self, data_dir):
-        """Gets a collection of :class:`InputExample` for the train set."""
+        """Gets a collection of [`InputExample`] for the train set."""
         raise NotImplementedError()
 
     def get_dev_examples(self, data_dir):
-        """Gets a collection of :class:`InputExample` for the dev set."""
+        """Gets a collection of [`InputExample`] for the dev set."""
         raise NotImplementedError()
 
     def get_test_examples(self, data_dir):
-        """Gets a collection of :class:`InputExample` for the test set."""
+        """Gets a collection of [`InputExample`] for the test set."""
         raise NotImplementedError()
 
     def get_labels(self):
@@ -180,7 +179,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
         texts = []
         labels = []
         ids = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             texts.append(line[column_text])
             labels.append(line[column_label])
             if column_id is not None:
@@ -208,7 +207,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
             labels = [None] * len(texts_or_text_and_labels)
         examples = []
         added_labels = set()
-        for (text_or_text_and_label, label, guid) in zip(texts_or_text_and_labels, labels, ids):
+        for text_or_text_and_label, label, guid in zip(texts_or_text_and_labels, labels, ids):
             if isinstance(text_or_text_and_label, (tuple, list)) and label is None:
                 text, label = text_or_text_and_label
             else:
@@ -240,21 +239,21 @@ class SingleSentenceClassificationProcessor(DataProcessor):
         return_tensors=None,
     ):
         """
-        Convert examples in a list of ``InputFeatures``
+        Convert examples in a list of `InputFeatures`
 
         Args:
             tokenizer: Instance of a tokenizer that will tokenize the examples
             max_length: Maximum example length
-            pad_on_left: If set to ``True``, the examples will be padded on the left rather than on the right (default)
+            pad_on_left: If set to `True`, the examples will be padded on the left rather than on the right (default)
             pad_token: Padding token
-            mask_padding_with_zero: If set to ``True``, the attention mask will be filled by ``1`` for actual values
-                and by ``0`` for padded values. If set to ``False``, inverts it (``1`` for padded values, ``0`` for
-                actual values)
+            mask_padding_with_zero: If set to `True`, the attention mask will be filled by `1` for actual values
+                and by `0` for padded values. If set to `False`, inverts it (`1` for padded values, `0` for actual
+                values)
 
         Returns:
-            If the ``examples`` input is a ``tf.data.Dataset``, will return a ``tf.data.Dataset`` containing the
-            task-specific features. If the input is a list of ``InputExamples``, will return a list of task-specific
-            ``InputFeatures`` which can be fed to the model.
+            If the `examples` input is a `tf.data.Dataset`, will return a `tf.data.Dataset` containing the
+            task-specific features. If the input is a list of `InputExamples`, will return a list of task-specific
+            `InputFeatures` which can be fed to the model.
 
         """
         if max_length is None:
@@ -263,7 +262,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
         label_map = {label: i for i, label in enumerate(self.labels)}
 
         all_input_ids = []
-        for (ex_index, example) in enumerate(self.examples):
+        for ex_index, example in enumerate(self.examples):
             if ex_index % 10000 == 0:
                 logger.info(f"Tokenizing example {ex_index}")
 
@@ -277,7 +276,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
         batch_length = max(len(input_ids) for input_ids in all_input_ids)
 
         features = []
-        for (ex_index, (input_ids, example)) in enumerate(zip(all_input_ids, self.examples)):
+        for ex_index, (input_ids, example) in enumerate(zip(all_input_ids, self.examples)):
             if ex_index % 10000 == 0:
                 logger.info(f"Writing example {ex_index}/{len(self.examples)}")
             # The mask has 1 for real tokens and 0 for padding tokens. Only real

@@ -14,12 +14,13 @@
 
 import random
 import warnings
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 
-from ..file_utils import PaddingStrategy
 from ..models.bert import BertTokenizer, BertTokenizerFast
-from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
+from ..tokenization_utils_base import PreTrainedTokenizerBase
+from ..utils import PaddingStrategy
 
 
 InputDataClass = NewType("InputDataClass", Any)
@@ -50,8 +51,8 @@ def default_data_collator(features: List[InputDataClass], return_tensors="pt") -
     Very simple data collator that simply collates batches of dict-like objects and performs special handling for
     potential keys named:
 
-        - ``label``: handles a single value (int or float) per object
-        - ``label_ids``: handles a list of values per object
+        - `label`: handles a single value (int or float) per object
+        - `label_ids`: handles a list of values per object
 
     Does not do any additional preprocessing: property names of the input object will be used as corresponding inputs
     to the model. See glue and ner for example of how it's useful.
@@ -76,8 +77,8 @@ class DefaultDataCollator(DataCollatorMixin):
     Very simple data collator that simply collates batches of dict-like objects and performs special handling for
     potential keys named:
 
-        - ``label``: handles a single value (int or float) per object
-        - ``label_ids``: handles a list of values per object
+        - `label`: handles a single value (int or float) per object
+        - `label_ids`: handles a list of values per object
 
     Does not do any additional preprocessing: property names of the input object will be used as corresponding inputs
     to the model. See glue and ner for example of how it's useful.
@@ -86,7 +87,7 @@ class DefaultDataCollator(DataCollatorMixin):
     helpful if you need to set a return_tensors value at initialization.
 
     Args:
-        return_tensors (:obj:`str`):
+        return_tensors (`str`):
             The type of Tensor to return. Allowable values are "np", "pt" and "tf".
     """
 
@@ -101,7 +102,7 @@ class DefaultDataCollator(DataCollatorMixin):
 def torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     import torch
 
-    if not isinstance(features[0], (dict, BatchEncoding)):
+    if not isinstance(features[0], Mapping):
         features = [vars(f) for f in features]
     first = features[0]
     batch = {}
@@ -136,7 +137,7 @@ def tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     import numpy as np
     import tensorflow as tf
 
-    if not isinstance(features[0], (dict, BatchEncoding)):
+    if not isinstance(features[0], Mapping):
         features = [vars(f) for f in features]
     first = features[0]
     batch = {}
@@ -145,26 +146,27 @@ def tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     # Ensure that tensor is created with the correct type
     # (it should be automatically the case, but let's make sure of it.)
     if "label" in first and first["label"] is not None:
-        if isinstance(first["label"], tf.Tensor):
-            dtype = tf.int64 if first["label"].dtype.is_integer() else tf.float32
-        elif isinstance(first["label"], np.ndarray):
-            dtype = tf.int64 if np.issubdtype(first["label"].dtype, np.integer) else tf.float32
-        elif isinstance(first["label"], (tuple, list)):
-            dtype = tf.int64 if isinstance(first["label"][0], int) else tf.float32
-        else:
-            dtype = tf.int64 if isinstance(first["label"], int) else tf.float32
-        batch["labels"] = tf.convert_to_tensor([f["label"] for f in features], dtype=dtype)
+        label_col_name = "label"
     elif "label_ids" in first and first["label_ids"] is not None:
-        if isinstance(first["label_ids"], tf.Tensor):
-            batch["labels"] = tf.stack([f["label_ids"] for f in features])
+        label_col_name = "label_ids"
+    elif "labels" in first and first["labels"] is not None:
+        label_col_name = "labels"
+    else:
+        label_col_name = None
+    if label_col_name is not None:
+        if isinstance(first[label_col_name], tf.Tensor):
+            dtype = tf.int64 if first[label_col_name].dtype.is_integer() else tf.float32
+        elif isinstance(first[label_col_name], np.ndarray) or isinstance(first[label_col_name], np.generic):
+            dtype = tf.int64 if np.issubdtype(first[label_col_name].dtype, np.integer) else tf.float32
+        elif isinstance(first[label_col_name], (tuple, list)):
+            dtype = tf.int64 if isinstance(first[label_col_name][0], int) else tf.float32
         else:
-            dtype = tf.int64 if type(first["label_ids"][0]) is int else tf.float32
-            batch["labels"] = tf.convert_to_tensor([f["label_ids"] for f in features], dtype=dtype)
-
+            dtype = tf.int64 if isinstance(first[label_col_name], int) else tf.float32
+        batch["labels"] = tf.convert_to_tensor([f[label_col_name] for f in features], dtype=dtype)
     # Handling of all other possible keys.
     # Again, we will use the first element to figure out which key/values are not None for this model.
     for k, v in first.items():
-        if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+        if k not in ("label", "label_ids", "labels") and v is not None and not isinstance(v, str):
             if isinstance(v, (tf.Tensor, np.ndarray)):
                 batch[k] = tf.stack([f[k] for f in features])
             else:
@@ -176,7 +178,7 @@ def tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
 def numpy_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     import numpy as np
 
-    if not isinstance(features[0], (dict, BatchEncoding)):
+    if not isinstance(features[0], Mapping):
         features = [vars(f) for f in features]
     first = features[0]
     batch = {}
@@ -213,26 +215,25 @@ class DataCollatorWithPadding:
     Data collator that will dynamically pad the inputs received.
 
     Args:
-        tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
+        tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
             The tokenizer used for encoding the data.
-        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
-            * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-              sequence if provided).
-            * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
-              maximum acceptable input length for the model if that argument is not provided.
-            * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-              different lengths).
-        max_length (:obj:`int`, `optional`):
+            - `True` or `'longest'` (default): Pad to the longest sequence in the batch (or no padding if only a single
+              sequence is provided).
+            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+              acceptable input length for the model if that argument is not provided.
+            - `False` or `'do_not_pad'`: No padding (i.e., can output a batch with sequences of different lengths).
+        max_length (`int`, *optional*):
             Maximum length of the returned list and optionally padding length (see above).
-        pad_to_multiple_of (:obj:`int`, `optional`):
+        pad_to_multiple_of (`int`, *optional*):
             If set will pad the sequence to a multiple of the provided value.
 
             This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
             7.5 (Volta).
-        return_tensors (:obj:`str`):
+        return_tensors (`str`):
             The type of Tensor to return. Allowable values are "np", "pt" and "tf".
     """
 
@@ -265,28 +266,28 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
     Data collator that will dynamically pad the inputs received, as well as the labels.
 
     Args:
-        tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
+        tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
             The tokenizer used for encoding the data.
-        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
-            * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-              sequence if provided).
-            * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
-              maximum acceptable input length for the model if that argument is not provided.
-            * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-              different lengths).
-        max_length (:obj:`int`, `optional`):
+            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
+              is provided).
+            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+              acceptable input length for the model if that argument is not provided.
+            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+              lengths).
+        max_length (`int`, *optional*):
             Maximum length of the returned list and optionally padding length (see above).
-        pad_to_multiple_of (:obj:`int`, `optional`):
+        pad_to_multiple_of (`int`, *optional*):
             If set will pad the sequence to a multiple of the provided value.
 
             This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
             7.5 (Volta).
-        label_pad_token_id (:obj:`int`, `optional`, defaults to -100):
+        label_pad_token_id (`int`, *optional*, defaults to -100):
             The id to use when padding the labels (-100 will be automatically ignore by PyTorch loss functions).
-        return_tensors (:obj:`str`):
+        return_tensors (`str`):
             The type of Tensor to return. Allowable values are "np", "pt" and "tf".
     """
 
@@ -515,33 +516,33 @@ class DataCollatorForSeq2Seq:
     Data collator that will dynamically pad the inputs received, as well as the labels.
 
     Args:
-        tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
+        tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
             The tokenizer used for encoding the data.
-        model (:class:`~transformers.PreTrainedModel`):
-            The model that is being trained. If set and has the `prepare_decoder_input_ids_from_labels`, use it to
-            prepare the `decoder_input_ids`
+        model ([`PreTrainedModel`]):
+            The model that is being trained. If set and has the *prepare_decoder_input_ids_from_labels*, use it to
+            prepare the *decoder_input_ids*
 
-            This is useful when using `label_smoothing` to avoid calculating loss twice.
-        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+            This is useful when using *label_smoothing* to avoid calculating loss twice.
+        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
-            * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-              sequence is provided).
-            * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
-              maximum acceptable input length for the model if that argument is not provided.
-            * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-              different lengths).
-        max_length (:obj:`int`, `optional`):
+            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
+              is provided).
+            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+              acceptable input length for the model if that argument is not provided.
+            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+              lengths).
+        max_length (`int`, *optional*):
             Maximum length of the returned list and optionally padding length (see above).
-        pad_to_multiple_of (:obj:`int`, `optional`):
+        pad_to_multiple_of (`int`, *optional*):
             If set will pad the sequence to a multiple of the provided value.
 
             This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
             7.5 (Volta).
-        label_pad_token_id (:obj:`int`, `optional`, defaults to -100):
+        label_pad_token_id (`int`, *optional*, defaults to -100):
             The id to use when padding the labels (-100 will be automatically ignored by PyTorch loss functions).
-        return_tensors (:obj:`str`):
+        return_tensors (`str`):
             The type of Tensor to return. Allowable values are "np", "pt" and "tf".
     """
 
@@ -591,7 +592,11 @@ class DataCollatorForSeq2Seq:
         )
 
         # prepare decoder_input_ids
-        if self.model is not None and hasattr(self.model, "prepare_decoder_input_ids_from_labels"):
+        if (
+            labels is not None
+            and self.model is not None
+            and hasattr(self.model, "prepare_decoder_input_ids_from_labels")
+        ):
             decoder_input_ids = self.model.prepare_decoder_input_ids_from_labels(labels=features["labels"])
             features["decoder_input_ids"] = decoder_input_ids
 
@@ -605,26 +610,26 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     are not all of the same length.
 
     Args:
-        tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
+        tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
             The tokenizer used for encoding the data.
-        mlm (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to use masked language modeling. If set to :obj:`False`, the labels are the same as the
-            inputs with the padding tokens ignored (by setting them to -100). Otherwise, the labels are -100 for
-            non-masked tokens and the value to predict for the masked token.
-        mlm_probability (:obj:`float`, `optional`, defaults to 0.15):
-            The probability with which to (randomly) mask tokens in the input, when :obj:`mlm` is set to :obj:`True`.
-        pad_to_multiple_of (:obj:`int`, `optional`):
+        mlm (`bool`, *optional*, defaults to `True`):
+            Whether or not to use masked language modeling. If set to `False`, the labels are the same as the inputs
+            with the padding tokens ignored (by setting them to -100). Otherwise, the labels are -100 for non-masked
+            tokens and the value to predict for the masked token.
+        mlm_probability (`float`, *optional*, defaults to 0.15):
+            The probability with which to (randomly) mask tokens in the input, when `mlm` is set to `True`.
+        pad_to_multiple_of (`int`, *optional*):
             If set will pad the sequence to a multiple of the provided value.
-        return_tensors (:obj:`str`):
+        return_tensors (`str`):
             The type of Tensor to return. Allowable values are "np", "pt" and "tf".
 
-    .. note::
+    <Tip>
 
-        For best performance, this data collator should be used with a dataset having items that are dictionaries or
-        BatchEncoding, with the :obj:`"special_tokens_mask"` key, as returned by a
-        :class:`~transformers.PreTrainedTokenizer` or a :class:`~transformers.PreTrainedTokenizerFast` with the
-        argument :obj:`return_special_tokens_mask=True`.
-    """
+    For best performance, this data collator should be used with a dataset having items that are dictionaries or
+    BatchEncoding, with the `"special_tokens_mask"` key, as returned by a [`PreTrainedTokenizer`] or a
+    [`PreTrainedTokenizerFast`] with the argument `return_special_tokens_mask=True`.
+
+    </Tip>"""
 
     tokenizer: PreTrainedTokenizerBase
     mlm: bool = True
@@ -683,7 +688,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         import tensorflow as tf
 
         # Handle dict or lists with proper padding and conversion to tensor.
-        if isinstance(examples[0], (dict, BatchEncoding)):
+        if isinstance(examples[0], Mapping):
             batch = self.tokenizer.pad(examples, return_tensors="tf", pad_to_multiple_of=self.pad_to_multiple_of)
         else:
             batch = {
@@ -720,7 +725,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
-        if isinstance(examples[0], (dict, BatchEncoding)):
+        if isinstance(examples[0], Mapping):
             batch = self.tokenizer.pad(examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of)
         else:
             batch = {
@@ -777,7 +782,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         import numpy as np
 
         # Handle dict or lists with proper padding and conversion to tensor.
-        if isinstance(examples[0], (dict, BatchEncoding)):
+        if isinstance(examples[0], Mapping):
             batch = self.tokenizer.pad(examples, return_tensors="np", pad_to_multiple_of=self.pad_to_multiple_of)
         else:
             batch = {
@@ -845,16 +850,16 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
     - collates batches of tensors, honoring their tokenizer's pad_token
     - preprocesses batches for masked language modeling
 
-    .. note::
+    <Tip>
 
-        This collator relies on details of the implementation of subword tokenization by
-        :class:`~transformers.BertTokenizer`, specifically that subword tokens are prefixed with `##`. For tokenizers
-        that do not adhere to this scheme, this collator will produce an output that is roughly equivalent to
-        :class:`.DataCollatorForLanguageModeling`.
-    """
+    This collator relies on details of the implementation of subword tokenization by [`BertTokenizer`], specifically
+    that subword tokens are prefixed with *##*. For tokenizers that do not adhere to this scheme, this collator will
+    produce an output that is roughly equivalent to [`.DataCollatorForLanguageModeling`].
+
+    </Tip>"""
 
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
-        if isinstance(examples[0], (dict, BatchEncoding)):
+        if isinstance(examples[0], Mapping):
             input_ids = [e["input_ids"] for e in examples]
         else:
             input_ids = examples
@@ -882,7 +887,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         return {"input_ids": inputs, "labels": labels}
 
     def tf_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
-        if isinstance(examples[0], (dict, BatchEncoding)):
+        if isinstance(examples[0], Mapping):
             input_ids = [e["input_ids"] for e in examples]
         else:
             input_ids = examples
@@ -910,7 +915,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         return {"input_ids": inputs, "labels": labels}
 
     def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
-        if isinstance(examples[0], (dict, BatchEncoding)):
+        if isinstance(examples[0], Mapping):
             input_ids = [e["input_ids"] for e in examples]
         else:
             input_ids = examples
@@ -948,7 +953,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             )
 
         cand_indexes = []
-        for (i, token) in enumerate(input_tokens):
+        for i, token in enumerate(input_tokens):
             if token == "[CLS]" or token == "[SEP]":
                 continue
 
@@ -993,7 +998,8 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the"
+                " --mlm flag if you want to use this tokenizer."
             )
         labels = inputs.clone()
         # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
@@ -1033,7 +1039,8 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         input_shape = tf.shape(inputs)
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the"
+                " --mlm flag if you want to use this tokenizer."
             )
         labels = tf.identity(inputs)
         # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
@@ -1073,7 +1080,8 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the"
+                " --mlm flag if you want to use this tokenizer."
             )
         labels = np.copy(inputs)
         # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
@@ -1154,7 +1162,8 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the"
+                " --mlm flag if you want to use this tokenizer."
             )
 
         labels = inputs.clone()
@@ -1203,21 +1212,21 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
     return_tensors: str = "pt"
 
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
-        if isinstance(examples[0], (dict, BatchEncoding)):
+        if isinstance(examples[0], Mapping):
             examples = [e["input_ids"] for e in examples]
         batch = _torch_collate_batch(examples, self.tokenizer)
         inputs, perm_mask, target_mapping, labels = self.torch_mask_tokens(batch)
         return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}
 
     def tf_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
-        if isinstance(examples[0], (dict, BatchEncoding)):
+        if isinstance(examples[0], Mapping):
             examples = [e["input_ids"] for e in examples]
         batch = _tf_collate_batch(examples, self.tokenizer)
         inputs, perm_mask, target_mapping, labels = self.tf_mask_tokens(batch)
         return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}
 
     def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
-        if isinstance(examples[0], (dict, BatchEncoding)):
+        if isinstance(examples[0], Mapping):
             examples = [e["input_ids"] for e in examples]
         batch = _numpy_collate_batch(examples, self.tokenizer)
         inputs, perm_mask, target_mapping, labels = self.numpy_mask_tokens(batch)
@@ -1227,26 +1236,27 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
         """
         The masked tokens to be predicted for a particular sequence are determined by the following algorithm:
 
-            0. Start from the beginning of the sequence by setting ``cur_len = 0`` (number of tokens processed so far).
-            1. Sample a ``span_length`` from the interval ``[1, max_span_length]`` (length of span of tokens to be
-               masked)
-            2. Reserve a context of length ``context_length = span_length / plm_probability`` to surround span to be
+            0. Start from the beginning of the sequence by setting `cur_len = 0` (number of tokens processed so far).
+            1. Sample a `span_length` from the interval `[1, max_span_length]` (length of span of tokens to be masked)
+            2. Reserve a context of length `context_length = span_length / plm_probability` to surround span to be
                masked
-            3. Sample a starting point ``start_index`` from the interval ``[cur_len, cur_len + context_length -
-               span_length]`` and mask tokens ``start_index:start_index + span_length``
-            4. Set ``cur_len = cur_len + context_length``. If ``cur_len < max_len`` (i.e. there are tokens remaining in
-               the sequence to be processed), repeat from Step 1.
+            3. Sample a starting point `start_index` from the interval `[cur_len, cur_len + context_length -
+               span_length]` and mask tokens `start_index:start_index + span_length`
+            4. Set `cur_len = cur_len + context_length`. If `cur_len < max_len` (i.e. there are tokens remaining in the
+               sequence to be processed), repeat from Step 1.
         """
         import torch
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for permutation language modeling. Please add a mask token if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for permutation language modeling."
+                " Please add a mask token if you want to use this tokenizer."
             )
 
         if inputs.size(1) % 2 != 0:
             raise ValueError(
-                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see relevant comments in source code for details."
+                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see"
+                " relevant comments in source code for details."
             )
 
         labels = inputs.clone()
@@ -1325,15 +1335,14 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
         """
         The masked tokens to be predicted for a particular sequence are determined by the following algorithm:
 
-            0. Start from the beginning of the sequence by setting ``cur_len = 0`` (number of tokens processed so far).
-            1. Sample a ``span_length`` from the interval ``[1, max_span_length]`` (length of span of tokens to be
-               masked)
-            2. Reserve a context of length ``context_length = span_length / plm_probability`` to surround span to be
+            0. Start from the beginning of the sequence by setting `cur_len = 0` (number of tokens processed so far).
+            1. Sample a `span_length` from the interval `[1, max_span_length]` (length of span of tokens to be masked)
+            2. Reserve a context of length `context_length = span_length / plm_probability` to surround span to be
                masked
-            3. Sample a starting point ``start_index`` from the interval ``[cur_len, cur_len + context_length -
-               span_length]`` and mask tokens ``start_index:start_index + span_length``
-            4. Set ``cur_len = cur_len + context_length``. If ``cur_len < max_len`` (i.e. there are tokens remaining in
-               the sequence to be processed), repeat from Step 1.
+            3. Sample a starting point `start_index` from the interval `[cur_len, cur_len + context_length -
+               span_length]` and mask tokens `start_index:start_index + span_length`
+            4. Set `cur_len = cur_len + context_length`. If `cur_len < max_len` (i.e. there are tokens remaining in the
+               sequence to be processed), repeat from Step 1.
         """
         from random import randint
 
@@ -1342,12 +1351,14 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for permutation language modeling. Please add a mask token if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for permutation language modeling."
+                " Please add a mask token if you want to use this tokenizer."
             )
 
         if tf.shape(inputs)[1] % 2 != 0:
             raise ValueError(
-                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see relevant comments in source code for details."
+                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see"
+                " relevant comments in source code for details."
             )
 
         labels = tf.identity(inputs)
@@ -1434,15 +1445,14 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
         """
         The masked tokens to be predicted for a particular sequence are determined by the following algorithm:
 
-            0. Start from the beginning of the sequence by setting ``cur_len = 0`` (number of tokens processed so far).
-            1. Sample a ``span_length`` from the interval ``[1, max_span_length]`` (length of span of tokens to be
-               masked)
-            2. Reserve a context of length ``context_length = span_length / plm_probability`` to surround span to be
+            0. Start from the beginning of the sequence by setting `cur_len = 0` (number of tokens processed so far).
+            1. Sample a `span_length` from the interval `[1, max_span_length]` (length of span of tokens to be masked)
+            2. Reserve a context of length `context_length = span_length / plm_probability` to surround span to be
                masked
-            3. Sample a starting point ``start_index`` from the interval ``[cur_len, cur_len + context_length -
-               span_length]`` and mask tokens ``start_index:start_index + span_length``
-            4. Set ``cur_len = cur_len + context_length``. If ``cur_len < max_len`` (i.e. there are tokens remaining in
-               the sequence to be processed), repeat from Step 1.
+            3. Sample a starting point `start_index` from the interval `[cur_len, cur_len + context_length -
+               span_length]` and mask tokens `start_index:start_index + span_length`
+            4. Set `cur_len = cur_len + context_length`. If `cur_len < max_len` (i.e. there are tokens remaining in the
+               sequence to be processed), repeat from Step 1.
         """
         from random import randint
 
@@ -1450,12 +1460,14 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for permutation language modeling. Please add a mask token if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for permutation language modeling."
+                " Please add a mask token if you want to use this tokenizer."
             )
 
         if inputs.shape[1] % 2 != 0:
             raise ValueError(
-                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see relevant comments in source code for details."
+                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see"
+                " relevant comments in source code for details."
             )
 
         labels = np.copy(inputs)

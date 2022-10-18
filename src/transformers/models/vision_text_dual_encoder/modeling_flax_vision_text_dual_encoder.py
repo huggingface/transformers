@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax VisionTextDualEncoder model. """
+""" Flax VisionTextDualEncoder model."""
 
 
 from typing import Optional, Tuple
@@ -20,11 +20,11 @@ from typing import Optional, Tuple
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict
+from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
+from flax.traverse_util import flatten_dict, unflatten_dict
 
-from ...file_utils import add_start_docstrings
 from ...modeling_flax_utils import FlaxPreTrainedModel, append_replace_return_docstrings, overwrite_call_docstring
-from ...utils import logging
+from ...utils import add_start_docstrings, logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_flax_auto import FLAX_MODEL_MAPPING, FlaxAutoModel
 from ..clip.modeling_flax_clip import FlaxCLIPOutput, FlaxCLIPVisionModel
@@ -38,87 +38,84 @@ _CONFIG_FOR_DOC = "VisionTextDualEncoderConfig"
 VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
     This class can be used to initialize a vision-text dual encoder model with any pretrained vision autoencoding model
     as the vision encoder and any pretrained text model as the text encoder. The vision and text encoders are loaded
-    via the :meth:`~transformers.FlaxAutoModel.from_pretrained` method. The projection layers are automatically added
-    to the model and should be fine-tuned on a downstream task, like contrastive image-text modeling.
+    via the [`~FlaxAutoModel.from_pretrained`] method. The projection layers are automatically added to the model and
+    should be fine-tuned on a downstream task, like contrastive image-text modeling.
 
-    In `LiT: Zero-Shot Transfer with Locked-image Text Tuning <https://arxiv.org/abs/2111.07991>`__ it is shown how
+    In [LiT: Zero-Shot Transfer with Locked-image Text Tuning](https://arxiv.org/abs/2111.07991) it is shown how
     leveraging pre-trained (locked/frozen) image and text model for contrastive learning yields significant improvment
     on new zero-shot vision tasks such as image classification or retrieval.
 
     After such a Vision-Text-Dual-Encoder model has been trained/fine-tuned, it can be saved/loaded just like any other
     models (see the examples for more information).
 
-    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-     This model is also a Flax Linen `flax.linen.Module
-     <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`__ subclass. Use it as a regular Flax linen Module
-     and refer to the Flax documentation for all matter related to general usage and behavior.
+     This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
+     subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
+     general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
-    - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
-    - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
-    - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
-    - `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__
+    - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
+    - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
+    - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
+    - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
 
     Parameters:
-        config (:class:`~transformers.VisionTextDualEncoderConfig`): Model configuration class with all the parameters of the model.
+        config ([`VisionTextDualEncoderConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.FlaxPreTrainedModel.from_pretrained` method to load the
-            model weights.
-        dtype (:obj:`jax.numpy.dtype`, `optional`, defaults to :obj:`jax.numpy.float32`):
-            The data type of the computation. Can be one of :obj:`jax.numpy.float32`, :obj:`jax.numpy.float16` (on
-            GPUs) and :obj:`jax.numpy.bfloat16` (on TPUs).
+            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
+        dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
+            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on GPUs) and
+            `jax.numpy.bfloat16` (on TPUs).
 
             This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
-            specified all the computation will be performed with the given ``dtype``.
+            specified all the computation will be performed with the given `dtype`.
 
             **Note that this only specifies the dtype of the computation and does not influence the dtype of model
             parameters.**
 
-            If you wish to change the dtype of the model parameters, see
-            :meth:`~transformers.FlaxPreTrainedModel.to_fp16` and :meth:`~transformers.FlaxPreTrainedModel.to_bf16`.
+            If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
+            [`~FlaxPreTrainedModel.to_bf16`].
 """
 
 
 VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.PreTrainedTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
+            Indices can be obtained using [`PreTrainedTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        position_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`_
-        pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
+            [What are position IDs?](../glossary#position-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            a feature extractor (e.g. if you use ViT as the encoder, you should use
-            :class:`~transformers.ViTFeatureExtractor`). See :meth:`transformers.ViTFeatureExtractor.__call__` for
-            details.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            a feature extractor (e.g. if you use ViT as the encoder, you should use [`ViTFeatureExtractor`]). See
+            [`ViTFeatureExtractor.__call__`] for details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -229,15 +226,22 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         input_shape: Optional[Tuple] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
+        _do_init: bool = True,
         **kwargs
     ):
+
+        if not _do_init:
+            raise ValueError(
+                "`FlaxVisionTextDualEncoderModel` cannot be created without initializing, `_do_init` must be `True`."
+            )
+
         if input_shape is None:
             input_shape = ((1, 1), (1, config.vision_config.image_size, config.vision_config.image_size, 3))
 
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensor
         input_ids = jnp.zeros(input_shape[0], dtype="i4")
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape[0])
@@ -249,7 +253,19 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(rngs, input_ids, pixel_values, attention_mask, position_ids, token_type_ids)["params"]
+        random_params = self.module.init(rngs, input_ids, pixel_values, attention_mask, position_ids, token_type_ids)[
+            "params"
+        ]
+
+        if params is not None:
+            random_params = flatten_dict(unfreeze(random_params))
+            params = flatten_dict(unfreeze(params))
+            for missing_key in self._missing_keys:
+                params[missing_key] = random_params[missing_key]
+            self._missing_keys = set()
+            return freeze(unflatten_dict(params))
+        else:
+            return random_params
 
     def __call__(
         self,
@@ -313,19 +329,18 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
     ):
         r"""
         Args:
-            input_ids (:obj:`numpy.ndarray` of shape :obj:`(batch_size, sequence_length)`):
+            input_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.PreTrainedTokenizer`. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
-                for details.
+                Indices can be obtained using [`PreTrainedTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
 
-                `What are input IDs? <../glossary.html#input-ids>`__
+                [What are input IDs?](../glossary#input-ids)
 
         Returns:
-            text_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of text model.
+            text_features (`jnp.ndarray` of shape `(batch_size, output_dim`): The text embeddings obtained by applying
+            the projection layer to the pooled output of text model.
         """
         if position_ids is None:
             position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
@@ -369,14 +384,13 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
     ):
         r"""
         Args:
-            pixel_values (:obj:`numpy.ndarray` of shape :obj:`(batch_size, num_channels, height, width)`):
+            pixel_values (`numpy.ndarray` of shape `(batch_size, num_channels, height, width)`):
                 Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained
-                using :class:`~transformers.ImageFeatureExtractionMixin`. See
-                :meth:`transformers.ImageFeatureExtractionMixin.__call__` for details.
+                using [`ImageFeatureExtractionMixin`]. See [`ImageFeatureExtractionMixin.__call__`] for details.
 
         Returns:
-            image_features (:obj:`jnp.ndarray` of shape :obj:`(batch_size, output_dim`): The image embeddings obtained
-            by applying the projection layer to the pooled output of vision model.
+            image_features (`jnp.ndarray` of shape `(batch_size, output_dim`): The image embeddings obtained by
+            applying the projection layer to the pooled output of vision model.
         """
 
         # Handle any PRNG if needed
@@ -408,55 +422,59 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
     ) -> FlaxPreTrainedModel:
         """
         Params:
-            vision_model_name_or_path (:obj: `str`, `optional`, defaults to `None`):
+            vision_model_name_or_path (`str`, *optional*, defaults to `None`):
                 Information necessary to initiate the vision model. Can be either:
 
-                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
-                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
-                    - A path to a `directory` containing model weights saved using
-                      :func:`~transformers.FlaxPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
-                    - A path or url to a `PyTorch checkpoint folder` (e.g, ``./pt_model``). In this case, ``from_pt``
-                      should be set to :obj:`True` and a configuration object should be provided as ``config``
-                      argument. This loading path is slower than converting the PyTorch checkpoint in a Flax model
-                      using the provided conversion scripts and loading the Flax model afterwards.
+                    - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
+                      user or organization name, like `dbmdz/bert-base-german-cased`.
+                    - A path to a *directory* containing model weights saved using
+                      [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
+                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
+                      should be set to `True` and a configuration object should be provided as `config` argument. This
+                      loading path is slower than converting the PyTorch checkpoint in a Flax model using the provided
+                      conversion scripts and loading the Flax model afterwards.
 
-            text_model_name_or_path (:obj: `str`, `optional`):
+            text_model_name_or_path (`str`, *optional*):
                 Information necessary to initiate the text model. Can be either:
 
-                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
-                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
-                    - A path to a `directory` containing model weights saved using
-                      :func:`~transformers.FlaxPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
-                    - A path or url to a `PyTorch checkpoint folder` (e.g, ``./pt_model``). In this case, ``from_pt``
-                      should be set to :obj:`True` and a configuration object should be provided as ``config``
-                      argument. This loading path is slower than converting the PyTorch checkpoint in a Flax model
-                      using the provided conversion scripts and loading the Flax model afterwards.
+                    - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
+                      user or organization name, like `dbmdz/bert-base-german-cased`.
+                    - A path to a *directory* containing model weights saved using
+                      [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
+                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
+                      should be set to `True` and a configuration object should be provided as `config` argument. This
+                      loading path is slower than converting the PyTorch checkpoint in a Flax model using the provided
+                      conversion scripts and loading the Flax model afterwards.
 
-            model_args (remaining positional arguments, `optional`):
-                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+            model_args (remaining positional arguments, *optional*):
+                All remaning positional arguments will be passed to the underlying model's `__init__` method.
 
-            kwargs (remaining dictionary of keyword arguments, `optional`):
+            kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
-                :obj:`output_attentions=True`).
+                `output_attentions=True`).
 
-                - To update the text configuration, use the prefix `text_` for each configuration parameter.
-                - To update the vision configuration, use the prefix `vision_` for each configuration parameter.
+                - To update the text configuration, use the prefix *text_* for each configuration parameter.
+                - To update the vision configuration, use the prefix *vision_* for each configuration parameter.
                 - To update the parent model configuration, do not use a prefix for each configuration parameter.
 
-                Behaves differently depending on whether a :obj:`config` is provided or automatically loaded.
+                Behaves differently depending on whether a `config` is provided or automatically loaded.
 
-        Example::
+        Example:
 
-            >>> from transformers import FlaxVisionTextDualEncoderModel
-            >>> # initialize a model from pretrained ViT and BERT models. Note that the projection layers will be randomly initialized.
-            >>> model =  FlaxVisionTextDualEncoderModel.from_vision_text_pretrained('bert-base-uncased', 'google/vit-base-patch16-224')
-            >>> # saving model after fine-tuning
-            >>> model.save_pretrained("./vit-bert")
-            >>> # load fine-tuned model
-            >>> model =  FlaxVisionTextDualEncoderModel.from_pretrained("./vit-bert")
-        """
+        ```python
+        >>> from transformers import FlaxVisionTextDualEncoderModel
+
+        >>> # initialize a model from pretrained ViT and BERT models. Note that the projection layers will be randomly initialized.
+        >>> model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(
+        ...     "google/vit-base-patch16-224", "bert-base-uncased"
+        ... )
+        >>> # saving model after fine-tuning
+        >>> model.save_pretrained("./vit-bert")
+        >>> # load fine-tuned model
+        >>> model = FlaxVisionTextDualEncoderModel.from_pretrained("./vit-bert")
+        ```"""
 
         kwargs_vision = {
             argument[len("vision_") :]: value for argument, value in kwargs.items() if argument.startswith("vision_")
@@ -518,9 +536,9 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         # the projection layers are always newly initialized when loading the model
         # using pre-trained vision and text model.
         logger.warning(
-            "The projection layer and logit scale weights `[('visual_projection', 'kernel'), ('text_projection', 'kernel'), ('logit_scale',)]` "
-            "are newly initialized. You should probably TRAIN this model on a down-stream task "
-            "to be able to use it for predictions and inference."
+            "The projection layer and logit scale weights `[('visual_projection', 'kernel'), ('text_projection',"
+            " 'kernel'), ('logit_scale',)]` are newly initialized. You should probably TRAIN this model on a"
+            " down-stream task to be able to use it for predictions and inference."
         )
 
         return model
@@ -529,34 +547,51 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
 VISION_TEXT_DUAL_ENCODER_MODEL_DOCSTRING = r"""
     Returns:
 
-    Examples::
+    Examples:
 
-        >>> from PIL import Image
-        >>> import requests
-        >>> import jax
-        >>> from transformers import FlaxVisionTextDualEncoderModel, VisionTextDualEncoderProcessor, ViTFeatureExtractor, BertTokenizer
+    ```python
+    >>> from PIL import Image
+    >>> import requests
+    >>> import jax
+    >>> from transformers import (
+    ...     FlaxVisionTextDualEncoderModel,
+    ...     VisionTextDualEncoderProcessor,
+    ...     ViTFeatureExtractor,
+    ...     BertTokenizer,
+    ... )
 
-        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
-        >>> processor = VisionTextDualEncoderProcessor(feature_extractor, tokenizer)
-        >>> model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained("google/vit-base-patch16-224", "bert-base-uncased")
+    >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
+    >>> processor = VisionTextDualEncoderProcessor(feature_extractor, tokenizer)
+    >>> model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(
+    ...     "google/vit-base-patch16-224", "bert-base-uncased"
+    ... )
 
-        >>> # contrastive training
-        >>> urls = ["http://images.cocodataset.org/val2017/000000039769.jpg", "https://farm3.staticflickr.com/2674/5850229113_4fe05d5265_z.jpg]
-        >>> images = [Image.open(requests.get(url, stream=True).raw) for url in urls]
-        >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=images, return_tensors="np", padding=True)
-        >>> outputs = model(input_ids=inputs.input_ids, attention_mask=inputs.attention_mask, pixel_values=inputs.pixel_values, return_loss=True)
-        >>> loss, logits_per_image = outputs.loss, outputs.logits_per_imag # this is the image-text similarity score
+    >>> # contrastive training
+    >>> urls = [
+    ...     "http://images.cocodataset.org/val2017/000000039769.jpg",
+    ...     "https://farm3.staticflickr.com/2674/5850229113_4fe05d5265_z.jpg",
+    ... ]
+    >>> images = [Image.open(requests.get(url, stream=True).raw) for url in urls]
+    >>> inputs = processor(
+    ...     text=["a photo of a cat", "a photo of a dog"], images=images, return_tensors="np", padding=True
+    ... )
+    >>> outputs = model(
+    ...     input_ids=inputs.input_ids,
+    ...     attention_mask=inputs.attention_mask,
+    ...     pixel_values=inputs.pixel_values,
+    ... )
+    >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
 
-        >>> # save and load from pretrained
-        >>> model.save_pretrained("vit-bert")
-        >>> model = FlaxVisionTextDualEncoderModel.from_pretrained("vit-bert")
+    >>> # save and load from pretrained
+    >>> model.save_pretrained("vit-bert")
+    >>> model = FlaxVisionTextDualEncoderModel.from_pretrained("vit-bert")
 
-        >>> # inference
-        >>> outputs = model(**inputs)
-        >>> logits_per_image = outputs.logits_per_image # this is the image-text similarity score
-        >>> probs = jax.nn.softmax(logits_per_image, axis=1) # we can take the softmax to get the label probabilities
-
+    >>> # inference
+    >>> outputs = model(**inputs)
+    >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
+    >>> probs = jax.nn.softmax(logits_per_image, axis=1)  # we can take the softmax to get the label probabilities
+    ```
 """
 
 overwrite_call_docstring(

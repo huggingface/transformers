@@ -29,7 +29,8 @@ def get_checkpoint_callback(output_dir, metric):
         exp = "{val_avg_em:.4f}-{step_count}"
     else:
         raise NotImplementedError(
-            f"seq2seq callbacks only support rouge2 and bleu, got {metric}, You can make your own by adding to this function."
+            f"seq2seq callbacks only support rouge2 and bleu, got {metric}, You can make your own by adding to this"
+            " function."
         )
 
     checkpoint_callback = ModelCheckpoint(
@@ -38,7 +39,7 @@ def get_checkpoint_callback(output_dir, metric):
         monitor=f"val_{metric}",
         mode="max",
         save_top_k=3,
-        period=1,  # maybe save a checkpoint every time val is run, not just end of epoch.
+        every_n_epochs=1,  # maybe save a checkpoint every time val is run, not just end of epoch.
     )
     return checkpoint_callback
 

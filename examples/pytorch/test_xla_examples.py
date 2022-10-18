@@ -40,13 +40,14 @@ def get_results(output_dir):
     return results
 
 
+stream_handler = logging.StreamHandler(sys.stdout)
+logger.addHandler(stream_handler)
+
+
 @require_torch_tpu
 class TorchXLAExamplesTests(TestCasePlus):
     def test_run_glue(self):
         import xla_spawn
-
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
 
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""

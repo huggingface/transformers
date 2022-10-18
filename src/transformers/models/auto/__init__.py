@@ -18,7 +18,13 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_flax_available, is_tf_available, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_flax_available,
+    is_tf_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
@@ -29,64 +35,96 @@ _import_structure = {
     "tokenization_auto": ["TOKENIZER_MAPPING", "AutoTokenizer"],
 }
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_auto"] = [
         "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
+        "MODEL_FOR_AUDIO_XVECTOR_MAPPING",
         "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
         "MODEL_FOR_CAUSAL_LM_MAPPING",
         "MODEL_FOR_CTC_MAPPING",
+        "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
+        "MODEL_FOR_DEPTH_ESTIMATION_MAPPING",
         "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
         "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
+        "MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING",
+        "MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
         "MODEL_FOR_MASKED_LM_MAPPING",
         "MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
         "MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
         "MODEL_FOR_OBJECT_DETECTION_MAPPING",
         "MODEL_FOR_PRETRAINING_MAPPING",
         "MODEL_FOR_QUESTION_ANSWERING_MAPPING",
+        "MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING",
         "MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
         "MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
         "MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
         "MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
         "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
+        "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING",
         "MODEL_FOR_VISION_2_SEQ_MAPPING",
+        "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING",
         "MODEL_MAPPING",
         "MODEL_WITH_LM_HEAD_MAPPING",
+        "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
         "AutoModel",
         "AutoModelForAudioClassification",
         "AutoModelForAudioFrameClassification",
         "AutoModelForAudioXVector",
         "AutoModelForCausalLM",
         "AutoModelForCTC",
+        "AutoModelForDepthEstimation",
         "AutoModelForImageClassification",
         "AutoModelForImageSegmentation",
+        "AutoModelForInstanceSegmentation",
+        "AutoModelForMaskedImageModeling",
         "AutoModelForMaskedLM",
         "AutoModelForMultipleChoice",
         "AutoModelForNextSentencePrediction",
         "AutoModelForObjectDetection",
         "AutoModelForPreTraining",
         "AutoModelForQuestionAnswering",
+        "AutoModelForSemanticSegmentation",
         "AutoModelForSeq2SeqLM",
         "AutoModelForSequenceClassification",
         "AutoModelForSpeechSeq2Seq",
         "AutoModelForTableQuestionAnswering",
         "AutoModelForTokenClassification",
+        "AutoModelForVideoClassification",
         "AutoModelForVision2Seq",
+        "AutoModelForVisualQuestionAnswering",
+        "AutoModelForDocumentQuestionAnswering",
         "AutoModelWithLMHead",
+        "AutoModelForZeroShotObjectDetection",
     ]
 
-if is_tf_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_tf_auto"] = [
         "TF_MODEL_FOR_CAUSAL_LM_MAPPING",
         "TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
+        "TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
         "TF_MODEL_FOR_MASKED_LM_MAPPING",
         "TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
         "TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
         "TF_MODEL_FOR_PRETRAINING_MAPPING",
         "TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
+        "TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
+        "TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING",
         "TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
         "TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
+        "TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
         "TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
         "TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
+        "TF_MODEL_FOR_VISION_2_SEQ_MAPPING",
         "TF_MODEL_MAPPING",
         "TF_MODEL_WITH_LM_HEAD_MAPPING",
         "TFAutoModel",
@@ -94,16 +132,26 @@ if is_tf_available():
         "TFAutoModelForImageClassification",
         "TFAutoModelForMaskedLM",
         "TFAutoModelForMultipleChoice",
+        "TFAutoModelForNextSentencePrediction",
         "TFAutoModelForPreTraining",
+        "TFAutoModelForDocumentQuestionAnswering",
         "TFAutoModelForQuestionAnswering",
+        "TFAutoModelForSemanticSegmentation",
         "TFAutoModelForSeq2SeqLM",
         "TFAutoModelForSequenceClassification",
+        "TFAutoModelForSpeechSeq2Seq",
         "TFAutoModelForTableQuestionAnswering",
         "TFAutoModelForTokenClassification",
+        "TFAutoModelForVision2Seq",
         "TFAutoModelWithLMHead",
     ]
 
-if is_flax_available():
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_flax_auto"] = [
         "FLAX_MODEL_FOR_CAUSAL_LM_MAPPING",
         "FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
@@ -139,26 +187,40 @@ if TYPE_CHECKING:
     from .processing_auto import PROCESSOR_MAPPING, AutoProcessor
     from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_auto import (
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
+            MODEL_FOR_AUDIO_XVECTOR_MAPPING,
             MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
             MODEL_FOR_CTC_MAPPING,
+            MODEL_FOR_DEPTH_ESTIMATION_MAPPING,
+            MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
+            MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
+            MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
             MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
             MODEL_FOR_OBJECT_DETECTION_MAPPING,
             MODEL_FOR_PRETRAINING_MAPPING,
             MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+            MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
             MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
             MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
             MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+            MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
             MODEL_FOR_VISION_2_SEQ_MAPPING,
+            MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
+            MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoModel,
@@ -167,53 +229,81 @@ if TYPE_CHECKING:
             AutoModelForAudioXVector,
             AutoModelForCausalLM,
             AutoModelForCTC,
+            AutoModelForDepthEstimation,
+            AutoModelForDocumentQuestionAnswering,
             AutoModelForImageClassification,
             AutoModelForImageSegmentation,
+            AutoModelForInstanceSegmentation,
+            AutoModelForMaskedImageModeling,
             AutoModelForMaskedLM,
             AutoModelForMultipleChoice,
             AutoModelForNextSentencePrediction,
             AutoModelForObjectDetection,
             AutoModelForPreTraining,
             AutoModelForQuestionAnswering,
+            AutoModelForSemanticSegmentation,
             AutoModelForSeq2SeqLM,
             AutoModelForSequenceClassification,
             AutoModelForSpeechSeq2Seq,
             AutoModelForTableQuestionAnswering,
             AutoModelForTokenClassification,
+            AutoModelForVideoClassification,
             AutoModelForVision2Seq,
+            AutoModelForVisualQuestionAnswering,
+            AutoModelForZeroShotObjectDetection,
             AutoModelWithLMHead,
         )
 
-    if is_tf_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_auto import (
             TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+            TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
             TF_MODEL_FOR_MASKED_LM_MAPPING,
             TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
             TF_MODEL_FOR_PRETRAINING_MAPPING,
             TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+            TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
             TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
             TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+            TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
             TF_MODEL_MAPPING,
             TF_MODEL_WITH_LM_HEAD_MAPPING,
             TFAutoModel,
             TFAutoModelForCausalLM,
+            TFAutoModelForDocumentQuestionAnswering,
             TFAutoModelForImageClassification,
             TFAutoModelForMaskedLM,
             TFAutoModelForMultipleChoice,
+            TFAutoModelForNextSentencePrediction,
             TFAutoModelForPreTraining,
             TFAutoModelForQuestionAnswering,
+            TFAutoModelForSemanticSegmentation,
             TFAutoModelForSeq2SeqLM,
             TFAutoModelForSequenceClassification,
+            TFAutoModelForSpeechSeq2Seq,
             TFAutoModelForTableQuestionAnswering,
             TFAutoModelForTokenClassification,
+            TFAutoModelForVision2Seq,
             TFAutoModelWithLMHead,
         )
 
-    if is_flax_available():
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_flax_auto import (
             FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
             FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
@@ -244,4 +334,4 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

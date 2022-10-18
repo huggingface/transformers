@@ -17,15 +17,14 @@
 from dataclasses import dataclass, field
 from typing import Tuple
 
-from ..file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
-from ..utils import logging
+from ..utils import cached_property, is_torch_available, is_torch_tpu_available, logging, torch_required
 from .benchmark_args_utils import BenchmarkArguments
 
 
 if is_torch_available():
     import torch
 
-if is_torch_tpu_available():
+if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 
@@ -55,7 +54,8 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
                 positive_arg = deprecated_arg[3:]
                 setattr(self, positive_arg, not kwargs.pop(deprecated_arg))
                 logger.warning(
-                    f"{deprecated_arg} is depreciated. Please use --no_{positive_arg} or {positive_arg}={kwargs[positive_arg]}"
+                    f"{deprecated_arg} is depreciated. Please use --no_{positive_arg} or"
+                    f" {positive_arg}={kwargs[positive_arg]}"
                 )
 
         self.torchscript = kwargs.pop("torchscript", self.torchscript)

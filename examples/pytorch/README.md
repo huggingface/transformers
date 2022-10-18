@@ -15,12 +15,12 @@ limitations under the License.
 
 # Examples
 
-This folder contains actively maintained examples of use of 🤗 Transformers using the PyTorch backend, organized along NLP tasks.
+This folder contains actively maintained examples of use of 🤗 Transformers using the PyTorch backend, organized by ML task.
 
 ## The Big Table of Tasks
 
 Here is the list of all our examples:
-- with information on whether they are **built on top of `Trainer``** (if not, they still work, they might
+- with information on whether they are **built on top of `Trainer`** (if not, they still work, they might
   just lack some features),
 - whether or not they have a version using the [🤗 Accelerate](https://github.com/huggingface/accelerate) library.
 - whether or not they leverage the [🤗 Datasets](https://github.com/huggingface/datasets) library.
@@ -32,17 +32,19 @@ Coming soon!
 
 | Task | Example datasets | Trainer support | 🤗 Accelerate | 🤗 Datasets | Colab
 |---|---|:---:|:---:|:---:|:---:|
-| [**`language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/language-modeling) | WikiText-2 | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/language_modeling.ipynb)
-| [**`multiple-choice`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/multiple-choice) | SWAG | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/multiple_choice.ipynb)
-| [**`question-answering`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/question-answering) | SQuAD | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/question_answering.ipynb)
-| [**`summarization`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/summarization) |  XSum | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/summarization.ipynb)
-| [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/text-classification) | GLUE | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification.ipynb)
-| [**`text-generation`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/text-generation) | - | n/a | - | - | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/02_how_to_generate.ipynb)
-| [**`token-classification`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/token-classification) | CoNLL NER | ✅ |✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/token_classification.ipynb)
-| [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/translation) | WMT | ✅ | ✅ |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/translation.ipynb)
-| [**`speech-recognition`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/speech-recognition) | TIMIT | ✅ | - |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/speech_recognition.ipynb)
-| [**`multi-lingual speech-recognition`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/speech-recognition) | Common Voice | ✅ | - |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/multi_lingual_speech_recognition.ipynb)
-| [**`audio-classification`**](https://github.com/huggingface/transformers/tree/master/examples/pytorch/audio-classification) | SUPERB KS | ✅ | - |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/audio_classification.ipynb)
+| [**`language-modeling`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling) | WikiText-2 | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)
+| [**`multiple-choice`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/multiple-choice) | SWAG | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb)
+| [**`question-answering`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) | SQuAD | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb)
+| [**`summarization`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization) |  XSum | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb)
+| [**`text-classification`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) | GLUE | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)
+| [**`text-generation`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-generation) | - | n/a | - | - | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/main/notebooks/02_how_to_generate.ipynb)
+| [**`token-classification`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification) | CoNLL NER | ✅ |✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)
+| [**`translation`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/translation) | WMT | ✅ | ✅ |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb)
+| [**`speech-recognition`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/speech-recognition) | TIMIT | ✅ | - |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/speech_recognition.ipynb)
+| [**`multi-lingual speech-recognition`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/speech-recognition) | Common Voice | ✅ | - |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multi_lingual_speech_recognition.ipynb)
+| [**`audio-classification`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/audio-classification) | SUPERB KS | ✅ | - |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb)
+| [**`image-classification`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) | CIFAR-10 | ✅ | ✅ |✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)
+| [**`semantic-segmentation`**](https://github.com/huggingface/transformers/tree/main/examples/pytorch/semantic-segmentation) | SCENE_PARSE_150 | ✅ | ✅ |✅ | /
 
 
 ## Running quick tests
@@ -122,7 +124,7 @@ training with PyTorch 1.6.0 or latest, or by installing the [Apex](https://githu
 versions. Just add the flag `--fp16` to your command launching one of the scripts mentioned above!
 
 Using mixed precision training usually results in 2x-speedup for training with the same final results (as shown in
-[this table](https://github.com/huggingface/transformers/tree/master/examples/text-classification#mixed-precision-training)
+[this table](https://github.com/huggingface/transformers/tree/main/examples/text-classification#mixed-precision-training)
 for text classification).
 
 ## Running on TPUs
@@ -133,7 +135,7 @@ When using PyTorch, we support TPUs thanks to `pytorch/xla`. For more context an
 very detailed [pytorch/xla README](https://github.com/pytorch/xla/blob/master/README.md).
 
 In this repo, we provide a very simple launcher script named
-[xla_spawn.py](https://github.com/huggingface/transformers/tree/master/examples/pytorch/xla_spawn.py) that lets you run our
+[xla_spawn.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/xla_spawn.py) that lets you run our
 example scripts on multiple TPU cores without any boilerplate. Just pass a `--num_cores` flag to this script, then your
 regular training script with its arguments (this is similar to the `torch.distributed.launch` helper for
 `torch.distributed`):
@@ -165,10 +167,10 @@ python xla_spawn.py --num_cores 8 \
 
 Most PyTorch example scripts have a version using the [🤗 Accelerate](https://github.com/huggingface/accelerate) library
 that exposes the training loop so it's easy for you to customize or tweak them to your needs. They all require you to
-install `accelerate` with
+install `accelerate` with the latest development version
 
 ```bash
-pip install accelerate
+pip install git+https://github.com/huggingface/accelerate
 ```
 
 Then you can easily launch any of the scripts by running
@@ -196,6 +198,7 @@ You can easily log and monitor your runs code. The following are currently suppo
 * [TensorBoard](https://www.tensorflow.org/tensorboard)
 * [Weights & Biases](https://docs.wandb.ai/integrations/huggingface)
 * [Comet ML](https://www.comet.ml/docs/python-sdk/huggingface/)
+* [Neptune](https://docs.neptune.ai/integrations-and-supported-tools/model-training/hugging-face)
 
 ### Weights & Biases
 
@@ -249,3 +252,86 @@ or if in a Conda environment:
 ```bash
 conda install -c comet_ml -c anaconda -c conda-forge comet_ml
 ```
+
+### Neptune
+
+First, install the Neptune client library. You can do it with either `pip` or `conda`:
+
+`pip`:
+
+```bash
+pip install neptune-client
+```
+
+`conda`:
+
+```bash
+conda install -c conda-forge neptune-client
+```
+
+Next, in your model training script, import `NeptuneCallback`:
+
+```python
+from transformers.integrations import NeptuneCallback
+```
+
+To enable Neptune logging, in your `TrainingArguments`, set the `report_to` argument to `"neptune"`:
+
+```python
+training_args = TrainingArguments(
+    "quick-training-distilbert-mrpc", 
+    evaluation_strategy="steps",
+    eval_steps = 20,
+    report_to = "neptune",
+)
+
+trainer = Trainer(
+    model,
+    training_args,
+    ...
+)
+```
+
+Alternatively, for more logging options, create a Neptune callback:
+
+```python
+neptune_callback = NeptuneCallback()
+```
+
+To add more detail to the tracked run, you can supply optional arguments to `NeptuneCallback`.
+
+Some examples:
+
+```python
+neptune_callback = NeptuneCallback(
+    name = "DistilBERT",
+    description = "DistilBERT fine-tuned on GLUE/MRPC",
+    tags = ["args-callback", "fine-tune", "MRPC"],  # tags help you manage runs in Neptune
+    base_namespace="callback",  # the default is "finetuning"
+    log_checkpoints = "best",  # other options are "last", "same", and None
+    capture_hardware_metrics = False,  # additional keyword arguments for a Neptune run
+)
+```
+
+Pass the callback to the Trainer:
+
+```python
+training_args = TrainingArguments(..., report_to = None)
+trainer = Trainer(
+    model,
+    training_args,
+    ...
+    callbacks=[neptune_callback],
+)
+```
+
+Now, when you start the training with `trainer.train()`, your metadata will be logged in Neptune.
+
+**Note:** Although you can pass your **Neptune API token** and **project name** as arguments when creating the callback, the recommended way is to save them as environment variables:
+
+| Environment variable | Value                                                |
+| :------------------- | :--------------------------------------------------- |
+| `NEPTUNE_API_TOKEN`  | Your Neptune API token. To find and copy it, click your Neptune avatar and select **Get your API token**. |
+| `NEPTUNE_PROJECT` | The full name of your Neptune project (`workspace-name/project-name`). To find and copy it, head to **project settings** &rarr; **Properties**. |
+
+For detailed instructions and examples, see the [Neptune docs](https://docs.neptune.ai/integrations-and-supported-tools/model-training/hugging-face).

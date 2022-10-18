@@ -13,10 +13,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0  XLM-RoBERTa model. """
+""" TF 2.0 XLM-RoBERTa model."""
 
-from ...file_utils import add_start_docstrings
-from ...utils import logging
+from ...utils import add_start_docstrings, logging
 from ..roberta.modeling_tf_roberta import (
     TFRobertaForCausalLM,
     TFRobertaForMaskedLM,
@@ -38,38 +37,44 @@ TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 XLM_ROBERTA_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
-    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
-    and behavior.
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
+    behavior.
 
-    .. note::
+    <Tip>
 
-        TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
-        - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
-        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
-        the first positional argument :
+    - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
+    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+    `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
+    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+    `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
 
-        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
-        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
-        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
+
+    </Tip>
 
     Parameters:
-        config (:class:`~transformers.XLMRobertaConfig`): Model configuration class with all the parameters of the
+        config ([`XLMRobertaConfig`]): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 
@@ -79,8 +84,8 @@ XLM_ROBERTA_START_DOCSTRING = r"""
 )
 class TFXLMRobertaModel(TFRobertaModel):
     """
-    This class overrides :class:`~transformers.TFRobertaModel`. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`TFRobertaModel`]. Please check the superclass for the appropriate documentation alongside
+    usage examples.
     """
 
     config_class = XLMRobertaConfig
@@ -92,21 +97,21 @@ class TFXLMRobertaModel(TFRobertaModel):
 )
 class XLMRobertaForCausalLM(TFRobertaForCausalLM):
     """
-    This class overrides :class:`~transformers.TFRobertaForCausalLM`. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`TFRobertaForCausalLM`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
     """
 
     config_class = XLMRobertaConfig
 
 
 @add_start_docstrings(
-    """XLM-RoBERTa Model with a `language modeling` head on top. """,
+    """XLM-RoBERTa Model with a `language modeling` head on top.""",
     XLM_ROBERTA_START_DOCSTRING,
 )
 class TFXLMRobertaForMaskedLM(TFRobertaForMaskedLM):
     """
-    This class overrides :class:`~transformers.TFRobertaForMaskedLM`. Please check the superclass for the appropriate
-    documentation alongside usage examples.
+    This class overrides [`TFRobertaForMaskedLM`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
     """
 
     config_class = XLMRobertaConfig
@@ -121,8 +126,8 @@ class TFXLMRobertaForMaskedLM(TFRobertaForMaskedLM):
 )
 class TFXLMRobertaForSequenceClassification(TFRobertaForSequenceClassification):
     """
-    This class overrides :class:`~transformers.TFRobertaForSequenceClassification`. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`TFRobertaForSequenceClassification`]. Please check the superclass for the appropriate
+    documentation alongside usage examples.
     """
 
     config_class = XLMRobertaConfig
@@ -137,8 +142,8 @@ class TFXLMRobertaForSequenceClassification(TFRobertaForSequenceClassification):
 )
 class TFXLMRobertaForTokenClassification(TFRobertaForTokenClassification):
     """
-    This class overrides :class:`~transformers.TFRobertaForTokenClassification`. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`TFRobertaForTokenClassification`]. Please check the superclass for the appropriate
+    documentation alongside usage examples.
     """
 
     config_class = XLMRobertaConfig
@@ -153,8 +158,8 @@ layers on top of the hidden-states output to compute `span start logits` and `sp
 )
 class TFXLMRobertaForQuestionAnswering(TFRobertaForQuestionAnswering):
     """
-    This class overrides :class:`~transformers.TFRobertaForQuestionAnsweringSimple`. Please check the superclass for
-    the appropriate documentation alongside usage examples.
+    This class overrides [`TFRobertaForQuestionAnsweringSimple`]. Please check the superclass for the appropriate
+    documentation alongside usage examples.
     """
 
     config_class = XLMRobertaConfig
@@ -169,8 +174,8 @@ class TFXLMRobertaForQuestionAnswering(TFRobertaForQuestionAnswering):
 )
 class TFXLMRobertaForMultipleChoice(TFRobertaForMultipleChoice):
     """
-    This class overrides :class:`~transformers.TFRobertaForMultipleChoice`. Please check the superclass for the
-    appropriate documentation alongside usage examples.
+    This class overrides [`TFRobertaForMultipleChoice`]. Please check the superclass for the appropriate documentation
+    alongside usage examples.
     """
 
     config_class = XLMRobertaConfig

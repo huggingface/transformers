@@ -33,7 +33,7 @@ if is_apex_available():
     from apex import amp
 
 
-if version.parse(torch.__version__) >= version.parse("1.6"):
+if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.6"):
     _is_native_amp_available = True
     from torch.cuda.amp import autocast
 
@@ -79,9 +79,11 @@ class ModelArguments:
     mask_time_prob: Optional[float] = field(
         default=0.05,
         metadata={
-            "help": "Propability of each feature vector along the time axis to be chosen as the start of the vector"
-            "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
-            "vectors will be masked along the time axis. This is only relevant if ``apply_spec_augment is True``."
+            "help": (
+                "Propability of each feature vector along the time axis to be chosen as the start of the vector"
+                "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
+                "vectors will be masked along the time axis. This is only relevant if ``apply_spec_augment is True``."
+            )
         },
     )
     layerdrop: Optional[float] = field(default=0.0, metadata={"help": "The LayerDrop probability."})
@@ -116,15 +118,19 @@ class DataTrainingArguments:
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_val_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of validation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of validation examples to this "
+                "value if set."
+            )
         },
     )
     chars_to_ignore: List[str] = list_field(
@@ -179,14 +185,13 @@ class DataCollatorCTCWithPadding:
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
         )
-        with self.processor.as_target_processor():
-            labels_batch = self.processor.pad(
-                label_features,
-                padding=self.padding,
-                max_length=self.max_length_labels,
-                pad_to_multiple_of=self.pad_to_multiple_of_labels,
-                return_tensors="pt",
-            )
+        labels_batch = self.processor.pad(
+            labels=label_features,
+            padding=self.padding,
+            max_length=self.max_length_labels,
+            pad_to_multiple_of=self.pad_to_multiple_of_labels,
+            return_tensors="pt",
+        )
 
         # replace padding with -100 to ignore loss correctly
         labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
@@ -375,7 +380,8 @@ def main():
     )
 
     if data_args.max_train_samples is not None:
-        train_dataset = train_dataset.select(range(data_args.max_train_samples))
+        max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+        train_dataset = train_dataset.select(range(max_train_samples))
 
     if data_args.max_val_samples is not None:
         eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
@@ -407,10 +413,11 @@ def main():
         assert (
             len(set(batch["sampling_rate"])) == 1
         ), f"Make sure all inputs have the same sampling rate of {processor.feature_extractor.sampling_rate}."
-        batch["input_values"] = processor(batch["speech"], sampling_rate=batch["sampling_rate"][0]).input_values
-        # Setup the processor for targets
-        with processor.as_target_processor():
-            batch["labels"] = processor(batch["target_text"]).input_ids
+
+        processed_batch = processor(
+            audio=batch["speech"], text=batch["target_text"], sampling_rate=batch["sampling_rate"][0]
+        )
+        batch.update(processed_batch)
         return batch
 
     train_dataset = train_dataset.map(

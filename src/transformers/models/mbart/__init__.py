@@ -17,7 +17,8 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import (
+from ...utils import (
+    OptionalDependencyNotAvailable,
     _LazyModule,
     is_flax_available,
     is_sentencepiece_available,
@@ -27,17 +28,30 @@ from ...file_utils import (
 )
 
 
-_import_structure = {
-    "configuration_mbart": ["MBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "MBartConfig", "MBartOnnxConfig"],
-}
+_import_structure = {"configuration_mbart": ["MBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "MBartConfig", "MBartOnnxConfig"]}
 
-if is_sentencepiece_available():
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_mbart"] = ["MBartTokenizer"]
 
-if is_tokenizers_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_mbart_fast"] = ["MBartTokenizerFast"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_mbart"] = [
         "MBART_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MBartForCausalLM",
@@ -48,14 +62,24 @@ if is_torch_available():
         "MBartPreTrainedModel",
     ]
 
-if is_tf_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_tf_mbart"] = [
         "TFMBartForConditionalGeneration",
         "TFMBartModel",
         "TFMBartPreTrainedModel",
     ]
 
-if is_flax_available():
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_flax_mbart"] = [
         "FlaxMBartForConditionalGeneration",
         "FlaxMBartForQuestionAnswering",
@@ -68,13 +92,28 @@ if is_flax_available():
 if TYPE_CHECKING:
     from .configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig, MBartOnnxConfig
 
-    if is_sentencepiece_available():
+    try:
+        if not is_sentencepiece_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_mbart import MBartTokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_mbart_fast import MBartTokenizerFast
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_mbart import (
             MBART_PRETRAINED_MODEL_ARCHIVE_LIST,
             MBartForCausalLM,
@@ -85,10 +124,20 @@ if TYPE_CHECKING:
             MBartPreTrainedModel,
         )
 
-    if is_tf_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_mbart import TFMBartForConditionalGeneration, TFMBartModel, TFMBartPreTrainedModel
 
-    if is_flax_available():
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_flax_mbart import (
             FlaxMBartForConditionalGeneration,
             FlaxMBartForQuestionAnswering,
@@ -100,4 +149,4 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

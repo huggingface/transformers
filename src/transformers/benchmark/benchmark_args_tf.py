@@ -17,8 +17,7 @@
 from dataclasses import dataclass, field
 from typing import Tuple
 
-from ..file_utils import cached_property, is_tf_available, tf_required
-from ..utils import logging
+from ..utils import cached_property, is_tf_available, logging, tf_required
 from .benchmark_args_utils import BenchmarkArguments
 
 
@@ -52,7 +51,8 @@ class TensorFlowBenchmarkArguments(BenchmarkArguments):
                 positive_arg = deprecated_arg[3:]
                 kwargs[positive_arg] = not kwargs.pop(deprecated_arg)
                 logger.warning(
-                    f"{deprecated_arg} is depreciated. Please use --no-{positive_arg} or {positive_arg}={kwargs[positive_arg]}"
+                    f"{deprecated_arg} is depreciated. Please use --no-{positive_arg} or"
+                    f" {positive_arg}={kwargs[positive_arg]}"
                 )
         self.tpu_name = kwargs.pop("tpu_name", self.tpu_name)
         self.device_idx = kwargs.pop("device_idx", self.device_idx)

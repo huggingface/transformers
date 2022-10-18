@@ -18,100 +18,37 @@ Speech processor class for Wav2Vec2
 import warnings
 from contextlib import contextmanager
 
-from ...tokenization_utils import PreTrainedTokenizer
-from ..auto.tokenization_auto import AutoTokenizer
+from ...processing_utils import ProcessorMixin
 from .feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
 from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
 
 
-class Wav2Vec2Processor:
+class Wav2Vec2Processor(ProcessorMixin):
     r"""
     Constructs a Wav2Vec2 processor which wraps a Wav2Vec2 feature extractor and a Wav2Vec2 CTC tokenizer into a single
     processor.
 
-    :class:`~transformers.Wav2Vec2Processor` offers all the functionalities of
-    :class:`~transformers.Wav2Vec2FeatureExtractor` and :class:`~transformers.PreTrainedTokenizer`. See the docstring
-    of :meth:`~transformers.Wav2Vec2Processor.__call__` and :meth:`~transformers.Wav2Vec2Processor.decode` for more
-    information.
+    [`Wav2Vec2Processor`] offers all the functionalities of [`Wav2Vec2FeatureExtractor`] and [`PreTrainedTokenizer`].
+    See the docstring of [`~Wav2Vec2Processor.__call__`] and [`~Wav2Vec2Processor.decode`] for more information.
 
     Args:
-        feature_extractor (:obj:`Wav2Vec2FeatureExtractor`):
-            An instance of :class:`~transformers.Wav2Vec2FeatureExtractor`. The feature extractor is a required input.
-        tokenizer (:class:`~transformers.PreTrainedTokenizer`):
-            An instance of :class:`~transformers.PreTrainedTokenizer`. The tokenizer is a required input.
+        feature_extractor (`Wav2Vec2FeatureExtractor`):
+            An instance of [`Wav2Vec2FeatureExtractor`]. The feature extractor is a required input.
+        tokenizer ([`PreTrainedTokenizer`]):
+            An instance of [`PreTrainedTokenizer`]. The tokenizer is a required input.
     """
+    feature_extractor_class = "Wav2Vec2FeatureExtractor"
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, feature_extractor, tokenizer):
-        if not isinstance(feature_extractor, Wav2Vec2FeatureExtractor):
-            raise ValueError(
-                f"`feature_extractor` has to be of type {Wav2Vec2FeatureExtractor.__class__}, but is {type(feature_extractor)}"
-            )
-        if not isinstance(tokenizer, PreTrainedTokenizer):
-            raise ValueError(
-                f"`tokenizer` has to be of type {PreTrainedTokenizer.__class__}, but is {type(tokenizer)}"
-            )
-
-        self.feature_extractor = feature_extractor
-        self.tokenizer = tokenizer
+        super().__init__(feature_extractor, tokenizer)
         self.current_processor = self.feature_extractor
-
-    def save_pretrained(self, save_directory):
-        """
-        Save a Wav2Vec2 feature_extractor object and Wav2Vec2 tokenizer object to the directory ``save_directory``, so
-        that it can be re-loaded using the :func:`~transformers.Wav2Vec2Processor.from_pretrained` class method.
-
-        .. note::
-
-            This class method is simply calling
-            :meth:`~transformers.feature_extraction_utils.FeatureExtractionMixin.save_pretrained` and
-            :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.save_pretrained`. Please refer to the
-            docstrings of the methods above for more information.
-
-        Args:
-            save_directory (:obj:`str` or :obj:`os.PathLike`):
-                Directory where the feature extractor JSON file and the tokenizer files will be saved (directory will
-                be created if it does not exist).
-        """
-
-        self.feature_extractor.save_pretrained(save_directory)
-        self.tokenizer.save_pretrained(save_directory)
+        self._in_target_context_manager = False
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        r"""
-        Instantiate a :class:`~transformers.Wav2Vec2Processor` from a pretrained Wav2Vec2 processor.
-
-        .. note::
-
-            This class method is simply calling Wav2Vec2FeatureExtractor's
-            :meth:`~transformers.feature_extraction_utils.FeatureExtractionMixin.from_pretrained` and
-            PreTrainedTokenizer's :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained`.
-            Please refer to the docstrings of the methods above for more information.
-
-        Args:
-            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
-                This can be either:
-
-                - a string, the `model id` of a pretrained feature_extractor hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
-                  namespaced under a user or organization name, like ``dbmdz/bert-base-german-cased``.
-                - a path to a `directory` containing a feature extractor file saved using the
-                  :meth:`~transformers.SequenceFeatureExtractor.save_pretrained` method, e.g.,
-                  ``./my_model_directory/``.
-                - a path or url to a saved feature extractor JSON `file`, e.g.,
-                  ``./my_model_directory/preprocessor_config.json``.
-            **kwargs
-                Additional keyword arguments passed along to both :class:`~transformers.SequenceFeatureExtractor` and
-                :class:`~transformers.PreTrainedTokenizer`
-        """
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        # load generic `AutoTokenizer`
-        # need fallback here for backward compatibility in case processor is
-        # loaded from just a tokenizer file that does not have a `tokenizer_class` attribute
-        # behavior should be deprecated in major future release
         try:
-            tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            return super().from_pretrained(pretrained_model_name_or_path, **kwargs)
         except OSError:
             warnings.warn(
                 f"Loading a tokenizer inside {cls.__name__} from a config that does not"
@@ -121,43 +58,90 @@ class Wav2Vec2Processor:
                 "file to suppress this warning: ",
                 FutureWarning,
             )
+
+            feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
             tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
     def __call__(self, *args, **kwargs):
         """
         When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
-        :meth:`~transformers.Wav2Vec2FeatureExtractor.__call__` and returns its output. If used in the context
-        :meth:`~transformers.Wav2Vec2Processor.as_target_processor` this method forwards all its arguments to
-        PreTrainedTokenizer's :meth:`~transformers.PreTrainedTokenizer.__call__`. Please refer to the docstring of the
-        above two methods for more information.
+        [`~Wav2Vec2FeatureExtractor.__call__`] and returns its output. If used in the context
+        [`~Wav2Vec2Processor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
+        [`~PreTrainedTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
         """
-        return self.current_processor(*args, **kwargs)
+        # For backward compatibility
+        if self._in_target_context_manager:
+            return self.current_processor(*args, **kwargs)
+
+        if "raw_speech" in kwargs:
+            warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
+            audio = kwargs.pop("raw_speech")
+        else:
+            audio = kwargs.pop("audio", None)
+        text = kwargs.pop("text", None)
+        if len(args) > 0:
+            audio = args[0]
+            args = args[1:]
+
+        if audio is None and text is None:
+            raise ValueError("You need to specify either an `audio` or `text` input to process.")
+
+        if audio is not None:
+            inputs = self.feature_extractor(audio, *args, **kwargs)
+        if text is not None:
+            encodings = self.tokenizer(text, **kwargs)
+
+        if text is None:
+            return inputs
+        elif audio is None:
+            return encodings
+        else:
+            inputs["labels"] = encodings["input_ids"]
+            return inputs
 
     def pad(self, *args, **kwargs):
         """
         When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
-        :meth:`~transformers.Wav2Vec2FeatureExtractor.pad` and returns its output. If used in the context
-        :meth:`~transformers.Wav2Vec2Processor.as_target_processor` this method forwards all its arguments to
-        PreTrainedTokenizer's :meth:`~transformers.PreTrainedTokenizer.pad`. Please refer to the docstring of the above
-        two methods for more information.
+        [`~Wav2Vec2FeatureExtractor.pad`] and returns its output. If used in the context
+        [`~Wav2Vec2Processor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
+        [`~PreTrainedTokenizer.pad`]. Please refer to the docstring of the above two methods for more information.
         """
-        return self.current_processor.pad(*args, **kwargs)
+        # For backward compatibility
+        if self._in_target_context_manager:
+            return self.current_processor.pad(*args, **kwargs)
+
+        input_features = kwargs.pop("input_features", None)
+        labels = kwargs.pop("labels", None)
+        if len(args) > 0:
+            input_features = args[0]
+            args = args[1:]
+
+        if input_features is not None:
+            input_features = self.feature_extractor.pad(input_features, *args, **kwargs)
+        if labels is not None:
+            labels = self.tokenizer.pad(labels, **kwargs)
+
+        if labels is None:
+            return input_features
+        elif input_features is None:
+            return labels
+        else:
+            input_features["labels"] = labels["input_ids"]
+            return input_features
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to PreTrainedTokenizer's
-        :meth:`~transformers.PreTrainedTokenizer.batch_decode`. Please refer to the docstring of this method for more
-        information.
+        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
+        refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to PreTrainedTokenizer's
-        :meth:`~transformers.PreTrainedTokenizer.decode`. Please refer to the docstring of this method for more
-        information.
+        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
+        to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 
@@ -167,6 +151,13 @@ class Wav2Vec2Processor:
         Temporarily sets the tokenizer for processing the input. Useful for encoding the labels when fine-tuning
         Wav2Vec2.
         """
+        warnings.warn(
+            "`as_target_processor` is deprecated and will be removed in v5 of Transformers. You can process your "
+            "labels by using the argument `text` of the regular `__call__` method (either in the same call as "
+            "your audio inputs, or in a separate call."
+        )
+        self._in_target_context_manager = True
         self.current_processor = self.tokenizer
         yield
         self.current_processor = self.feature_extractor
+        self._in_target_context_manager = False

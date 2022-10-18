@@ -18,7 +18,7 @@ limitations under the License.
 
 ## GLUE tasks
 
-Based on the script [`run_flax_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/flax/text-classification/run_flax_glue.py).
+Based on the script [`run_flax_glue.py`](https://github.com/huggingface/transformers/blob/main/examples/flax/text-classification/run_flax_glue.py).
 
 Fine-tuning the library models for sequence classification on the GLUE benchmark: [General Language Understanding
 Evaluation](https://gluebenchmark.com/). This script can fine-tune any of the models on the [hub](https://huggingface.co/models)  and can also be used for a 
@@ -33,15 +33,16 @@ export TASK_NAME=mrpc
 python run_flax_glue.py \
   --model_name_or_path bert-base-cased \
   --task_name ${TASK_NAME} \
-  --max_length 128 \
+  --max_seq_length 128 \
   --learning_rate 2e-5 \
   --num_train_epochs 3 \
   --per_device_train_batch_size 4 \
+  --eval_steps 100 \
   --output_dir ./$TASK_NAME/ \
   --push_to_hub
 ```
 
-where task name can be one of cola, mnli, mnli-mm, mrpc, qnli, qqp, rte, sst2, stsb, wnli.
+where task name can be one of cola, mnli, mnli_mismatched, mnli_matched, mrpc, qnli, qqp, rte, sst2, stsb, wnli.
 
 Using the command above, the script will train for 3 epochs and run eval after each epoch. 
 Metrics and hyperparameters are stored in Tensorflow event files in `--output_dir`.
@@ -84,7 +85,7 @@ website. For QQP and WNLI, please refer to [FAQ #12](https://gluebenchmark.com/f
 ### Runtime evaluation
 
 We also ran each task once on a single V100 GPU, 8 V100 GPUs, and 8 Cloud v3 TPUs and report the
-overall training time below. For comparison we ran Pytorch's [run_glue.py](https://github.com/huggingface/transformers/blob/master/examples/pytorch/text-classification/run_glue.py) on a single GPU (last column).
+overall training time below. For comparison we ran Pytorch's [run_glue.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_glue.py) on a single GPU (last column).
 
 
 | Task  | TPU v3-8  | 8 GPU      | [1 GPU](https://tensorboard.dev/experiment/mkPS4Zh8TnGe1HB6Yzwj4Q)  | 1 GPU (Pytorch) |

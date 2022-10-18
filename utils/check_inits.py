@@ -14,8 +14,10 @@
 # limitations under the License.
 
 import collections
+import importlib.util
 import os
 import re
+from pathlib import Path
 
 
 PATH_TO_TRANSFORMERS = "src/transformers"
@@ -23,10 +25,12 @@ PATH_TO_TRANSFORMERS = "src/transformers"
 
 # Matches is_xxx_available()
 _re_backend = re.compile(r"is\_([a-z_]*)_available()")
+# Catches a one-line _import_struct = {xxx}
+_re_one_line_import_struct = re.compile(r"^_import_structure\s+=\s+\{([^\}]+)\}")
 # Catches a line with a key-values pattern: "bla": ["foo", "bar"]
 _re_import_struct_key_value = re.compile(r'\s+"\S*":\s+\[([^\]]*)\]')
-# Catches a line if is_foo_available
-_re_test_backend = re.compile(r"^\s*if\s+is\_[a-z_]*\_available\(\)")
+# Catches a line if not is_foo_available
+_re_test_backend = re.compile(r"^\s*if\s+not\s+is\_[a-z_]*\_available\(\)")
 # Catches a line _import_struct["bla"].append("foo")
 _re_import_struct_add_one = re.compile(r'^\s*_import_structure\["\S*"\]\.append\("(\S*)"\)')
 # Catches a line _import_struct["bla"].extend(["foo", "bar"]) or _import_struct["bla"] = ["foo", "bar"]
@@ -37,6 +41,10 @@ _re_quote_object = re.compile('^\s+"([^"]+)",')
 _re_between_brackets = re.compile("^\s+\[([^\]]+)\]")
 # Catches a line with from foo import bar, bla, boo
 _re_import = re.compile(r"\s+from\s+\S*\s+import\s+([^\(\s].*)\n")
+# Catches a line with try:
+_re_try = re.compile(r"^\s*try:")
+# Catches a line with else:
+_re_else = re.compile(r"^\s*else:")
 
 
 def find_backend(line):
@@ -68,6 +76,14 @@ def parse_init(init_file):
     objects = []
     while not lines[line_index].startswith("if TYPE_CHECKING") and find_backend(lines[line_index]) is None:
         line = lines[line_index]
+        # If we have everything on a single line, let's deal with it.
+        if _re_one_line_import_struct.search(line):
+            content = _re_one_line_import_struct.search(line).groups()[0]
+            imports = re.findall("\[([^\]]+)\]", content)
+            for imp in imports:
+                objects.extend([obj[1:-1] for obj in imp.split(", ")])
+            line_index += 1
+            continue
         single_line_import_search = _re_import_struct_key_value.search(line)
         if single_line_import_search is not None:
             imports = [obj[1:-1] for obj in single_line_import_search.groups()[0].split(", ") if len(obj) > 0]
@@ -79,9 +95,19 @@ def parse_init(init_file):
     import_dict_objects = {"none": objects}
     # Let's continue with backend-specific objects in _import_structure
     while not lines[line_index].startswith("if TYPE_CHECKING"):
-        # If the line is an if is_backend_available, we grab all objects associated.
+        # If the line is an if not is_backend_available, we grab all objects associated.
         backend = find_backend(lines[line_index])
+        # Check if the backend declaration is inside a try block:
+        if _re_try.search(lines[line_index - 1]) is None:
+            backend = None
+
         if backend is not None:
+            line_index += 1
+
+            # Scroll until we hit the else block of try-except-else
+            while _re_else.search(lines[line_index]) is None:
+                line_index += 1
+
             line_index += 1
 
             objects = []
@@ -128,9 +154,19 @@ def parse_init(init_file):
     type_hint_objects = {"none": objects}
     # Let's continue with backend-specific objects
     while line_index < len(lines):
-        # If the line is an if is_backemd_available, we grab all objects associated.
+        # If the line is an if is_backend_available, we grab all objects associated.
         backend = find_backend(lines[line_index])
+        # Check if the backend declaration is inside a try block:
+        if _re_try.search(lines[line_index - 1]) is None:
+            backend = None
+
         if backend is not None:
+            line_index += 1
+
+            # Scroll until we hit the else block of try-except-else
+            while _re_else.search(lines[line_index]) is None:
+                line_index += 1
+
             line_index += 1
 
             objects = []
@@ -202,5 +238,62 @@ def check_all_inits():
         raise ValueError("\n\n".join(failures))
 
 
+def get_transformers_submodules():
+    """
+    Returns the list of Transformers submodules.
+    """
+    submodules = []
+    for path, directories, files in os.walk(PATH_TO_TRANSFORMERS):
+        for folder in directories:
+            # Ignore private modules
+            if folder.startswith("_"):
+                directories.remove(folder)
+                continue
+            # Ignore leftovers from branches (empty folders apart from pycache)
+            if len(list((Path(path) / folder).glob("*.py"))) == 0:
+                continue
+            short_path = str((Path(path) / folder).relative_to(PATH_TO_TRANSFORMERS))
+            submodule = short_path.replace(os.path.sep, ".")
+            submodules.append(submodule)
+        for fname in files:
+            if fname == "__init__.py":
+                continue
+            short_path = str((Path(path) / fname).relative_to(PATH_TO_TRANSFORMERS))
+            submodule = short_path.replace(".py", "").replace(os.path.sep, ".")
+            if len(submodule.split(".")) == 1:
+                submodules.append(submodule)
+    return submodules
+
+
+IGNORE_SUBMODULES = [
+    "convert_pytorch_checkpoint_to_tf2",
+    "modeling_flax_pytorch_utils",
+]
+
+
+def check_submodules():
+    # This is to make sure the transformers module imported is the one in the repo.
+    spec = importlib.util.spec_from_file_location(
+        "transformers",
+        os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"),
+        submodule_search_locations=[PATH_TO_TRANSFORMERS],
+    )
+    transformers = spec.loader.load_module()
+
+    module_not_registered = [
+        module
+        for module in get_transformers_submodules()
+        if module not in IGNORE_SUBMODULES and module not in transformers._import_structure.keys()
+    ]
+    if len(module_not_registered) > 0:
+        list_of_modules = "\n".join(f"- {module}" for module in module_not_registered)
+        raise ValueError(
+            "The following submodules are not properly registed in the main init of Transformers:\n"
+            f"{list_of_modules}\n"
+            "Make sure they appear somewhere in the keys of `_import_structure` with an empty list as value."
+        )
+
+
 if __name__ == "__main__":
     check_all_inits()
+    check_submodules()

@@ -12,31 +12,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow Hubert model. """
+""" TensorFlow Hubert model."""
 import inspect
 import warnings
+from collections.abc import Mapping
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import (
+from ...modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput
+from ...modeling_tf_utils import TFPreTrainedModel, booleans_processing, get_initializer, keras_serializable
+from ...tf_utils import shape_list, stable_softmax
+from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    logging,
     replace_return_docstrings,
 )
-from ...modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput
-from ...modeling_tf_utils import (
-    TFPreTrainedModel,
-    booleans_processing,
-    get_initializer,
-    keras_serializable,
-    shape_list,
-)
-from ...tokenization_utils_base import BatchEncoding
-from ...utils import logging
 from .configuration_hubert import HubertConfig
 
 
@@ -56,14 +51,14 @@ LARGE_NEGATIVE = -1e8
 def input_values_processing(func, config, input_values, **kwargs):
     """
     Process the input of each TensorFlow model including the booleans. In case of a list of symbolic inputs, each input
-    has to be named accordingly to the parameters name, i.e. :obj:`input_values = tf.keras.Input(shape=(128,),
+    has to be named accordingly to the parameters name, i.e. `input_values = tf.keras.Input(shape=(128,),
     dtype='float32', name="input_values")` otherwise the order of the tensors will not be guaranteed during the
     training.
 
     Args:
-        func (:obj:`callable`):
+        func (`callable`):
             The callable function of the TensorFlow model.
-        config (:class:`~transformers.PretrainedConfig`):
+        config ([`PretrainedConfig`]):
             The config of the running model.
         **kwargs:
             The inputs of the model.
@@ -100,12 +95,14 @@ def input_values_processing(func, config, input_values, **kwargs):
                 output[parameter_names[i]] = input
             else:
                 raise ValueError(
-                    f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for {parameter_names[i]}."
+                    f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for"
+                    f" {parameter_names[i]}."
                 )
-    elif isinstance(input_values, (dict, BatchEncoding)):
+    elif isinstance(input_values, Mapping):
         if "inputs" in input_values:
             warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_values` instead.",
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_values`"
+                " instead.",
                 FutureWarning,
             )
 
@@ -113,7 +110,8 @@ def input_values_processing(func, config, input_values, **kwargs):
 
         if "decoder_cached_states" in input_values:
             warnings.warn(
-                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use"
+                " `past_key_values` instead.",
                 FutureWarning,
             )
             output["past_key_values"] = input_values.pop("decoder_cached_states")
@@ -133,7 +131,8 @@ def input_values_processing(func, config, input_values, **kwargs):
             output[parameter_names[0]] = input_values
         else:
             raise ValueError(
-                f"Data of type {type(input_values)} is not allowed only {allowed_types} is accepted for {parameter_names[0]}."
+                f"Data of type {type(input_values)} is not allowed only {allowed_types} is accepted for"
+                f" {parameter_names[0]}."
             )
 
     for name in parameter_names:
@@ -204,17 +203,18 @@ def _compute_mask_indices(
     Computes random mask spans for a given shape
 
     Args:
-        shape: the the shape for which to compute masks.
+        shape: the shape for which to compute masks.
             should be of size 2 where first element is batch size and 2nd is timesteps
         attention_mask: optional padding mask of the same size as shape, which will prevent masking padded elements
-        mask_prob: probability for each token to be chosen as start of the span to be masked. this will be multiplied by
+        mask_prob:
+            probability for each token to be chosen as start of the span to be masked. this will be multiplied by
             number of timesteps divided by length of mask span to mask approximately this percentage of all elements.
             however due to overlaps, the actual number will be smaller (unless no_overlap is True)
         mask_length: size of the mask
         min_masks: minimum number of masked spans
 
-    Adapted from `fairseq's data_utils.py
-    <https://github.com/pytorch/fairseq/blob/e0788f7007a8473a76db573985031f3c94201e79/fairseq/data/data_utils.py#L376>`__.
+    Adapted from [fairseq's
+    data_utils.py](https://github.com/pytorch/fairseq/blob/e0788f7007a8473a76db573985031f3c94201e79/fairseq/data/data_utils.py#L376).
     """
     batch_size, sequence_length = shape
 
@@ -223,15 +223,17 @@ def _compute_mask_indices(
 
     if mask_length > sequence_length:
         raise ValueError(
-            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and `sequence_length`: {sequence_length}`"
+            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and"
+            f" `sequence_length`: {sequence_length}`"
         )
     # compute number of masked spans in batch
-    num_masked_spans = int(mask_prob * sequence_length / mask_length + tf.random.uniform((1,)))
-    num_masked_spans = max(num_masked_spans, min_masks)
+    num_masked_spans = mask_prob * sequence_length / mask_length + tf.random.uniform((1,))
+    num_masked_spans = tf.maximum(num_masked_spans, min_masks)
+    num_masked_spans = tf.cast(num_masked_spans, tf.int32)
 
     # make sure num masked indices <= sequence_length
-    if num_masked_spans * mask_length > sequence_length:
-        num_masked_spans = sequence_length // mask_length
+    num_masked_spans = tf.math.minimum(sequence_length // mask_length, num_masked_spans)
+    num_masked_spans = tf.squeeze(num_masked_spans)
 
     # SpecAugment mask to fill
     spec_aug_mask = tf.zeros((batch_size, sequence_length), dtype=tf.int32)
@@ -255,14 +257,14 @@ def _compute_mask_indices(
 
     # scatter indices to mask
     spec_aug_mask = _scatter_values_on_batch_indices(
-        tf.ones_like(spec_aug_mask_idxs), spec_aug_mask_idxs, spec_aug_mask.shape
+        tf.ones_like(spec_aug_mask_idxs), spec_aug_mask_idxs, tf.shape(spec_aug_mask)
     )
 
     return spec_aug_mask
 
 
 # Copied from transformers.models.bart.modeling_tf_bart._expand_mask
-def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
+def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -412,9 +414,11 @@ class TFHubertGroupNorm(tf.keras.layers.Layer):
         dim = input_shape[self.axis]
         if dim is None:
             raise ValueError(
-                "Axis " + str(self.axis) + " of "
-                "input tensor should have a defined dimension "
-                "but the layer received an input with shape " + str(input_shape) + "."
+                "Axis "
+                + str(self.axis)
+                + " of input tensor should have a defined dimension but the layer received an input with shape "
+                + str(input_shape)
+                + "."
             )
 
     def _set_number_of_groups_for_instance_norm(self, input_shape):
@@ -428,22 +432,27 @@ class TFHubertGroupNorm(tf.keras.layers.Layer):
         dim = input_shape[self.axis]
         if dim < self.groups:
             raise ValueError(
-                "Number of groups (" + str(self.groups) + ") cannot be "
-                "more than the number of channels (" + str(dim) + ")."
+                "Number of groups ("
+                + str(self.groups)
+                + ") cannot be more than the number of channels ("
+                + str(dim)
+                + ")."
             )
 
         if dim % self.groups != 0:
             raise ValueError(
-                "Number of groups (" + str(self.groups) + ") must be a "
-                "multiple of the number of channels (" + str(dim) + ")."
+                "Number of groups ("
+                + str(self.groups)
+                + ") must be a multiple of the number of channels ("
+                + str(dim)
+                + ")."
             )
 
     def _check_axis(self):
 
         if self.axis == 0:
             raise ValueError(
-                "You are trying to normalize your batch axis. Do you want to "
-                "use tf.layer.batch_normalization instead"
+                "You are trying to normalize your batch axis. Do you want to use tf.layer.batch_normalization instead"
             )
 
     def _create_input_spec(self, input_shape):
@@ -658,7 +667,7 @@ class TFHubertSamePadLayer(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFHubertFeatureExtractor(tf.keras.layers.Layer):
+class TFHubertFeatureEncoder(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
@@ -683,6 +692,17 @@ class TFHubertFeatureExtractor(tf.keras.layers.Layer):
         for conv_layer in self.conv_layers:
             hidden_states = conv_layer(hidden_states)
         return hidden_states
+
+
+class TFHubertFeatureExtractor(TFHubertFeatureEncoder):
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
+        warnings.warn(
+            f"The class `{self.__class__.__name__}` has been depreciated "
+            "and will be removed in Transformers v5. "
+            f"Use `{self.__class__.__bases__[0].__name__}` instead.",
+            FutureWarning,
+        )
 
 
 class TFHubertFeatureProjection(tf.keras.layers.Layer):
@@ -724,8 +744,12 @@ class TFHubertAttention(tf.keras.layers.Layer):
         self.num_heads = num_heads
         self.dropout = tf.keras.layers.Dropout(dropout)
         self.head_dim = embed_dim // num_heads
-        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
-        self.scaling = self.head_dim ** -0.5
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
@@ -743,7 +767,7 @@ class TFHubertAttention(tf.keras.layers.Layer):
         past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
         attention_mask: Optional[tf.Tensor] = None,
         layer_head_mask: Optional[tf.Tensor] = None,
-        training=False,
+        training: Optional[bool] = False,
     ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -792,40 +816,40 @@ class TFHubertAttention(tf.keras.layers.Layer):
         src_len = shape_list(key_states)[1]
         attn_weights = tf.matmul(query_states, key_states, transpose_b=True)
 
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(attn_weights),
-                [bsz * self.num_heads, tgt_len, src_len],
-                message=f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}",
-            )
+        tf.debugging.assert_equal(
+            shape_list(attn_weights),
+            [bsz * self.num_heads, tgt_len, src_len],
+            message=(
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {shape_list(attn_weights)}"
+            ),
+        )
 
         if attention_mask is not None:
-            # The tf.debugging asserts are not compliant with XLA then they
-            # have to be disabled in other modes than eager.
-            if tf.executing_eagerly():
-                tf.debugging.assert_equal(
-                    shape_list(attention_mask),
-                    [bsz, 1, tgt_len, src_len],
-                    message=f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}",
-                )
+            tf.debugging.assert_equal(
+                shape_list(attention_mask),
+                [bsz, 1, tgt_len, src_len],
+                message=(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
+                    f" {shape_list(attention_mask)}"
+                ),
+            )
 
             attention_mask = tf.cast(attention_mask, dtype=attn_weights.dtype)
             attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attention_mask
             attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
-        attn_weights = tf.nn.softmax(attn_weights, axis=-1)
+        attn_weights = stable_softmax(attn_weights, axis=-1)
 
         if layer_head_mask is not None:
-            # The tf.debugging asserts are not compliant with XLA then they
-            # have to be disabled in other modes than eager.
-            if tf.executing_eagerly():
-                tf.debugging.assert_equal(
-                    shape_list(layer_head_mask),
-                    [self.num_heads],
-                    message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
-                )
+            tf.debugging.assert_equal(
+                shape_list(layer_head_mask),
+                [self.num_heads],
+                message=(
+                    f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
+                    f" {shape_list(layer_head_mask)}"
+                ),
+            )
 
             attn_weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
                 attn_weights, (bsz, self.num_heads, tgt_len, src_len)
@@ -835,14 +859,14 @@ class TFHubertAttention(tf.keras.layers.Layer):
         attn_probs = self.dropout(attn_weights, training=training)
         attn_output = tf.matmul(attn_probs, value_states)
 
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(attn_output),
-                [bsz * self.num_heads, tgt_len, self.head_dim],
-                message=f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {shape_list(attn_output)}",
-            )
+        tf.debugging.assert_equal(
+            shape_list(attn_output),
+            [bsz * self.num_heads, tgt_len, self.head_dim],
+            message=(
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {shape_list(attn_output)}"
+            ),
+        )
 
         attn_output = tf.transpose(
             tf.reshape(attn_output, (bsz, self.num_heads, tgt_len, self.head_dim)), (0, 2, 1, 3)
@@ -1115,7 +1139,7 @@ class TFHubertMainLayer(tf.keras.layers.Layer):
     def __init__(self, config: HubertConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self.feature_extractor = TFHubertFeatureExtractor(config, name="feature_extractor")
+        self.feature_extractor = TFHubertFeatureEncoder(config, name="feature_extractor")
         self.feature_projection = TFHubertFeatureProjection(config, name="feature_projection")
 
         if config.do_stable_layer_norm:
@@ -1147,8 +1171,8 @@ class TFHubertMainLayer(tf.keras.layers.Layer):
 
     def _mask_hidden_states(self, hidden_states: tf.Tensor, mask_time_indices: Optional[tf.Tensor] = None):
         """
-        Masks extracted features along time axis and/or along feature axis according to `SpecAugment
-        <https://arxiv.org/abs/1904.08779>`__ .
+        Masks extracted features along time axis and/or along feature axis according to
+        [SpecAugment](https://arxiv.org/abs/1904.08779).
         """
         batch_size, sequence_length, hidden_size = shape_list(hidden_states)
 
@@ -1265,6 +1289,7 @@ class TFHubertPreTrainedModel(TFPreTrainedModel):
 
     config_class = HubertConfig
     base_model_prefix = "hubert"
+    main_input_name = "input_values"
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -1276,7 +1301,22 @@ class TFHubertPreTrainedModel(TFPreTrainedModel):
         }
         return dummy_inputs
 
-    @tf.function
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        logger.warning(
+            f"\n{self.__class__.__name__} has backpropagation operations that are NOT supported on CPU. If you wish "
+            "to train/fine-tine this model, you need a GPU or a TPU"
+        )
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_values": tf.TensorSpec((None, None), tf.float32, name="input_values"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None), tf.int64, name="token_type_ids"),
+            }
+        ]
+    )
     def serving(self, inputs):
         output = self.call(input_values=inputs, training=False)
 
@@ -1285,92 +1325,97 @@ class TFHubertPreTrainedModel(TFPreTrainedModel):
 
 HUBERT_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
-    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
-    and behavior.
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
+    behavior.
 
-    .. note::
+    <Tip>
 
-        TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
-        - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
-        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
-        the first positional argument :
+    - a single Tensor with `input_values` only and nothing else: `model(input_values)`
+    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+    `model([input_values, attention_mask])` or `model([input_values, attention_mask, token_type_ids])`
+    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+    `model({"input_values": input_values, "token_type_ids": token_type_ids})`
 
-        - a single Tensor with :obj:`input_values` only and nothing else: :obj:`model(inputs_ids)`
-        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-          :obj:`model([input_values, attention_mask])` or :obj:`model([input_values, attention_mask, token_type_ids])`
-        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({"input_values": input_values, "token_type_ids": token_type_ids})`
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
+
+    </Tip>
 
     Args:
-        config (:class:`~transformers.HubertConfig`): Model configuration class with all the parameters of the model.
+        config ([`HubertConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 HUBERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]` and each example must have the shape :obj:`({0})`):
+        input_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
-            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
-            details.
+            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            [`PreTrainedTokenizer.encode`] for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
+            [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`__
-        position_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
-            `What are position IDs? <../glossary.html#position-ids>`__
-        head_mask (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+            [What are position IDs?](../glossary#position-ids)
+        head_mask (`np.ndarray` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`({0}, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_values` you can choose to directly pass an embedded
-            representation. This is useful if you want more control over how to convert :obj:`input_values` indices
-            into associated vectors than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+        inputs_embeds (`np.ndarray` or `tf.Tensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_values` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_values` indices into associated vectors
+            than the model's internal embedding lookup matrix.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
             config will be used instead.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
-            argument can be used in eager mode, in graph mode the value will always be set to True.
-        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
+            eager mode, in graph mode the value will always be set to True.
+        training (`bool`, *optional*, defaults to `False``):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
 """
@@ -1405,26 +1450,29 @@ class TFHubertModel(TFHubertPreTrainedModel):
 
         Returns:
 
-        Example::
+        Example:
 
-            >>> from transformers import Wav2Vec2Processor, TFHubertModel
-            >>> from datasets import load_dataset
-            >>> import soundfile as sf
+        ```python
+        >>> from transformers import Wav2Vec2Processor, TFHubertModel
+        >>> from datasets import load_dataset
+        >>> import soundfile as sf
 
-            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-base-960h")
-            >>> model = TFHubertModel.from_pretrained("facebook/hubert-base-960h")
+        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-base-960h")
+        >>> model = TFHubertModel.from_pretrained("facebook/hubert-base-960h")
 
-            >>> def map_to_array(batch):
-            ...     speech, _ = sf.read(batch["file"])
-            ...     batch["speech"] = speech
-            ...     return batch
 
-            >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
+        >>> def map_to_array(batch):
+        ...     speech, _ = sf.read(batch["file"])
+        ...     batch["speech"] = speech
+        ...     return batch
 
-            >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values  # Batch size 1
-            >>> hidden_states = model(input_values).last_hidden_state
-        """
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.map(map_to_array)
+
+        >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values  # Batch size 1
+        >>> hidden_states = model(input_values).last_hidden_state
+        ```"""
 
         inputs = input_values_processing(
             func=self.call,
@@ -1465,14 +1513,15 @@ class TFHubertModel(TFHubertPreTrainedModel):
         return outputs
 
     def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        return TFBaseModelOutput(
+            last_hidden_state=output.last_hidden_state, hidden_states=hidden_states, attentions=attentions
+        )
 
 
 @add_start_docstrings(
-    """TFHubert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC). """,
+    """TFHubert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     HUBERT_START_DOCSTRING,
 )
 class TFHubertForCTC(TFHubertPreTrainedModel):
@@ -1485,8 +1534,20 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
 
     def freeze_feature_extractor(self):
         """
-        Calling this function will disable the gradient computation for the feature extractor so that its parameter
-        will not be updated during training.
+        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
+        not be updated during training.
+        """
+        warnings.warn(
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "Please use the equivalent `freeze_feature_encoder` method instead.",
+            FutureWarning,
+        )
+        self.freeze_feature_encoder()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
         """
         self.hubert.feature_extractor.trainable = False
 
@@ -1507,45 +1568,48 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
         training: Optional[bool] = False,
     ) -> Union[TFCausalLMOutput, Tuple[tf.Tensor]]:
         r"""
-        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
-            config.vocab_size]`` (see ``input_values`` docstring) Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_values` docstring) Tokens with indices set to `-100` are ignored (masked),
+            the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
 
         Returns:
 
-        Example::
+        Example:
 
-            >>> import tensorflow as tf
-            >>> from transformers import Wav2Vec2Processor, TFHubertForCTC
-            >>> from datasets import load_dataset
-            >>> import soundfile as sf
+        ```python
+        >>> import tensorflow as tf
+        >>> from transformers import Wav2Vec2Processor, TFHubertForCTC
+        >>> from datasets import load_dataset
+        >>> import soundfile as sf
 
-            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-base-960h")
-            >>> model = TFHubertForCTC.from_pretrained("facebook/hubert-base-960h")
+        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-base-960h")
+        >>> model = TFHubertForCTC.from_pretrained("facebook/hubert-base-960h")
 
-            >>> def map_to_array(batch):
-            ...     speech, _ = sf.read(batch["file"])
-            ...     batch["speech"] = speech
-            ...     return batch
 
-            >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-            >>> ds = ds.map(map_to_array)
+        >>> def map_to_array(batch):
+        ...     speech, _ = sf.read(batch["file"])
+        ...     batch["speech"] = speech
+        ...     return batch
 
-            >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values # Batch size 1
-            >>> logits = model(input_values).logits >>> predicted_ids = tf.argmax(logits, axis=-1)
 
-            >>> transcription = processor.decode(predicted_ids[0])
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.map(map_to_array)
 
-            >>> # compute loss
-            >>> target_transcription = "A MAN SAID TO THE UNIVERSE SIR I EXIST"
+        >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values  # Batch size 1
+        >>> logits = model(input_values).logits
+        >>> predicted_ids = tf.argmax(logits, axis=-1)
 
-            >>> # wrap processor as target processor to encode labels
-            >>> with processor.as_target_processor():
-            ...     labels = processor(transcription, return_tensors="tf").input_values
+        >>> transcription = processor.decode(predicted_ids[0])
 
-            >>> loss = model(input_values, labels=labels).loss
-        """
+        >>> # compute loss
+        >>> target_transcription = "A MAN SAID TO THE UNIVERSE SIR I EXIST"
+
+        >>> # Pass the transcription as text to encode labels
+        >>> labels = processor(text=transcription, return_tensors="tf").input_values
+
+        >>> loss = model(input_values, labels=labels).loss
+        ```"""
         inputs = input_values_processing(
             func=self.call,
             config=self.config,
@@ -1606,8 +1670,10 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
 
             if self.config.ctc_loss_reduction == "sum":
                 loss = tf.reduce_sum(loss)
+                loss = tf.reshape(loss, (1,))
             if self.config.ctc_loss_reduction == "mean":
                 loss = tf.reduce_mean(loss)
+                loss = tf.reshape(loss, (1,))
         else:
             loss = None
 
@@ -1623,6 +1689,6 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
         )
 
     def serving_output(self, output: TFCausalLMOutput) -> TFCausalLMOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        return TFCausalLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        return TFCausalLMOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)

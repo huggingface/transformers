@@ -18,6 +18,7 @@ Fine-tuning the library models for question answering.
 """
 # You can also adapt this script on your own question answering task. Pointers for this are left as comments.
 
+import json
 import logging
 import os
 import sys
@@ -26,8 +27,9 @@ from pathlib import Path
 from typing import Optional
 
 import tensorflow as tf
-from datasets import load_dataset, load_metric
+from datasets import load_dataset
 
+import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -35,17 +37,18 @@ from transformers import (
     EvalPrediction,
     HfArgumentParser,
     PreTrainedTokenizerFast,
+    PushToHubCallback,
     TFAutoModelForQuestionAnswering,
     TFTrainingArguments,
+    create_optimizer,
     set_seed,
 )
-from transformers.file_utils import CONFIG_NAME, TF2_WEIGHTS_NAME
-from transformers.utils import check_min_version
+from transformers.utils import CONFIG_NAME, TF2_WEIGHTS_NAME, check_min_version, send_example_telemetry
 from utils_qa import postprocess_qa_predictions
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.15.0.dev0")
+check_min_version("4.24.0.dev0")
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +80,10 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+            "help": (
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
     )
 
@@ -114,37 +119,46 @@ class DataTrainingArguments:
     max_seq_length: int = field(
         default=384,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            )
         },
     )
     pad_to_max_length: bool = field(
         default=False,
         metadata={
-            "help": "Whether to pad all samples to `max_seq_length`. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch (which can "
-            "be faster on GPU but will be slower on TPU)."
+            "help": (
+                "Whether to pad all samples to `max_seq_length`. If False, will pad the samples dynamically when"
+                " batching to the maximum length in the batch (which can be faster on GPU but will be slower on TPU)."
+            )
         },
     )
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
     max_predict_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of prediction examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of prediction examples to this "
+                "value if set."
+            )
         },
     )
     version_2_with_negative: bool = field(
@@ -153,9 +167,11 @@ class DataTrainingArguments:
     null_score_diff_threshold: float = field(
         default=0.0,
         metadata={
-            "help": "The threshold used to select the null answer: if the best answer has a score that is less than "
-            "the score of the null answer minus this threshold, the null answer is selected for this example. "
-            "Only useful when `version_2_with_negative=True`."
+            "help": (
+                "The threshold used to select the null answer: if the best answer has a score that is less than "
+                "the score of the null answer minus this threshold, the null answer is selected for this example. "
+                "Only useful when `version_2_with_negative=True`."
+            )
         },
     )
     doc_stride: int = field(
@@ -169,8 +185,10 @@ class DataTrainingArguments:
     max_answer_length: int = field(
         default=30,
         metadata={
-            "help": "The maximum length of an answer that can be generated. This is needed because the start "
-            "and end predictions are not conditioned on one another."
+            "help": (
+                "The maximum length of an answer that can be generated. This is needed because the start "
+                "and end predictions are not conditioned on one another."
+            )
         },
     )
 
@@ -209,51 +227,6 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
         self.model.save_pretrained(self.output_dir)
 
 
-def convert_dataset_for_tensorflow(
-    dataset, batch_size, dataset_mode="variable_batch", shuffle=True, drop_remainder=True
-):
-    """Converts a Hugging Face dataset to a Tensorflow Dataset. The dataset_mode controls whether we pad all batches
-    to the maximum sequence length, or whether we only pad to the maximum length within that batch. The former
-    is most useful when training on TPU, as a new graph compilation is required for each sequence length.
-    """
-
-    def densify_ragged_batch(features, label=None):
-        features = {
-            feature: ragged_tensor.to_tensor(shape=batch_shape[feature]) if feature in tensor_keys else ragged_tensor
-            for feature, ragged_tensor in features.items()
-        }
-        if label is None:
-            return features
-        else:
-            return features, label
-
-    tensor_keys = ["attention_mask", "input_ids"]
-    label_keys = ["start_positions", "end_positions"]
-    if dataset_mode == "variable_batch":
-        batch_shape = {key: None for key in tensor_keys}
-        data = {key: tf.ragged.constant(dataset[key]) for key in tensor_keys}
-    elif dataset_mode == "constant_batch":
-        data = {key: tf.ragged.constant(dataset[key]) for key in tensor_keys}
-        batch_shape = {
-            key: tf.concat(([batch_size], ragged_tensor.bounding_shape()[1:]), axis=0)
-            for key, ragged_tensor in data.items()
-        }
-    else:
-        raise ValueError("Unknown dataset mode!")
-
-    if all([key in dataset.features for key in label_keys]):
-        for key in label_keys:
-            data[key] = tf.convert_to_tensor(dataset[key])
-        dummy_labels = tf.zeros_like(dataset[key])
-        tf_dataset = tf.data.Dataset.from_tensor_slices((data, dummy_labels))
-    else:
-        tf_dataset = tf.data.Dataset.from_tensor_slices(data)
-    if shuffle:
-        tf_dataset = tf_dataset.shuffle(buffer_size=len(dataset))
-    tf_dataset = tf_dataset.batch(batch_size=batch_size, drop_remainder=drop_remainder).map(densify_ragged_batch)
-    return tf_dataset
-
-
 # endregion
 
 
@@ -270,6 +243,10 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_qa", model_args, data_args, framework="tensorflow")
 
     output_dir = Path(training_args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -322,7 +299,12 @@ def main():
     # download the dataset.
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
+        datasets = load_dataset(
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     else:
         data_files = {}
         if data_args.train_file is not None:
@@ -335,7 +317,13 @@ def main():
         if data_args.test_file is not None:
             data_files["test"] = data_args.test_file
             extension = data_args.test_file.split(".")[-1]
-        datasets = load_dataset(extension, data_files=data_files, field="data", cache_dir=model_args.cache_dir)
+        datasets = load_dataset(
+            extension,
+            data_files=data_files,
+            field="data",
+            cache_dir=model_args.cache_dir,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
     # endregion
@@ -363,9 +351,9 @@ def main():
     # region Tokenizer check: this script requires a fast tokenizer.
     if not isinstance(tokenizer, PreTrainedTokenizerFast):
         raise ValueError(
-            "This example script only works for models that have a fast tokenizer. Checkout the big table of models "
-            "at https://huggingface.co/transformers/index.html#supported-frameworks to find the model types that meet this "
-            "requirement"
+            "This example script only works for models that have a fast tokenizer. Checkout the big table of models at"
+            " https://huggingface.co/transformers/index.html#supported-frameworks to find the model types that meet"
+            " this requirement"
         )
     # endregion
 
@@ -391,6 +379,12 @@ def main():
         )
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
+    if data_args.pad_to_max_length or isinstance(training_args.strategy, tf.distribute.TPUStrategy):
+        logger.info("Padding all batches to max length because argument was set or we're on TPU.")
+        padding = "max_length"
+    else:
+        padding = False
+
     # Training preprocessing
     def prepare_train_features(examples):
         # Some of the questions have lots of whitespace on the left, which is not useful and will make the
@@ -409,7 +403,7 @@ def main():
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
-            padding="max_length" if data_args.pad_to_max_length else False,
+            padding=padding,
         )
 
         # Since one example might give us several features if it has a long context, we need a map from a feature to
@@ -476,7 +470,8 @@ def main():
         train_dataset = datasets["train"]
         if data_args.max_train_samples is not None:
             # We will select sample from whole data if agument is specified
-            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+            train_dataset = train_dataset.select(range(max_train_samples))
         # Create train feature from dataset
         train_dataset = train_dataset.map(
             prepare_train_features,
@@ -487,7 +482,8 @@ def main():
         )
         if data_args.max_train_samples is not None:
             # Number of samples might increase during Feature Creation, We select only specified max samples
-            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+            train_dataset = train_dataset.select(range(max_train_samples))
         processed_datasets["train"] = train_dataset
 
     # Validation preprocessing
@@ -508,7 +504,7 @@ def main():
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
-            padding="max_length" if data_args.pad_to_max_length else False,
+            padding=padding,
         )
 
         # Since one example might give us several features if it has a long context, we need a map from a feature to
@@ -543,7 +539,8 @@ def main():
         eval_examples = datasets["validation"]
         if data_args.max_eval_samples is not None:
             # We will select sample from whole data
-            eval_examples = eval_examples.select(range(data_args.max_eval_samples))
+            max_eval_samples = min(len(eval_examples), data_args.max_eval_samples)
+            eval_examples = eval_examples.select(range(max_eval_samples))
         # Validation Feature Creation
         eval_dataset = eval_examples.map(
             prepare_validation_features,
@@ -554,7 +551,8 @@ def main():
         )
         if data_args.max_eval_samples is not None:
             # During Feature creation dataset samples might increase, we will select required samples again
-            eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
+            max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+            eval_dataset = eval_dataset.select(range(max_eval_samples))
         processed_datasets["validation"] = eval_dataset
 
     if training_args.do_predict:
@@ -574,7 +572,8 @@ def main():
         )
         if data_args.max_predict_samples is not None:
             # During Feature creation dataset samples might increase, we will select required samples again
-            predict_dataset = predict_dataset.select(range(data_args.max_predict_samples))
+            max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
+            predict_dataset = predict_dataset.select(range(max_predict_samples))
         processed_datasets["test"] = predict_dataset
     # endregion
 
@@ -603,7 +602,7 @@ def main():
         references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in examples]
         return EvalPrediction(predictions=formatted_predictions, label_ids=references)
 
-    metric = load_metric("squad_v2" if data_args.version_2_with_negative else "squad")
+    metric = evaluate.load("squad_v2" if data_args.version_2_with_negative else "squad")
 
     def compute_metrics(p: EvalPrediction):
         return metric.compute(predictions=p.predictions, references=p.label_ids)
@@ -611,7 +610,12 @@ def main():
     # endregion
 
     with training_args.strategy.scope():
-        # region Load model
+
+        dataset_options = tf.data.Options()
+        dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+        num_replicas = training_args.strategy.num_replicas_in_sync
+
+        # region Load model and prepare datasets
         if checkpoint is None:
             model_path = model_args.model_name_or_path
         else:
@@ -623,71 +627,163 @@ def main():
             revision=model_args.model_revision,
             use_auth_token=True if model_args.use_auth_token else None,
         )
-        optimizer = tf.keras.optimizers.Adam(
-            learning_rate=training_args.learning_rate,
-            beta_1=training_args.adam_beta1,
-            beta_2=training_args.adam_beta2,
-            epsilon=training_args.adam_epsilon,
-            clipnorm=training_args.max_grad_norm,
-        )
-
-        def dummy_loss(y_true, y_pred):
-            return tf.reduce_mean(y_pred)
-
-        losses = {"loss": dummy_loss}
-        model.compile(optimizer=optimizer, loss=losses)
-        # endregion
-
-        # region Training
         if training_args.do_train:
-            # Make a tf.data.Dataset for this
-            if isinstance(training_args.strategy, tf.distribute.TPUStrategy) or data_args.pad_to_max_length:
-                logger.info("Padding all batches to max length because argument was set or we're on TPU.")
-                dataset_mode = "constant_batch"
-            else:
-                dataset_mode = "variable_batch"
-            training_dataset = convert_dataset_for_tensorflow(
+
+            training_dataset = model.prepare_tf_dataset(
                 processed_datasets["train"],
-                batch_size=training_args.per_device_train_batch_size,
-                dataset_mode=dataset_mode,
-                drop_remainder=True,
                 shuffle=True,
+                batch_size=training_args.per_device_train_batch_size * num_replicas,
+                tokenizer=tokenizer,
             )
-            model.fit(training_dataset, epochs=int(training_args.num_train_epochs))
+
+            training_dataset = training_dataset.with_options(dataset_options)
+
+            num_train_steps = len(training_dataset) * training_args.num_train_epochs
+            if training_args.warmup_steps > 0:
+                num_warmup_steps = training_args.warmup_steps
+            elif training_args.warmup_ratio > 0:
+                num_warmup_steps = int(num_train_steps * training_args.warmup_ratio)
+            else:
+                num_warmup_steps = 0
+
+            optimizer, schedule = create_optimizer(
+                init_lr=training_args.learning_rate,
+                num_train_steps=len(training_dataset) * training_args.num_train_epochs,
+                num_warmup_steps=num_warmup_steps,
+                adam_beta1=training_args.adam_beta1,
+                adam_beta2=training_args.adam_beta2,
+                adam_epsilon=training_args.adam_epsilon,
+                weight_decay_rate=training_args.weight_decay,
+                adam_global_clipnorm=training_args.max_grad_norm,
+            )
+
+            # no user-specified loss = will use the model internal loss
+            model.compile(optimizer=optimizer, jit_compile=training_args.xla, metrics=["accuracy"])
+
+        else:
+            model.compile(optimizer=None, jit_compile=training_args.xla, metrics=["accuracy"])
+            training_dataset = None
+
+        if training_args.do_eval:
+            eval_dataset = model.prepare_tf_dataset(
+                processed_datasets["validation"],
+                shuffle=False,
+                batch_size=training_args.per_device_train_batch_size * num_replicas,
+                tokenizer=tokenizer,
+            )
+            eval_dataset = eval_dataset.with_options(dataset_options)
+        else:
+            eval_dataset = None
+
+        if training_args.do_predict:
+            predict_dataset = model.prepare_tf_dataset(
+                processed_datasets["test"],
+                shuffle=False,
+                batch_size=training_args.per_device_eval_batch_size * num_replicas,
+                tokenizer=tokenizer,
+            )
+            predict_dataset = predict_dataset.with_options(dataset_options)
+        else:
+            predict_dataset = None
+
         # endregion
 
-        # region Evaluation
+        # region Preparing push_to_hub and model card
+        push_to_hub_model_id = training_args.push_to_hub_model_id
+        model_name = model_args.model_name_or_path.split("/")[-1]
+        if not push_to_hub_model_id:
+            if data_args.dataset_name is not None:
+                push_to_hub_model_id = f"{model_name}-finetuned-{data_args.dataset_name}"
+            else:
+                push_to_hub_model_id = f"{model_name}-finetuned-question-answering"
+
+        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "question-answering"}
+        if data_args.dataset_name is not None:
+            model_card_kwargs["dataset_tags"] = data_args.dataset_name
+            if data_args.dataset_config_name is not None:
+                model_card_kwargs["dataset_args"] = data_args.dataset_config_name
+                model_card_kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            else:
+                model_card_kwargs["dataset"] = data_args.dataset_name
+
+        if training_args.push_to_hub:
+            callbacks = [
+                PushToHubCallback(
+                    output_dir=training_args.output_dir,
+                    model_id=push_to_hub_model_id,
+                    organization=training_args.push_to_hub_organization,
+                    token=training_args.push_to_hub_token,
+                    tokenizer=tokenizer,
+                    **model_card_kwargs,
+                )
+            ]
+        else:
+            callbacks = []
+        # endregion
+
+        # region Training and Evaluation
+
+        if training_args.do_train:
+            # Note that the validation and test datasets have been processed in a different way to the
+            # training datasets in this example, and so they don't have the same label structure.
+            # As such, we don't pass them directly to Keras, but instead get model predictions to evaluate
+            # after training.
+            model.fit(training_dataset, epochs=int(training_args.num_train_epochs), callbacks=callbacks)
+
         if training_args.do_eval:
             logger.info("*** Evaluation ***")
-            eval_inputs = {
-                "input_ids": tf.ragged.constant(processed_datasets["validation"]["input_ids"]).to_tensor(),
-                "attention_mask": tf.ragged.constant(processed_datasets["validation"]["attention_mask"]).to_tensor(),
-            }
-            eval_predictions = model.predict(eval_inputs)
+
+            # In this example, we compute advanced metrics at the end of training, but
+            # if you'd like to compute metrics every epoch that are too complex to be written as
+            # standard Keras metrics, you can use our KerasMetricCallback. See
+            # https://huggingface.co/docs/transformers/main/en/main_classes/keras_callbacks
+
+            eval_predictions = model.predict(eval_dataset)
+            if isinstance(eval_predictions.start_logits, tf.RaggedTensor):
+                # If predictions are RaggedTensor, we densify them. Since they are logits, padding with 0 is a bad idea!
+                # The reason is that a logit of 0 can often end up as quite a high probability value, sometimes even
+                # the highest probability in a sample. Instead, we use a large negative value, which ensures that the
+                # padding positions are correctly masked.
+                eval_start_logits = eval_predictions.start_logits.to_tensor(default_value=-1000).numpy()
+                eval_end_logits = eval_predictions.end_logits.to_tensor(default_value=-1000).numpy()
+            else:
+                eval_start_logits = eval_predictions.start_logits
+                eval_end_logits = eval_predictions.end_logits
 
             post_processed_eval = post_processing_function(
                 datasets["validation"],
                 processed_datasets["validation"],
-                (eval_predictions.start_logits, eval_predictions.end_logits),
+                (eval_start_logits, eval_end_logits),
             )
             metrics = compute_metrics(post_processed_eval)
             logging.info("Evaluation metrics:")
             for metric, value in metrics.items():
                 logging.info(f"{metric}: {value:.3f}")
+            if training_args.output_dir is not None:
+                output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+                with open(output_eval_file, "w") as writer:
+                    writer.write(json.dumps(metrics))
         # endregion
 
         # region Prediction
         if training_args.do_predict:
             logger.info("*** Predict ***")
-            predict_inputs = {
-                "input_ids": tf.ragged.constant(processed_datasets["test"]["input_ids"]).to_tensor(),
-                "attention_mask": tf.ragged.constant(processed_datasets["test"]["attention_mask"]).to_tensor(),
-            }
-            test_predictions = model.predict(predict_inputs)
+
+            test_predictions = model.predict(predict_dataset)
+            if isinstance(test_predictions.start_logits, tf.RaggedTensor):
+                # If predictions are RaggedTensor, we densify them. Since they are logits, padding with 0 is a bad idea!
+                # The reason is that a logit of 0 can often end up as quite a high probability value, sometimes even
+                # the highest probability in a sample. Instead, we use a large negative value, which ensures that the
+                # padding positions are correctly masked.
+                test_start_logits = test_predictions.start_logits.to_tensor(default_value=-1000).numpy()
+                test_end_logits = test_predictions.end_logits.to_tensor(default_value=-1000).numpy()
+            else:
+                test_start_logits = test_predictions.start_logits
+                test_end_logits = test_predictions.end_logits
             post_processed_test = post_processing_function(
                 datasets["test"],
                 processed_datasets["test"],
-                (test_predictions.start_logits, test_predictions.end_logits),
+                (test_start_logits, test_end_logits),
             )
             metrics = compute_metrics(post_processed_test)
 
@@ -696,8 +792,9 @@ def main():
                 logging.info(f"{metric}: {value:.3f}")
         # endregion
 
-    if training_args.push_to_hub:
-        model.push_to_hub()
+    if training_args.output_dir is not None and not training_args.push_to_hub:
+        # If we're not pushing to hub, at least save a local copy when we're done
+        model.save_pretrained(training_args.output_dir)
 
 
 if __name__ == "__main__":

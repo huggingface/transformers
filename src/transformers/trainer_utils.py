@@ -25,18 +25,18 @@ import random
 import re
 import threading
 import time
-from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
-from .file_utils import (
+from .utils import (
     ExplicitEnum,
     is_psutil_available,
-    is_sagemaker_dp_enabled,
     is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
     is_torch_tpu_available,
+    requires_backends,
 )
 
 
@@ -47,13 +47,45 @@ if is_tf_available():
     import tensorflow as tf
 
 
+def seed_worker(_):
+    """
+    Helper function to set worker seed during Dataloader initialization.
+    """
+    worker_seed = torch.initial_seed() % 2**32
+    set_seed(worker_seed)
+
+
+def enable_full_determinism(seed: int):
+    """
+    Helper function for reproducible behavior during distributed training. See
+    - https://pytorch.org/docs/stable/notes/randomness.html for pytorch
+    - https://www.tensorflow.org/api_docs/python/tf/config/experimental/enable_op_determinism for tensorflow
+    """
+    # set seed first
+    set_seed(seed)
+
+    if is_torch_available():
+        #  Enable PyTorch deterministic mode. This potentially requires either the environment
+        #  variable 'CUDA_LAUNCH_BLOCKING' or 'CUBLAS_WORKSPACE_CONFIG' to be set,
+        # depending on the CUDA version, so we set them both here
+        os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+        torch.use_deterministic_algorithms(True)
+
+        # Enable CUDNN deterministic mode
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+    if is_tf_available():
+        tf.config.experimental.enable_op_determinism()
+
+
 def set_seed(seed: int):
     """
-    Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch`` and/or ``tf`` (if
-    installed).
+    Helper function for reproducible behavior to set the seed in `random`, `numpy`, `torch` and/or `tf` (if installed).
 
     Args:
-        seed (:obj:`int`): The seed to set.
+        seed (`int`): The seed to set.
     """
     random.seed(seed)
     np.random.seed(seed)
@@ -65,17 +97,43 @@ def set_seed(seed: int):
         tf.random.set_seed(seed)
 
 
-class EvalPrediction(NamedTuple):
+class EvalPrediction:
     """
     Evaluation output (always contains labels), to be used to compute metrics.
 
     Parameters:
-        predictions (:obj:`np.ndarray`): Predictions of the model.
-        label_ids (:obj:`np.ndarray`): Targets to be matched.
+        predictions (`np.ndarray`): Predictions of the model.
+        label_ids (`np.ndarray`): Targets to be matched.
+        inputs (`np.ndarray`, *optional*)
     """
 
-    predictions: Union[np.ndarray, Tuple[np.ndarray]]
-    label_ids: Union[np.ndarray, Tuple[np.ndarray]]
+    def __init__(
+        self,
+        predictions: Union[np.ndarray, Tuple[np.ndarray]],
+        label_ids: Union[np.ndarray, Tuple[np.ndarray]],
+        inputs: Optional[Union[np.ndarray, Tuple[np.ndarray]]] = None,
+    ):
+        self.predictions = predictions
+        self.label_ids = label_ids
+        self.inputs = inputs
+
+    def __iter__(self):
+        if self.inputs is not None:
+            return iter((self.predictions, self.label_ids, self.inputs))
+        else:
+            return iter((self.predictions, self.label_ids))
+
+    def __getitem__(self, idx):
+        if idx < 0 or idx > 2:
+            raise IndexError("tuple index out of range")
+        if idx == 2 and self.inputs is None:
+            raise IndexError("tuple index out of range")
+        if idx == 0:
+            return self.predictions
+        elif idx == 1:
+            return self.label_ids
+        elif idx == 2:
+            return self.inputs
 
 
 class EvalLoopOutput(NamedTuple):
@@ -134,15 +192,15 @@ class HubStrategy(ExplicitEnum):
 
 class BestRun(NamedTuple):
     """
-    The best run found by an hyperparameter search (see :class:`~transformers.Trainer.hyperparameter_search`).
+    The best run found by an hyperparameter search (see [`~Trainer.hyperparameter_search`]).
 
     Parameters:
-        run_id (:obj:`str`):
+        run_id (`str`):
             The id of the best run (if models were saved, the corresponding checkpoint will be in the folder ending
             with run-{run_id}).
-        objective (:obj:`float`):
+        objective (`float`):
             The objective that was obtained for this run.
-        hyperparameters (:obj:`Dict[str, Any]`):
+        hyperparameters (`Dict[str, Any]`):
             The hyperparameters picked to get this run.
     """
 
@@ -154,13 +212,13 @@ class BestRun(NamedTuple):
 def default_compute_objective(metrics: Dict[str, float]) -> float:
     """
     The default objective to maximize/minimize when doing an hyperparameter search. It is the evaluation loss if no
-    metrics are provided to the :class:`~transformers.Trainer`, the sum of all metrics otherwise.
+    metrics are provided to the [`Trainer`], the sum of all metrics otherwise.
 
     Args:
-        metrics (:obj:`Dict[str, float]`): The metrics returned by the evaluate method.
+        metrics (`Dict[str, float]`): The metrics returned by the evaluate method.
 
     Return:
-        :obj:`float`: The objective to minimize or maximize
+        `float`: The objective to minimize or maximize
     """
     metrics = copy.deepcopy(metrics)
     loss = metrics.pop("eval_loss", None)
@@ -187,7 +245,7 @@ def default_hp_space_optuna(trial) -> Dict[str, float]:
 def default_hp_space_ray(trial) -> Dict[str, float]:
     from .integrations import is_ray_tune_available
 
-    assert is_ray_tune_available(), "This function needs ray installed: `pip " "install ray[tune]`"
+    assert is_ray_tune_available(), "This function needs ray installed: `pip install ray[tune]`"
     from ray import tune
 
     return {
@@ -211,16 +269,36 @@ def default_hp_space_sigopt(trial):
     ]
 
 
+def default_hp_space_wandb(trial) -> Dict[str, float]:
+    from .integrations import is_wandb_available
+
+    if not is_wandb_available():
+        raise ImportError("This function needs wandb installed: `pip install wandb`")
+
+    return {
+        "method": "random",
+        "metric": {"name": "objective", "goal": "minimize"},
+        "parameters": {
+            "learning_rate": {"distribution": "uniform", "min": 1e-6, "max": 1e-4},
+            "num_train_epochs": {"distribution": "int_uniform", "min": 1, "max": 6},
+            "seed": {"distribution": "int_uniform", "min": 1, "max": 40},
+            "per_device_train_batch_size": {"values": [4, 8, 16, 32, 64]},
+        },
+    }
+
+
 class HPSearchBackend(ExplicitEnum):
     OPTUNA = "optuna"
     RAY = "ray"
     SIGOPT = "sigopt"
+    WANDB = "wandb"
 
 
 default_hp_space = {
     HPSearchBackend.OPTUNA: default_hp_space_optuna,
     HPSearchBackend.RAY: default_hp_space_ray,
     HPSearchBackend.SIGOPT: default_hp_space_sigopt,
+    HPSearchBackend.WANDB: default_hp_space_wandb,
 }
 
 
@@ -229,7 +307,7 @@ def is_main_process(local_rank):
     Whether or not the current process is the local process, based on `xm.get_ordinal()` (for TPUs) first, then on
     `local_rank`.
     """
-    if is_torch_tpu_available():
+    if is_torch_tpu_available(check_device=True):
         import torch_xla.core.xla_model as xm
 
         return xm.get_ordinal() == 0
@@ -240,14 +318,10 @@ def total_processes_number(local_rank):
     """
     Return the number of processes launched in parallel. Works with `torch.distributed` and TPUs.
     """
-    if is_torch_tpu_available():
+    if is_torch_tpu_available(check_device=True):
         import torch_xla.core.xla_model as xm
 
         return xm.xrt_world_size()
-    elif is_sagemaker_dp_enabled():
-        import smdistributed.dataparallel.torch.distributed as dist
-
-        return dist.get_world_size()
     elif local_rank != -1 and is_torch_available():
         import torch
 
@@ -263,7 +337,6 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None):
     should be run immediately after the operation to be measured has completed.
 
     Args:
-
     - split: name to prefix metric (like train, eval, test...)
     - start_time: operation start time
     - num_samples: number of samples processed
@@ -292,28 +365,30 @@ class TrainerMemoryTracker:
     """
     A helper class that tracks cpu and gpu memory.
 
-    This class will silently skip unless ``psutil`` is available. Install with ``pip install psutil``.
+    This class will silently skip unless `psutil` is available. Install with `pip install psutil`.
 
     When a stage completes, it can pass metrics dict to update with the memory metrics gathered during this stage.
 
-    Example ::
+    Example :
 
-        self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
-        self._memory_tracker.start()
-        code ...
-        metrics = {"train_runtime": 10.5}
-        self._memory_tracker.stop_and_update_metrics(metrics)
+    ```python
+    self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
+    self._memory_tracker.start()
+    # code ...
+    metrics = {"train_runtime": 10.5}
+    self._memory_tracker.stop_and_update_metrics(metrics)
+    ```
 
-    At the moment GPU tracking is only for ``pytorch``, but can be extended to support ``tensorflow``.
+    At the moment GPU tracking is only for `pytorch`, but can be extended to support `tensorflow`.
 
-    To understand this class' intricacies please read the documentation of :meth:`~transformers.Trainer.log_metrics`.
-
+    To understand this class' intricacies please read the documentation of [`~Trainer.log_metrics`].
     """
 
     # map trainer methods to metrics prefix
     stages = {
         "__init__": "init",
         "train": "train",
+        "_inner_training_loop": "train",
         "evaluate": "eval",
         "predict": "test",
     }
@@ -499,6 +574,17 @@ class TrainerMemoryTracker:
             self.update_metrics(stage, metrics)
 
 
+def has_length(dataset):
+    """
+    Checks if the dataset implements __len__() and it doesn't raise an error
+    """
+    try:
+        return len(dataset) is not None
+    except TypeError:
+        # TypeError: len() of unsized object
+        return False
+
+
 def denumpify_detensorize(metrics):
     """
     Recursively calls `.item()` on the element of the dictionary passed
@@ -530,3 +616,81 @@ class ShardedDDPOption(ExplicitEnum):
     ZERO_DP_3 = "zero_dp_3"
     OFFLOAD = "offload"
     AUTO_WRAP = "auto_wrap"
+
+
+def find_executable_batch_size(
+    function: callable = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
+):
+    """
+    Args:
+    A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
+    CUDNN, the batch size is cut in half and passed to `function` `function` must take in a `batch_size` parameter as
+    its first argument.
+        function (`callable`, *optional*)
+            A function to wrap
+        starting_batch_size (`int`, *optional*)
+            The batch size to try and fit into memory
+        auto_find_batch_size (`bool`, *optional*)
+            If False, will just execute `function`
+    """
+    if function is None:
+        return functools.partial(
+            find_executable_batch_size,
+            starting_batch_size=starting_batch_size,
+            auto_find_batch_size=auto_find_batch_size,
+        )
+
+    if auto_find_batch_size:
+        requires_backends(find_executable_batch_size, "accelerate")
+        import accelerate.memory_utils as mem_utils
+
+        return mem_utils.find_executable_batch_size(function=function, starting_batch_size=starting_batch_size)
+
+    return functools.partial(function, batch_size=starting_batch_size)
+
+
+class FSDPOption(ExplicitEnum):
+    FULL_SHARD = "full_shard"
+    SHARD_GRAD_OP = "shard_grad_op"
+    NO_SHARD = "no_shard"
+    OFFLOAD = "offload"
+    AUTO_WRAP = "auto_wrap"
+
+
+class RemoveColumnsCollator:
+    """Wrap the data collator to remove unused columns before they are passed to the collator."""
+
+    def __init__(
+        self,
+        data_collator,
+        signature_columns,
+        logger=None,
+        model_name: Optional[str] = None,
+        description: Optional[str] = None,
+    ):
+        self.data_collator = data_collator
+        self.signature_columns = signature_columns
+        self.logger = logger
+        self.description = description
+        self.model_name = model_name
+        self.message_logged = False
+
+    def _remove_columns(self, feature: dict) -> dict:
+        if not isinstance(feature, dict):
+            return feature
+        if not self.message_logged and self.logger and self.model_name:
+            ignored_columns = list(set(feature.keys()) - set(self.signature_columns))
+            if len(ignored_columns) > 0:
+                dset_description = "" if self.description is None else f"in the {self.description} set"
+                self.logger.info(
+                    f"The following columns {dset_description} don't have a corresponding argument in "
+                    f"`{self.model_name}.forward` and have been ignored: {', '.join(ignored_columns)}."
+                    f" If {', '.join(ignored_columns)} are not expected by `{self.model_name}.forward`, "
+                    " you can safely ignore this message."
+                )
+                self.message_logged = True
+        return {k: v for k, v in feature.items() if k in self.signature_columns}
+
+    def __call__(self, features: List[dict]):
+        features = [self._remove_columns(feature) for feature in features]
+        return self.data_collator(features)
