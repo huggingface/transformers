@@ -1687,6 +1687,10 @@ class Trainer:
                     _ = list(train_dataloader.sampler)
 
         for epoch in range(epochs_trained, num_train_epochs):
+            if self.use_cuda_amp and hasattr(self, "qat_active") and callable(self.qat_active) and self.qat_active(epoch):
+                logger.info("entering QAT phase, disabling FP16 training")
+                self.scaler._enabled = False
+
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
             elif hasattr(train_dataloader, "dataset") and isinstance(train_dataloader.dataset, IterableDatasetShard):
@@ -2167,7 +2171,12 @@ class Trainer:
                 torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
 
         # Determine the new best metric / best model checkpoint
-        if metrics is not None and self.args.metric_for_best_model is not None:
+        if (
+            metrics is not None
+            and self.args.metric_for_best_model is not None
+            and self.args.best_model_after_epoch is not None
+            and self.state.epoch > self.args.best_model_after_epoch
+        ):
             metric_to_check = self.args.metric_for_best_model
             if not metric_to_check.startswith("eval_"):
                 metric_to_check = f"eval_{metric_to_check}"
@@ -2421,14 +2430,14 @@ class Trainer:
 
         return inputs
 
-    def compute_loss_context_manager(self):
+    def compute_loss_context_manager(self, enabled):
         """
         A helper wrapper to group together context managers.
         """
         return ContextManagers(
             [
                 self.torchdynamo_smart_context_manager(),
-                self.autocast_smart_context_manager(),
+                self.autocast_smart_context_manager(enabled=enabled),
             ]
         )
 
@@ -2438,7 +2447,7 @@ class Trainer:
         """
         return self.ctx_manager_torchdynamo
 
-    def autocast_smart_context_manager(self):
+    def autocast_smart_context_manager(self, enabled):
         """
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
         arguments, depending on the situation.
@@ -2448,10 +2457,10 @@ class Trainer:
                 ctx_manager = (
                     torch.cpu.amp.autocast(dtype=self.amp_dtype)
                     if self.use_cpu_amp
-                    else torch.cuda.amp.autocast(dtype=self.amp_dtype)
+                    else torch.cuda.amp.autocast(dtype=self.amp_dtype, enabled=enabled)
                 )
             else:
-                ctx_manager = torch.cuda.amp.autocast()
+                ctx_manager = torch.cuda.amp.autocast(enabled=enabled)
         else:
             ctx_manager = contextlib.nullcontext() if sys.version_info >= (3, 7) else contextlib.suppress()
 
@@ -2482,7 +2491,7 @@ class Trainer:
             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
-        with self.compute_loss_context_manager():
+        with self.compute_loss_context_manager(enabled=hasattr(self, "scaler") and self.scaler.is_enabled()):
             loss = self.compute_loss(model, inputs)
 
         if self.args.n_gpu > 1:
@@ -2939,7 +2948,14 @@ class Trainer:
 
         observed_num_examples = 0
         # Main evaluation loop
+        module_forward_fn = model.module.forward if isinstance(model, nn.DataParallel) else model.forward
         for step, inputs in enumerate(dataloader):
+            inputs = {
+                k: inputs[k]
+                for k in inputs
+                if k in list(inspect.signature(module_forward_fn).parameters.keys())
+            }
+
             # Update the observed num examples
             observed_batch_size = find_batch_size(inputs)
             if observed_batch_size is not None:
@@ -3191,7 +3207,9 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels:
-                    with self.compute_loss_context_manager():
+                    with self.compute_loss_context_manager(
+                        enabled=hasattr(self, "scaler") and self.scaler.is_enabled()
+                    ):
                         loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                     loss = loss.mean().detach()
 
@@ -3201,7 +3219,9 @@ class Trainer:
                         logits = outputs[1:]
                 else:
                     loss = None
-                    with self.compute_loss_context_manager():
+                    with self.compute_loss_context_manager(
+                        enabled=hasattr(self, "scaler") and self.scaler.is_enabled()
+                    ):
                         outputs = model(**inputs)
                     if isinstance(outputs, dict):
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)

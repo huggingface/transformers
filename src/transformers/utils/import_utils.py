@@ -1016,6 +1016,9 @@ class _LazyModule(ModuleType):
     Module class that surfaces all objects but only performs associated imports when the objects are requested.
     """
 
+    # flag to signal NM integration is active
+    NM_INTEGRATED = True
+
     # Very heavily inspired by optuna.integration._IntegrationModule
     # https://github.com/optuna/optuna/blob/master/optuna/integration/__init__.py
     def __init__(self, name, module_file, import_structure, module_spec=None, extra_objects=None):
