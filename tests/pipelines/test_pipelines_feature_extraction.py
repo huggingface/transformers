@@ -15,8 +15,6 @@
 import unittest
 
 import numpy as np
-import tensorflow as tf
-import torch
 
 from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
@@ -24,11 +22,20 @@ from transformers import (
     TF_MODEL_MAPPING,
     FeatureExtractionPipeline,
     LxmertConfig,
+    is_tf_available,
+    is_torch_available,
     pipeline,
 )
 from transformers.testing_utils import nested_simplify, require_tf, require_torch
 
 from .test_pipelines_common import PipelineTestCaseMeta
+
+
+if is_torch_available():
+    import torch
+
+if is_tf_available():
+    import tensorflow as tf
 
 
 class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
