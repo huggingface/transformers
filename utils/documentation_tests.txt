@@ -89,6 +89,7 @@ src/transformers/models/mobilevit/modeling_tf_mobilevit.py
 src/transformers/models/opt/modeling_opt.py
 src/transformers/models/opt/modeling_tf_opt.py
 src/transformers/models/owlvit/modeling_owlvit.py
+src/transformers/models/pegasus/configuration_pegasus.py
 src/transformers/models/pegasus/modeling_pegasus.py
 src/transformers/models/perceiver/modeling_perceiver.py
 src/transformers/models/plbart/modeling_plbart.py
