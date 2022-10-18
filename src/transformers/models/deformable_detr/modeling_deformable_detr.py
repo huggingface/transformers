@@ -2061,7 +2061,6 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
     return loss.mean(1).sum() / num_boxes
 
 
-# Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrLoss with ConditionalDetr->DeformableDetr
 class DeformableDetrLoss(nn.Module):
     """
     This class computes the losses for DeformableDetrForObjectDetection/DeformableDetrForSegmentation. The process
@@ -2121,6 +2120,7 @@ class DeformableDetrLoss(nn.Module):
         return losses
 
     @torch.no_grad()
+    # Copied from transformers.models.detr.modeling_detr.DetrLoss.loss_cardinality
     def loss_cardinality(self, outputs, targets, indices, num_boxes):
         """
         Compute the cardinality error, i.e. the absolute error in the number of predicted non-empty boxes.
@@ -2136,6 +2136,7 @@ class DeformableDetrLoss(nn.Module):
         losses = {"cardinality_error": card_err}
         return losses
 
+    # Copied from transformers.models.detr.modeling_detr.DetrLoss.loss_boxes
     def loss_boxes(self, outputs, targets, indices, num_boxes):
         """
         Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss.
@@ -2160,51 +2161,21 @@ class DeformableDetrLoss(nn.Module):
         losses["loss_giou"] = loss_giou.sum() / num_boxes
         return losses
 
-    def loss_masks(self, outputs, targets, indices, num_boxes):
-        """
-        Compute the losses related to the masks: the focal loss and the dice loss.
-
-        Targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, h, w].
-        """
-        if "pred_masks" not in outputs:
-            raise KeyError("No predicted masks found in outputs")
-
-        source_idx = self._get_source_permutation_idx(indices)
-        target_idx = self._get_target_permutation_idx(indices)
-        source_masks = outputs["pred_masks"]
-        source_masks = source_masks[source_idx]
-        masks = [t["masks"] for t in targets]
-        # TODO use valid to mask invalid areas due to padding in loss
-        target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
-        target_masks = target_masks.to(source_masks)
-        target_masks = target_masks[target_idx]
-
-        # upsample predictions to the target size
-        source_masks = nn.functional.interpolate(
-            source_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
-        )
-        source_masks = source_masks[:, 0].flatten(1)
-
-        target_masks = target_masks.flatten(1)
-        target_masks = target_masks.view(source_masks.shape)
-        losses = {
-            "loss_mask": sigmoid_focal_loss(source_masks, target_masks, num_boxes),
-            "loss_dice": dice_loss(source_masks, target_masks, num_boxes),
-        }
-        return losses
-
+    # Copied from transformers.models.detr.modeling_detr.DetrLoss._get_source_permutation_idx
     def _get_source_permutation_idx(self, indices):
         # permute predictions following indices
         batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
         source_idx = torch.cat([source for (source, _) in indices])
         return batch_idx, source_idx
 
+    # Copied from transformers.models.detr.modeling_detr.DetrLoss._get_target_permutation_idx
     def _get_target_permutation_idx(self, indices):
         # permute targets following indices
         batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
         target_idx = torch.cat([target for (_, target) in indices])
         return batch_idx, target_idx
 
+    # Copied from transformers.models.detr.modeling_detr.DetrLoss.get_loss
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
             "labels": self.loss_labels,
@@ -2257,6 +2228,21 @@ class DeformableDetrLoss(nn.Module):
                     l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes)
                     l_dict = {k + f"_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
+
+        if "enc_outputs" in outputs:
+            enc_outputs = outputs["enc_outputs"]
+            bin_targets = copy.deepcopy(targets)
+            for bt in bin_targets:
+                bt["labels"] = torch.zeros_like(bt["labels"])
+            indices = self.matcher(enc_outputs, bin_targets)
+            for loss in self.losses:
+                kwargs = {}
+                if loss == "labels":
+                    # Logging is enabled only for the last layer
+                    kwargs["log"] = False
+                l_dict = self.get_loss(loss, enc_outputs, bin_targets, indices, num_boxes, **kwargs)
+                l_dict = {k + "_enc": v for k, v in l_dict.items()}
+                losses.update(l_dict)
 
         return losses
 
