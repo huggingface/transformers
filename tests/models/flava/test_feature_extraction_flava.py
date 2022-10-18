@@ -31,6 +31,7 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import FlavaFeatureExtractor
+    from transformers.image_utils import PILImageResampling
     from transformers.models.flava.feature_extraction_flava import (
         FLAVA_CODEBOOK_MEAN,
         FLAVA_CODEBOOK_STD,
@@ -80,7 +81,7 @@ class FlavaFeatureExtractionTester(unittest.TestCase):
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.size = size
-        self.resample = resample if resample is not None else Image.BICUBIC
+        self.resample = resample if resample is not None else PILImageResampling.BICUBIC
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -96,7 +97,7 @@ class FlavaFeatureExtractionTester(unittest.TestCase):
 
         self.codebook_do_resize = codebook_do_resize
         self.codebook_size = codebook_size
-        self.codebook_resample = codebook_resample if codebook_resample is not None else Image.LANCZOS
+        self.codebook_resample = codebook_resample if codebook_resample is not None else PILImageResampling.LANCZOS
         self.codebook_do_center_crop = codebook_do_center_crop
         self.codebook_crop_size = codebook_crop_size
         self.codebook_do_map_pixels = codebook_do_map_pixels
