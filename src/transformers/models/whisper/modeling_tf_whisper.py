@@ -1288,7 +1288,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> transcription
-        ' Mr. Quilter is the apostle of the middle classes, and we are glad to'
+        ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
