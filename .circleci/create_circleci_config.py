@@ -331,6 +331,7 @@ repo_utils_job = CircleCIJob(
         "pip install .[all,quality,testing]",
     ],
     parallelism=None,
+    pytest_num_workers=1,
     resource_class=None,
     tests_to_run="tests/repo_utils",
 )

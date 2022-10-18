@@ -24,6 +24,7 @@ sys.path.append(os.path.join(git_repo_path, "utils"))
 
 transformers_path = os.path.join(git_repo_path, "src", "transformers")
 # Tests are run against this specific commit for reproducibility
+# https://github.com/huggingface/transformers/commit/07f6690206e39ed7a4d9dbc58824314f7089bb38
 GIT_TEST_SHA = "07f6690206e39ed7a4d9dbc58824314f7089bb38"
 
 from tests_fetcher import checkout_commit, clean_code, get_module_dependencies  # noqa: E402

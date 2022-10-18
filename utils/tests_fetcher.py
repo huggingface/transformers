@@ -628,6 +628,13 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None, j
 
 
 def filter_tests(output_file, filters):
+    """
+    Reads the content of the output file and filters out all the tests in a list of given folders.
+
+    Args:
+        output_file (`str` or `os.PathLike`): The path to the output file of the tests fetcher.
+        filters (`List[str]`): A list of folders to filter.
+    """
     if not os.path.isfile(output_file):
         print("No test file found.")
         return
