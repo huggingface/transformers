@@ -1179,12 +1179,12 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> transcription
-        ' Mr. Quilter is the apostle of the middle classes, and we are glad to'
+        ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
-            if decoder_input_ids is None:
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
