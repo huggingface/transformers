@@ -1500,22 +1500,11 @@ class GenerationMixin:
                     f"num_return_sequences has to be 1, but is {num_return_sequences} when doing contrastive search."
                 )
 
-            # 10. prepare logits warper: get the TopKLogitsWarper for contrastive_search
-            logits_warper = self._get_logits_warper(
-                top_k=top_k,
-                top_p=top_p,
-                typical_p=typical_p,
-                temperature=temperature,
-                num_beams=num_beams,
-                renormalize_logits=renormalize_logits,
-            )
-
             return self.contrastive_search(
                 input_ids,
                 top_k=top_k,
                 penalty_alpha=penalty_alpha,
                 logits_processor=logits_processor,
-                logits_warper=logits_warper,
                 stopping_criteria=stopping_criteria,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
@@ -1781,9 +1770,7 @@ class GenerationMixin:
     ) -> Union[GreedySearchOutput, torch.LongTensor]:
         r"""
         Generates sequences of token ids for models with a language modeling head using **contrastive search** and can
-        be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models. The utils functions
-        [`ContrastiveDecodingOneStepFast`] is used in this function, which supports the batch generation and the cached
-        mechanism for speeding up decoding
+        be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1834,37 +1821,27 @@ class GenerationMixin:
         >>> from transformers import (
         ...     AutoTokenizer,
         ...     AutoModelForCausalLM,
-        ...     LogitsProcessorList,
         ...     MinLengthLogitsProcessor,
         ...     StoppingCriteriaList,
         ...     MaxLengthCriteria,
-        ...     ContrastiveSearchRankingLogitsProcessor,
         ... )
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
-        >>> model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m")
+        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2-large")
+        >>> model = AutoModelForCausalLM.from_pretrained("gpt2-large")
         >>> # set pad_token_id to eos_token_id because GPT2 does not have a PAD token
         >>> model.config.pad_token_id = model.config.eos_token_id
         >>> input_prompt = "DeepMind Company is"
         >>> input_ids = tokenizer(input_prompt, return_tensors="pt")
-        >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=32)])
-        >>> logits_processor = LogitsProcessorList(
-        ...     [
-        ...         ContrastiveSearchRankingLogitsProcessor(penalty_alpha=0.6, beam_width=5),
-        ...     ]
-        ... )
+        >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=256)])
         >>> outputs = model.contrastive_search(
-        ...     **input_ids,
-        ...     penalty_alpha=0.6,
-        ...     top_k=5,
-        ...     stopping_criteria=stopping_criteria,
-        ...     logits_processor=logits_processor,
+        ...     **input_ids, penalty_alpha=0.6, top_k=4, stopping_criteria=stopping_criteria
         ... )
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ["DeepMind Company is a leader in Artificial Intelligence (AI) and has been recognized by industry leaders as one of the fastest growing companies in the AI industry."]
+        ["DeepMind Company is a leader in artificial intelligence (AI). We have a long history of working with companies such as Google, Facebook, Amazon, and Microsoft to build products that improve people\'s lives, and today we are excited to announce that DeepMind\'s AlphaGo program has won the game of Go, becoming the first program to defeat a professional Go player.\n\nThe victory is a testament to the power of deep learning, and to the incredible work of our research team, which has been at the forefront of AI research for the past five years. AlphaGo is one of the most advanced Go programs ever created, and its performance is an important step towards the goal of human-level AI.\n\n"This is the culmination of a decade of hard work," said Andy Ng, co-founder and CTO of DeepMind. "We are thrilled to have achieved this milestone and look forward to continuing to develop AI that can be used in a wide range of applications and to help people live better lives."\n\nDeepMind\'s work on Go began in 2010, when it began to train a neural network to play Go using millions of games played by top Go players around the world. Since then, the team has refined the algorithm, adding more and more layers of reinforcement"]
         ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
+        logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
             warnings.warn(
@@ -1905,11 +1882,13 @@ class GenerationMixin:
                 if this_peer_finished_flag.item() == 0.0:
                     break
 
+            # prepare inputs
+            model_kwargs["use_cache"] = True
+            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
             # if the first step in the loop, encode all the prefix and obtain three parameters: (1) past_key_values; (2) last_hidden_states; (3) logit_for_next_step
             if step_counter == 0:
                 # encode the given prefix and prepare model inputs; encoder-decoder model process the prefix and save the `encoder_outputs`
-                model_kwargs["use_cache"] = True
-                model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
                 output = self(**model_inputs, output_hidden_states=True, output_attentions=True)
                 # past_key_values is activated for fast decoding
                 past_key_values = output.past_key_values
@@ -1925,11 +1904,10 @@ class GenerationMixin:
             # contrastive search decoding consists of two steps: (1) candidate tokens recall; (2) candidate re-rank by degeneration penalty
             bsz, seqlen, embed_dim = last_hidden_states.size()
 
-            # logits processor: empty logits processor
+            # logits processor
             logit_for_next_step = logits_processor(input_ids, logit_for_next_step)
+            logit_for_next_step = logits_warper(input_ids, logit_for_next_step)
             next_probs = nn.functional.softmax(logit_for_next_step, dim=-1)
-            # logit warper: applying after the softmax, which is consistent with the logic in the paper
-            logit_for_next_step = logits_warper(input_ids, next_probs)
 
             _, top_k_ids = torch.topk(logit_for_next_step, dim=-1, k=top_k)
             top_k_probs = torch.gather(next_probs, dim=1, index=top_k_ids)
@@ -2065,7 +2043,6 @@ class GenerationMixin:
 
             # prepare model inputs
             model_kwargs["past_key_values"] = past_key_values
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
             step_counter += 1
 
         if return_dict_in_generate:
@@ -3911,9 +3888,9 @@ def ranking_fast(
     norm_context_hidden = context_hidden / context_hidden.norm(dim=2, keepdim=True)
     norm_next_hidden = next_hidden / next_hidden.norm(dim=2, keepdim=True)
     cosine_matrix = torch.matmul(norm_context_hidden, norm_next_hidden.transpose(1, 2)).squeeze(-1)  # [B*K, S]
-    scores, _ = torch.max(cosine_matrix, dim=-1)  # [B*K]
+    degeneration_penalty, _ = torch.max(cosine_matrix, dim=-1)  # [B*K]
     next_top_k_probs = next_top_k_probs.view(-1)  # [B*K]
-    scores = (1.0 - alpha) * next_top_k_probs - alpha * scores
-    scores = torch.stack(torch.split(scores, beam_width))  # [B, K]
-    selected_scores, selected_idx = scores.max(dim=-1)  # [B]
-    return selected_scores, selected_idx
+    contrastive_score = (1.0 - alpha) * next_top_k_probs - alpha * degeneration_penalty
+    contrastive_score = torch.stack(torch.split(contrastive_score, beam_width))  # [B, K]
+    selected_scores, selected_idx = contrastive_score.max(dim=-1)  # [B]
+    return torch.log(selected_scores), selected_idx
