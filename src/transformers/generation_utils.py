@@ -1826,18 +1826,18 @@ class GenerationMixin:
         ...     MaxLengthCriteria,
         ... )
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2-large")
-        >>> model = AutoModelForCausalLM.from_pretrained("gpt2-large")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
+        >>> model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m")
         >>> # set pad_token_id to eos_token_id because GPT2 does not have a PAD token
         >>> model.config.pad_token_id = model.config.eos_token_id
         >>> input_prompt = "DeepMind Company is"
         >>> input_ids = tokenizer(input_prompt, return_tensors="pt")
-        >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=256)])
+        >>> stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=64)])
         >>> outputs = model.contrastive_search(
         ...     **input_ids, penalty_alpha=0.6, top_k=4, stopping_criteria=stopping_criteria
         ... )
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ["DeepMind Company is a leader in artificial intelligence (AI). We have a long history of working with companies such as Google, Facebook, Amazon, and Microsoft to build products that improve people\'s lives, and today we are excited to announce that DeepMind\'s AlphaGo program has won the game of Go, becoming the first program to defeat a professional Go player.\n\nThe victory is a testament to the power of deep learning, and to the incredible work of our research team, which has been at the forefront of AI research for the past five years. AlphaGo is one of the most advanced Go programs ever created, and its performance is an important step towards the goal of human-level AI.\n\n"This is the culmination of a decade of hard work," said Andy Ng, co-founder and CTO of DeepMind. "We are thrilled to have achieved this milestone and look forward to continuing to develop AI that can be used in a wide range of applications and to help people live better lives."\n\nDeepMind\'s work on Go began in 2010, when it began to train a neural network to play Go using millions of games played by top Go players around the world. Since then, the team has refined the algorithm, adding more and more layers of reinforcement"]
+        ["DeepMind Company is a company that focuses on the development and commercialization of artificial intelligence (AI). DeepMind’s mission is to help people understand and solve problems that are difficult to solve in the world today.\n\nIn this post, we talk about the benefits of deep learning in business and how it"]
         ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
