@@ -284,6 +284,12 @@ class CLIPConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
+
+    >>> # Initializing a CLIPText and CLIPVision configuration
+    >>> config_text = CLIPTextConfig()
+    >>> config_vision = CLIPVisionConfig()
+
+    >>> config = CLIPConfig.from_text_vision_configs(config_text, config_vision)
     ```"""
 
     model_type = "clip"
