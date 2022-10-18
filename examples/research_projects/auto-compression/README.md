@@ -1,7 +1,7 @@
 # Huggingface BERT Quantization Compression Example
 
 This example uses [ACT](https://github.com/PaddlePaddle/PaddleSlim/tree/develop/example/auto_compression) from [PaddleSlim](https://github.com/PaddlePaddle/PaddleSlim) for BERT quantization.
-The quantized model can be deployed on TensorRT.
+The quantized model can be deployed on Paddle Inference and ONNXRuntime.
 
 ### Experiment
 
@@ -18,10 +18,10 @@ We provide a compression example on the bert-base-cased, if you want to compress
 |  bert-base-cased | Accuracy（avg） | Latency(ms) | SpeedUp |
 |:-------:|:----------:|:------------:| :------:|
 | origin model |  81.35 | - | - |
-| compressed model |  81.51 | - | - |
+| structure prune & quant aware |  81.51 | - | - |
 
 - Nvidia GPU ：
-  - hardware：NVIDIA Tesla T4 single card
+  - hardware：One Nvidia Tesla T4 GPU
   - software：CUDA 11.2, cuDNN 8.0, TensorRT 8.4
   - hyperparameter：batch_size: 40, seqence length: 128
 
@@ -62,29 +62,34 @@ python run_glue.py \
   --output_dir ./tmp/$TASK_NAME/
 ```
 
-#### 5. Export FP32 model to ONNX
+#### 5. Exporting FP32 Models for Compression Acceleration
 ```
-pip install paddle2onnx
-paddle2onnx --model_dir ./tmp/$TASK_NAME/ \
-            --model_filename model.pdmodel \
-            --params_filename model.pdiparams \
-            --save_file model.onnx \
-            --enable_dev_version True
+pip install x2paddle
+pip install torch == 1.6.0
+python convert_pt2pd.py  --task_name=$TASK_NAME --model_name_or_path=../../pytorch/text-classification/tmp/$TASK_NAME/ --task_name=mrpc --save_dir=./x2paddle/$TASK_NAME
 ```
+
+if you want to get PaddlePaddle inference model with dynamic batch size, please modify ```x2paddle_code.py``` generate by x2paddle in directory reference by ```convert_dynamic_shape.py``` or can use ```convert_dynamic_shape.py``` to convert bert model except ```sst2```.
+```
+mv convert_dynamic_shape.py ./x2paddle/$TASK_NAME/
+python convert_dynamic_shape.py
+```
+
+NOTE: If you want to train/eval model with batch_size > 1, please convert PaddlePaddle inference model with dynamic batch size.
 
 #### 6. Auto Compression
 
-- Single card training:
+- Train on a Single GPU:
 ```
 export TASK_NAME=mrpc
 
 export CUDA_VISIBLE_DEVICES=0
-python run_glue.py --config_path=./train_config.yaml --task_name=$TASK_NAME --max_length=128 --model_name_or_path=./tmp/$TASK_NAME --per_device_train_batch_size 40 --per_device_eval_batch_size 40 --output_dir ./tmp_ac/$TASK_NAME 
+python run_glue.py --config_path=./train_config.yaml --task_name=$TASK_NAME --max_length=128 --model_name_or_path=./tmp/$TASK_NAME --per_device_train_batch_size 1 --per_device_eval_batch_size 1 --output_dir ./tmp_ac/$TASK_NAME 
 ```
 
 #### 7. Deployment
 
-##### 7.1 Deploy with Paddle TensorRT
+##### 7.1 Deploy with Paddle Inference
 
 - Python test:
 
@@ -92,7 +97,7 @@ First install the [PaddlePaddle with TensorRT](https://www.paddlepaddle.org.cn/i
 
 Then use [paddle_trt_infer.py](./paddle_trt_infer.py) to deploy:
 ```shell
-python paddle_trt_infer.py --task_name=$TASK_NAME --model_name_or_path=./tmp_ac/$TASK_NAME --device='gpu' --perf --int8
+python paddle_trt_infer.py --task_name=$TASK_NAME --model_name_or_path=./tmp_ac/$TASK_NAME --batch_size=1 --device='gpu' --perf --int8
 ```
 
 #### 8.FAQ

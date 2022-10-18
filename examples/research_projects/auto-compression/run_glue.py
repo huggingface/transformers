@@ -141,45 +141,6 @@ def eval_function(exe, compiled_test_program, test_feed_names, test_fetch_list):
         res = eval_metric
     return res
 
-
-def eval(args):
-    devices = paddle.device.get_device().split(":")[0]
-    places = paddle.device._convert_to_place(devices)
-    exe = paddle.static.Executor(places)
-    val_program, feed_target_names, fetch_targets = paddle.static.load_inference_model(
-        args.model_name_or_path, exe, model_filename="model.pdmodel", params_filename="model.pdiparams"
-    )
-    print("Loaded model from: {}".format(args.model_name_or_path))
-    print("Evaluating...", feed_target_names, fetch_targets)
-    for data in eval_dataloader():
-        logits = exe.run(
-            val_program,
-            feed={
-                feed_target_names[0]: data[0]["x0"],
-                feed_target_names[1]: data[0]["x1"],
-                feed_target_names[2]: data[0]["x2"],
-            },
-            fetch_list=fetch_targets,
-        )
-        predictions = np.argmax(np.array(logits[0]), axis=-1) if not is_regression else np.squeeze(np.array(logits[0]))
-        predictions, references = accelerator.gather((predictions, np.squeeze(data[0]["labels"])))
-        print("predictions: ", predictions.flatten())
-        # print("references: ", references)
-        metric.add_batch(
-            predictions=predictions,
-            references=references,
-        )
-    eval_metric = metric.compute()
-    print("task name: {}, metric: {}, \n".format(args.task_name, eval_metric))
-    if isinstance(eval_metric, dict):
-        res = list(eval_metric.values())[0]
-    elif isinstance(eval_metric, list) or isinstance(eval_metric, tuple):
-        res = eval_metric[0]
-    else:
-        res = eval_metric
-    print(res)
-
-
 def main():
     args = parse_args()
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
@@ -375,7 +336,6 @@ def main():
     if "TrainConfig" in config:
         config["TrainConfig"]["optimizer_builder"]["apply_decay_param_fun"] = apply_decay_param_fun
 
-    # eval(args)
     ac = AutoCompression(
         model_dir=args.model_name_or_path,
         model_filename="model.pdmodel",
@@ -387,7 +347,7 @@ def main():
         eval_dataloader=eval_dataloader,
     )
     ac.compress()
-    ac.export_onnx()
+    #ac.export_onnx()
 
 
 if __name__ == "__main__":

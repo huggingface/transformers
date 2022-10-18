@@ -5,7 +5,7 @@ Quantization:
   onnx_format: true
 TrainConfig:
   epochs: 3
-  eval_iter: 210
+  eval_iter: 10
   learning_rate: 1.0e-5
   optimizer_builder:
     optimizer: 

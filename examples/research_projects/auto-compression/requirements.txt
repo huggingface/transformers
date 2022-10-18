@@ -1,0 +1,5 @@
+torch==1.6.0
+paddleslim >= 2.3.3
+datasets>=1.8.0
+evaluate
+accelerate
