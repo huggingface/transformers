@@ -22,8 +22,6 @@ from functools import partial
 from pickle import UnpicklingError
 from typing import Any, Dict, Set, Tuple, Union
 
-import numpy as np
-
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -82,9 +80,9 @@ def dtype_byte_size(dtype):
     4
     ```
     """
-    if dtype == np.bool:
+    if dtype == bool:
         return 1 / 8
-    bit_search = re.search("[^\d](\d+)$", dtype.name)
+    bit_search = re.search(r"[^\d](\d+)$", dtype.name)
     if bit_search is None:
         raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
     bit_size = int(bit_search.groups()[0])
