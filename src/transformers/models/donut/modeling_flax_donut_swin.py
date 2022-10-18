@@ -200,16 +200,8 @@ class FlaxDonutSwinPatchEmbeddings(nn.Module):
     # TODO: use pad_values everywhere and make 0. as a constant
     def maybe_pad(self, pixel_values: jnp.ndarray, height: int, width: int) -> jnp.ndarray:
         pad_values = [
-            (
-                0,
-                0,
-                0,
-            ),
-            (
-                0,
-                0,
-                0,
-            ),
+            (0, 0, 0),
+            (0, 0, 0),
             (0, 0, 0),
             (0, 0, 0),
         ]
@@ -251,7 +243,6 @@ class FlaxDonutSwinEmbeddings(nn.Module):
 
     def setup(self):
         self.patch_embeddings = FlaxDonutSwinPatchEmbeddings(self.config, dtype=self.dtype)
-        num_patches = self.patch_embeddings.num_patches
         self.patch_grid = self.patch_embeddings.grid_size
         if self.use_mask_token:
             self.mask_token = self.param("mask_token", nn.initializers.zeros, (1, 1, self.config.embed_dim))
@@ -260,12 +251,14 @@ class FlaxDonutSwinEmbeddings(nn.Module):
 
         if self.config.use_absolute_embeddings:
             self.position_embeddings = self.param(
-                "position_embeddings", nn.initializers.zeros, (1, num_patches + 1, self.config.embed_dim)
+                "position_embeddings",
+                nn.initializers.zeros,
+                (1, self.patch_embeddings.num_patches + 1, self.config.embed_dim),
             )
         else:
             self.position_embeddings = None
 
-        self.norm = nn.LayerNorm(self.config.embed_dim)
+        self.norm = nn.LayerNorm(self.config.layer_norm_eps)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(
@@ -576,7 +569,7 @@ class FlaxDonutSwinLayer(nn.Module):
             if min(self.input_resolution) <= self.config.window_size
             else self.config.window_size
         )
-        self.layernorm_before = nn.LayerNorm(self.config.layer_norm_eps)
+        self.layernorm_before = nn.LayerNorm(epsilon=self.config.layer_norm_eps)
         self.attention = FlaxDonutSwinAttention(self.config, self.dim, self.num_heads)
         self.drop_path = (
             FlaxDonutSwinDropPath(self.config.drop_path_rate) if self.config.drop_path_rate > 0.0 else nn.Identity()

@@ -29,8 +29,12 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, id
 if is_flax_available():
 
     import jax
+
     # TODO: from transformers import FlaxDonutSwinModel
-    from transformers.models.donut.modeling_flax_donut_swin import DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST, FlaxDonutSwinModel
+    from transformers import (
+        DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
+        FlaxDonutSwinModel,
+    )
 
 
 class FlaxDonutSwinModelTester(unittest.TestCase):
@@ -118,7 +122,7 @@ class FlaxDonutSwinModelTester(unittest.TestCase):
             initializer_range=self.initializer_range,
             encoder_stride=self.encoder_stride,
         )
-    
+
     def create_and_check_model(self, config: DonutSwinConfig, pixel_values: np.ndarray, labels):
         model = FlaxDonutSwinModel(config=config)
         result = model(pixel_values)
@@ -127,7 +131,7 @@ class FlaxDonutSwinModelTester(unittest.TestCase):
         expected_dim = int(config.embed_dim * 2 ** (len(config.depths) - 1))
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, expected_dim))
-    
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -142,7 +146,7 @@ class FlaxDonutSwinModelTester(unittest.TestCase):
 @require_flax
 class FlaxDonutSwinModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (FlaxDonutSwinModel, ) if is_flax_available() else ()
+    all_model_classes = (FlaxDonutSwinModel,) if is_flax_available() else ()
 
     fx_compatible = True
 
@@ -162,7 +166,7 @@ class FlaxDonutSwinModelTest(FlaxModelTesterMixin, unittest.TestCase):
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
-    
+
     def create_and_test_config_common_properties(self):
         return
 
@@ -181,7 +185,7 @@ class FlaxDonutSwinModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-    
+
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -255,7 +259,7 @@ class FlaxDonutSwinModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
             )
-    
+
     def check_hidden_states_output(self, inputs_dict, config, model_class, image_size):
         model = model_class(config)
 
@@ -286,8 +290,10 @@ class FlaxDonutSwinModelTest(FlaxModelTesterMixin, unittest.TestCase):
         self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
 
         batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
-        reshaped_hidden_states = jnp.transpose(jnp.reshape(reshaped_hidden_states[0], (batch_size, num_channels, height * width)), (0, 2, 1))
-        
+        reshaped_hidden_states = jnp.transpose(
+            jnp.reshape(reshaped_hidden_states[0], (batch_size, num_channels, height * width)), (0, 2, 1)
+        )
+
         self.assertListEqual(
             list(reshaped_hidden_states.shape[-2:]),
             [num_patches, self.model_tester.embed_dim],
