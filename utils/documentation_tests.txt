@@ -153,3 +153,4 @@ src/transformers/models/yolos/modeling_yolos.py
 src/transformers/models/x_clip/modeling_x_clip.py
 src/transformers/models/yoso/configuration_yoso.py
 src/transformers/models/clip/configuration_clip.py
+src/transformers/models/convnext/configuration_convnext.py
