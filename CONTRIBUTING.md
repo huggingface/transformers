@@ -251,11 +251,13 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
    $ git rebase upstream/main
    ```
 
-   Force push your changes after you rebase:
+   Push your changes to your branch:
 
    ```bash
-   $ git push -u --force origin a-descriptive-name-for-my-changes
+   $ git push -u origin a-descriptive-name-for-my-changes
    ```
+
+   If you've already opened a pull request, you'll need to force push with the `--force` flag. Otherwise, if the pull request hasn't been opened yet, you can just push your changes normally.
 
 6. Now you can go to your fork of the repository on GitHub and click on **Pull request** to open a pull request. Make sure you tick off all the boxes in our [checklist](contributing#checklist) below. When you're ready, you can send your changes to the project maintainers for review.
 
