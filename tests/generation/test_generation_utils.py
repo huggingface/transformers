@@ -1693,6 +1693,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             ],
         )
 
+    @slow
     def test_contrastive_search(self):
         article = """DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"""
 
