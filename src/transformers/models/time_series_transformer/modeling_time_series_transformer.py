@@ -1717,7 +1717,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         self.target_shape = self.distribution_output.event_shape
 
         if config.loss == "nll":
-            self.loss = NegativeLogLikelihood(config.beta)
+            self.loss = NegativeLogLikelihood(beta=config.beta)
         else:
             raise ValueError(f"Unknown loss function {config.loss}")
 
