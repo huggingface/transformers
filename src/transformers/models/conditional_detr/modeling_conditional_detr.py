@@ -2222,7 +2222,6 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
     return loss.mean(1).sum() / num_boxes
 
 
-# taken from https://github.com/Atten4Vis/conditionalDETR/blob/master/models/conditional_detr.py
 class ConditionalDetrLoss(nn.Module):
     """
     This class computes the losses for ConditionalDetrForObjectDetection/ConditionalDetrForSegmentation. The process
@@ -2240,6 +2239,7 @@ class ConditionalDetrLoss(nn.Module):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss.__init__
     def __init__(self, matcher, num_classes, focal_alpha, losses):
         super().__init__()
         self.matcher = matcher
@@ -2247,7 +2247,7 @@ class ConditionalDetrLoss(nn.Module):
         self.focal_alpha = focal_alpha
         self.losses = losses
 
-    # removed logging parameter, which was part of the original implementation
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss.loss_labels
     def loss_labels(self, outputs, targets, indices, num_boxes):
         """
         Classification loss (Binary focal loss) targets dicts must contain the key "class_labels" containing a tensor
@@ -2282,6 +2282,7 @@ class ConditionalDetrLoss(nn.Module):
         return losses
 
     @torch.no_grad()
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss.loss_cardinality
     def loss_cardinality(self, outputs, targets, indices, num_boxes):
         """
         Compute the cardinality error, i.e. the absolute error in the number of predicted non-empty boxes.
@@ -2297,6 +2298,7 @@ class ConditionalDetrLoss(nn.Module):
         losses = {"cardinality_error": card_err}
         return losses
 
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss.loss_boxes
     def loss_boxes(self, outputs, targets, indices, num_boxes):
         """
         Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss.
@@ -2321,6 +2323,7 @@ class ConditionalDetrLoss(nn.Module):
         losses["loss_giou"] = loss_giou.sum() / num_boxes
         return losses
 
+    # Copied from transformers.models.detr.modeling_detr.DetrLoss.loss_masks
     def loss_masks(self, outputs, targets, indices, num_boxes):
         """
         Compute the losses related to the masks: the focal loss and the dice loss.
@@ -2354,18 +2357,21 @@ class ConditionalDetrLoss(nn.Module):
         }
         return losses
 
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss._get_source_permutation_idx
     def _get_source_permutation_idx(self, indices):
         # permute predictions following indices
         batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
         source_idx = torch.cat([source for (source, _) in indices])
         return batch_idx, source_idx
 
+    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss._get_target_permutation_idx
     def _get_target_permutation_idx(self, indices):
         # permute targets following indices
         batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
         target_idx = torch.cat([target for (_, target) in indices])
         return batch_idx, target_idx
 
+    # Copied from transformers.models.detr.modeling_detr.DetrLoss.get_loss
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
             "labels": self.loss_labels,
@@ -2377,6 +2383,7 @@ class ConditionalDetrLoss(nn.Module):
             raise ValueError(f"Loss {loss} not supported")
         return loss_map[loss](outputs, targets, indices, num_boxes)
 
+    # Copied from transformers.models.detr.modeling_detr.DetrLoss.forward
     def forward(self, outputs, targets):
         """
         This performs the loss computation.
@@ -2393,7 +2400,7 @@ class ConditionalDetrLoss(nn.Module):
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets)
 
-        # Compute the average number of target boxes accross all nodes, for normalization purposes
+        # Compute the average number of target boxes across all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         # (Niels): comment out function below, distributed training to be added
