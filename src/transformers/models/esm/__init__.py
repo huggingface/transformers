@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -40,6 +40,21 @@ else:
         "EsmPreTrainedModel",
     ]
 
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_esm"] = [
+        "TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFEsmForMaskedLM",
+        "TFEsmForSequenceClassification",
+        "TFEsmForTokenClassification",
+        "TFEsmModel",
+        "TFEsmPreTrainedModel",
+    ]
+
 
 if TYPE_CHECKING:
     from .configuration_esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig
@@ -58,6 +73,21 @@ if TYPE_CHECKING:
             EsmForTokenClassification,
             EsmModel,
             EsmPreTrainedModel,
+        )
+
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_esm import (
+            TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFEsmForMaskedLM,
+            TFEsmForSequenceClassification,
+            TFEsmForTokenClassification,
+            TFEsmModel,
+            TFEsmPreTrainedModel,
         )
 
 

@@ -44,8 +44,8 @@ def center_to_corners_format(x):
     Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
     (x_0, y_0, x_1, y_1).
     """
-    x_c, y_c, w, h = x.unbind(-1)
-    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
+    center_x, center_y, width, height = x.unbind(-1)
+    b = [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)]
     return torch.stack(b, dim=-1)
 
 
@@ -1261,8 +1261,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
             # No mask found
             if mask_probs_item.shape[0] <= 0:
-                segmentation = None
-                segments: List[Dict] = []
+                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
+                segmentation = torch.zeros((height, width)) - 1
+                results.append({"segmentation": segmentation, "segments_info": []})
                 continue
 
             # Get segmentation map and segment information of batch item
@@ -1347,8 +1348,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
             # No mask found
             if mask_probs_item.shape[0] <= 0:
-                segmentation = None
-                segments: List[Dict] = []
+                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
+                segmentation = torch.zeros((height, width)) - 1
+                results.append({"segmentation": segmentation, "segments_info": []})
                 continue
 
             # Get segmentation map and segment information of batch item

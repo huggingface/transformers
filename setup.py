@@ -133,7 +133,7 @@ _deps = [
     "packaging>=20.0",
     "parameterized",
     "phonemizer",
-    "protobuf<=3.20.1",
+    "protobuf<=3.20.2",
     "psutil",
     "pyyaml>=5.1",
     "pydantic",
@@ -170,6 +170,9 @@ _deps = [
     "unidic_lite>=1.0.7",
     "uvicorn",
     "beautifulsoup4",
+    "sudachipy>=0.6.6",
+    "sudachidict_core>=20220729",
+    "pyknp>=0.6.1",
 ]
 
 
@@ -239,7 +242,7 @@ class DepsTableUpdateCommand(Command):
 
 extras = {}
 
-extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic")
+extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "pyknp")
 extras["sklearn"] = deps_list("scikit-learn")
 
 extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text")
@@ -405,7 +408,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.23.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.24.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",

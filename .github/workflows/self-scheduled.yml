@@ -256,10 +256,8 @@ jobs:
 
       - name: Run all pipeline tests on GPU
         working-directory: /transformers
-        env:
-          RUN_PIPELINE_TESTS: yes
         run: |
-          python3 -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=${{ matrix.machine_type }}_tests_torch_pipeline_gpu tests
+          python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ matrix.machine_type }}_tests_torch_pipeline_gpu tests/pipelines
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -301,10 +299,8 @@ jobs:
 
       - name: Run all pipeline tests on GPU
         working-directory: /transformers
-        env:
-          RUN_PIPELINE_TESTS: yes
         run: |
-          python3 -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=${{ matrix.machine_type }}_tests_tf_pipeline_gpu tests
+          python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ matrix.machine_type }}_tests_tf_pipeline_gpu tests/pipelines
 
       - name: Failure short reports
         if: ${{ always() }}

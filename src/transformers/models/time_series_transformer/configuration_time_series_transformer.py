@@ -117,7 +117,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
     >>> # Initializing a default Time Series Transformer configuration
     >>> configuration = TimeSeriesTransformerConfig()
 
-    >>> # Randomly initializing a model from the configuration
+    >>> # Randomly initializing a model (with random weights) from the configuration
     >>> model = TimeSeriesTransformerModel(configuration)
 
     >>> # Accessing the model configuration

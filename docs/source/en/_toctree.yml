@@ -33,7 +33,9 @@
     - local: converting_tensorflow_models
       title: Converting from TensorFlow checkpoints
     - local: serialization
-      title: Export 🤗 Transformers models
+      title: Export to ONNX
+    - local: torchscript
+      title: Export to TorchScript
     - local: troubleshooting
       title: Troubleshoot
     title: General usage
@@ -275,6 +277,8 @@
         title: LayoutLM
       - local: model_doc/led
         title: LED
+      - local: model_doc/lilt
+        title: LiLT
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
@@ -449,6 +453,8 @@
         title: Wav2Vec2Phoneme
       - local: model_doc/wavlm
         title: WavLM
+      - local: model_doc/whisper
+        title: Whisper
       - local: model_doc/xls_r
         title: XLS-R
       - local: model_doc/xlsr_wav2vec2
@@ -517,6 +523,8 @@
       title: Utilities for Trainer
     - local: internal/generation_utils
       title: Utilities for Generation
+    - local: internal/image_processing_utils
+      title: Utilities for Image Processors
     - local: internal/file_utils
       title: General Utilities
     title: Internal Helpers
