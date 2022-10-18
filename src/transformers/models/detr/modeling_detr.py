@@ -33,7 +33,6 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_scipy_available,
     is_timm_available,
-    is_vision_available,
     logging,
     replace_return_docstrings,
     requires_backends,
@@ -43,9 +42,6 @@ from .configuration_detr import DetrConfig
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
-
-if is_vision_available():
-    from .feature_extraction_detr import center_to_corners_format
 
 if is_timm_available():
     from timm import create_model
