@@ -152,13 +152,16 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
 
         model = AutoModelForImageSegmentation.from_pretrained(model_id)
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-        image_segmenter = ImageSegmentationPipeline(model=model, feature_extractor=feature_extractor)
+        image_segmenter = ImageSegmentationPipeline(
+            model=model,
+            feature_extractor=feature_extractor,
+            task="semantic",
+            threshold=0.0,
+            overlap_mask_area_threshold=0.0,
+        )
 
         outputs = image_segmenter(
             "http://images.cocodataset.org/val2017/000000039769.jpg",
-            task="panoptic",
-            threshold=0.0,
-            overlap_mask_area_threshold=0.0,
         )
 
         # Shortening by hashing
@@ -169,16 +172,34 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             nested_simplify(outputs, decimals=4),
             [
                 {
-                    "score": 0.004,
-                    "label": "LABEL_215",
-                    "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+                    "label": "LABEL_88",
+                    "mask": {"hash": "4e2da4b9a4", "shape": (480, 640), "white_pixels": 11},
+                    "score": None,
                 },
                 {
-                    "score": 0.004,
-                    "label": "LABEL_215",
-                    "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+                    "label": "LABEL_101",
+                    "mask": {"hash": "9ec7310913", "shape": (480, 640), "white_pixels": 8946},
+                    "score": None,
                 },
-            ],
+                {
+                    "label": "LABEL_215",
+                    "mask": {"hash": "21dcfdc10d", "shape": (480, 640), "white_pixels": 298243},
+                    "score": None,
+                },
+            ]
+            # Temporary: Keeping around the old values as they might provide useful later
+            # [
+            #     {
+            #         "score": 0.004,
+            #         "label": "LABEL_215",
+            #         "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+            #     },
+            #     {
+            #         "score": 0.004,
+            #         "label": "LABEL_215",
+            #         "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+            #     },
+            # ],
         )
 
         outputs = image_segmenter(
@@ -197,28 +218,62 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             [
                 [
                     {
-                        "score": 0.004,
-                        "label": "LABEL_215",
-                        "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+                        "label": "LABEL_88",
+                        "mask": {"hash": "4e2da4b9a4", "shape": (480, 640), "white_pixels": 11},
+                        "score": None,
                     },
                     {
-                        "score": 0.004,
+                        "label": "LABEL_101",
+                        "mask": {"hash": "9ec7310913", "shape": (480, 640), "white_pixels": 8946},
+                        "score": None,
+                    },
+                    {
                         "label": "LABEL_215",
-                        "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+                        "mask": {"hash": "21dcfdc10d", "shape": (480, 640), "white_pixels": 298243},
+                        "score": None,
                     },
                 ],
                 [
                     {
-                        "score": 0.004,
-                        "label": "LABEL_215",
-                        "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+                        "label": "LABEL_88",
+                        "mask": {"hash": "4e2da4b9a4", "shape": (480, 640), "white_pixels": 11},
+                        "score": None,
                     },
                     {
-                        "score": 0.004,
-                        "label": "LABEL_215",
-                        "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+                        "label": "LABEL_101",
+                        "mask": {"hash": "9ec7310913", "shape": (480, 640), "white_pixels": 8946},
+                        "score": None,
                     },
-                ],
+                    {
+                        "label": "LABEL_215",
+                        "mask": {"hash": "21dcfdc10d", "shape": (480, 640), "white_pixels": 298243},
+                        "score": None,
+                    },
+                ]
+                # [
+                #     {
+                #         "score": 0.004,
+                #         "label": "LABEL_215",
+                #         "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+                #     },
+                #     {
+                #         "score": 0.004,
+                #         "label": "LABEL_215",
+                #         "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+                #     },
+                # ],
+                # [
+                #     {
+                #         "score": 0.004,
+                #         "label": "LABEL_215",
+                #         "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+                #     },
+                #     {
+                #         "score": 0.004,
+                #         "label": "LABEL_215",
+                #         "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+                #     },
+                # ],
             ],
         )
 
