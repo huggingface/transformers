@@ -322,7 +322,7 @@ def center_crop(
     image: np.ndarray,
     size: Tuple[int, int],
     data_format: Optional[Union[str, ChannelDimension]] = None,
-    return_numpy: Optional[bool] = None
+    return_numpy: Optional[bool] = None,
 ) -> np.ndarray:
     """
     Crops the `image` to the specified `size` using a center crop. Note that if the image is too small to be cropped to
