@@ -36,11 +36,14 @@ src/transformers/models/canine/configuration_canine.py
 src/transformers/models/codegen/configuration_codegen.py
 src/transformers/models/conditional_detr/configuration_conditional_detr.py
 src/transformers/models/conditional_detr/modeling_conditional_detr.py
+src/transformers/models/convbert/configuration_convbert.py
 src/transformers/models/convnext/modeling_convnext.py
 src/transformers/models/ctrl/configuration_ctrl.py
 src/transformers/models/ctrl/modeling_ctrl.py
 src/transformers/models/cvt/modeling_cvt.py
+src/transformers/models/data2vec/configuration_data2vec_audio.py
 src/transformers/models/data2vec/configuration_data2vec_text.py
+src/transformers/models/data2vec/configuration_data2vec_vision.py
 src/transformers/models/data2vec/modeling_data2vec_audio.py
 src/transformers/models/data2vec/modeling_data2vec_vision.py
 src/transformers/models/deberta/modeling_deberta.py
@@ -89,6 +92,7 @@ src/transformers/models/pegasus/modeling_pegasus.py
 src/transformers/models/perceiver/modeling_perceiver.py
 src/transformers/models/plbart/modeling_plbart.py
 src/transformers/models/poolformer/modeling_poolformer.py
+src/transformers/models/realm/configuration_realm.py
 src/transformers/models/reformer/configuration_reformer.py
 src/transformers/models/reformer/modeling_reformer.py
 src/transformers/models/regnet/modeling_regnet.py

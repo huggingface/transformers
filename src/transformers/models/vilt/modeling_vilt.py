@@ -136,9 +136,10 @@ class ViltEmbeddings(nn.Module):
 
         pos_embed = pos_embed.flatten(2).transpose(1, 2)
         x = x.flatten(2).transpose(1, 2)
+        # Set `device` here, otherwise `patch_index` will always be on `CPU` and will fail near the end for torch>=1.13
         patch_index = torch.stack(
             torch.meshgrid(torch.arange(x_mask.shape[-2]), torch.arange(x_mask.shape[-1]), indexing="ij"), dim=-1
-        )
+        ).to(device=x_mask.device)
         patch_index = patch_index[None, None, :, :, :]
         patch_index = patch_index.expand(x_mask.shape[0], x_mask.shape[1], -1, -1, -1)
         patch_index = patch_index.flatten(1, 3)
@@ -177,6 +178,7 @@ class ViltEmbeddings(nn.Module):
         select = torch.cat(select, dim=0)
         x = x[select[:, 0], select[:, 1]].view(batch_size, -1, num_channels)
         x_mask = x_mask[select[:, 0], select[:, 1]].view(batch_size, -1)
+        # `patch_index` should be on the same device as `select` (for torch>=1.13), which is ensured at definition time.
         patch_index = patch_index[select[:, 0], select[:, 1]].view(batch_size, -1, 2)
         pos_embed = pos_embed[select[:, 0], select[:, 1]].view(batch_size, -1, num_channels)
 

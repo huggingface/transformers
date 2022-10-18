@@ -31,8 +31,6 @@ class FeatureExtractionPipeline(Pipeline):
             If no framework is specified, will default to the one currently installed. If no framework is specified and
             both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model is
             provided.
-        return_tensor (`bool`, *optional*):
-            If `True`, returns a tensor according to the specified framework, otherwise returns a list.
         task (`str`, defaults to `""`):
             A task-identifier for the pipeline.
         args_parser ([`~pipelines.ArgumentHandler`], *optional*):
@@ -42,7 +40,7 @@ class FeatureExtractionPipeline(Pipeline):
             the associated CUDA device id.
     """
 
-    def _sanitize_parameters(self, truncation=None, tokenize_kwargs=None, return_tensors=None, **kwargs):
+    def _sanitize_parameters(self, truncation=None, tokenize_kwargs=None, **kwargs):
         if tokenize_kwargs is None:
             tokenize_kwargs = {}
 
@@ -55,11 +53,7 @@ class FeatureExtractionPipeline(Pipeline):
 
         preprocess_params = tokenize_kwargs
 
-        postprocess_params = {}
-        if return_tensors is not None:
-            postprocess_params["return_tensors"] = return_tensors
-
-        return preprocess_params, {}, postprocess_params
+        return preprocess_params, {}, {}
 
     def preprocess(self, inputs, **tokenize_kwargs) -> Dict[str, GenericTensor]:
         return_tensors = self.framework
@@ -70,10 +64,8 @@ class FeatureExtractionPipeline(Pipeline):
         model_outputs = self.model(**model_inputs)
         return model_outputs
 
-    def postprocess(self, model_outputs, return_tensors=False):
+    def postprocess(self, model_outputs):
         # [0] is the first available tensor, logits or last_hidden_state.
-        if return_tensors:
-            return model_outputs[0]
         if self.framework == "pt":
             return model_outputs[0].tolist()
         elif self.framework == "tf":
