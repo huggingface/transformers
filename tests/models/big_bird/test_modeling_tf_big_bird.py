@@ -17,26 +17,21 @@ import unittest
 
 from transformers import BigBirdConfig, is_tf_available
 
-# from ...test_configuration_common import ConfigTester
-from transformers.testing_utils import slow
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
-# from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+# from ...test_configuration_common import ConfigTester
 
 if is_tf_available():
     import numpy as np
     import tensorflow as tf
 
-    from transformers.models.big_bird.modeling_tf_big_bird import (
-        TFBigBirdModel,
+    from transformers.models.big_bird.modeling_tf_big_bird import (  # TF_BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST,; TFBigBirdForPreTraining,; TFBigBirdForQuestionAnswering,; TFBigBirdForSequenceClassification,; TFBigBirdForTokenClassification,
         TFBigBirdForCausalLM,
         TFBigBirdForMaskedLM,
-        TFBigBirdForQuestionAnswering,
-        TFBigBirdForSequenceClassification,
-        TFBigBirdForTokenClassification, TFBigBirdForPreTraining, TF_BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST,
-)
+        TFBigBirdModel,
+    )
 
 
 class TFBigBirdModelTester:

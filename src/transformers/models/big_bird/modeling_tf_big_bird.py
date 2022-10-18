@@ -504,7 +504,8 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
             3,
         )
         second_rand_pad = tf.concat(
-            [tf.ones_like(second_product[:, :, :, : 4 * to_block_size], dtype=tf.dtypes.float32), rand_mask[:, :, 0]], 3,
+            [tf.ones_like(second_product[:, :, :, : 4 * to_block_size], dtype=tf.dtypes.float32), rand_mask[:, :, 0]],
+            3,
         )
         second_product = tf.multiply(second_product, rsqrt_d)
         second_product += (1.0 - tf.minimum(second_seq_pad, second_rand_pad)) * attn_mask_penalty
@@ -661,19 +662,21 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
         ]  # last key block (global)
 
         # random keys
-        attention_probs_view = attention_probs.reshape((
-            batch_size,
-            n_heads,
-            from_seq_len // from_block_size,
-            from_block_size,
-            to_seq_len // to_block_size,
-            to_block_size,
-        ))
+        attention_probs_view = attention_probs.reshape(
+            (
+                batch_size,
+                n_heads,
+                from_seq_len // from_block_size,
+                from_block_size,
+                to_seq_len // to_block_size,
+                to_block_size,
+            )
+        )
         for p1, i1, w1 in zip(range(batch_size), rand_attn, second_attn_weights):
             # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
             for p2, i2, w2 in zip(range(n_heads), i1, w1):
                 # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
-                right_slice = tf.reshape(w2[:, 4 * to_block_size:], (n_rand_blocks, from_block_size, to_block_size))
+                right_slice = tf.reshape(w2[:, 4 * to_block_size :], (n_rand_blocks, from_block_size, to_block_size))
                 attention_probs_view[p1, p2, 1, :, i2[0]] = right_slice
 
         # Middle query blocks
@@ -681,18 +684,27 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
         # sliding keys
         for q_idx in range(from_seq_len // from_block_size - 4):
             sub_view = attention_probs_view[:, :, 2:-2, :, 1:-1, :]
-            right_slice = tf.reshape(attn_weights[:, :, q_idx, :, to_block_size : 4 * to_block_size], (batch_size, n_heads, from_block_size, 3, to_block_size))
+            right_slice = tf.reshape(
+                attn_weights[:, :, q_idx, :, to_block_size : 4 * to_block_size],
+                (batch_size, n_heads, from_block_size, 3, to_block_size),
+            )
             sub_view[:, :, q_idx, :, q_idx : q_idx + 3, :] = right_slice  # inner_band_product
 
         # global keys (corresponding to 1st key block)
         # reshape to normal after random keys
-        first_band_view = tf.reshape(attn_weights[:, :, :, :, :to_block_size], ( batch_size, n_heads, -1, to_block_size))
-        attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, :to_block_size] = first_band_view  # first_band_product
+        first_band_view = tf.reshape(
+            attn_weights[:, :, :, :, :to_block_size], (batch_size, n_heads, -1, to_block_size)
+        )
+        attention_probs[
+            :, :, 2 * from_block_size : -2 * from_block_size, :to_block_size
+        ] = first_band_view  # first_band_product
 
         # global keys (corresponding to last key block)
         last_band_view = attn_weights[:, :, :, :, -to_block_size:]
         last_band_view = tf.reshape(last_band_view, (batch_size, n_heads, -1, to_block_size))
-        attention_probs[:, :, 2 * from_block_size: -2 * from_block_size, -to_block_size:] = last_band_view # last_band_product
+        attention_probs[
+            :, :, 2 * from_block_size : -2 * from_block_size, -to_block_size:
+        ] = last_band_view  # last_band_product
 
         # random keys
         for p1, i1, w1 in zip(range(batch_size), rand_attn, attn_weights):
@@ -700,16 +712,22 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
             for p2, i2, w2 in zip(range(n_heads), i1, w1):
                 # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
                 for q_idx in range(1, len(i2) - 1):
-                    right_slice = tf.reshape(w2[q_idx - 1, :, 4 * to_block_size : -to_block_size],(
-                        n_rand_blocks, from_block_size, to_block_size
-                    ))
+                    right_slice = tf.reshape(
+                        w2[q_idx - 1, :, 4 * to_block_size : -to_block_size],
+                        (n_rand_blocks, from_block_size, to_block_size),
+                    )
                     attention_probs_view[p1, p2, q_idx + 1, :, i2[q_idx]] = right_slice
-
 
         # Second-last query block
         # corresponding to `second_last_context_layer`
-        attention_probs[:, :, -2 * from_block_size : -from_block_size, :to_block_size] = second_last_attn_weights[:, :, :, :to_block_size ] # 1st key block (global)
-        attention_probs[:, :, -2 * from_block_size : -from_block_size, -3 * to_block_size :] = second_last_attn_weights[:, :, :, to_block_size : 4 * to_block_size]  # last three blocks (global + sliding)
+        attention_probs[:, :, -2 * from_block_size : -from_block_size, :to_block_size] = second_last_attn_weights[
+            :, :, :, :to_block_size
+        ]  # 1st key block (global)
+        attention_probs[
+            :, :, -2 * from_block_size : -from_block_size, -3 * to_block_size :
+        ] = second_last_attn_weights[
+            :, :, :, to_block_size : 4 * to_block_size
+        ]  # last three blocks (global + sliding)
 
         # random keys
         for p1, i1, w1 in zip(range(batch_size), rand_attn, second_last_attn_weights):
@@ -721,7 +739,7 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
 
         # last query block
         # corresponding to `last_context_layer`
-        attention_probs[:, :, -from_block_size:, :] = last_attn_weights # all keys global
+        attention_probs[:, :, -from_block_size:, :] = last_attn_weights  # all keys global
 
         return context_layer, tf.convert_to_tensor(attention_probs)
 
@@ -759,15 +777,15 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
         return plan_from_length, plan_num_rand_blocks
 
     def create_rand_mask_from_inputs(
-            self,
-            from_blocked_mask,
-            to_blocked_mask,
-            rand_attn,
-            num_attention_heads,
-            num_rand_blocks,
-            batch_size,
-            from_seq_length,
-            from_block_size
+        self,
+        from_blocked_mask,
+        to_blocked_mask,
+        rand_attn,
+        num_attention_heads,
+        num_rand_blocks,
+        batch_size,
+        from_seq_length,
+        from_block_size,
     ):
         """Create 4D attention mask from a 3D tensor mask.
         Args:
@@ -784,17 +802,14 @@ class TFBigBirdBlockSparseAttention(tf.keras.layers.Layer):
           from_block_size: int. size of block in from sequence.
         Returns:
           float Tensor of shape [batch_size, num_attention_heads,
-                                 from_seq_length//from_block_size-2,
-                                 from_block_size, num_rand_blocks*to_block_size].
+                                 from_seq_length//from_block_size-2, from_block_size, num_rand_blocks*to_block_size].
         """
         num_windows = from_seq_length // from_block_size - 2
         rand_mask = tf.reshape(
-            tf.gather(to_blocked_mask, rand_attn, batch_dims=1), [
-                -1, num_attention_heads, num_windows,
-                num_rand_blocks * from_block_size
-            ])
-        rand_mask = tf.einsum("BLQ,BHLK->BHLQK", from_blocked_mask[:, 1:-1],
-                              rand_mask)
+            tf.gather(to_blocked_mask, rand_attn, batch_dims=1),
+            [-1, num_attention_heads, num_windows, num_rand_blocks * from_block_size],
+        )
+        rand_mask = tf.einsum("BLQ,BHLK->BHLQK", from_blocked_mask[:, 1:-1], rand_mask)
         return rand_mask
 
     @staticmethod
@@ -1632,10 +1647,11 @@ class TFBigBirdMainLayer(tf.keras.layers.Layer):
             attention_mask = tf.pad(
                 attention_mask, (0, padding_len), mode="CONSTANT", constant_values=False
             )  # no attention on the padding tokens
-            token_type_ids = tf.pad(token_type_ids, (0, padding_len), mode="CONSTANT", constant_values=0)  # pad with token_type_id = 0
+            token_type_ids = tf.pad(
+                token_type_ids, (0, padding_len), mode="CONSTANT", constant_values=0
+            )  # pad with token_type_id = 0
 
         return padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds
-
 
     def create_masks_for_block_sparse_attn(self, attention_mask: tf.Tensor, block_size: int):
 
@@ -1655,13 +1671,12 @@ class TFBigBirdMainLayer(tf.keras.layers.Layer):
                 to_seq_length//to_block_size, to_block_size].
             Returns:
               float Tensor of shape [batch_size, 1, from_seq_length//from_block_size-4,
-                                     from_block_size,  3*to_block_size].
+                                     from_block_size, 3*to_block_size].
             """
             exp_blocked_to_pad = tf.concat(
-                [to_blocked_mask[:, 1:-3], to_blocked_mask[:, 2:-2],
-                 to_blocked_mask[:, 3:-1]], 2)
-            band_mask = tf.einsum(
-                "BLQ,BLK->BLQK", from_blocked_mask[:, 2:-2], exp_blocked_to_pad)
+                [to_blocked_mask[:, 1:-3], to_blocked_mask[:, 2:-2], to_blocked_mask[:, 3:-1]], 2
+            )
+            band_mask = tf.einsum("BLQ,BLK->BLQK", from_blocked_mask[:, 2:-2], exp_blocked_to_pad)
             band_mask = tf.expand_dims(band_mask, 1)
             return band_mask
 
@@ -2410,6 +2425,7 @@ class TFBigBirdForMaskedLM(TFBigBirdPreTrainedModel, TFMaskedLanguageModelingLos
 
         return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
+
 class TFBigBirdLMHead(tf.keras.layers.Layer):
     """BigBird Head for masked language modeling."""
 
@@ -2460,6 +2476,7 @@ class TFBigBirdLMHead(tf.keras.layers.Layer):
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
         return hidden_states
+
 
 class TFBigBirdForCausalLM(TFBigBirdPreTrainedModel, TFCausalLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
