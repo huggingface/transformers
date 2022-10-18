@@ -147,7 +147,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         feature_extractor = pipeline(
             task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
         )
-        outputs = feature_extractor("This is a test" * 100, return_tensors=True)
+        outputs = feature_extractor("This is a test", return_tensors=True)
         self.assertTrue(torch.is_tensor(outputs))
 
     @require_tf
@@ -155,7 +155,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         feature_extractor = pipeline(
             task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert", framework="tf"
         )
-        outputs = feature_extractor("This is a test" * 100, return_tensors=True)
+        outputs = feature_extractor("This is a test", return_tensors=True)
         self.assertTrue(tf.is_tensor(outputs))
 
     def get_shape(self, input_, shape=None):
