@@ -37,6 +37,7 @@ src/transformers/models/codegen/configuration_codegen.py
 src/transformers/models/conditional_detr/configuration_conditional_detr.py
 src/transformers/models/conditional_detr/modeling_conditional_detr.py
 src/transformers/models/convbert/configuration_convbert.py
+src/transformers/models/convnext/configuration_convnext.py
 src/transformers/models/convnext/modeling_convnext.py
 src/transformers/models/ctrl/configuration_ctrl.py
 src/transformers/models/ctrl/modeling_ctrl.py
@@ -80,7 +81,7 @@ src/transformers/models/longt5/modeling_longt5.py
 src/transformers/models/marian/modeling_marian.py
 src/transformers/models/markuplm/modeling_markuplm.py
 src/transformers/models/mbart/modeling_mbart.py
-src/transformers/models/megatron_bert/configuration_megatron_bert.py 
+src/transformers/models/megatron_bert/configuration_megatron_bert.py
 src/transformers/models/mobilebert/configuration_mobilebert.py
 src/transformers/models/mobilebert/modeling_mobilebert.py
 src/transformers/models/mobilebert/modeling_tf_mobilebert.py
