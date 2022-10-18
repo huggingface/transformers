@@ -266,24 +266,26 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
 
 ### Pull request checklist
 
-[ ] The pull request title should summarize your contribution.[ ] If your pull request
-addresses an issue, please mention the issue number in the pull request description to
-make sure they are linked (and people viewing the issue know you are working on it).
-[ ] To indicate a work in progress please prefix the title with `[WIP]`. These are
+☐ The pull request title should summarize your contribution.<br>
+☐ If your pull request addresses an issue, please mention the issue number in the pull
+request description to make sure they are linked (and people viewing the issue know you
+are working on it).<br>
+☐ To indicate a work in progress please prefix the title with `[WIP]`. These are
 useful to avoid duplicated work, and to differentiate it from PRs ready to be merged.
-[ ] Make sure existing tests pass.
-[ ] If adding a new feature, also add tests for it.
+☐ Make sure existing tests pass.<br>
+☐ If adding a new feature, also add tests for it.<br>
    - If you are adding a new model, make sure you use
      `ModelTester.all_model_classes = (MyModel, MyModelWithLMHead,...)` to trigger the common tests.
    - If you are adding new `@slow` tests, make sure they pass using
      `RUN_SLOW=1 python -m pytest tests/models/my_new_model/test_my_new_model.py`.
    - If you are adding a new tokenizer, write tests and make sure
      `RUN_SLOW=1 python -m pytest tests/models/{your_model_name}/test_tokenization_{your_model_name}.py` passes.
-   CircleCI does not run the slow tests, but GitHub Actions does every night!
-[ ] All public methods must have informative docstrings (see
+   CircleCI does not run the slow tests, but GitHub Actions does every night!<br>
+
+☐ All public methods must have informative docstrings (see
 [`modeling_bert.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py)
-for an example).
-[ ] Due to the rapidly growing repository, don't add any images, videos and other
+for an example).<br>
+☐ Due to the rapidly growing repository, don't add any images, videos and other
 non-text files that'll significantly weigh down the repository. Instead, use a Hub
 repository such as [`hf-internal-testing`](https://huggingface.co/hf-internal-testing)
 to host these files and reference them by URL. We recommend placing documentation
