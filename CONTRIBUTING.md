@@ -59,10 +59,10 @@ feedback.
 
 ### Did you find a bug?
 
-The 🤗 Transformers library is robust and reliable thanks to users who report an issue.
+The 🤗 Transformers library is robust and reliable thanks to users who report the problems they encounter.
 
 Before you report an issue, we would really appreciate it if you could **make sure the bug was not
-already reported** (use the search bar on GitHub under Issues).
+already reported** (use the search bar on GitHub under Issues). Your issue should also be related to bugs in the library itself, and not your code. If you're unsure whether the bug is in your code or the library, please ask on the [forum](https://discuss.huggingface.co/) first. This helps us respond quicker to fixing issues related to the library versus general questions.
 
 Once you've confirmed the bug hasn't already been reported, please include the following information in your issue so we can quickly resolve it:
 
@@ -70,7 +70,8 @@ Once you've confirmed the bug hasn't already been reported, please include the f
   **TensorFlow** versions when applicable.
 * A short, self-contained, code snippet that allows us to reproduce the bug in
   less than 30s.
-* A *full* traceback if an exception is raised.
+* The *full* traceback if an exception is raised.
+* Attach any other additional information, like screenshots, you think may help.
 
 To get the OS and software versions automatically, run the following command:
 
@@ -95,7 +96,6 @@ If there is a new feature you'd like to see in 🤗 Transformers, please open an
 2. Describe your requested feature in as much detail as possible. The more you can tell us about it, the better we'll be able to help you.
 3. Provide a *code snippet* that demonstrates the features usage.
 4. If the feature is related to a paper, please include a link.
-5. Attach any other additional information (drawings, screenshots, etc.) you think may help.
 
 If your issue is well written we're already 80% of the way there by the time you create it.
 
@@ -130,7 +130,7 @@ You will need basic `git` proficiency to contribute to
 manual. Type `git --help` in a shell and enjoy! If you prefer books, [Pro
 Git](https://git-scm.com/book/en/v2) is a very good reference.
 
-You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/main/setup.py#L426))** to contribute to 🤗 Transformers. Follow the steps below to start contributing:
+You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/main/setup.py#L426))** or above to contribute to 🤗 Transformers. Follow the steps below to start contributing:
 
 1. Fork the [repository](https://github.com/huggingface/transformers) by
    clicking on the **[Fork](https://github.com/huggingface/transformers/fork)** button on the repository's page. This creates a copy of the code
@@ -161,18 +161,6 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
    If 🤗 Transformers was already installed in the virtual environment, remove
    it with `pip uninstall transformers` before reinstalling it in editable
    mode with the `-e` flag.
-
-   To run the full test suite, you might need the `datasets` dependency which requires a separate source
-   install:
-
-   ```bash
-   $ git clone https://github.com/huggingface/datasets
-   $ cd datasets
-   $ pip install -e .
-   ```
-
-   If you have already cloned `datasets`, you might need to `git pull` to get the most recent changes in the `datasets`
-   library.
    
    Depending on your OS, you may need to install some external libraries as well if the `pip` installation fails.
    
@@ -189,14 +177,6 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
 
    ```bash
    $ pytest tests/<TEST_TO_RUN>.py
-   ```
-
-   You can also run the full suite with the following command, but it takes
-   a powerful machine to generate the results in a tolerable amount of time now that
-   🤗 Transformers has grown a lot. Here is the command for it:
-
-   ```bash
-   $ make test
    ```
 
    For more information about tests, check out the
@@ -237,23 +217,16 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
    [Checks on a Pull Request](https://huggingface.co/docs/transformers/pr_checks) guide.
 
    If you're modifying documents under `docs/source` directory, make sure the documentation can still be built. This check will also run in the CI when you open a pull request. To run a local check
-   make sure you install the documentation builder. First, you will need to clone the
-   [doc-builder](https://github.com/huggingface/doc-builder) tool that builds our documentation:
-   
-   ```bash
-   $ pip install git+https://github.com/huggingface/doc-builder
-   ```
-
-   Then, make sure you have all the dependencies to build the docs with:
+   make sure you install the documentation builder:
    
    ```bash
    $ pip install ".[docs]"
    ```
 
-   Finally, run the following command from the root of the repository:
+   Run the following command from the root of the repository:
 
    ```bash
-   $ doc-builder build transformers docs/source/ --build_dir ~/tmp/test-build
+   $ doc-builder build transformers docs/source/en --build_dir ~/tmp/test-build
    ```
 
    This will build the documentation in the `~/tmp/test-build` folder where you can inspect the generated
@@ -270,18 +243,18 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
    Please remember to write [good commit
    messages](https://chris.beams.io/posts/git-commit/) to clearly communicate the changes you made!
 
-   It is a good idea to regularly sync your copy of the code with the original
-   repository so you can quickly account for changes:
+   To keep your copy of the code up to date with the original
+   repository, rebase your branch on `upstream/branch` *before* you open a pull request or if requested by a maintainer:
 
    ```bash
    $ git fetch upstream
    $ git rebase upstream/main
    ```
 
-   Push the changes to your account with:
+   Force push your changes after you rebase:
 
    ```bash
-   $ git push -u origin a-descriptive-name-for-my-changes
+   $ git push -u --force origin a-descriptive-name-for-my-changes
    ```
 
 6. Now you can go to your fork of the repository on GitHub and click on **Pull request** to open a pull request. Make sure you tick off all the boxes in our [checklist](contributing#checklist) below. When you're ready, you can send your changes to the project maintainers for review.
@@ -297,16 +270,16 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
 - [ ] If your pull request addresses an issue, please mention the issue number in the pull request description to make sure they are linked (and people viewing the issue know you are working on it).
 - [ ] To indicate a work in progress please prefix the title with `[WIP]`. These are useful to avoid duplicated work, and to differentiate it from PRs ready to be merged.
 - [ ] Make sure existing tests pass.
-- [ ] Add high-coverage tests. Your PR won't be merged if there is no quality testing.
+- [ ] If adding a new feature, also add tests for it.
    - If you are adding a new model, make sure you use
      `ModelTester.all_model_classes = (MyModel, MyModelWithLMHead,...)` to trigger the common tests.
    - If you are adding new `@slow` tests, make sure they pass using
-     `RUN_SLOW=1 python -m pytest tests/test_my_new_model.py`.
+     `RUN_SLOW=1 python -m pytest tests/models/my_new_model/test_my_new_model.py`.
    - If you are adding a new tokenizer, write tests and make sure
-     `RUN_SLOW=1 python -m pytest tests/test_tokenization_{your_model_name}.py` passes.
+     `RUN_SLOW=1 python -m pytest tests/models/{your_model_name}/test_tokenization_{your_model_name}.py` passes.
    CircleCI does not run the slow tests, but GitHub Actions does every night!
 - [ ] All public methods must have informative docstrings (see [`modeling_bert.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py) for an example).
-- [ ] Due to the rapidly growing repository, don't add any images, videos and other non-text files that'll significantly weigh down the repository. Instead, use a Hub repository such as [`hf-internal-testing`](https://huggingface.co/hf-internal-testing) to host these files and reference them by URL. We recommend placing documentation related images in the following repository: [huggingface/documentation-images](https://huggingface.co/datasets/huggingface/documentation-images). If it is an external contribution, feel free to add the images to your PR and ask a Hugging Face member to migrate your images to this dataset.
+- [ ] Due to the rapidly growing repository, don't add any images, videos and other non-text files that'll significantly weigh down the repository. Instead, use a Hub repository such as [`hf-internal-testing`](https://huggingface.co/hf-internal-testing) to host these files and reference them by URL. We recommend placing documentation related images in the following repository: [huggingface/documentation-images](https://huggingface.co/datasets/huggingface/documentation-images). You can open a PR on this dataset repostitory and ask a Hugging Face member to merge it.
 
 For more information about the checks run on a pull request, take a look at our [Checks on a Pull Request](pr_checks) guide.
 
@@ -317,17 +290,17 @@ the [tests](https://github.com/huggingface/transformers/tree/main/tests) folder 
 [examples](https://github.com/huggingface/transformers/tree/main/examples) folder.
 
 We like `pytest` and `pytest-xdist` because it's faster. From the root of the
-repository, here's how to run tests with `pytest`:
+repository, specify a *path to a subfolder or a test file* to run the test.
 
 ```bash
-$ python -m pytest -n auto --dist=loadfile -s -v ./tests/
+$ python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
 ```
 
-For the examples:
+Similarly, for the `examples` directory, specify a *path to a subfolder or test file* to run the test. For example, the following command tests the text classification subfolder in the PyTorch `examples` directory:
 
 ```bash
 $ pip install -r examples/xxx/requirements.txt  # only needed the first time
-$ python -m pytest -n auto --dist=loadfile -s -v ./examples/
+$ python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
 ```
 
 In fact, this is actually how our `make test` and `make test-examples` commands are implemented (not including the `pip install`)!
@@ -339,9 +312,15 @@ By default, slow tests are skipped but you can set the `RUN_SLOW` environment va
 `yes` to run them. This will download many gigabytes of models so make sure you
 have enough disk space, a good internet connection or a lot of patience!
 
+<Tip warning={true}>
+
+Remember to specify a *path to a subfolder or a test file* to run the test. Otherwise, you'll run all the tests in the `tests` or `examples` folder, which will take a very long time!
+
+</Tip>
+
 ```bash
-$ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/
-$ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/
+$ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
+$ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
 ```
 
 Like the slow tests, custom tokenizer tests are skipped but you can set the `RUN_CUSTOM_TOKENIZERS` environment variable to `yes` to run them.
@@ -365,7 +344,7 @@ for more information.
 
 ### Develop on Windows
 
-On Windows, you need to configure git to transform Windows `CRLF` line endings to Linux `LF` line endings:
+On Windows (unless you're working in [Windows Subsytem for Linux](https://learn.microsoft.com/en-us/windows/wsl/) or WSL), you need to configure git to transform Windows `CRLF` line endings to Linux `LF` line endings:
 
 ```bash
 `git config core.autocrlf input`
