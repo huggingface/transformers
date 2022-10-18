@@ -263,6 +263,19 @@ class OnnxConfig(ABC):
             images.append(Image.fromarray(data.astype("uint8")).convert("RGB"))
         return images
 
+    def _generate_dummy_audio(
+        self, batch_size: int = 2, sampling_rate: int = 22050, time_duration: float = 5.0, frequency: int = 220
+    ):
+        audio_data = []
+        for _ in range(batch_size):
+            # time variable
+            t = np.linspace(0, time_duration, int(time_duration * sampling_rate), endpoint=False)
+
+            # generate pure sine wave at `frequency` Hz
+            audio_data.append(0.5 * np.sin(2 * np.pi * frequency * t))
+
+        return audio_data
+
     def generate_dummy_inputs(
         self,
         preprocessor: Union["PreTrainedTokenizerBase", "FeatureExtractionMixin"],
@@ -274,6 +287,9 @@ class OnnxConfig(ABC):
         num_channels: int = 3,
         image_width: int = 40,
         image_height: int = 40,
+        sampling_rate: int = 22050,
+        time_duration: float = 5.0,
+        frequency: int = 220,
         tokenizer: "PreTrainedTokenizerBase" = None,
     ) -> Mapping[str, Any]:
         """
@@ -298,6 +314,12 @@ class OnnxConfig(ABC):
                 The width of the generated images.
             image_height (`int`, *optional*, defaults to 40):
                 The height of the generated images.
+            sampling_rate (`int`, *optional* defaults to 22050)
+                The sampling rate for audio data generation.
+            time_duration (`int`, *optional* defaults to 5 sec)
+                Total seconds of sampling for audio data generation.
+            frequency (`int`, *optional* defaults to 220)
+                The desired natural frequency of generated audio.
 
         Returns:
             Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
@@ -352,8 +374,7 @@ class OnnxConfig(ABC):
         ):
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
             batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
-            # 80000 random samples between -1 and 1
-            dummy_input = np.random.uniform(-1, 1, 80000)
+            dummy_input = self._generate_dummy_audio(batch_size, sampling_rate, time_duration, frequency)
             return dict(preprocessor(dummy_input, return_tensors=framework))
         else:
             raise ValueError(

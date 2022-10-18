@@ -221,6 +221,7 @@ PYTORCH_EXPORT_MODELS = {
 
 PYTORCH_EXPORT_ENCODER_DECODER_MODELS = {
     ("vision-encoder-decoder", "nlpconnect/vit-gpt2-image-captioning"),
+    ("whisper", "openai/whisper-tiny.en"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
@@ -374,15 +375,19 @@ class OnnxExportTestCaseV2(TestCase):
         encoder_model = model.get_encoder()
         decoder_model = model.get_decoder()
 
+        use_past = True if "-with-past" in feature else False
+
         encoder_onnx_config = onnx_config.get_encoder_config(encoder_model.config)
-        decoder_onnx_config = onnx_config.get_decoder_config(encoder_model.config, decoder_model.config, feature)
+        decoder_onnx_config = onnx_config.get_decoder_config(
+            encoder_model.config, decoder_model.config, feature, use_past
+        )
 
         preprocessor = AutoFeatureExtractor.from_pretrained(model_name)
 
         onnx_opset = max(encoder_onnx_config.default_onnx_opset, decoder_onnx_config.default_onnx_opset)
 
         with NamedTemporaryFile("w") as encoder_output:
-            onnx_inputs, onnx_outputs = export(
+            _, onnx_outputs = export(
                 preprocessor, encoder_model, encoder_onnx_config, onnx_opset, Path(encoder_output.name), device=device
             )
             validate_model_outputs(
@@ -397,9 +402,9 @@ class OnnxExportTestCaseV2(TestCase):
         preprocessor = AutoTokenizer.from_pretrained(model_name)
 
         with NamedTemporaryFile("w") as decoder_output:
-            onnx_inputs, onnx_outputs = export(
+            _, onnx_outputs = export(
                 preprocessor,
-                decoder_model,
+                model,
                 decoder_onnx_config,
                 onnx_config.default_onnx_opset,
                 Path(decoder_output.name),
@@ -408,7 +413,7 @@ class OnnxExportTestCaseV2(TestCase):
             validate_model_outputs(
                 decoder_onnx_config,
                 preprocessor,
-                decoder_model,
+                model,
                 Path(decoder_output.name),
                 onnx_outputs,
                 decoder_onnx_config.atol_for_validation,
