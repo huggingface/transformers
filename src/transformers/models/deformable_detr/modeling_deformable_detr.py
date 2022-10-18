@@ -2063,7 +2063,7 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
 
 class DeformableDetrLoss(nn.Module):
     """
-    This class computes the losses for DeformableDetrForObjectDetection/DeformableDetrForSegmentation. The process
+    This class computes the losses for `DeformableDetrForObjectDetection`. The process
     happens in two steps: 1) we compute hungarian assignment between ground truth boxes and the outputs of the model 2)
     we supervise each pair of matched ground-truth / prediction (supervise class and box).
 
@@ -2222,9 +2222,6 @@ class DeformableDetrLoss(nn.Module):
             for i, auxiliary_outputs in enumerate(outputs["auxiliary_outputs"]):
                 indices = self.matcher(auxiliary_outputs, targets)
                 for loss in self.losses:
-                    if loss == "masks":
-                        # Intermediate masks losses are too costly to compute, we ignore them.
-                        continue
                     l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes)
                     l_dict = {k + f"_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
@@ -2269,7 +2266,6 @@ class DeformableDetrMLPPredictionHead(nn.Module):
         return x
 
 
-# Copied from transformers.models.conditional_detr.modeling_conditional_detr.ConditionalDetrHungarianMatcher with ConditionalDetr->DeformableDetr
 class DeformableDetrHungarianMatcher(nn.Module):
     """
     This class computes an assignment between the targets and the predictions of the network.

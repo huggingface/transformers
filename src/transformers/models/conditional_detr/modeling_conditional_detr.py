@@ -2451,6 +2451,7 @@ class ConditionalDetrMLPPredictionHead(nn.Module):
         return x
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrHungarianMatcher with DeformableDetr->ConditionalDetr
 class ConditionalDetrHungarianMatcher(nn.Module):
     """
     This class computes an assignment between the targets and the predictions of the network.
