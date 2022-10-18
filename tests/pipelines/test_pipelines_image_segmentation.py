@@ -168,6 +168,10 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         for o in outputs:
             o["mask"] = mask_to_test_readable(o["mask"])
 
+        import pprint
+
+        pprint.pprint(nested_simplify(outputs, decimals=4))
+
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
