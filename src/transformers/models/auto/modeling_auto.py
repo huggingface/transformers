@@ -130,6 +130,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("swin", "SwinModel"),
         ("swinv2", "Swinv2Model"),
         ("t5", "T5Model"),
+        ("table-transformer", "TableTransformerModel"),
         ("tapas", "TapasModel"),
         ("time_series_transformer", "TimeSeriesTransformerModel"),
         ("trajectory_transformer", "TrajectoryTransformerModel"),
@@ -468,6 +469,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         ("conditional_detr", "ConditionalDetrForObjectDetection"),
         ("deformable_detr", "DeformableDetrForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
+        ("table-transformer", "TableTransformerForObjectDetection"),
         ("yolos", "YolosForObjectDetection"),
     ]
 )
