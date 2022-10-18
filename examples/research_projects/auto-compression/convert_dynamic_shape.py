@@ -1,9 +1,11 @@
+import argparse
 import paddle
 import math
 from x2paddle.op_mapper.pytorch2paddle import pytorch_custom_layer as x2paddle_nn
+from datasets import load_dataset
 
 class BertForSequenceClassification(paddle.nn.Layer):
-    def __init__(self):
+    def __init__(self, num_labels):
         super(BertForSequenceClassification, self).__init__()
         self.bert_embeddings_position_ids = self.create_parameter(dtype='int64', shape=(1, 512), default_initializer=paddle.nn.initializer.Constant(value=0.0))
         self.embedding0 = paddle.nn.Embedding(num_embeddings=28996, embedding_dim=768, padding_idx=0)
@@ -170,7 +172,7 @@ class BertForSequenceClassification(paddle.nn.Layer):
         self.linear72 = paddle.nn.Linear(in_features=768, out_features=768)
         self.tanh0 = paddle.nn.Tanh()
         self.dropout37 = paddle.nn.Dropout(p=0.0)
-        self.linear73 = paddle.nn.Linear(in_features=768, out_features=2)
+        self.linear73 = paddle.nn.Linear(in_features=768, out_features=num_labels)
 
     def forward(self, x0, x1, x2):
         x5 = 8.0
@@ -752,8 +754,25 @@ class BertForSequenceClassification(paddle.nn.Layer):
         return x1053
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Finetune a transformers model on a text classification task")
+    parser.add_argument(
+        "--task_name",
+        type=str,
+        default=None,
+        help="The name of the glue task to train on.",
+    )
+    args = parser.parse_args()
+
+    raw_datasets = load_dataset("glue", args.task_name)
+
+    if args.task_name != "stsb":
+        label_list = raw_datasets["train"].features["label"].names
+        num_labels = len(label_list)
+    else:
+        num_labels = 1
+
     params = paddle.load(r'model.pdparams')
-    model = BertForSequenceClassification()
+    model = BertForSequenceClassification(num_labels)
     model.set_dict(params, use_structured_name=True)
     model.eval()
     ## convert to jit

@@ -62,17 +62,22 @@ python run_glue.py \
   --output_dir ./tmp/$TASK_NAME/
 ```
 
-#### 5. Exporting FP32 Models for Compression Acceleration
+#### 5. Export FP32 Models for Compression Acceleration
+
+##### 5.1 Export FP32 Model
 ```
 pip install x2paddle
 pip install torch == 1.6.0
-python convert_pt2pd.py  --task_name=$TASK_NAME --model_name_or_path=../../pytorch/text-classification/tmp/$TASK_NAME/ --task_name=mrpc --save_dir=./x2paddle/$TASK_NAME
+python convert_pt2pd.py  --task_name=$TASK_NAME --model_name_or_path=../../pytorch/text-classification/tmp/$TASK_NAME/ --task_name=$TASK_NAME --save_dir=./x2paddle/$TASK_NAME
 ```
 
-if you want to get PaddlePaddle inference model with dynamic batch size, please modify ```x2paddle_code.py``` generate by x2paddle in directory reference by ```convert_dynamic_shape.py``` or can use ```convert_dynamic_shape.py``` to convert bert model except ```sst2```.
+##### 5.2 Convert FP32 Model to dynamic batch size
+if you want to get PaddlePaddle inference model with dynamic batch size, please modify ```x2paddle_code.py``` generate by x2paddle in directory reference by ```convert_dynamic_shape.py``` or can use ```convert_dynamic_shape.py``` to convert bert model.
+
 ```
-mv convert_dynamic_shape.py ./x2paddle/$TASK_NAME/
-python convert_dynamic_shape.py
+cp convert_dynamic_shape.py ./x2paddle/$TASK_NAME/
+cd ./x2paddle/$TASK_NAME/
+python convert_dynamic_shape.py --task_name=$TASK_NAME
 ```
 
 NOTE: If you want to train/eval model with batch_size > 1, please convert PaddlePaddle inference model with dynamic batch size.
@@ -84,7 +89,7 @@ NOTE: If you want to train/eval model with batch_size > 1, please convert Paddle
 export TASK_NAME=mrpc
 
 export CUDA_VISIBLE_DEVICES=0
-python run_glue.py --config_path=./train_config.yaml --task_name=$TASK_NAME --max_length=128 --model_name_or_path=./tmp/$TASK_NAME --per_device_train_batch_size 1 --per_device_eval_batch_size 1 --output_dir ./tmp_ac/$TASK_NAME 
+python run_glue.py --config_path=./train_config.yaml --task_name=$TASK_NAME --max_length=128 --model_name_or_path=./x2paddle/$TASK_NAME --per_device_train_batch_size 32 --per_device_eval_batch_size 32 --output_dir ./tmp_ac/$TASK_NAME 
 ```
 
 #### 7. Deployment
@@ -97,7 +102,7 @@ First install the [PaddlePaddle with TensorRT](https://www.paddlepaddle.org.cn/i
 
 Then use [paddle_trt_infer.py](./paddle_trt_infer.py) to deploy:
 ```shell
-python paddle_trt_infer.py --task_name=$TASK_NAME --model_name_or_path=./tmp_ac/$TASK_NAME --batch_size=1 --device='gpu' --perf --int8
+python paddle_trt_infer.py --task_name=$TASK_NAME --model_name_or_path=./tmp_ac/$TASK_NAME --batch_size=32 --device='gpu' --perf --int8
 ```
 
 #### 8.FAQ

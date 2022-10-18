@@ -305,7 +305,6 @@ def main():
         batch_size=args.per_device_train_batch_size,
         num_workers=0,
         shuffle=True,
-        drop_last=True,
     )
     train_dataloader = reader_wrapper(train_dataloader, ["x0", "x2", "x1"])
 
@@ -316,7 +315,6 @@ def main():
         batch_size=args.per_device_eval_batch_size,
         num_workers=0,
         shuffle=False,
-        drop_last=True,
     )
     eval_dataloader = reader_wrapper(eval_dataloader, ["x0", "x2", "x1", "labels"])
 
