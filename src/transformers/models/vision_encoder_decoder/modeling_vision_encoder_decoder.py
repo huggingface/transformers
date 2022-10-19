@@ -251,6 +251,64 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         return super().from_pretrained(*args, **kwargs)
 
     @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        r"""
+        ```"""
+
+        from_tf = kwargs.pop("from_tf", False)
+        if from_tf:
+            import os
+            import tempfile
+
+            from transformers import TFVisionEncoderDecoderModel
+
+            # a workaround to load from tensorflow checkpoint
+            # Using `_tf_model`, the test will fail, because the weight names in the encoder/decoder of `_tf_model` get
+            # extended before saving those components. For example, The name of `_tf_model.encoder.vit` is
+            # `[top model name]/encoder/vit`, but the name of `tf_model.encoder.vit` is `[top model name]/vit`. The
+            # [top model name] is handled (stripped) by the conversion method, and the former case gets extra `encoder`,
+            # which should not occur when we want to save the components along.
+
+            # There was a (very) ugly potential fix, which wasn't integrated to `transformers`: see
+            #   https://github.com/huggingface/transformers/pull/13222/commits/dbb3c9de76eee235791d2064094654637c99f36d#r697304245
+            #   (the change in `src/transformers/modeling_tf_utils.py`)
+            _tf_model = TFVisionEncoderDecoderModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
+            # Using `tf_model` to pass the test.
+            encoder = _tf_model.encoder.__class__(_tf_model.config.encoder)
+            decoder = _tf_model.decoder.__class__(_tf_model.config.decoder)
+            # Make sure models are built
+            encoder(encoder.dummy_inputs)
+            decoder(decoder.dummy_inputs)
+            tf_model = TFVisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
+            tf_model.config = _tf_model.config
+
+            # Deal with `enc_to_dec_proj`
+            if hasattr(_tf_model, "enc_to_dec_proj"):
+                tf_model(tf_model.dummy_inputs)
+                tf_model.enc_to_dec_proj.kernel.assign(_tf_model.enc_to_dec_proj.kernel)
+                tf_model.enc_to_dec_proj.bias.assign(_tf_model.enc_to_dec_proj.bias)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                encoder_dir = os.path.join(tmpdirname, "encoder")
+                decoder_dir = os.path.join(tmpdirname, "decoder")
+                tf_model.encoder.save_pretrained(encoder_dir)
+                tf_model.decoder.save_pretrained(decoder_dir)
+                model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+                    encoder_dir, decoder_dir, encoder_from_tf=True, decoder_from_tf=True
+                )
+                # This is only for copying some specific attributes of this particular model.
+                model.config = tf_model.config
+
+                if hasattr(tf_model, "enc_to_dec_proj"):
+                    model.enc_to_dec_proj.weight.data = torch.transpose(torch.from_numpy(tf_model.enc_to_dec_proj.kernel.numpy()), 1, 0)
+                    model.enc_to_dec_proj.bias.data = torch.from_numpy(tf_model.enc_to_dec_proj.bias.numpy())
+
+                return model
+
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
+    @classmethod
     def from_encoder_decoder_pretrained(
         cls,
         encoder_pretrained_model_name_or_path: str = None,

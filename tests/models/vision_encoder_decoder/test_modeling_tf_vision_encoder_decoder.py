@@ -463,7 +463,6 @@ class TFVisionEncoderDecoderMixin:
         self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
 
     def check_pt_to_tf_equivalence(self, config, decoder_config, tf_inputs_dict):
-        """EncoderDecoderModel requires special way to cross load (PT -> TF)"""
 
         encoder_decoder_config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
         # Output all for aggressive testing
@@ -480,7 +479,6 @@ class TFVisionEncoderDecoderMixin:
         self.check_pt_tf_equivalence(tf_model, pt_model, tf_inputs_dict)
 
     def check_tf_to_pt_equivalence(self, config, decoder_config, tf_inputs_dict):
-        """EncoderDecoderModel requires special way to cross load (TF -> PT)"""
 
         encoder_decoder_config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
         # Output all for aggressive testing
@@ -488,37 +486,13 @@ class TFVisionEncoderDecoderMixin:
         # TODO: A generalizable way to determine this attribute
         encoder_decoder_config.output_attentions = True
 
-        # Using `_tf_model`, the test will fail, because the weight names in the encoder/decoder of `_tf_model` get
-        # extended before saving those components. For example, The name of `_tf_model.encoder.vit` is
-        # `[top model name]/encoder/vit`, but the name of `tf_model.encoder.vit` is `[top model name]/vit`. The
-        # [top model name] is handled (stripped) by the conversion method, and the former case gets extra `encoder`,
-        # which should not occur when we want to save the components along.
+        tf_model = TFVisionEncoderDecoderModel(encoder_decoder_config)
+        # Make sure model is built before saving
+        tf_model(**tf_inputs_dict)
 
-        # There was a (very) ugly potential fix, which wasn't integrated to `transformers`: see
-        #   https://github.com/huggingface/transformers/pull/13222/commits/dbb3c9de76eee235791d2064094654637c99f36d#r697304245
-        #   (the change in `src/transformers/modeling_tf_utils.py`)
-        _tf_model = TFVisionEncoderDecoderModel(encoder_decoder_config)
-        # Make sure model is built
-        _tf_model(**tf_inputs_dict)
-
-        # Using `tf_model` to pass the test.
-        encoder = _tf_model.encoder.__class__(encoder_decoder_config.encoder)
-        decoder = _tf_model.decoder.__class__(encoder_decoder_config.decoder)
-        # Make sure models are built
-        encoder(encoder.dummy_inputs)
-        decoder(decoder.dummy_inputs)
-        tf_model = TFVisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
-        tf_model.config = encoder_decoder_config
-
-        with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
-
-            tf_model.encoder.save_pretrained(encoder_tmp_dirname)
-            tf_model.decoder.save_pretrained(decoder_tmp_dirname)
-            pt_model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-                encoder_tmp_dirname, decoder_tmp_dirname, encoder_from_tf=True, decoder_from_tf=True
-            )
-            # This is only for copying some specific attributes of this particular model.
-            pt_model.config = tf_model.config
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            tf_model.save_pretrained(tmpdirname)
+            pt_model = VisionEncoderDecoderModel.from_pretrained(tmpdirname, from_tf=True)
 
         self.check_pt_tf_equivalence(tf_model, pt_model, tf_inputs_dict)
 
@@ -620,8 +594,7 @@ class TFVisionEncoderDecoderMixin:
         decoder_config.hidden_size = decoder_config.hidden_size * 2
         self.assertTrue(config.hidden_size != decoder_config.hidden_size)
         self.check_pt_to_tf_equivalence(config, decoder_config, tf_inputs_dict)
-        # This requires a change in `VisionEncoderDecoder.from_pretrained` to pass
-        # self.check_tf_to_pt_equivalence(config, decoder_config, tf_inputs_dict)
+        self.check_tf_to_pt_equivalence(config, decoder_config, tf_inputs_dict)
 
     @slow
     def test_real_model_save_load_from_pretrained(self):
