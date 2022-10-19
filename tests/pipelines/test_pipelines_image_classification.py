@@ -140,7 +140,7 @@ class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     @require_tf
     def test_small_model_tf(self):
         small_model = "hf-internal-testing/tiny-random-vit"
-        image_classifier = pipeline("image-classification", model=small_model)
+        image_classifier = pipeline("image-classification", model=small_model, framework="tf")
 
         outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
         self.assertEqual(
