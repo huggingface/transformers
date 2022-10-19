@@ -341,7 +341,7 @@ def center_crop(
         return_numpy (`bool`, *optional*):
             Whether or not to return the cropped image as a numpy array. Used for backwards compatibility with the
             previous ImageFeatureExtractionMixin method.
-                - `None` (default): will return the same type as the input image.
+                - Unset: will return the same type as the input image.
                 - `True`: will return a numpy array.
                 - `False`: will return a `PIL.Image.Image` object.
     Returns:
