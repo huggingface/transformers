@@ -53,9 +53,6 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         loss (`string`, *optional*, defaults to `"nll"`):
             The loss function for the model corresponding to the `distribution_output` head. For parametric
             distributions it is the negative log likelihood (nll) - which currently is the only supported one.
-        beta (`float`, *optional*, defaults to `0.0`):
-            The beta parameter in the range (0, 1) for the beta-nll loss. This is only used if `loss` is set to
-            `"nll"`.
         input_size (`int`, *optional*, defaults to 1):
             The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
             multivariate targets.
@@ -140,7 +137,6 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         context_length: Optional[int] = None,
         distribution_output: str = "student_t",
         loss: str = "nll",
-        beta: float = 0.0,
         lags_sequence: List[int] = [1, 2, 3, 4, 5, 6, 7],
         scaling: bool = True,
         num_dynamic_real_features: int = 0,
@@ -172,7 +168,6 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.context_length = context_length or prediction_length
         self.distribution_output = distribution_output
         self.loss = loss
-        self.beta = beta
         self.input_size = input_size
         self.num_time_features = num_time_features
         self.lags_sequence = lags_sequence

@@ -356,23 +356,11 @@ def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor]
 
 class NegativeLogLikelihood:
     """
-    Computes the negative log likelihood loss.
-
-    Args:
-        beta (`float`):
-            Float in range (0, 1). The beta parameter from the paper: "On the Pitfalls of Heteroscedastic Uncertainty
-            Estimation with Probabilistic Neural Networks" by [Seitzer et al.
-            2022](https://openreview.net/forum?id=aPOpXlnV1T).
+    Computes the negative log likelihood loss from input distribution with respect to target.
     """
 
-    beta: float = 0.0
-
     def __call__(self, input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
-        nll = -input.log_prob(target)
-        if self.beta > 0.0:
-            variance = input.variance
-            nll = nll * (variance.detach() ** self.beta)
-        return nll
+        return -input.log_prob(target)
 
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
@@ -1717,7 +1705,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         self.target_shape = self.distribution_output.event_shape
 
         if config.loss == "nll":
-            self.loss = NegativeLogLikelihood(beta=config.beta)
+            self.loss = NegativeLogLikelihood()
         else:
             raise ValueError(f"Unknown loss function {config.loss}")
 
