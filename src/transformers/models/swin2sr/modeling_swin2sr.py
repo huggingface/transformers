@@ -1077,18 +1077,19 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.upscale = config.upscale
         self.swin2sr = Swin2SRModel(config)
+        self.upsampler = config.upsampler
+        self.upscale = config.upscale
 
         # Upsampler
         num_features = 64
-        if config.upsampler == "pixelshuffle":
+        if self.upsampler == "pixelshuffle":
             self.conv_before_upsample = nn.Sequential(
                 nn.Conv2d(config.embed_dim, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True)
             )
             self.upsample = Upsample(config.upscale, num_features)
             self.conv_last = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
-        elif config.upsampler == "pixelshuffle_aux":
+        elif self.upsampler == "pixelshuffle_aux":
             self.conv_bicubic = nn.Conv2d(config.num_channels, num_features, 3, 1, 1)
             self.conv_before_upsample = nn.Sequential(
                 nn.Conv2d(config.embed_dim, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True)
@@ -1097,14 +1098,27 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             self.conv_after_aux = nn.Sequential(nn.Conv2d(3, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True))
             self.upsample = Upsample(config.upscale, num_features)
             self.conv_last = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
-        elif config.upsampler == "pixelshuffledirect":
+        elif self.upsampler == "pixelshuffledirect":
             # for lightweight SR (to save parameters)
             patches_resolution = self.swin2sr.embeddings.patch_embeddings.patches_resolution
             self.upsample = UpsampleOneStep(
                 config.upscale, config.embed_dim, config.num_channels, (patches_resolution[0], patches_resolution[1])
             )
+        elif self.upsampler == "nearest+conv":
+            # for real-world SR (less artifacts)
+            if self.upscale != 4:
+                raise ValueError("The nearesst+conv upsampler only supports an upscale factor of 4 at the moment.")
+            self.conv_before_upsample = nn.Sequential(
+                nn.Conv2d(config.embed_dim, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True)
+            )
+            self.conv_up1 = nn.Conv2d(num_features, num_features, 3, 1, 1)
+            self.conv_up2 = nn.Conv2d(num_features, num_features, 3, 1, 1)
+            self.conv_hr = nn.Conv2d(num_features, num_features, 3, 1, 1)
+            self.conv_last = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
+            self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
         else:
-            raise NotImplementedError("To do")
+            # for image denoising and JPEG compression artifact reduction
+            self.conv_last = nn.Conv2d(config.embed_dim, config.num_channels, 3, 1, 1)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1168,11 +1182,11 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        if self.config.upsampler == "pixelshuffle":
+        if self.upsampler == "pixelshuffle":
             sequence_output = self.conv_before_upsample(sequence_output)
             sequence_output = self.upsample(sequence_output)
             sequence_output = self.conv_last(sequence_output)
-        elif self.config.upsampler == "pixelshuffle_aux":
+        elif self.upsampler == "pixelshuffle_aux":
             sequence_output = self.conv_before_upsample(sequence_output)
             aux = self.conv_aux(sequence_output)
             sequence_output = self.conv_after_aux(aux)
@@ -1182,8 +1196,18 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             )
             sequence_output = self.conv_last(sequence_output)
             aux = aux / self.swin2sr.img_range + self.swin2sr.mean
-        elif self.config.upsampler == "pixelshuffledirect":
+        elif self.upsampler == "pixelshuffledirect":
             sequence_output = self.upsample(sequence_output)
+        elif self.upsampler == "nearest+conv":
+            # for real-world SR
+            sequence_output = self.conv_before_upsample(sequence_output)
+            sequence_output = self.lrelu(
+                self.conv_up1(torch.nn.functional.interpolate(sequence_output, scale_factor=2, mode="nearest"))
+            )
+            sequence_output = self.lrelu(
+                self.conv_up2(torch.nn.functional.interpolate(sequence_output, scale_factor=2, mode="nearest"))
+            )
+            sequence_output = self.conv_last(self.lrelu(self.conv_hr(sequence_output)))
 
         x = sequence_output / self.swin2sr.img_range + self.swin2sr.mean
         result = x[:, :, : height * self.upscale, : width * self.upscale]

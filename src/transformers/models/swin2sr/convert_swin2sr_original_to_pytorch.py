@@ -33,24 +33,14 @@ def get_config(checkpoint_url):
         config.upscale = 4
         config.image_size = 48
         config.upsampler = "pixelshuffle_aux"
-
     elif "Swin2SR_Lightweight_X2_64" in checkpoint_url:
         config.depths = [6, 6, 6, 6]
         config.embed_dim = 60
         config.num_heads = [6, 6, 6, 6]
         config.upsampler = "pixelshuffledirect"
-
-    elif (
-        "Swin2SR_RealworldSR_X4_64_BSRGAN_PSNR" in checkpoint_url
-        or "Swin2SR_RealworldSR_X4_RealSRSet" in checkpoint_url
-    ):
+    elif "Swin2SR_RealworldSR_X4_64_BSRGAN_PSNR" in checkpoint_url:
         config.upscale = 4
         config.upsampler = "nearest+conv"
-    # elif "real-sr-large" in model_name:
-    #     config.upscale = 4
-    #     config.upsampler = "nearest+conv"
-    #     config.resi_connection = "3conv"
-
     elif "Swin2SR_Jpeg_dynamic" in checkpoint_url:
         config.num_channels = 1
         config.upscale = 1
@@ -58,6 +48,12 @@ def get_config(checkpoint_url):
         config.window_size = 7
         config.img_range = 255.0
         config.upsampler = ""
+
+    # elif "real-sr-large" in model_name:
+    #     config.upscale = 4
+    #     config.upsampler = "nearest+conv"
+    #     config.resi_connection = "3conv"
+
     # elif "color-jpeg-car" in model_name:
     #     config.upscale = 1
     #     config.image_size = 126
@@ -107,8 +103,10 @@ def rename_key(name):
 
     if (
         "upsample" in name
-        or "conv_bicubic" in name
         or "conv_before_upsample" in name
+        or "conv_bicubic" in name
+        or "conv_up" in name
+        or "conv_hr" in name
         or "conv_last" in name
         or "aux" in name
     ):
@@ -207,6 +205,11 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
         expected_shape = torch.Size([1, 3, 512, 512])
         expected_slice = torch.tensor(
             [[-0.7669, -0.8662, -0.8767], [-0.8810, -0.9962, -0.9820], [-0.9340, -1.0322, -1.1149]]
+        )
+    elif "Swin2SR_RealworldSR_X4_64_BSRGAN_PSNR" in checkpoint_url:
+        expected_shape = torch.Size([1, 3, 1024, 1024])
+        expected_slice = torch.tensor(
+            [[-0.5238, -0.5557, -0.6321], [-0.6016, -0.5903, -0.6391], [-0.6244, -0.6334, -0.6889]]
         )
 
     print("Shape of logits:", outputs.logits.shape)
