@@ -14,11 +14,11 @@
 # limitations under the License.
 """Image processor class for MobileViT."""
 
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Optional, Union
 
 import numpy as np
 
-from transformers.utils import is_torch_available, is_torch_tensor, is_vision_available
+from transformers.utils import is_vision_available
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -37,9 +37,6 @@ from ...utils import logging
 
 if is_vision_available():
     import PIL
-
-if is_torch_available():
-    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -81,8 +78,8 @@ class MobileViTImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
             dimensions to the specified `size`.
-        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
-            Set the class default for the `size` parameter. Size of the image after applying `resize`.
+        size (`Dict[str, int]` *optional*, defaults to {"shortest_edge": 224}):
+            Set the class default for the `size` parameter. Size of the image after applying resize.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -93,7 +90,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to crop the input at the center. If the input size is smaller than `crop_size` along any edge, the
             image is padded with 0's and then center cropped.
-        crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 256, "width": 256}`):
+        crop_size (`Dict[str, int]`, *optional*, defaults to {"height": 256, "width": 256}):
             Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to `True`.
         do_flip_channel_order (`bool`, *optional*, defaults to `True`):
             Whether to flip the color channels from RGB to BGR.
@@ -144,7 +141,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Controls the size of the output image. The shortest edge of the image will be resized to
-                `size["shortest_edge"]` while maintaining the aspect ratio.
+                size["shortest_edge"] while maintaining the aspect ratio.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
@@ -162,8 +159,8 @@ class MobileViTImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Center crop an image to size `(size["height], size["width"])`. If the input size is smaller than `size` along
-        any edge, the image is padded with 0's and then center cropped.
+        Center crop an image to size (size["height], size["width"]). If the input size is smaller than `size` along any
+        edge, the image is padded with 0's and then center cropped.
 
         Args:
             image (`np.ndarray`):
@@ -311,46 +308,3 @@ class MobileViTImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
-
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
-        """
-        Args:
-        Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps. Only supports
-        PyTorch.
-            outputs ([`MobileViTForSemanticSegmentation`]):
-                Raw outputs of the model.
-            target_sizes (`List[Tuple]`, *optional*):
-                A list of length `batch_size`, where each item is a `Tuple[int, int]` corresponding to the requested
-                final size (height, width) of each prediction. If left to None, predictions will not be resized.
-        Returns:
-            `List[torch.Tensor]`:
-                A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
-                corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
-                `torch.Tensor` correspond to a semantic class id.
-        """
-        # TODO: add support for other frameworks
-        logits = outputs.logits
-
-        # Resize logits and compute semantic segmentation maps
-        if target_sizes is not None:
-            if len(logits) != len(target_sizes):
-                raise ValueError(
-                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
-                )
-
-            if is_torch_tensor(target_sizes):
-                target_sizes = target_sizes.numpy()
-
-            semantic_segmentation = []
-
-            for idx in range(len(logits)):
-                resized_logits = torch.nn.functional.interpolate(
-                    logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
-                )
-                semantic_map = resized_logits[0].argmax(dim=0)
-                semantic_segmentation.append(semantic_map)
-        else:
-            semantic_segmentation = logits.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
-
-        return semantic_segmentation
