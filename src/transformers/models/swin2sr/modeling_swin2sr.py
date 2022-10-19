@@ -1062,12 +1062,21 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         self.upscale = config.upscale
         self.swin2sr = Swin2SRModel(config)
 
-        # Upsampler for classical SR
+        # Upsampler
+        num_features = 64
         if config.upsampler == "pixelshuffle":
-            num_features = 64
             self.conv_before_upsample = nn.Sequential(
                 nn.Conv2d(config.embed_dim, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True)
             )
+            self.upsample = Upsample(config.upscale, num_features)
+            self.conv_last = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
+        elif config.upsampler == "pixelshuffle_aux":
+            self.conv_bicubic = nn.Conv2d(config.num_channels, num_features, 3, 1, 1)
+            self.conv_before_upsample = nn.Sequential(
+                nn.Conv2d(config.embed_dim, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True)
+            )
+            self.conv_aux = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
+            self.conv_after_aux = nn.Sequential(nn.Conv2d(3, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True))
             self.upsample = Upsample(config.upscale, num_features)
             self.conv_last = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
         else:
@@ -1126,9 +1135,29 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        sequence_output = self.conv_before_upsample(sequence_output)
-        sequence_output = self.upsample(sequence_output)
-        sequence_output = self.conv_last(sequence_output)
+        if self.config.upsampler == "pixelshuffle":
+            sequence_output = self.conv_before_upsample(sequence_output)
+            sequence_output = self.upsample(sequence_output)
+            sequence_output = self.conv_last(sequence_output)
+        elif self.config.upsampler == "pixelshuffle_aux":
+            bicubic = nn.functional.interpolate(
+                sequence_output,
+                size=(height * self.upscale, width * self.upscale),
+                mode="bicubic",
+                align_corners=False,
+            )
+            bicubic = self.conv_bicubic(bicubic)
+            sequence_output = self.conv_first(sequence_output)
+            sequence_output = self.conv_after_body(self.forward_features(sequence_output)) + sequence_output
+            sequence_output = self.conv_before_upsample(sequence_output)
+            aux = self.conv_aux(sequence_output)  # b, 3, LR_H, LR_W
+            sequence_output = self.conv_after_aux(aux)
+            sequence_output = (
+                self.upsample(sequence_output)[:, :, : height * self.upscale, : width * self.upscale]
+                + bicubic[:, :, : height * self.upscale, : width * self.upscale]
+            )
+            sequence_output = self.conv_last(sequence_output)
+            aux = aux / self.swin2sr.img_range + self.swin2sr.mean
 
         x = sequence_output / self.swin2sr.img_range + self.swin2sr.mean
         result = x[:, :, : height * self.upscale, : width * self.upscale]
