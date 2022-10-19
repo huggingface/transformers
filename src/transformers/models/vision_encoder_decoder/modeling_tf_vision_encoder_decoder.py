@@ -476,6 +476,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             encoder = TFAutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
 
             # Necessary to make `save_pretrained -> from_pretrained` work correctly for the converted PT -> TF model.
+            # See https://github.com/huggingface/transformers/pull/14016#issuecomment-944046313
             if kwargs_encoder.get("from_pt", None):
                 del kwargs_encoder["from_pt"]
                 with tempfile.TemporaryDirectory() as tmp_dirname:
@@ -518,6 +519,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             decoder = TFAutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
             # Necessary to make `save_pretrained -> from_pretrained` work correctly for the converted PT -> TF model.
+            # See https://github.com/huggingface/transformers/pull/14016#issuecomment-944046313
             if kwargs_decoder.get("from_pt", None):
                 del kwargs_decoder["from_pt"]
                 with tempfile.TemporaryDirectory() as tmp_dirname:
