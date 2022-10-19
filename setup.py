@@ -158,7 +158,7 @@ _deps = [
     "tensorflow-cpu>=2.3",
     "tensorflow>=2.4",
     "tensorflow-text",
-    "tf2onnx<=1.12.0",
+    "tf2onnx",
     "timeout-decorator",
     "timm",
     "tokenizers>=0.11.1,!=0.11.3,<0.14",
