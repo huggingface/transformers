@@ -20,6 +20,7 @@ import numpy as np
 from packaging import version
 
 import requests
+import tree
 
 from .utils import (
     ExplicitEnum,
@@ -72,7 +73,7 @@ def is_valid_image(img):
 
 
 def valid_images(imgs):
-    return all(is_valid_image(img) for img in imgs)
+    return all(tree.map_structure(is_valid_image, imgs))
 
 
 def is_batched(img):
