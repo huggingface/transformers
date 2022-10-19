@@ -1878,12 +1878,10 @@ class Trainer:
         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
 
         run_dir = self._get_output_dir(trial)
-
-        output_dir = os.path.join(run_dir, checkpoint_folder)
-        checkpoints_sorted = self._sorted_checkpoints(use_mtime=True, output_dir=output_dir)
+        checkpoints_sorted = self._sorted_checkpoints(use_mtime=False, output_dir=run_dir)
 
         # Delete the last checkpoint when save_total_limit=1 if it's different from the best checkpoint.
-        if self.state.best_model_checkpoint is not None and self.state.args.save_total_limit == 1:
+        if self.state.best_model_checkpoint is not None and self.args.save_total_limit == 1:
             for checkpoint in checkpoints_sorted:
                 if checkpoint != self.state.best_model_checkpoint:
                     logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
