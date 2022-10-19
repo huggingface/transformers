@@ -56,6 +56,7 @@ src/transformers/models/deformable_detr/modeling_deformable_detr.py
 src/transformers/models/deit/configuration_deit.py
 src/transformers/models/deit/modeling_deit.py
 src/transformers/models/deit/modeling_tf_deit.py
+src/transformers/models/detr/configuration_detr.py
 src/transformers/models/detr/modeling_detr.py
 src/transformers/models/distilbert/configuration_distilbert.py
 src/transformers/models/dpt/modeling_dpt.py
