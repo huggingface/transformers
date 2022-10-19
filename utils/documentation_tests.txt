@@ -154,6 +154,7 @@ src/transformers/models/wavlm/modeling_wavlm.py
 src/transformers/models/whisper/configuration_whisper.py
 src/transformers/models/whisper/modeling_whisper.py
 src/transformers/models/whisper/modeling_tf_whisper.py
+src/transformers/models/xlm/configuration_xlm.py
 src/transformers/models/xlm_roberta/configuration_xlm_roberta.py
 src/transformers/models/xlm_roberta_xl/configuration_xlm_roberta_xl.py
 src/transformers/models/xlnet/configuration_xlnet.py
