@@ -15,6 +15,7 @@
 """ Classes to support Vision-Encoder-Text-Decoder architectures"""
 
 
+import gc
 import os
 import tempfile
 from typing import Optional
@@ -285,6 +286,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
             _tf_model = TFVisionEncoderDecoderModel.from_pretrained(
                 pretrained_model_name_or_path, *model_args, **kwargs
             )
+            config = _tf_model.config
 
             # Using `tf_model` instead
             encoder = _tf_model.encoder.__class__(_tf_model.config.encoder)
@@ -295,22 +297,18 @@ class VisionEncoderDecoderModel(PreTrainedModel):
 
             # Get the variable correspondence between `_tf_model` and `encoder` and `decoder`
             encoder_variables = {}
-            for variables in [encoder.trainable_variables, encoder.non_trainable_variables]:
-                for v in variables:
-                    encoder_variables["/".join(v.name.split("/")[1:])] = v
+            for v in encoder.trainable_variables + encoder.non_trainable_variables:
+                encoder_variables["/".join(v.name.split("/")[1:])] = v
             decoder_variables = {}
-            for variables in [decoder.trainable_variables, decoder.non_trainable_variables]:
-                for v in variables:
-                    decoder_variables["/".join(v.name.split("/")[1:])] = v
+            for v in decoder.trainable_variables + decoder.non_trainable_variables:
+                decoder_variables["/".join(v.name.split("/")[1:])] = v
 
             _encoder_variables = {}
-            for variables in [_tf_model.encoder.trainable_variables, _tf_model.encoder.non_trainable_variables]:
-                for v in variables:
-                    _encoder_variables["/".join(v.name.split("/")[2:])] = v
+            for v in _tf_model.encoder.trainable_variables + _tf_model.encoder.non_trainable_variables:
+                _encoder_variables["/".join(v.name.split("/")[2:])] = v
             _decoder_variables = {}
-            for variables in [_tf_model.decoder.trainable_variables, _tf_model.decoder.non_trainable_variables]:
-                for v in variables:
-                    _decoder_variables["/".join(v.name.split("/")[2:])] = v
+            for v in _tf_model.decoder.trainable_variables + _tf_model.decoder.non_trainable_variables:
+                _decoder_variables["/".join(v.name.split("/")[2:])] = v
 
             # assign weight values to `encoder` and `decoder` from `_tf_model`
             for name, v in encoder_variables.items():
@@ -319,7 +317,6 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                 v.assign(_decoder_variables[name])
 
             tf_model = TFVisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
-            tf_model.config = _tf_model.config
 
             # Deal with `enc_to_dec_proj`
             if hasattr(_tf_model, "enc_to_dec_proj"):
@@ -332,17 +329,26 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                 decoder_dir = os.path.join(tmpdirname, "decoder")
                 tf_model.encoder.save_pretrained(encoder_dir)
                 tf_model.decoder.save_pretrained(decoder_dir)
+
+                if hasattr(tf_model, "enc_to_dec_proj"):
+                    enc_to_dec_proj_weight = torch.transpose(
+                        torch.from_numpy(tf_model.enc_to_dec_proj.kernel.numpy()), 1, 0
+                    )
+                    enc_to_dec_proj_bias = torch.from_numpy(tf_model.enc_to_dec_proj.bias.numpy())
+
+                del _tf_model
+                del tf_model
+                gc.collect()
+
                 model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
                     encoder_dir, decoder_dir, encoder_from_tf=True, decoder_from_tf=True
                 )
                 # This is only for copying some specific attributes of this particular model.
-                model.config = tf_model.config
+                model.config = config
 
-                if hasattr(tf_model, "enc_to_dec_proj"):
-                    model.enc_to_dec_proj.weight.data = torch.transpose(
-                        torch.from_numpy(tf_model.enc_to_dec_proj.kernel.numpy()), 1, 0
-                    )
-                    model.enc_to_dec_proj.bias.data = torch.from_numpy(tf_model.enc_to_dec_proj.bias.numpy())
+                if hasattr(model, "enc_to_dec_proj"):
+                    model.enc_to_dec_proj.weight.data = enc_to_dec_proj_weight
+                    model.enc_to_dec_proj.bias.data = enc_to_dec_proj_bias
 
                 return model
 
