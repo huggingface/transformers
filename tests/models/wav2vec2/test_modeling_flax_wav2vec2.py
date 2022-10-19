@@ -362,7 +362,7 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
         self.assertTrue(abs(ppl.item() - 141.4291) < 1e-3)
 
         # mask half of the input
-        mask = np.ones((2,), dtype=np.bool)
+        mask = np.ones((2,), dtype=bool)
         mask[0] = 0
 
         ppl = FlaxWav2Vec2GumbelVectorQuantizer._compute_perplexity(probs, mask)

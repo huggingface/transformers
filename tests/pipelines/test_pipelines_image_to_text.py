@@ -56,7 +56,7 @@ class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
 
     @require_tf
     def test_small_model_tf(self):
-        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2")
+        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2", framework="tf")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
 
         outputs = pipe(image)
@@ -64,7 +64,12 @@ class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
             outputs,
             [
                 {
-                    "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
+                    "generated_text": (
+                        " intermedi intermedi intermedi intermedi intermedi "
+                        "explorer explorer explorer explorer explorer explorer "
+                        "explorer medicine medicine medicine medicine medicine "
+                        "medicine medicine"
+                    )
                 },
             ],
         )
@@ -75,13 +80,23 @@ class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
             [
                 [
                     {
-                        "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
-                    }
+                        "generated_text": (
+                            " intermedi intermedi intermedi intermedi intermedi "
+                            "explorer explorer explorer explorer explorer explorer "
+                            "explorer medicine medicine medicine medicine medicine "
+                            "medicine medicine"
+                        )
+                    },
                 ],
                 [
                     {
-                        "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
-                    }
+                        "generated_text": (
+                            " intermedi intermedi intermedi intermedi intermedi "
+                            "explorer explorer explorer explorer explorer explorer "
+                            "explorer medicine medicine medicine medicine medicine "
+                            "medicine medicine"
+                        )
+                    },
                 ],
             ],
         )
