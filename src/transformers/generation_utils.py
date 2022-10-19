@@ -1879,10 +1879,13 @@ class GenerationMixin:
             if step_counter == 0:
                 # encode the given prefix and prepare model inputs; encoder-decoder model process the prefix and save the `encoder_outputs`
                 output = self(**model_inputs, output_hidden_states=True, output_attentions=True)
-                
+
                 # past_key_values is activated for fast decoding
                 if "past_key_values" not in output:
-                    raise ValueError(f"self.__class__ cannot return `past_key_values` and can therefore **not** be used for contrastive search.")
+                    raise ValueError(
+                        "self.__class__ cannot return `past_key_values` and can therefore **not** be used for"
+                        " contrastive search."
+                    )
                 past_key_values = output.past_key_values
 
                 # last decoder hidden states will be used to compute the degeneration penalty (cosine similarity with previous tokens)
@@ -1913,7 +1916,10 @@ class GenerationMixin:
                 for item in layer:
                     bsz, num_head, seq_len, esz = item.size()
                     item = (
-                        item.unsqueeze(1).expand(-1, top_k, -1, -1, -1).reshape(bsz * top_k, num_head, seq_len, esz).contiguous()
+                        item.unsqueeze(1)
+                        .expand(-1, top_k, -1, -1, -1)
+                        .reshape(bsz * top_k, num_head, seq_len, esz)
+                        .contiguous()
                     )  # [bsz*beam, num_head, seq_len, esz]
                     items.append(item)
                 new_key_values.append(items)
@@ -1945,7 +1951,10 @@ class GenerationMixin:
             output = self(output_hidden_states=True, **next_model_inputs)
 
             if "past_key_values" not in output:
-                raise ValueError(f"self.__class__ cannot return `past_key_values` and can therefore **not** be used for contrastive search.")
+                raise ValueError(
+                    "self.__class__ cannot return `past_key_values` and can therefore **not** be used for contrastive"
+                    " search."
+                )
             past_key_values = output.past_key_values
 
             logits = output.logits[:, -1, :]

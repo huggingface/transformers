@@ -27,18 +27,18 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoModelForCausalLM,
         AutoModelForSeq2SeqLM,
         AutoTokenizer,
-        AutoModelForCausalLM,
-        OPTForCausalLM,
-        T5ForConditionalGeneration,
         BartForConditionalGeneration,
         BartTokenizer,
         GPT2LMHeadModel,
         GPT2Tokenizer,
         ImageGPTForCausalImageModeling,
+        OPTForCausalLM,
         Speech2TextForConditionalGeneration,
         SpeechEncoderDecoderModel,
+        T5ForConditionalGeneration,
         VisionEncoderDecoderModel,
         pipeline,
         top_k_top_p_filtering,
@@ -1698,7 +1698,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     @slow
     def test_contrastive_search_bart(self):
-        article = """ New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York. 
+        article = """ New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York.
 A year later, she got married again in Westchester County, but to a different man and without divorcing her first husband.
 Only 18 days after that marriage, she got hitched yet again. Then, Barrientos declared "I do" five more times, sometimes only within two weeks of each other.
 In 2010, she married once more, this time in the Bronx. In an application for a marriage license, she stated it was her "first and only" marriage.
@@ -1718,7 +1718,9 @@ If convicted, Barrientos faces up to four years in prison.  Her next court appea
 """
         bart_tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
         bart_model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn").to(torch_device)
-        input_ids = bart_tokenizer(article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt").input_ids.to(torch_device)
+        input_ids = bart_tokenizer(
+            article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
+        ).input_ids.to(torch_device)
 
         outputs = bart_model.generate(input_ids, penalty_alpha=0.5, top_k=5, max_length=64)
         generated_text = bart_tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -1726,13 +1728,13 @@ If convicted, Barrientos faces up to four years in prison.  Her next court appea
         self.assertListEqual(
             generated_text,
             [
-                '''Liana Barrientos, 39, pleaded not guilty to two counts of "offering a false instrument" Prosecutors say the marriages were part of an immigration scam. In total, Barriento has been married 10 times, with nine of her marriages occurring between 1999 and 2002.'''
+                """Liana Barrientos, 39, pleaded not guilty to two counts of "offering a false instrument" Prosecutors say the marriages were part of an immigration scam. In total, Barriento has been married 10 times, with nine of her marriages occurring between 1999 and 2002."""
             ],
         )
 
     @slow
     def test_contrastive_search_t5(self):
-        article = """ New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York. 
+        article = """ New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York.
 A year later, she got married again in Westchester County, but to a different man and without divorcing her first husband.
 Only 18 days after that marriage, she got hitched yet again. Then, Barrientos declared "I do" five more times, sometimes only within two weeks of each other.
 In 2010, she married once more, this time in the Bronx. In an application for a marriage license, she stated it was her "first and only" marriage.
@@ -1753,7 +1755,9 @@ If convicted, Barrientos faces up to four years in prison.  Her next court appea
         article = "summarize: " + article.strip()
         t5_tokenizer = AutoTokenizer.from_pretrained("flax-community/t5-base-cnn-dm")
         t5_model = T5ForConditionalGeneration.from_pretrained("flax-community/t5-base-cnn-dm").to(torch_device)
-        input_ids = t5_tokenizer(article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt").input_ids.to(torch_device)
+        input_ids = t5_tokenizer(
+            article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
+        ).input_ids.to(torch_device)
 
         outputs = t5_model.generate(input_ids, penalty_alpha=0.5, top_k=5, max_length=64)
         generated_text = t5_tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -1761,7 +1765,7 @@ If convicted, Barrientos faces up to four years in prison.  Her next court appea
         self.assertListEqual(
             generated_text,
             [
-                '''Liana Barrientos has been married 10 times, nine of them in the Bronx. Her husbands filed for permanent residence after the marriages, prosecutors say.'''
+                """Liana Barrientos has been married 10 times, nine of them in the Bronx. Her husbands filed for permanent residence after the marriages, prosecutors say."""
             ],
         )
 
@@ -1785,7 +1789,7 @@ Human: How long have you lived there?"""
         self.assertListEqual(
             generated_text,
             [
-                '''A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I am the Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have you lived there?\nStatue: Since 1884.\nHuman: Why did you come to America?\nStatue: I was given to the United States by France as a gift for helping the French during the Franco-Prussian War.\nHuman: What do you think of America?\nStatue: I love it. It is the greatest country in the world.\nHuman: What’s the weather like in New York?\nStatue: It is cold.\nHuman: Is it safe to walk around at night?\nStatue: Yes. There are policemen everywhere.\nHuman: Do you have any children?\nStatue: Not yet. My pedestal is empty.\nHuman: What would you like to say to people who want to immigrate to America?\nStatue: Come on over. You will be happy here. We have everything you need.\nSource: http://www.statueofliberty.org/index.cf'''
+                """A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I am the Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have you lived there?\nStatue: Since 1884.\nHuman: Why did you come to America?\nStatue: I was given to the United States by France as a gift for helping the French during the Franco-Prussian War.\nHuman: What do you think of America?\nStatue: I love it. It is the greatest country in the world.\nHuman: What’s the weather like in New York?\nStatue: It is cold.\nHuman: Is it safe to walk around at night?\nStatue: Yes. There are policemen everywhere.\nHuman: Do you have any children?\nStatue: Not yet. My pedestal is empty.\nHuman: What would you like to say to people who want to immigrate to America?\nStatue: Come on over. You will be happy here. We have everything you need.\nSource: http://www.statueofliberty.org/index.cf"""
             ],
         )
 
@@ -1803,7 +1807,7 @@ Human: How long have you lived there?"""
         self.assertListEqual(
             generated_text,
             [
-               '''DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, United Kingdom with offices in Mountain View, San Francisco, New York City, Paris, Tokyo, Seoul, Beijing, Singapore, Tel Aviv, Dublin, Sydney, and Melbourne.[1]\n\nContents\n\nIn 2010, Google\'s parent company, Alphabet, announced a $500 million investment in DeepMind, with the aim of creating a company that would apply deep learning to problems in healthcare, energy, transportation, and other areas.[2]\n\nOn April 23, 2014, Google announced that it had acquired DeepMind for $400 million in cash and stock.[3] The acquisition was seen as a move to strengthen Google\'s position in the fast-growing field of artificial intelligence (AI), which it had invested in since 2010.[4] Google CEO Larry Page said that the company was "excited to have DeepMind on board" and that "this is a step towards our goal of building AI that works for everyone, not just a few".[5]\n\nDeepMind\'s co-founders, Demis Hassabis and Mustafa Suleyman, were named CEO and C''' 
+                """DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, United Kingdom with offices in Mountain View, San Francisco, New York City, Paris, Tokyo, Seoul, Beijing, Singapore, Tel Aviv, Dublin, Sydney, and Melbourne.[1]\n\nContents\n\nIn 2010, Google\'s parent company, Alphabet, announced a $500 million investment in DeepMind, with the aim of creating a company that would apply deep learning to problems in healthcare, energy, transportation, and other areas.[2]\n\nOn April 23, 2014, Google announced that it had acquired DeepMind for $400 million in cash and stock.[3] The acquisition was seen as a move to strengthen Google\'s position in the fast-growing field of artificial intelligence (AI), which it had invested in since 2010.[4] Google CEO Larry Page said that the company was "excited to have DeepMind on board" and that "this is a step towards our goal of building AI that works for everyone, not just a few".[5]\n\nDeepMind\'s co-founders, Demis Hassabis and Mustafa Suleyman, were named CEO and C"""
             ],
         )
 
@@ -2186,9 +2190,7 @@ Human: How long have you lived there?"""
     def test_max_new_tokens_decoder_only_contrastive_search_t5(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
         t5_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-t5")
-        t5_model = T5ForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-t5").to(
-            torch_device
-        )
+        t5_model = T5ForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-t5").to(torch_device)
         input_ids = t5_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
         self.assertEqual(list(input_ids.shape), [1, 56])
@@ -2203,7 +2205,9 @@ Human: How long have you lived there?"""
         self.assertEqual(list(outputs.shape), [1, 4])
 
         # Decoder only call
-        outputs = t5_model.generate(decoder_input_ids=input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4)
+        outputs = t5_model.generate(
+            decoder_input_ids=input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4
+        )
         # 56 + 3 new tokens
         self.assertEqual(list(outputs.shape), [1, 59])
 
@@ -2215,7 +2219,9 @@ Human: How long have you lived there?"""
 
         # max_new_tokens and max_length serve the same purpose and must not be used together.
         with self.assertRaises(ValueError):
-            t5_model.generate(decoder_input_ids=input_ids, max_new_tokens=10, max_length=20, penalty_alpha=0.6, top_k=4)
+            t5_model.generate(
+                decoder_input_ids=input_ids, max_new_tokens=10, max_length=20, penalty_alpha=0.6, top_k=4
+            )
 
     def test_max_new_tokens_decoder_only_contrastive_search_bart(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
@@ -2237,7 +2243,9 @@ Human: How long have you lived there?"""
         self.assertEqual(list(outputs.shape), [1, 4])
 
         # Decoder only call
-        outputs = bart_model.generate(decoder_input_ids=input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4)
+        outputs = bart_model.generate(
+            decoder_input_ids=input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4
+        )
         # 29 + 3 new tokens
         self.assertEqual(list(outputs.shape), [1, 32])
 
@@ -2249,7 +2257,9 @@ Human: How long have you lived there?"""
 
         # max_new_tokens and max_length serve the same purpose and must not be used together.
         with self.assertRaises(ValueError):
-            bart_model.generate(decoder_input_ids=input_ids, max_new_tokens=10, max_length=20, penalty_alpha=0.6, top_k=4)
+            bart_model.generate(
+                decoder_input_ids=input_ids, max_new_tokens=10, max_length=20, penalty_alpha=0.6, top_k=4
+            )
 
     def test_max_new_tokens_decoder_only_contrastive_search_gptj(self):
         article = """Justin Timberlake."""
