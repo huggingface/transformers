@@ -456,15 +456,9 @@ class TFVisionEncoderDecoderMixin:
         self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
 
         # PT -> TF
-        with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
-
-            pt_model.encoder.save_pretrained(encoder_tmp_dirname)
-            pt_model.decoder.save_pretrained(decoder_tmp_dirname)
-            tf_model_loaded = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-                encoder_tmp_dirname, decoder_tmp_dirname, encoder_from_pt=True, decoder_from_pt=True
-            )
-            # This is only for copying some specific attributes of this particular model.
-            tf_model_loaded.config = pt_model.config
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            pt_model.save_pretrained(tmpdirname)
+            tf_model = TFVisionEncoderDecoderModel.from_pretrained(tmpdirname, from_pt=True)
 
         self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
 
@@ -479,15 +473,9 @@ class TFVisionEncoderDecoderMixin:
 
         pt_model = VisionEncoderDecoderModel(encoder_decoder_config)
 
-        with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
-
-            pt_model.encoder.save_pretrained(encoder_tmp_dirname)
-            pt_model.decoder.save_pretrained(decoder_tmp_dirname)
-            tf_model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-                encoder_tmp_dirname, decoder_tmp_dirname, encoder_from_pt=True, decoder_from_pt=True
-            )
-            # This is only for copying some specific attributes of this particular model.
-            tf_model.config = pt_model.config
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            pt_model.save_pretrained(tmpdirname)
+            tf_model = TFVisionEncoderDecoderModel.from_pretrained(tmpdirname, from_pt=True)
 
         self.check_pt_tf_equivalence(tf_model, pt_model, tf_inputs_dict)
 
@@ -500,8 +488,12 @@ class TFVisionEncoderDecoderMixin:
         # TODO: A generalizable way to determine this attribute
         encoder_decoder_config.output_attentions = True
 
-        # Using `_tf_model`, the test will fail, because the weights of `_tf_model` get extended before saving
-        # the encoder/decoder models.
+        # Using `_tf_model`, the test will fail, because the weight names in the encoder/decoder of `_tf_model` get
+        # extended before saving those components. For example, The name of `_tf_model.encoder.vit` is
+        # `[top model name]/encoder/vit`, but the name of `tf_model.encoder.vit` is `[top model name]/vit`. The
+        # [top model name] is handled (stripped) by the conversion method, and the former case gets extra `encoder`,
+        # which should not occur when we want to save the components along.
+
         # There was a (very) ugly potential fix, which wasn't integrated to `transformers`: see
         #   https://github.com/huggingface/transformers/pull/13222/commits/dbb3c9de76eee235791d2064094654637c99f36d#r697304245
         #   (the change in `src/transformers/modeling_tf_utils.py`)
@@ -624,20 +616,12 @@ class TFVisionEncoderDecoderMixin:
         self.check_pt_to_tf_equivalence(config, decoder_config, tf_inputs_dict_with_labels)
         self.check_tf_to_pt_equivalence(config, decoder_config, tf_inputs_dict_with_labels)
 
-        # This is not working, because pt/tf equivalence test for encoder-decoder use `from_encoder_decoder_pretrained`,
-        # which randomly initialize `enc_to_dec_proj`.
         # check `enc_to_dec_proj` work as expected
-        # decoder_config.hidden_size = decoder_config.hidden_size * 2
-        # self.assertTrue(config.hidden_size != decoder_config.hidden_size)
-        # self.check_pt_to_tf_equivalence(config, decoder_config, tf_inputs_dict)
-        # self.check_tf_to_pt_equivalence(config, decoder_config, tf_inputs_dict)
-
-        # Let's just check `enc_to_dec_proj` can run for now
         decoder_config.hidden_size = decoder_config.hidden_size * 2
         self.assertTrue(config.hidden_size != decoder_config.hidden_size)
-        encoder_decoder_config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
-        model = TFVisionEncoderDecoderModel(encoder_decoder_config)
-        model(tf_inputs_dict)
+        self.check_pt_to_tf_equivalence(config, decoder_config, tf_inputs_dict)
+        # This requires a change in `VisionEncoderDecoder.from_pretrained` to pass
+        # self.check_tf_to_pt_equivalence(config, decoder_config, tf_inputs_dict)
 
     @slow
     def test_real_model_save_load_from_pretrained(self):

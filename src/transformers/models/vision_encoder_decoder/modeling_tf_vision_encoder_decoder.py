@@ -339,6 +339,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         if from_pt:
             import os
             import tempfile
+
             from transformers import VisionEncoderDecoderModel
 
             # a workaround to load from pytorch checkpoint
@@ -349,14 +350,22 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
                 decoder_dir = os.path.join(tmpdirname, "decoder")
                 _model.encoder.save_pretrained(encoder_dir)
                 _model.decoder.save_pretrained(decoder_dir)
-                model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(encoder_dir, decoder_dir, encoder_from_pt=True, decoder_from_pt=True)
+                model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+                    encoder_dir, decoder_dir, encoder_from_pt=True, decoder_from_pt=True
+                )
                 # This is only for copying some specific attributes of this particular model.
                 model.config = _model.config
 
                 if hasattr(_model, "enc_to_dec_proj"):
                     model(model.dummy_inputs)
-                    model.enc_to_dec_proj.kernel.assign(tf.transpose(tf.constant(_model.enc_to_dec_proj.weight.detach().to("cpu").numpy()), perm=(1, 0)))
-                    model.enc_to_dec_proj.bias.assign(tf.constant(_model.enc_to_dec_proj.bias.detach().to("cpu").numpy()))
+                    model.enc_to_dec_proj.kernel.assign(
+                        tf.transpose(
+                            tf.constant(_model.enc_to_dec_proj.weight.detach().to("cpu").numpy()), perm=(1, 0)
+                        )
+                    )
+                    model.enc_to_dec_proj.bias.assign(
+                        tf.constant(_model.enc_to_dec_proj.bias.detach().to("cpu").numpy())
+                    )
 
                 return model
 
@@ -466,7 +475,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             kwargs_encoder["load_weight_prefix"] = cls.load_weight_prefix
             encoder = TFAutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
 
-            # This is necessary to make `from_pretrained` following `save_pretrained` work correctly
+            # Necessary to make `save_pretrained -> from_pretrained` work correctly for the converted PT -> TF model.
             if kwargs_encoder.get("from_pt", None):
                 del kwargs_encoder["from_pt"]
                 with tempfile.TemporaryDirectory() as tmp_dirname:
@@ -508,7 +517,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             kwargs_decoder["load_weight_prefix"] = cls.load_weight_prefix
             decoder = TFAutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
-            # This is necessary to make `from_pretrained` following `save_pretrained` work correctly
+            # Necessary to make `save_pretrained -> from_pretrained` work correctly for the converted PT -> TF model.
             if kwargs_decoder.get("from_pt", None):
                 del kwargs_decoder["from_pt"]
                 with tempfile.TemporaryDirectory() as tmp_dirname:
