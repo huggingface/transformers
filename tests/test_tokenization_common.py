@@ -40,6 +40,7 @@ from transformers import (
     AutoTokenizer,
     BertTokenizer,
     BertTokenizerFast,
+    GPT2TokenizerFast,
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
@@ -3884,9 +3885,27 @@ class TokenizerUtilTester(unittest.TestCase):
         # Download this model to make sure it's in the cache.
         _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
 
-        # Under the mock environment we get a 500 error when trying to reach the model.
+        # Under the mock environment we get a 500 error when trying to reach the tokenizer.
         with mock.patch("requests.request", return_value=response_mock) as mock_head:
             _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+            # This check we did call the fake head request
+            mock_head.assert_called()
+
+    @require_tokenizers
+    def test_cached_files_are_used_when_internet_is_down_missing_files(self):
+        # A mock response for an HTTP head request to emulate server down
+        response_mock = mock.Mock()
+        response_mock.status_code = 500
+        response_mock.headers = {}
+        response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.json.return_value = {}
+
+        # Download this model to make sure it's in the cache.
+        _ = GPT2TokenizerFast.from_pretrained("gpt2")
+
+        # Under the mock environment we get a 500 error when trying to reach the tokenizer.
+        with mock.patch("requests.request", return_value=response_mock) as mock_head:
+            _ = GPT2TokenizerFast.from_pretrained("gpt2")
             # This check we did call the fake head request
             mock_head.assert_called()
 
@@ -3900,6 +3919,22 @@ class TokenizerUtilTester(unittest.TestCase):
             _ = AlbertTokenizer.from_pretrained(tmp_file)
         finally:
             os.remove(tmp_file)
+
+        # Supporting this legacy load introduced a weird bug where the tokenizer would load local files if they are in
+        # the current folder and have the right name.
+        if os.path.isfile("tokenizer.json"):
+            # We skip the test if the user has a `tokenizer.json` in this folder to avoid deleting it.
+            return
+        try:
+            with open("tokenizer.json", "wb") as f:
+                http_get("https://huggingface.co/hf-internal-testing/tiny-random-bert/blob/main/tokenizer.json", f)
+            tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+            # The tiny random BERT has a vocab size of 1024, tiny gpt2 as a vocab size of 1000
+            self.assertEqual(tokenizer.vocab_size, 1000)
+            # Tokenizer should depend on the remote checkpoint, not the local tokenizer.json file.
+
+        finally:
+            os.remove("tokenizer.json")
 
     def test_legacy_load_from_url(self):
         # This test is for deprecated behavior and can be removed in v5

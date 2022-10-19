@@ -25,6 +25,7 @@ from PIL import Image
 import requests
 from huggingface_hub import hf_hub_download
 from transformers import BeitConfig, BeitFeatureExtractor, BeitForImageClassification, BeitForMaskedImageModeling
+from transformers.image_utils import PILImageResampling
 from transformers.utils import logging
 
 
@@ -149,9 +150,9 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     # labels
     if "rvlcdip" in checkpoint_url:
         config.num_labels = 16
-        repo_id = "datasets/huggingface/label-files"
+        repo_id = "huggingface/label-files"
         filename = "rvlcdip-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -170,7 +171,9 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     model.load_state_dict(state_dict)
 
     # Check outputs on an image
-    feature_extractor = BeitFeatureExtractor(size=config.image_size, resample=Image.BILINEAR, do_center_crop=False)
+    feature_extractor = BeitFeatureExtractor(
+        size=config.image_size, resample=PILImageResampling.BILINEAR, do_center_crop=False
+    )
     image = prepare_img()
 
     encoding = feature_extractor(images=image, return_tensors="pt")

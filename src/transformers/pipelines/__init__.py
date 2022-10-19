@@ -32,6 +32,7 @@ from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
+from ..models.auto.modeling_auto import AutoModelForDepthEstimation
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..tokenization_utils_fast import PreTrainedTokenizerFast
@@ -51,6 +52,7 @@ from .base import (
     infer_framework_load_model,
 )
 from .conversational import Conversation, ConversationalPipeline
+from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
@@ -72,6 +74,7 @@ from .token_classification import (
 from .visual_question_answering import VisualQuestionAnsweringPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
+from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
 
 
 if is_tf_available():
@@ -124,6 +127,7 @@ if is_torch_available():
         AutoModelForTokenClassification,
         AutoModelForVision2Seq,
         AutoModelForVisualQuestionAnswering,
+        AutoModelForZeroShotObjectDetection,
     )
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -335,6 +339,20 @@ SUPPORTED_TASKS = {
         "default": {"model": {"pt": ("facebook/detr-resnet-50", "2729413")}},
         "type": "image",
     },
+    "zero-shot-object-detection": {
+        "impl": ZeroShotObjectDetectionPipeline,
+        "tf": (),
+        "pt": (AutoModelForZeroShotObjectDetection,) if is_torch_available() else (),
+        "default": {"model": {"pt": ("google/owlvit-base-patch32", "17740e1")}},
+        "type": "multimodal",
+    },
+    "depth-estimation": {
+        "impl": DepthEstimationPipeline,
+        "tf": (),
+        "pt": (AutoModelForDepthEstimation,) if is_torch_available() else (),
+        "default": {"model": {"pt": ("Intel/dpt-large", "e93beec")}},
+        "type": "image",
+    },
 }
 
 NO_FEATURE_EXTRACTOR_TASKS = set()
@@ -385,7 +403,7 @@ def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
     return task
 
 
-def check_task(task: str) -> Tuple[Dict, Any]:
+def check_task(task: str) -> Tuple[str, Dict, Any]:
     """
     Checks an incoming task string, to validate it's correct and return the default Pipeline and Model classes, and
     default models if they exist.

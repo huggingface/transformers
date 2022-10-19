@@ -150,7 +150,7 @@ def _compute_mask_indices(
         num_masked_spans = sequence_length // mask_length
 
     # SpecAugment mask to fill
-    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=np.bool)
+    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=bool)
 
     # get random indices to mask
     spec_aug_mask_idxs = np.array(
