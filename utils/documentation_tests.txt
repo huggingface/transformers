@@ -150,12 +150,14 @@ src/transformers/models/visual_bert/configuration_visual_bert.py
 src/transformers/models/wav2vec2/configuration_wav2vec2.py
 src/transformers/models/wav2vec2/modeling_wav2vec2.py
 src/transformers/models/wav2vec2/tokenization_wav2vec2.py
+src/transformers/models/wav2vec2_conformer/configuration_wav2vec2_conformer.py
 src/transformers/models/wav2vec2_conformer/modeling_wav2vec2_conformer.py
 src/transformers/models/wav2vec2_with_lm/processing_wav2vec2_with_lm.py
 src/transformers/models/wavlm/modeling_wavlm.py
 src/transformers/models/whisper/configuration_whisper.py
 src/transformers/models/whisper/modeling_whisper.py
 src/transformers/models/whisper/modeling_tf_whisper.py
+src/transformers/models/xlm/configuration_xlm.py
 src/transformers/models/xlm_roberta/configuration_xlm_roberta.py
 src/transformers/models/xlm_roberta_xl/configuration_xlm_roberta_xl.py
 src/transformers/models/xlnet/configuration_xlnet.py
