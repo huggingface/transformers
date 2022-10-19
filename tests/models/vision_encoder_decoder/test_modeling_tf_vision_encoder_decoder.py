@@ -532,7 +532,7 @@ class TFVisionEncoderDecoderMixin:
         diff = np.abs((a - b)).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and tf is {diff} (>= {tol}).")
 
-    # @is_pt_tf_cross_test
+    @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
 
         config_inputs_dict = self.prepare_config_and_inputs()
