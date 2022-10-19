@@ -337,7 +337,7 @@ def center_crop(
             The channel dimension format for the output image. Can be one of:
                     - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                     - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-            If `None`, will use the inferred format of the input image.
+            If unset, will use the inferred format of the input image.
         return_numpy (`bool`, *optional*):
             Whether or not to return the cropped image as a numpy array. Used for backwards compatibility with the
             previous ImageFeatureExtractionMixin method.
