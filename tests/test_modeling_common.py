@@ -2395,7 +2395,7 @@ class ModelTesterMixin:
                     new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
                     # Making sure part of the model will actually end up offloaded
                     breakpoint()
-                    self.assertSetEqual(set(new_model.hf_device_map.values()), {0, 1, "cpu"})
+                    self.assertSetEqual(set(new_model.hf_device_map.values()), {0, 1})
 
                     self.check_device_map_is_respected(new_model, new_model.hf_device_map)
 
