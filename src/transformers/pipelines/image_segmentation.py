@@ -117,7 +117,6 @@ class ImageSegmentationPipeline(Pipeline):
         return model_outputs
 
     def postprocess(self, model_outputs, task="semantic", threshold=0.9, overlap_mask_area_threshold=0.5):
-        print("Overkap ", overlap_mask_area_threshold)
         if task == "instance" and hasattr(self.feature_extractor, "post_process_instance_segmentation"):
             outputs = self.feature_extractor.post_process_panoptic_segmentation(
                 model_outputs,
