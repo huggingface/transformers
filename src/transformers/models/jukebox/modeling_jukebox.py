@@ -14,10 +14,8 @@
 # limitations under the License.
 """PyTorch Jukebox model."""
 
-import gc
 import math
 import os
-import sys
 import time
 from typing import List
 
@@ -861,12 +859,11 @@ class JukeboxVQVAE(PreTrainedModel):
         Example:
         ```python
         >>> from transformers import JukeboxVQVAE, set_seed
+
         >>> model = JukeboxVQVAE.from_pretrained("openai/jukebox-1b-lyrics").eval()
         >>> set_seed(0)
         >>> zs = [torch.random(1, 0, dtype=torch.long).cuda() for _ in range(3)]
         >>> model.decode(zs)
-
-
         ```"""
 
         # Encode/Decode
@@ -2867,6 +2864,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         ```python
         >>> from transformers import JukeboxTokenizer, JukeboxModel, set_seed
         >>> import torch
+
         >>> metas = dict(artist="Zac Brown Band", genres="Country", lyrics="I met a traveller from an antique land")
         >>> tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
         >>> model = JukeboxModel.from_pretrained("openai/jukebox-1b-lyrics", min_duration=0).eval()
@@ -2967,6 +2965,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
         ```python
         >>> from transformers import JukeboxTokenizer, JukeboxModel, set_seed
+
         >>> model = JukeboxModel.from_pretrained("openai/jukebox-1b-lyrics", min_duration=0).eval()
         >>> tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
 
@@ -2977,7 +2976,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
         >>> set_seed(0)
         >>> music_tokens = model.ancestral_sample(metas.input_ids, sample_length=400)
 
-        >>> with torch.no_grad():model.decode(music_tokens)[:, :10].squeeze(-1)
+        >>> with torch.no_grad():
+        ...     model.decode(music_tokens)[:, :10].squeeze(-1)
         tensor([[-0.0003, -0.0012,  0.0009,  0.0012,  0.0018,  0.0003, -0.0015, -0.0020,
                  -0.0013,  0.0010]])
         ```"""
