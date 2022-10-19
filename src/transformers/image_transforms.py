@@ -335,8 +335,8 @@ def center_crop(
             The target size for the cropped image.
         data_format (`str` or `ChannelDimension`, *optional*):
             The channel dimension format for the output image. Can be one of:
-                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
             If unset, will use the inferred format of the input image.
         return_numpy (`bool`, *optional*):
             Whether or not to return the cropped image as a numpy array. Used for backwards compatibility with the
@@ -372,10 +372,12 @@ def center_crop(
     orig_height, orig_width = get_image_size(image)
     crop_height, crop_width = size
 
+    # In case size is odd, (image_shape[0] + size[0]) // 2 won't give the proper result.
     top = (orig_height - crop_height) // 2
-    bottom = top + crop_height  # In case size is odd, (image_shape[0] + size[0]) // 2 won't give the proper result.
+    bottom = top + crop_height
+    # In case size is odd, (image_shape[1] + size[1]) // 2 won't give the proper result.
     left = (orig_width - crop_width) // 2
-    right = left + crop_width  # In case size is odd, (image_shape[1] + size[1]) // 2 won't give the proper result.
+    right = left + crop_width
 
     # Check if cropped area is within image boundaries
     if top >= 0 and bottom <= orig_height and left >= 0 and right <= orig_width:
