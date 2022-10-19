@@ -240,35 +240,29 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         return self.decoder.set_output_embeddings(new_embeddings)
 
     @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        # At the moment fast initialization is not supported for composite models
-        if kwargs.get("_fast_init", False):
-            logger.warning(
-                "Fast initialization is currently not supported for VisionEncoderDecoderModel. "
-                "Falling back to slow initialization..."
-            )
-        kwargs["_fast_init"] = False
-        return super().from_pretrained(*args, **kwargs)
-
-    @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""
-        >>> from transformers import VisionEncoderDecoderModel, ViTFeatureExtractor, GPT2Tokenizer >>> from PIL import
-        Image >>> import requests
+        Example:
 
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("ydshieh/vit-gpt2-coco-en") >>> decoder_tokenizer =
-        GPT2Tokenizer.from_pretrained("ydshieh/vit-gpt2-coco-en") >>> model =
-        VisionEncoderDecoderModel.from_pretrained("ydshieh/vit-gpt2-coco-en")
+        ```python
+        >>> from transformers import VisionEncoderDecoderModel, ViTFeatureExtractor, GPT2Tokenizer
+        >>> from PIL import Image
+        >>> import requests
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg" >>> img = Image.open(requests.get(url,
-        stream=True).raw) >>> pixel_values = feature_extractor(images=img, return_tensors="pt").pixel_values # Batch
-        size 1
+        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("ydshieh/vit-gpt2-coco-en")
+        >>> decoder_tokenizer = GPT2Tokenizer.from_pretrained("ydshieh/vit-gpt2-coco-en")
+        >>> model = VisionEncoderDecoderModel.from_pretrained("ydshieh/vit-gpt2-coco-en")
 
-        >>> output_ids = model.generate( ... pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True ...
-        ).sequences
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> img = Image.open(requests.get(url, stream=True).raw)
+        >>> pixel_values = feature_extractor(images=img, return_tensors="pt").pixel_values  # Batch size 1
 
-        >>> preds = decoder_tokenizer.batch_decode(output_ids, skip_special_tokens=True) >>> preds = [pred.strip() for
-        pred in preds]
+        >>> output_ids = model.generate(
+        ...     pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True
+        ... ).sequences
+
+        >>> preds = decoder_tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        >>> preds = [pred.strip() for pred in preds]
 
         >>> assert preds == ["a cat laying on top of a couch next to another cat"]
         ```"""
@@ -352,6 +346,14 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                     model.enc_to_dec_proj.bias.data = torch.from_numpy(tf_model.enc_to_dec_proj.bias.numpy())
 
                 return model
+
+        # At the moment fast initialization is not supported for composite models
+        if kwargs.get("_fast_init", False):
+            logger.warning(
+                "Fast initialization is currently not supported for VisionEncoderDecoderModel. "
+                "Falling back to slow initialization..."
+            )
+        kwargs["_fast_init"] = False
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
