@@ -1758,7 +1758,6 @@ class GenerationMixin:
         logits_processor: Optional[LogitsProcessorList] = None,
         logits_warper: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
-        max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
         output_attentions: Optional[bool] = None,
@@ -1785,9 +1784,6 @@ class GenerationMixin:
             stopping_criteria (`StoppingCriteriaList`, *optional*):
                 An instance of [`StoppingCriteriaList`]. List of instances of class derived from [`StoppingCriteria`]
                 used to tell if the generation loop should stop.
-            max_length (`int`, *optional*, defaults to 20):
-                **DEPRECATED**. Use `logits_processor` or `stopping_criteria` directly to cap the number of generated
-                tokens. The maximum length of the sequence to be generated.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
             eos_token_id (`int`, *optional*):
@@ -1843,13 +1839,6 @@ class GenerationMixin:
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
-        if max_length is not None:
-            warnings.warn(
-                "`max_length` is deprecated in this function, use"
-                " `stopping_criteria=StoppingCriteriaList([MaxLengthCriteria(max_length=max_length)])` instead.",
-                UserWarning,
-            )
-            stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         output_scores = output_scores if output_scores is not None else self.config.output_scores
@@ -1890,8 +1879,12 @@ class GenerationMixin:
             if step_counter == 0:
                 # encode the given prefix and prepare model inputs; encoder-decoder model process the prefix and save the `encoder_outputs`
                 output = self(**model_inputs, output_hidden_states=True, output_attentions=True)
+                
                 # past_key_values is activated for fast decoding
+                if "past_key_values" not in output:
+                    raise ValueError(f"self.__class__ cannot return `past_key_values` and can therefore **not** be used for contrastive search.")
                 past_key_values = output.past_key_values
+
                 # last decoder hidden states will be used to compute the degeneration penalty (cosine similarity with previous tokens)
                 if self.config.is_encoder_decoder:
                     last_hidden_states = output.decoder_hidden_states[-1]
@@ -1920,7 +1913,7 @@ class GenerationMixin:
                 for item in layer:
                     bsz, num_head, seq_len, esz = item.size()
                     item = (
-                        item.unsqueeze(1).expand(-1, top_k, -1, -1, -1).reshape(bsz * top_k, num_head, seq_len, esz)
+                        item.unsqueeze(1).expand(-1, top_k, -1, -1, -1).reshape(bsz * top_k, num_head, seq_len, esz).contiguous()
                     )  # [bsz*beam, num_head, seq_len, esz]
                     items.append(item)
                 new_key_values.append(items)
@@ -1950,7 +1943,11 @@ class GenerationMixin:
             )
             # compute the candidate tokens by the language model and collects their hidden_states
             output = self(output_hidden_states=True, **next_model_inputs)
+
+            if "past_key_values" not in output:
+                raise ValueError(f"self.__class__ cannot return `past_key_values` and can therefore **not** be used for contrastive search.")
             past_key_values = output.past_key_values
+
             logits = output.logits[:, -1, :]
             # name is different for encoder-decoder and decoder-only models
             if self.config.is_encoder_decoder:
