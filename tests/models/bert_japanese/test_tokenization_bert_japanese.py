@@ -26,12 +26,16 @@ from transformers.models.bert_japanese.tokenization_bert_japanese import (
     CharacterTokenizer,
     JumanppTokenizer,
     MecabTokenizer,
+    SentencepieceTokenizer,
     SudachiTokenizer,
     WordpieceTokenizer,
 )
-from transformers.testing_utils import custom_tokenizers, require_jumanpp, require_sudachi
+from transformers.testing_utils import custom_tokenizers, get_tests_dir, require_jumanpp, require_sudachi
 
 from ...test_tokenization_common import TokenizerTesterMixin
+
+
+SAMPLE_VOCAB = get_tests_dir("fixtures/spiece_ja.model")
 
 
 @custom_tokenizers
@@ -333,6 +337,15 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokenizer.tokenize("こんばんは"), ["こん", "##ばんは"])
 
         self.assertListEqual(tokenizer.tokenize("こんばんは こんばんにちは こんにちは"), ["こん", "##ばんは", "[UNK]", "こんにちは"])
+
+    def test_sentencepiece_tokenizer(self):
+        tokenizer = SentencepieceTokenizer(vocab=SAMPLE_VOCAB, unk_token="[UNK]")
+
+        tokens = tokenizer.tokenize("国境 の 長い トンネル を 抜ける と 雪国 であった 。")
+        self.assertListEqual(tokens, ["▁国境", "▁の", "▁長い", "▁トンネル", "▁を", "▁抜ける", "▁と", "▁雪", "国", "▁であった", "▁。"])
+
+        tokens = tokenizer.tokenize("こんばんは こんばん にち は こんにちは")
+        self.assertListEqual(tokens, ["▁こん", "ばん", "は", "▁こん", "ばん", "▁に", "ち", "▁は", "▁こんにちは"])
 
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("cl-tohoku/bert-base-japanese")
