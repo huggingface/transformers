@@ -1049,6 +1049,24 @@ class Upsample(nn.Sequential):
         super(Upsample, self).__init__(*m)
 
 
+# TODO inherit from nn.Module here
+class UpsampleOneStep(nn.Sequential):
+    """UpsampleOneStep module (the difference with Upsample is that it always only has 1conv + 1pixelshuffle)
+       Used in lightweight SR to save parameters.
+    Args:
+        scale (int): Scale factor. Supported scales: 2^n and 3.
+        num_feat (int): Channel number of intermediate features.
+    """
+
+    def __init__(self, scale, num_feat, num_out_ch, input_resolution=None):
+        self.num_feat = num_feat
+        self.input_resolution = input_resolution
+        m = []
+        m.append(nn.Conv2d(num_feat, (scale**2) * num_out_ch, 3, 1, 1))
+        m.append(nn.PixelShuffle(scale))
+        super(UpsampleOneStep, self).__init__(*m)
+
+
 @add_start_docstrings(
     """
     Swin2SR Model transformer with an image super resolution head on top.
@@ -1079,6 +1097,12 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             self.conv_after_aux = nn.Sequential(nn.Conv2d(3, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True))
             self.upsample = Upsample(config.upscale, num_features)
             self.conv_last = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
+        elif config.upsampler == "pixelshuffledirect":
+            # for lightweight SR (to save parameters)
+            patches_resolution = self.swin2sr.embeddings.patch_embeddings.patches_resolution
+            self.upsample = UpsampleOneStep(
+                config.upscale, config.embed_dim, config.num_channels, (patches_resolution[0], patches_resolution[1])
+            )
         else:
             raise NotImplementedError("To do")
 
@@ -1125,6 +1149,15 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
 
         height, width = pixel_values.shape[2:]
 
+        if self.config.upsampler == "pixelshuffle_aux":
+            bicubic = nn.functional.interpolate(
+                pixel_values,
+                size=(height * self.upscale, width * self.upscale),
+                mode="bicubic",
+                align_corners=False,
+            )
+            bicubic = self.conv_bicubic(bicubic)
+
         outputs = self.swin2sr(
             pixel_values,
             head_mask=head_mask,
@@ -1140,17 +1173,8 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             sequence_output = self.upsample(sequence_output)
             sequence_output = self.conv_last(sequence_output)
         elif self.config.upsampler == "pixelshuffle_aux":
-            bicubic = nn.functional.interpolate(
-                sequence_output,
-                size=(height * self.upscale, width * self.upscale),
-                mode="bicubic",
-                align_corners=False,
-            )
-            bicubic = self.conv_bicubic(bicubic)
-            sequence_output = self.conv_first(sequence_output)
-            sequence_output = self.conv_after_body(self.forward_features(sequence_output)) + sequence_output
             sequence_output = self.conv_before_upsample(sequence_output)
-            aux = self.conv_aux(sequence_output)  # b, 3, LR_H, LR_W
+            aux = self.conv_aux(sequence_output)
             sequence_output = self.conv_after_aux(aux)
             sequence_output = (
                 self.upsample(sequence_output)[:, :, : height * self.upscale, : width * self.upscale]
@@ -1158,6 +1182,8 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             )
             sequence_output = self.conv_last(sequence_output)
             aux = aux / self.swin2sr.img_range + self.swin2sr.mean
+        elif self.config.upsampler == "pixelshuffledirect":
+            sequence_output = self.upsample(sequence_output)
 
         x = sequence_output / self.swin2sr.img_range + self.swin2sr.mean
         result = x[:, :, : height * self.upscale, : width * self.upscale]

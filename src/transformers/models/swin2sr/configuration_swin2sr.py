@@ -82,7 +82,7 @@ class Swin2SRConfig(PretrainedConfig):
         resi_connection (`str`, *optional*, defaults to `"1conv"`):
             The convolutional block to use before the residual connection in each stage.
         upsampler (`str`, *optional*, defaults to `"pixelshuffle"`):
-            The upsampler for the image. `"bicubic"` or `"nearest"` are supported.
+            The reconstruction reconstruction module. Can be 'pixelshuffle'/'pixelshuffledirect'/'nearest+conv'/None.
 
     Example:
 

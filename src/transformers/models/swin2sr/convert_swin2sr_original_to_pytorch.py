@@ -29,14 +29,17 @@ def get_config(checkpoint_url):
 
     if "Swin2SR_ClassicalSR_X4_64" in checkpoint_url:
         config.upscale = 4
-    elif (
-        "Swin2SR_CompressedSR_X4_48" in checkpoint_url
-        or "Swin2SR_CompressedSR_X4_DIV2K_Test" in checkpoint_url
-        or "Swin2SR_CompressedSR_X4_DIV2K_Valid" in checkpoint_url
-    ):
+    elif "Swin2SR_CompressedSR_X4_48" in checkpoint_url:
         config.upscale = 4
         config.image_size = 48
         config.upsampler = "pixelshuffle_aux"
+
+    elif "Swin2SR_Lightweight_X2_64" in checkpoint_url:
+        config.depths = [6, 6, 6, 6]
+        config.embed_dim = 60
+        config.num_heads = [6, 6, 6, 6]
+        config.upsampler = "pixelshuffledirect"
+
     elif (
         "Swin2SR_RealworldSR_X4_64_BSRGAN_PSNR" in checkpoint_url
         or "Swin2SR_RealworldSR_X4_RealSRSet" in checkpoint_url
@@ -47,11 +50,6 @@ def get_config(checkpoint_url):
     #     config.upscale = 4
     #     config.upsampler = "nearest+conv"
     #     config.resi_connection = "3conv"
-    elif "Swin2SR_Lightweight_X2_64" in checkpoint_url:
-        config.depths = [6, 6, 6, 6]
-        config.embed_dim = 60
-        config.num_heads = [6, 6, 6, 6]
-        config.upsampler = "pixelshuffledirect"
 
     elif "Swin2SR_Jpeg_dynamic" in checkpoint_url:
         config.num_channels = 1
@@ -107,7 +105,13 @@ def rename_key(name):
     if name == "norm.bias":
         name = "layernorm.bias"
 
-    if "upsample" in name or "conv_bicubic" in name or "conv_before_upsample" in name or "conv_last" in name or "aux" in name:
+    if (
+        "upsample" in name
+        or "conv_bicubic" in name
+        or "conv_before_upsample" in name
+        or "conv_last" in name
+        or "aux" in name
+    ):
         pass
     else:
         name = "swin2sr." + name
@@ -193,6 +197,17 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
         expected_slice = torch.tensor(
             [[-0.7775, -0.8105, -0.8933], [-0.7764, -0.8356, -0.9225], [-0.7976, -0.8686, -0.9579]]
         )
+    elif "Swin2SR_CompressedSR_X4_48" in checkpoint_url:
+        # TODO values didn't match exactly here
+        expected_shape = torch.Size([1, 3, 1024, 1024])
+        expected_slice = torch.tensor(
+            [[-0.8035, -0.7504, -0.7491], [-0.8538, -0.8124, -0.7782], [-0.8804, -0.8651, -0.8493]]
+        )
+    elif "Swin2SR_Lightweight_X2_64" in checkpoint_url:
+        expected_shape = torch.Size([1, 3, 512, 512])
+        expected_slice = torch.tensor(
+            [[-0.7669, -0.8662, -0.8767], [-0.8810, -0.9962, -0.9820], [-0.9340, -1.0322, -1.1149]]
+        )
 
     print("Shape of logits:", outputs.logits.shape)
     print("Actual values of the logits:", outputs.logits[0, 0, :3, :3])
@@ -210,6 +225,12 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
             ),
             "https://github.com/mv-lab/swin2sr/releases/download/v0.0.1/Swin2SR_ClassicalSR_X4_64.pth": (
                 "swin2SR-classical-sr-x4-64"
+            ),
+            "https://github.com/mv-lab/swin2sr/releases/download/v0.0.1/Swin2SR_CompressedSR_X4_48.pth": (
+                "swin2SR-compressed-sr-x4-48"
+            ),
+            "https://github.com/mv-lab/swin2sr/releases/download/v0.0.1/Swin2SR_Lightweight_X2_64.pth": (
+                "swin2SR-lightweight-x2-64"
             ),
         }
         model_name = url_to_name[checkpoint_url]
