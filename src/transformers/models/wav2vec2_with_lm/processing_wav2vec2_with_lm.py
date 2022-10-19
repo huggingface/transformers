@@ -17,15 +17,18 @@ Speech processor class for Wav2Vec2
 """
 import os
 import warnings
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
-from multiprocessing import get_context
+from multiprocessing import Pool, get_context, get_start_method
 from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Union
 
 import numpy as np
 
 from ...processing_utils import ProcessorMixin
-from ...utils import ModelOutput, requires_backends
+from ...utils import ModelOutput, logging, requires_backends
+
+
+logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
@@ -115,7 +118,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
         This class method is simply calling Wav2Vec2FeatureExtractor's
         [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`], Wav2Vec2CTCTokenizer's
-        [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`], and
+        [`~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`], and
         [`pyctcdecode.BeamSearchDecoderCTC.load_from_hf_hub`].
 
         Please refer to the docstrings of the methods above for more information.
@@ -280,6 +283,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
     def batch_decode(
         self,
         logits: np.ndarray,
+        pool: Optional[Pool] = None,
         num_processes: Optional[int] = None,
         beam_width: Optional[int] = None,
         beam_prune_logp: Optional[float] = None,
@@ -297,16 +301,32 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
         <Tip>
 
-        This function makes use of Python's multiprocessing.
+        This function makes use of Python's multiprocessing. Currently, multiprocessing is available only on Unix
+        systems (see this [issue](https://github.com/kensho-technologies/pyctcdecode/issues/65)).
+
+        If you are decoding multiple batches, consider creating a `Pool` and passing it to `batch_decode`. Otherwise,
+        `batch_decode` will be very slow since it will create a fresh `Pool` for each call. See usage example below.
 
         </Tip>
 
         Args:
             logits (`np.ndarray`):
                 The logits output vector of the model representing the log probabilities for each token.
+            pool (`multiprocessing.Pool`, *optional*):
+                An optional user-managed pool. If not set, one will be automatically created and closed. The pool
+                should be instantiated *after* `Wav2Vec2ProcessorWithLM`. Otherwise, the LM won't be available to the
+                pool's sub-processes.
+
+                <Tip>
+
+                Currently, only pools created with a 'fork' context can be used. If a 'spawn' pool is passed, it will
+                be ignored and sequential decoding will be used instead.
+
+                </Tip>
+
             num_processes (`int`, *optional*):
-                Number of processes on which the function should be parallelized over. Defaults to the number of
-                available CPUs.
+                If `pool` is not set, number of processes on which the function should be parallelized over. Defaults
+                to the number of available CPUs.
             beam_width (`int`, *optional*):
                 Maximum number of beams at each step in decoding. Defaults to pyctcdecode's DEFAULT_BEAM_WIDTH.
             beam_prune_logp (`int`, *optional*):
@@ -332,17 +352,19 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
                 <Tip>
 
-                Please take a look at the Example of [`~model.wav2vec2_with_lm.processing_wav2vec2_with_lm.decode`] to
-                better understand how to make use of `output_word_offsets`.
-                [`~model.wav2vec2_with_lm.processing_wav2vec2_with_lm.batch_decode`] works the same way with batched
-                output.
+                Please take a look at the Example of [`~Wav2Vec2ProcessorWithLM.decode`] to better understand how to
+                make use of `output_word_offsets`. [`~Wav2Vec2ProcessorWithLM.batch_decode`] works the same way with
+                batched output.
 
                 </Tip>
 
         Returns:
-            [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`] or `tuple`.
+            [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`].
 
+        Example:
+            See [Decoding multiple audios](#decoding-multiple-audios).
         """
+
         from pyctcdecode.constants import (
             DEFAULT_BEAM_WIDTH,
             DEFAULT_HOTWORD_WEIGHT,
@@ -364,21 +386,41 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         # create multiprocessing pool and list numpy arrays
         # filter out logits padding
         logits_list = [array[(array != -100.0).all(axis=-1)] for array in logits]
-        pool = get_context("fork").Pool(num_processes)
+
+        # create a pool if necessary while also using it as a context manager to close itself
+        if pool is None:
+            # fork is safe to use only on Unix, see "Contexts and start methods" section on
+            # multiprocessing's docs (https://docs.python.org/3/library/multiprocessing.html#contexts-and-start-methods)
+            default_context = get_start_method()
+
+            if default_context == "fork":
+                cm = pool = get_context().Pool(num_processes)
+            else:
+                logger.warning(
+                    "Parallel batch decoding is not currently supported in this platform. "
+                    "Falling back to sequential decoding."
+                )
+                cm = nullcontext()
+        else:
+            # pool is managed by the user, so we don't need to close it
+            cm = nullcontext()
+
+            if num_processes is not None:
+                logger.warning(
+                    "Parameter `num_process` was passed, but it will be ignored since `pool` was also specified."
+                )
 
         # pyctcdecode
-        decoded_beams = self.decoder.decode_beams_batch(
-            pool,
-            logits_list=logits_list,
-            beam_width=beam_width,
-            beam_prune_logp=beam_prune_logp,
-            token_min_logp=token_min_logp,
-            hotwords=hotwords,
-            hotword_weight=hotword_weight,
-        )
-
-        # clone multi-processing pool
-        pool.close()
+        with cm:
+            decoded_beams = self.decoder.decode_beams_batch(
+                pool=pool,
+                logits_list=logits_list,
+                beam_width=beam_width,
+                beam_prune_logp=beam_prune_logp,
+                token_min_logp=token_min_logp,
+                hotwords=hotwords,
+                hotword_weight=hotword_weight,
+            )
 
         # extract text and scores
         batch_texts, logit_scores, lm_scores, word_offsets = [], [], [], []
@@ -440,13 +482,12 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
                 <Tip>
 
-                Please take a look at the example of [`~models.wav2vec2_with_lm.processing_wav2vec2_with_lm.decode`] to
-                better understand how to make use of `output_word_offsets`.
+                Please take a look at the example below to better understand how to make use of `output_word_offsets`.
 
                 </Tip>
 
         Returns:
-            [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`] or `tuple`.
+            [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`].
 
         Example:
 

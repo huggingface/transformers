@@ -17,6 +17,7 @@ import os
 from typing import TYPE_CHECKING, List, Tuple, Union
 
 import numpy as np
+from packaging import version
 
 import requests
 
@@ -34,6 +35,10 @@ if is_vision_available():
     import PIL.Image
     import PIL.ImageOps
 
+    if version.parse(version.parse(PIL.__version__).base_version) >= version.parse("9.1.0"):
+        PILImageResampling = PIL.Image.Resampling
+    else:
+        PILImageResampling = PIL.Image
 
 if TYPE_CHECKING:
     if is_torch_available():
@@ -110,6 +115,25 @@ def infer_channel_dimension_format(image: np.ndarray) -> ChannelDimension:
     elif image.shape[last_dim] in (1, 3):
         return ChannelDimension.LAST
     raise ValueError("Unable to infer channel dimension format")
+
+
+def get_channel_dimension_axis(image: np.ndarray) -> int:
+    """
+    Returns the channel dimension axis of the image.
+
+    Args:
+        image (`np.ndarray`):
+            The image to get the channel dimension axis of.
+
+    Returns:
+        The channel dimension axis of the image.
+    """
+    channel_dim = infer_channel_dimension_format(image)
+    if channel_dim == ChannelDimension.FIRST:
+        return image.ndim - 3
+    elif channel_dim == ChannelDimension.LAST:
+        return image.ndim - 1
+    raise ValueError(f"Unsupported data format: {channel_dim}")
 
 
 def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> Tuple[int, int]:
@@ -345,7 +369,7 @@ class ImageFeatureExtractionMixin:
                 If `size` is an int and `default_to_square` is `True`, then image will be resized to (size, size). If
                 `size` is an int and `default_to_square` is `False`, then smaller edge of the image will be matched to
                 this number. i.e, if height > width, then image will be rescaled to (size * height / width, size).
-            resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
+            resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
                 The filter to user for resampling.
             default_to_square (`bool`, *optional*, defaults to `True`):
                 How to convert `size` when it is a single int. If set to `True`, the `size` will be converted to a
@@ -361,7 +385,7 @@ class ImageFeatureExtractionMixin:
         Returns:
             image: A resized `PIL.Image.Image`.
         """
-        resample = resample if resample is not None else PIL.Image.BILINEAR
+        resample = resample if resample is not None else PILImageResampling.BILINEAR
 
         self._ensure_format_supported(image)
 

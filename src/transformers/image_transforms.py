@@ -13,10 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+import warnings
+from typing import TYPE_CHECKING, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
+from transformers.image_utils import PILImageResampling
 from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
 
 
@@ -25,11 +27,13 @@ if is_vision_available():
 
     from .image_utils import (
         ChannelDimension,
+        get_channel_dimension_axis,
         get_image_size,
         infer_channel_dimension_format,
         is_jax_tensor,
         is_tf_tensor,
         is_torch_tensor,
+        to_numpy_array,
     )
 
 
@@ -213,7 +217,7 @@ def get_resize_output_image_size(
 def resize(
     image,
     size: Tuple[int, int],
-    resample=PIL.Image.BILINEAR,
+    resample=PILImageResampling.BILINEAR,
     data_format: Optional[ChannelDimension] = None,
     return_numpy: bool = True,
 ) -> np.ndarray:
@@ -225,7 +229,7 @@ def resize(
             The image to resize.
         size (`Tuple[int, int]`):
             The size to use for resizing the image.
-        resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
+        resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
             The filter to user for resampling.
         data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the output image. If `None`, will use the inferred format from the input.
@@ -257,3 +261,59 @@ def resize(
         resized_image = np.array(resized_image)
         resized_image = to_channel_dimension_format(resized_image, data_format)
     return resized_image
+
+
+def normalize(
+    image: np.ndarray,
+    mean: Union[float, Iterable[float]],
+    std: Union[float, Iterable[float]],
+    data_format: Optional[ChannelDimension] = None,
+) -> np.ndarray:
+    """
+    Normalizes `image` using the mean and standard deviation specified by `mean` and `std`.
+
+    image = (image - mean) / std
+
+    Args:
+        image (`np.ndarray`):
+            The image to normalize.
+        mean (`float` or `Iterable[float]`):
+            The mean to use for normalization.
+        std (`float` or `Iterable[float]`):
+            The standard deviation to use for normalization.
+        data_format (`ChannelDimension`, *optional*):
+            The channel dimension format of the output image. If `None`, will use the inferred format from the input.
+    """
+    if isinstance(image, PIL.Image.Image):
+        warnings.warn(
+            "PIL.Image.Image inputs are deprecated and will be removed in v4.26.0. Please use numpy arrays instead.",
+            FutureWarning,
+        )
+        # Convert PIL image to numpy array with the same logic as in the previous feature extractor normalize -
+        # casting to numpy array and dividing by 255.
+        image = to_numpy_array(image)
+        image = rescale(image, scale=1 / 255)
+
+    input_data_format = infer_channel_dimension_format(image)
+    channel_axis = get_channel_dimension_axis(image)
+    num_channels = image.shape[channel_axis]
+
+    if isinstance(mean, Iterable):
+        if len(mean) != num_channels:
+            raise ValueError(f"mean must have {num_channels} elements if it is an iterable, got {len(mean)}")
+    else:
+        mean = [mean] * num_channels
+
+    if isinstance(std, Iterable):
+        if len(std) != num_channels:
+            raise ValueError(f"std must have {num_channels} elements if it is an iterable, got {len(std)}")
+    else:
+        std = [std] * num_channels
+
+    if input_data_format == ChannelDimension.LAST:
+        image = (image - mean) / std
+    else:
+        image = ((image.T - mean) / std).T
+
+    image = to_channel_dimension_format(image, data_format) if data_format is not None else image
+    return image

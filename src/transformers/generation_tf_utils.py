@@ -406,7 +406,7 @@ class TFGenerationMixin:
         forced_eos_token_id=None,
         suppress_tokens: Optional[List[int]] = None,
         begin_suppress_tokens: Optional[List[int]] = None,
-        forced_decoder_ids: Optional[List[int]] = None,
+        forced_decoder_ids: Optional[List[List[int]]] = None,
         **model_kwargs,
     ) -> Union[TFGreedySearchOutput, TFSampleOutput, TFBeamSearchOutput, TFBeamSampleOutput, tf.Tensor]:
         r"""
@@ -506,8 +506,10 @@ class TFGenerationMixin:
             begin_suppress_tokens  (`List[int]`, *optional*, defaults to `model.config.begin_suppress_tokens`):
                 A list of tokens that will be supressed at the begining of the generation. The `SupressBeginTokens`
                 logit processor will set their log probs to `-inf` so that they are not sampled.
-            forced_decoder_ids (`List[int]`, *optional*, defaults to `model.config.forced_decoder_ids`):
-                A list of tokens that will be forced as beginning tokens, before sampling.
+            forced_decoder_ids (`List[List[int]]`, *optional*, defaults to `model.config.forced_decoder_ids`):
+                A list of pairs of integers which indicates a mapping from generation indices to token indices that
+                will be forced before sampling. For example, `[[1, 123]]` means the second generated token will always
+                be a token of index 123.
             model_specific_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model.
 
@@ -1493,9 +1495,10 @@ class TFGenerationMixin:
             begin_suppress_tokens  (`List[int]`, *optional*, defaults to `model.config.begin_suppress_tokens`):
                 A list of tokens that will be supressed at the begining of the generation. The `SupressBeginTokens`
                 logit processor will set their log probs to `-inf` so that they are not sampled.
-            forced_decoder_ids (`List[int]`, *optional*, defaults to `model.config.forced_decoder_ids`):
-                A list of tokens that will be forced as beginning tokens.
-
+            forced_decoder_ids (`List[List[int]]`, *optional*, defaults to `model.config.forced_decoder_ids`):
+                A list of pairs of integers which indicates a mapping from generation indices to token indices that
+                will be forced before sampling. For example, `[[1, 123]]` means the second generated token will always
+                be a token of index 123.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `call` function of the model.
 
@@ -2147,7 +2150,7 @@ class TFGenerationMixin:
         forced_eos_token_id: int,
         suppress_tokens: Optional[List[int]] = None,
         begin_suppress_tokens: Optional[List[int]] = None,
-        forced_decoder_ids: Optional[List[int]] = None,
+        forced_decoder_ids: Optional[List[List[int]]] = None,
     ) -> TFLogitsProcessorList:
         """
         This class returns a [`TFLogitsProcessorList`] list object that contains all relevant [`TFLogitsProcessor`]
