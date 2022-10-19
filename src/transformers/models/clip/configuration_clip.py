@@ -285,6 +285,8 @@ class CLIPConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
+    >>> # We can also initialize a CLIPConfig from a CLIPTextConfig and a CLIPVisionConfig
+
     >>> # Initializing a CLIPText and CLIPVision configuration
     >>> config_text = CLIPTextConfig()
     >>> config_vision = CLIPVisionConfig()
