@@ -1875,7 +1875,6 @@ class Trainer:
         self._memory_tracker.stop_and_update_metrics(metrics)
 
         self.log(metrics)
-        checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
 
         run_dir = self._get_output_dir(trial)
         checkpoints_sorted = self._sorted_checkpoints(use_mtime=False, output_dir=run_dir)
