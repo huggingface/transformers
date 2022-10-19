@@ -33,6 +33,7 @@ src/transformers/models/blenderbot_small/configuration_blenderbot_small.py
 src/transformers/models/blenderbot_small/modeling_blenderbot_small.py
 src/transformers/models/bloom/configuration_bloom.py
 src/transformers/models/canine/configuration_canine.py
+src/transformers/models/clip/configuration_clip.py
 src/transformers/models/codegen/configuration_codegen.py
 src/transformers/models/conditional_detr/configuration_conditional_detr.py
 src/transformers/models/conditional_detr/modeling_conditional_detr.py
