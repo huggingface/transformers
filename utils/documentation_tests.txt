@@ -121,6 +121,7 @@ src/transformers/models/sew/modeling_sew.py
 src/transformers/models/sew_d/configuration_sew_d.py
 src/transformers/models/sew_d/modeling_sew_d.py
 src/transformers/models/speech_encoder_decoder/modeling_speech_encoder_decoder.py
+src/transformers/models/speech_to_text/configuration_speech_to_text.py
 src/transformers/models/speech_to_text/modeling_speech_to_text.py
 src/transformers/models/speech_to_text_2/modeling_speech_to_text_2.py
 src/transformers/models/segformer/modeling_tf_segformer.py
