@@ -17,9 +17,11 @@
 import inspect
 import unittest
 
-import jax
-from transformers import WhisperConfig, WhisperTokenizer, is_flax_available
-from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
+from datasets import load_dataset
+
+from transformers import WhisperConfig, is_flax_available
+from transformers.testing_utils import require_flax, slow
+from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
@@ -28,7 +30,7 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
 if is_flax_available():
     import numpy as np
 
-    import jax.numpy as jnp
+    import jax
     from transformers import (
         FlaxWhisperForConditionalGeneration,
         FlaxWhisperModel,
@@ -247,25 +249,47 @@ def _long_tensor(tok_lst):
 TOLERANCE = 1e-4
 
 
-# @slow
-# @require_sentencepiece
-# @require_tokenizers
-# @require_flax
-# class FlaxWhisperModelIntegrationTest(unittest.TestCase):
-#     def test_inference_no_head(self):
-#         model = FlaxWhisperModel.from_pretrained("brand-new-bert-base-cased")
-#         # change to intended input here
-#         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-#         decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-#         inputs_dict = prepare_whisper_inputs_dict(model.config, input_ids, decoder_input_ids)
-#         output = model(**inputs_dict)[0]
-#         expected_shape = (1, 11, 1024)
-#         self.assertEqual(output.shape, expected_shape)
-#         # change to expected output here
-#         expected_slice = np.array(
-#             [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],
-#         )
-#         _assert_tensors_equal(output[:, :3, :3], expected_slice, atol=TOLERANCE)
+@slow
+@require_flax
+class FlaxWhisperModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_processor(self):
+        return WhisperProcessor.from_pretrained("openai/whisper-base")
+
+    def _load_datasamples(self, num_samples):
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+
+        return [x["array"] for x in speech_samples]
+
+    def test_tiny_logits_librispeech(self):
+        model = FlaxWhisperModel.from_pretrained("openai/whisper-tiny", from_pt=True)
+        input_speech = self._load_datasamples(1)
+        feature_extractor = WhisperFeatureExtractor()
+        input_features = feature_extractor(input_speech, return_tensors="np").input_features
+
+        logits = model(
+            input_features,
+            decoder_input_ids=np.array([[50258, 50259, 50359]]),
+            output_hidden_states=False,
+            output_attentions=False,
+            return_dict=False,
+        )
+
+        # fmt: off
+        EXPECTED_LOGITS = np.array(
+            [
+                2.9892, -6.7607, 5.7348, 3.6096, 0.2152, -5.7321, 4.8855, -1.6407,
+                0.2823, -1.5718, 10.4269, 3.4427, 0.0219, -8.0612, 3.4784, 8.4246,
+                4.0575, -2.2864, 11.1084, 0.9963, 0.9884, -8.5154, -3.5469, -9.3713,
+                0.9786, 3.5435, 7.4850, -5.2579, -1.4366, 10.4841
+            ]
+        )
+        # fmt: on
+        self.assertTrue(np.allclose(logits[0][0, 0, :30], EXPECTED_LOGITS, atol=1e-4))
+
 
 #     def test_inference_with_head(self):
 #         model = FlaxWhisperForConditionalGeneration.from_pretrained("brand-new-bert-base-cased")
