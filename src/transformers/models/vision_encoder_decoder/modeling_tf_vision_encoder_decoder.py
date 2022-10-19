@@ -15,6 +15,7 @@
 """ Classes to support TF Vision-Encoder-Text-Decoder architectures"""
 
 
+import os
 import tempfile
 import warnings
 from typing import Optional
@@ -321,9 +322,6 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
 
         from_pt = kwargs.pop("from_pt", False)
         if from_pt:
-            import os
-            import tempfile
-
             from transformers import VisionEncoderDecoderModel
 
             # a workaround to load from pytorch checkpoint
