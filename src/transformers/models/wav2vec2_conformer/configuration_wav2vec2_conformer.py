@@ -193,12 +193,12 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Wav2Vec2ConformerModel, Wav2Vec2ConformerConfig
+    >>> from transformers import Wav2Vec2ConformerConfig, Wav2Vec2ConformerModel
 
     >>> # Initializing a Wav2Vec2Conformer facebook/wav2vec2-conformer-rel-pos-large style configuration
     >>> configuration = Wav2Vec2ConformerConfig()
 
-    >>> # Initializing a model from the facebook/wav2vec2-conformer-rel-pos-large style configuration
+    >>> # Initializing a model (with random weights) from the facebook/wav2vec2-conformer-rel-pos-large style configuration
     >>> model = Wav2Vec2ConformerModel(configuration)
 
     >>> # Accessing the model configuration
