@@ -722,7 +722,8 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
 @add_start_docstrings(
     """
     ViT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.
+    the [CLS] token) e.g. for ImageNet. Check the [image classification
+    task](https://huggingface.co/tasks/image-classification) for more info.
 
     <Tip>
 
