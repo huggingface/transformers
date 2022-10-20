@@ -644,8 +644,8 @@ def child(in_queue, out_queue):
         _inputs = in_queue.get(timeout=30)
 
         set_seed(0)
-        processor = WhisperProcessor.from_pretrained("openai/whisper-base")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-base")
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
+        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
 
         input_speech = _load_datasamples(4)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
@@ -662,7 +662,7 @@ def child(in_queue, out_queue):
         )
         # fmt: on
 
-        ## unittest.TestCase.assertTrue(np.allclose(generated_ids, EXPECTED_LOGITS))
+        unittest.TestCase().assertTrue(np.allclose(generated_ids, EXPECTED_LOGITS))
 
         # fmt: off
         EXPECTED_TRANSCRIPT = [
@@ -674,7 +674,7 @@ def child(in_queue, out_queue):
         # fmt: on
 
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
-        ## unittest.TestCase.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
+        unittest.TestCase().assertListEqual(transcript, EXPECTED_TRANSCRIPT)
     except Exception:
         error = f"{traceback.format_exc()}"
 
