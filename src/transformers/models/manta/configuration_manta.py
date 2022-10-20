@@ -32,8 +32,7 @@ class MantaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MantaModel`] or a [`TFMantaModel`]. It is used to
     instantiate a Manta model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Manta
-    [nthngdy/manta-base](https://huggingface.co/nthngdy/manta-base) architecture.
+    configuration with the defaults will yield a similar configuration to that of the Manta-base architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -42,6 +41,32 @@ class MantaConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 32128):
             Vocabulary size of the Manta model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`MantaModel`] or [`TFMantaModel`].
+        byte_embedding_dim (`int`, *optional*, defaults to 64):
+            Size of the input byte embeddings fed to the MANTa tokenization module.
+        frontier_predictor_num_layers (`int`, *optional*, defaults to 1):
+            Number of sliding window attention layers in the frontier predictor of the tokenization module.
+        frontier_predictor_num_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads in the frontier predictor of the tokenization module.
+        frontier_predictor_attention_window (`int`, *optional*, defaults to 16):
+            Size of the sliding attention window along the byte sequence.
+        pooling_variance_regularization (`float`, *optional*, defaults to 1.0e-6):
+            Variance regularization term used in the computation of the byte-block assignment map.
+        pooling_kernel_size (`int` or `List[List[int]]`, *optional*, defaults to 3):
+            Size(s) of the 1D-convolution kernel(s) used for the byte pooling operation in the tokenization module. Providing an integer
+            will imply using a convolution filter of `(pooling_kernel_size, byte_embedding_dim)`. Several kernel sizes can be provided
+            in the form `[(kernel_size, num_channels), ...]`. These will be concatenated in the style of [Character BERT](https://arxiv.org/pdf/2010.10392.pdf).
+        pooling_n_highway_layers (`int`, *optional*, defaults to 0):
+            Number of highway layers after the convolution in the pooling operation.
+            This allows to mimic the pooling operation of [Character BERT](https://arxiv.org/pdf/2010.10392.pdf).
+        pooling_highway_activation (`string`, *optional*, defaults to `"relu"`):
+            Activation function used for the highway layers in the pooling operation. Any function name from `torch.nn.functional` can be used.
+        pooling_depthwise_convolution (`bool`, *optional*, defaults to `True`):
+            Activates depthwise convolution in the pooling operation of the tokenization module. Depthwise convolution will be faster, but might be
+            less powerful than normal convolution, and impedes using different number of channels.
+        pooling_mean_pool (`bool`, *optional*, defaults to `False`):
+            Activates mean-pooling instead of default max-pooling as the reduction operation for each block.
+        max_length_encoder_decoder (`int`, *optional*, defaults to 256):
+            Maximum output sequence length of the tokenization module. This allows to control the length of the sequences that the encoder-decoder model receives.
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
@@ -78,7 +103,18 @@ class MantaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32128,
+        vocab_size=384,
+        byte_embedding_dim=64,
+        frontier_predictor_num_layers=1,
+        frontier_predictor_num_attention_heads=8,
+        frontier_predictor_attention_window=16,
+        pooling_variance_regularization=1.0e-6,
+        pooling_kernel_size=3,
+        pooling_n_highway_layers=0,
+        pooling_highway_activation="relu",
+        pooling_depthwise_convolution=True,
+        pooling_mean_pool=False,
+        max_length_encoder_decoder=256,
         d_model=512,
         d_kv=64,
         d_ff=2048,
@@ -98,6 +134,17 @@ class MantaConfig(PretrainedConfig):
         **kwargs
     ):
         self.vocab_size = vocab_size
+        self.byte_embedding_dim=byte_embedding_dim
+        self.frontier_predictor_num_layers=frontier_predictor_num_layers
+        self.frontier_predictor_num_attention_heads=frontier_predictor_num_attention_heads
+        self.frontier_predictor_attention_window=frontier_predictor_attention_window
+        self.pooling_variance_regularization=pooling_variance_regularization
+        self.pooling_kernel_size=pooling_kernel_size
+        self.pooling_n_highway_layers=pooling_n_highway_layers
+        self.pooling_highway_activation=pooling_highway_activation
+        self.pooling_depthwise_convolution=pooling_depthwise_convolution
+        self.pooling_mean_pool=pooling_mean_pool
+        self.max_length_encoder_decoder=max_length_encoder_decoder
         self.d_model = d_model
         self.d_kv = d_kv
         self.d_ff = d_ff
@@ -124,6 +171,12 @@ class MantaConfig(PretrainedConfig):
                 "Please make sure `feed_forward_proj` is of the format `gated-{ACT_FN}` or `{ACT_FN}`, e.g. "
                 "'gated-gelu' or 'relu'"
             )
+        
+        if pooling_depthwise_convolution and isinstance(pooling_kernel_size, list) and any(size!=byte_embedding_dim for _, size in pooling_kernel_size):
+            raise ValueError(
+                f"`pooling_kernel_size`: {pooling_kernel_size} is not a valid list of kernels when `pooling_depthwise_convolution` is True. Please set all"
+                f"kernel dimensions to {byte_embedding_dim} (=`byte_embedding_dim`) or `pooling_depthwise_convolution` to False."
+            )
 
         # for backwards compatibility
         if feed_forward_proj == "gated-gelu":
@@ -133,30 +186,6 @@ class MantaConfig(PretrainedConfig):
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
+            tie_word_embeddings=False,
             **kwargs,
         )
-
-
-class MantaOnnxConfig(OnnxSeq2SeqConfigWithPast):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_inputs = {
-            "input_ids": {0: "batch", 1: "encoder_sequence"},
-            "attention_mask": {0: "batch", 1: "encoder_sequence"},
-        }
-        if self.use_past:
-            common_inputs["attention_mask"][1] = "past_encoder_sequence + sequence"
-            common_inputs["decoder_input_ids"] = {0: "batch"}
-            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
-        else:
-            common_inputs["decoder_input_ids"] = {0: "batch", 1: "decoder_sequence"}
-            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "decoder_sequence"}
-
-        if self.use_past:
-            self.fill_with_past_key_values_(common_inputs, direction="inputs")
-
-        return common_inputs
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 13
