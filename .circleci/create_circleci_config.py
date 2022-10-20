@@ -127,7 +127,7 @@ torch_and_tf_job = CircleCIJob(
         "pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
         TORCH_SCATTER_INSTALL,
         "pip install tensorflow_probability",
-        "pip install https://github.com/kpu/kenlm/archive/master.zip",
+        "pip install kenlm==0.1",
         "pip install git+https://github.com/huggingface/accelerate",
     ],
     marker="is_pt_tf_cross_test",
