@@ -42,7 +42,7 @@ from ..utils import (
     is_torch_available,
     is_pyctcdecode_available,
     is_kenlm_available,
-    logging
+    logging,
 )
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
@@ -844,15 +844,13 @@ def pipeline(
 
                     kwargs["decoder"] = decoder
                 except ImportError as e:
-                    logger.warning(
-                        f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Error: {e}"
-                    )
+                    logger.warning(f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Error: {e}")
                     if not is_kenlm_available():
                         logger.warning("Try to install `kenlm`: `pip install kenlm")
 
                     if not is_pyctcdecode_available():
                         logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
-                        
+
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:
             if key.startswith("translation"):
