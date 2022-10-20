@@ -271,6 +271,10 @@ TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
 
 
+def is_kenlm_available():
+    return importlib.util.find_spec("kenlm") is not None
+
+
 def is_torch_available():
     return _torch_available
 
