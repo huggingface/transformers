@@ -724,7 +724,6 @@ class CharacterTokenizer:
 class BasicTokenizer(object):
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
-
     Args:
         do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
@@ -733,7 +732,6 @@ class BasicTokenizer(object):
             `do_basic_tokenize=True`
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters.
-
             This should likely be deactivated for Japanese (see this
             [issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents (`bool`, *optional*):
@@ -752,8 +750,7 @@ class BasicTokenizer(object):
     def tokenize(self, text, never_split=None):
         """
         Basic Tokenization of a piece of text. Split on "white spaces" only, for sub-word tokenization, see
-        WordpieceTokenizer and SentencepieceTokenizer.
-
+        WordPieceTokenizer.
         Args:
             never_split (`List[str]`, *optional*)
                 Kept for backward compatibility purposes. Now implemented directly at the base class level (see
