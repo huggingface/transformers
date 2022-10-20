@@ -17,6 +17,7 @@
 import inspect
 import multiprocessing
 import tempfile
+import traceback
 import unittest
 
 import numpy as np
@@ -638,45 +639,49 @@ def _load_datasamples(num_samples):
 
 def child(in_queue, out_queue):
 
-    _inputs = in_queue.get(timeout=30)
+    error = None
+    try:
+        _inputs = in_queue.get(timeout=30)
 
-    set_seed(0)
-    processor = WhisperProcessor.from_pretrained("openai/whisper-base")
-    model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-base")
+        set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-base")
+        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-base")
 
-    input_speech = _load_datasamples(4)
-    input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
-    generated_ids = model.generate(input_features, max_length=20)
+        input_speech = _load_datasamples(4)
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
+        generated_ids = model.generate(input_features, max_length=20)
 
-    error = "bye"
+        # fmt: off
+        EXPECTED_LOGITS = tf.convert_to_tensor(
+            [
+                [50258, 50358, 50363, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404, 281],
+                [50258, 50358, 50363, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50257, 50257],
+                [50258, 50358, 50363, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256],
+                [50258, 50358, 50363, 634, 575, 12525, 22618, 1968, 6144, 35617, 20084, 1756, 311, 589, 307, 534, 10281, 934, 439, 11]
+            ]
+        )
+        # fmt: on
+
+        ## unittest.TestCase.assertTrue(np.allclose(generated_ids, EXPECTED_LOGITS))
+
+        # fmt: off
+        EXPECTED_TRANSCRIPT = [
+            ' Mr. Quilter is the apostle of the middle classes and we are glad to',
+            " Nor is Mr. Quilter's manner less interesting than his matter.",
+            " He tells us that at this festive season of the year, with Christmas and roast beef",
+            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all,"
+        ]
+        # fmt: on
+
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        ## unittest.TestCase.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
+    except Exception:
+        error = f"{traceback.format_exc()}"
+
     results = {"error": error}
     out_queue.put(results, timeout=30)
     out_queue.join()
 
-    # # fmt: off
-    # EXPECTED_LOGITS = tf.convert_to_tensor(
-    #     [
-    #         [50258, 50358, 50363, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404, 281],
-    #         [50258, 50358, 50363, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50257, 50257],
-    #         [50258, 50358, 50363, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256],
-    #         [50258, 50358, 50363, 634, 575, 12525, 22618, 1968, 6144, 35617, 20084, 1756, 311, 589, 307, 534, 10281, 934, 439, 11]
-    #     ]
-    # )
-    # # fmt: on
-    #
-    # self.assertTrue(np.allclose(generated_ids, EXPECTED_LOGITS))
-    #
-    # # fmt: off
-    # EXPECTED_TRANSCRIPT = [
-    #     ' Mr. Quilter is the apostle of the middle classes and we are glad to',
-    #     " Nor is Mr. Quilter's manner less interesting than his matter.",
-    #     " He tells us that at this festive season of the year, with Christmas and roast beef",
-    #     " He has grave doubts whether Sir Frederick Layton's work is really Greek after all,"
-    # ]
-    # # fmt: on
-    #
-    # transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
-    # self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
 
 @require_tf
 @require_tokenizers
@@ -939,10 +944,12 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
             output_queue.task_done()
         except Exception as e:
             process.terminate()
+            self.fail(e)
         process.join(timeout=30)
 
-        print(results["error"])
-
+        if results["error"] is not None:
+            self.fail(f'{results["error"]}')
+            
     @slow
     def test_tiny_en_batched_generation(self):
         set_seed(0)
