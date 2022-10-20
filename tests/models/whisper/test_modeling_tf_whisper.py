@@ -639,8 +639,8 @@ def _load_datasamples(num_samples):
 def child(in_queue, out_queue):
 
     set_seed(0)
-    processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-    model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
+    processor = WhisperProcessor.from_pretrained("openai/whisper-base")
+    model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-base")
 
     input_speech = _load_datasamples(4)
     input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
