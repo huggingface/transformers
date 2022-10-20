@@ -123,7 +123,7 @@ _deps = [
     "jax>=0.2.8,!=0.3.2,<=0.3.6",
     "jaxlib>=0.1.65,<=0.3.6",
     "jieba",
-    "kenlm==0.1"
+    "kenlm==0.1",
     "nltk",
     "numpy>=1.17",
     "onnxconverter-common",
