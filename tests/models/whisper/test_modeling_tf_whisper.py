@@ -679,7 +679,7 @@ def child(in_queue, out_queue):
         error = f"{traceback.format_exc()}"
 
     results = {"error": error}
-    out_queue.put(results, timeout=30)
+    out_queue.put(results, timeout=120)
     out_queue.join()
 
 
