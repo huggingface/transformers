@@ -178,6 +178,34 @@ class GPT2Attention(nn.Module):
         self.num_heads = self.num_heads - len(heads)
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    def _memory_efficient_attn(self, query, key, value, attention_mask=None, head_mask=None):
+        query_length, key_length = query.size(-2), key.size(-2)
+        if query_length != key_length or attention_mask is not None or head_mask is not None:
+            return self._attn(query, key, value, attention_mask, head_mask)
+        if self.scale_attn_weights:
+            # this is done inside memory efficient forward
+            pass
+        else:
+            # undo scaling
+            query = query * torch.tensor(
+                value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device
+            )
+        # Layer-wise attention scaling
+        if self.scale_attn_by_inverse_layer_idx:
+            query = query / float(self.layer_idx + 1)
+
+        if self.is_cross_attention:
+            mask = None:
+        else:
+            mask = xformers.ops.LowerTriangularMask((query_length, query_length))
+            # the content of the mask is actually not used, xformers will only check the type
+
+        attn_output = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=mask, op=None)
+        attn_weights = None
+
+        return attn_output, attn_weights
+
+
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 

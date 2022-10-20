@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 
 
 class GLUETransformer(BaseTransformer):
-
     mode = "sequence-classification"
 
     def __init__(self, hparams):

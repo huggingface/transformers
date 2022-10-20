@@ -694,7 +694,6 @@ def main():
     total_steps = step_per_epoch * num_epochs
     epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
     for epoch in epochs:
-
         train_start = time.time()
         train_metrics = []
 
@@ -730,7 +729,6 @@ def main():
                 train_metrics = []
 
             if cur_step % training_args.eval_steps == 0 and cur_step > 0:
-
                 eval_metrics = {}
                 # evaluate
                 for batch in tqdm(
