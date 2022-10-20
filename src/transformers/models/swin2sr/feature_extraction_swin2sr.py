@@ -14,20 +14,13 @@
 # limitations under the License.
 """Feature extractor class for Swin2SR."""
 
-from curses import window
 from typing import Optional, Union
 
 import numpy as np
 from PIL import Image
 
-from transformers.image_utils import PILImageResampling
-
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...image_utils import (
-    ImageFeatureExtractionMixin,
-    ImageInput,
-    is_torch_tensor,
-)
+from ...image_utils import ImageFeatureExtractionMixin, ImageInput, is_torch_tensor
 from ...utils import TensorType, logging
 
 
@@ -56,14 +49,7 @@ class Swin2SRFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixi
 
     model_input_names = ["pixel_values"]
 
-    def __init__(
-        self,
-        do_pad=True,
-        size=8,
-        num_channels=3,
-        do_normalize=True,
-        **kwargs
-    ):
+    def __init__(self, do_pad=True, size=8, num_channels=3, do_normalize=True, **kwargs):
         super().__init__(**kwargs)
         self.do_pad = do_pad
         self.size = size
@@ -71,10 +57,10 @@ class Swin2SRFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixi
         self.do_normalize = do_normalize
         self.mean = (0.4488, 0.4371, 0.4040) if num_channels == 3 else 1
         self.range = 1.0 if num_channels == 3 else 255.0
-    
+
     def pad(image):
         return -1
-    
+
     def normalize(self, image):
         image = (image - self.mean) * self.range
 

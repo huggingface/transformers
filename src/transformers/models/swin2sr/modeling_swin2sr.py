@@ -25,7 +25,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import ImageClassifierOutput
+from ...modeling_outputs import ImageSuperResolutionOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
@@ -1126,7 +1126,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(SWIN2SR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=ImageSuperResolutionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1135,7 +1135,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ImageClassifierOutput]:
+    ) -> Union[Tuple, ImageSuperResolutionOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -1224,9 +1224,9 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             output = (reconstruction,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutput(
+        return ImageSuperResolutionOutput(
             loss=loss,
-            logits=reconstruction,
+            reconstruction=reconstruction,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

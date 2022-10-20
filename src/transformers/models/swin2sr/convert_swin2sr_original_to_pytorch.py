@@ -163,9 +163,6 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     new_state_dict = convert_state_dict(state_dict, config)
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
 
-    print("Missing keys:", missing_keys)
-    print("Unexpected keys:", unexpected_keys)
-
     if len(missing_keys) > 0:
         raise ValueError("Missing keys when converting: {}".format(missing_keys))
     for key in unexpected_keys:
@@ -222,13 +219,13 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
             [[-0.5238, -0.5557, -0.6321], [-0.6016, -0.5903, -0.6391], [-0.6244, -0.6334, -0.6889]]
         )
 
-    print("Shape of logits:", outputs.logits.shape)
-    print("Actual values of the logits:", outputs.logits[0, 0, :3, :3])
+    print("Shape of reconstruction:", outputs.reconstruction.shape)
+    print("Actual values of the reconstruction:", outputs.reconstruction[0, 0, :3, :3])
 
     assert (
-        outputs.logits.shape == expected_shape
-    ), f"Shape of logits should be {expected_shape}, but is {outputs.logits.shape}"
-    assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-3)
+        outputs.reconstruction.shape == expected_shape
+    ), f"Shape of reconstruction should be {expected_shape}, but is {outputs.reconstruction.shape}"
+    assert torch.allclose(outputs.reconstruction[0, 0, :3, :3], expected_slice, atol=1e-3)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
