@@ -636,7 +636,7 @@ def _load_datasamples(num_samples):
     return [x["array"] for x in speech_samples]
 
 
-def child():
+def child(in_queue, out_queue):
 
     set_seed(0)
     processor = WhisperProcessor.from_pretrained("openai/whisper-large")
