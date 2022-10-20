@@ -910,7 +910,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
-    @unittest.skip(reason="TF uses almost all GPU and won't release it, causing some PT tests GPU OOM.")
+    # @unittest.skip(reason="TF uses almost all GPU and won't release it, causing some PT tests GPU OOM.")
     def test_large_batched_generation(self):
 
         start_methohd = "spawn"
