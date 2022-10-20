@@ -653,10 +653,8 @@ ROBERTA_INPUTS_DOCSTRING = r"""
             1]`:
 
             - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-            
-            This parameter can only be used when RobertaEmbeddings is initialized with type_vocab_size parameter
-            
+            - 1 corresponds to a *sentence B* token.            
+            This parameter can only be used when RobertaEmbeddings is initialized with type_vocab_size parameter            
             [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
