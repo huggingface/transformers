@@ -123,7 +123,6 @@ class ImageSegmentationPipeline(Pipeline):
     def postprocess(
         self, model_outputs, subtask=None, threshold=0.9, mask_threshold=0.5, overlap_mask_area_threshold=0.5
     ):
-        print(threshold, mask_threshold, overlap_mask_area_threshold)
         if (subtask == "panoptic" or subtask is None) and hasattr(
             self.feature_extractor, "post_process_panoptic_segmentation"
         ):
