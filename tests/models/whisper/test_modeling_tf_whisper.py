@@ -15,6 +15,7 @@
 """ Testing suite for the TensorFlow Whisper model. """
 
 import inspect
+import multiprocessing
 import tempfile
 import unittest
 
@@ -626,6 +627,50 @@ class TFWhisperModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
 
 
+def _load_datasamples(num_samples):
+
+    ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    # automatic decoding with librispeech
+    speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+
+    return [x["array"] for x in speech_samples]
+
+
+def child():
+
+    set_seed(0)
+    processor = WhisperProcessor.from_pretrained("openai/whisper-large")
+    model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
+
+    input_speech = _load_datasamples(4)
+    input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
+    generated_ids = model.generate(input_features, max_length=20)
+
+    # # fmt: off
+    # EXPECTED_LOGITS = tf.convert_to_tensor(
+    #     [
+    #         [50258, 50358, 50363, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404, 281],
+    #         [50258, 50358, 50363, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50257, 50257],
+    #         [50258, 50358, 50363, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256],
+    #         [50258, 50358, 50363, 634, 575, 12525, 22618, 1968, 6144, 35617, 20084, 1756, 311, 589, 307, 534, 10281, 934, 439, 11]
+    #     ]
+    # )
+    # # fmt: on
+    #
+    # self.assertTrue(np.allclose(generated_ids, EXPECTED_LOGITS))
+    #
+    # # fmt: off
+    # EXPECTED_TRANSCRIPT = [
+    #     ' Mr. Quilter is the apostle of the middle classes and we are glad to',
+    #     " Nor is Mr. Quilter's manner less interesting than his matter.",
+    #     " He tells us that at this festive season of the year, with Christmas and roast beef",
+    #     " He has grave doubts whether Sir Frederick Layton's work is really Greek after all,"
+    # ]
+    # # fmt: on
+    #
+    # transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
+    # self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
+
 @require_tf
 @require_tokenizers
 class TFWhisperModelIntegrationTests(unittest.TestCase):
@@ -634,12 +679,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         return WhisperProcessor.from_pretrained("openai/whisper-base")
 
     def _load_datasamples(self, num_samples):
-
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
-
-        return [x["array"] for x in speech_samples]
+        return _load_datasamples(num_samples)
 
     @slow
     def test_tiny_logits_librispeech(self):
@@ -872,38 +912,29 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     @slow
     @unittest.skip(reason="TF uses almost all GPU and won't release it, causing some PT tests GPU OOM.")
     def test_large_batched_generation(self):
-        set_seed(0)
-        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
 
-        input_speech = self._load_datasamples(4)
-        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
-        generated_ids = model.generate(input_features, max_length=20)
+        start_methohd = "spawn"
+        ctx = multiprocessing.get_context(start_methohd)
 
-        # fmt: off
-        EXPECTED_LOGITS = tf.convert_to_tensor(
-            [
-                [50258, 50358, 50363, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404, 281],
-                [50258, 50358, 50363, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50257, 50257],
-                [50258, 50358, 50363, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256],
-                [50258, 50358, 50363, 634, 575, 12525, 22618, 1968, 6144, 35617, 20084, 1756, 311, 589, 307, 534, 10281, 934, 439, 11]
-            ]
-        )
-        # fmt: on
+        input_queue = ctx.Queue(1)
+        output_queue = ctx.JoinableQueue(1)
 
-        self.assertTrue(np.allclose(generated_ids, EXPECTED_LOGITS))
+        # We can't send `self` to the child, otherwise hanging forever.
+        _inputs = None
+        input_queue.put(_inputs, timeout=30)
 
-        # fmt: off
-        EXPECTED_TRANSCRIPT = [
-            ' Mr. Quilter is the apostle of the middle classes and we are glad to',
-            " Nor is Mr. Quilter's manner less interesting than his matter.",
-            " He tells us that at this festive season of the year, with Christmas and roast beef",
-            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all,"
-        ]
-        # fmt: on
+        process = ctx.Process(target=child, args=(input_queue, output_queue))
+        process.start()
+        # Kill the child process if we can't get outputs from it in time: otherwise, the hanging subprocess prevents
+        # the test to exit properly.
+        try:
+            results = output_queue.get(timeout=30)
+            output_queue.task_done()
+        except Exception as e:
+            process.terminate()
+        process.join(timeout=30)
 
-        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
+        print(results["error"])
 
     @slow
     def test_tiny_en_batched_generation(self):
