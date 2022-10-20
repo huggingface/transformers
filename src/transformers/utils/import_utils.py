@@ -839,8 +839,7 @@ Please note that you may need to restart your runtime after installation.
 # docstyle-ignore
 TENSORFLOW_PROBABILITY_IMPORT_ERROR = """
 {0} requires the tensorflow_probability library but it was not found in your environment. You can install it with pip as
-explained here: https://github.com/tensorflow/probability.
-Please note that you may need to restart your runtime after installation.
+explained here: https://github.com/tensorflow/probability. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
@@ -862,68 +861,59 @@ Please note that you may need to restart your runtime after installation.
 # docstyle-ignore
 PHONEMIZER_IMPORT_ERROR = """
 {0} requires the phonemizer library but it was not found in your environment. You can install it with pip:
-`pip install phonemizer`
-Please note that you may need to restart your runtime after installation.
+`pip install phonemizer`. Please note that you may need to restart your runtime after installation.
 """
 
 
 # docstyle-ignore
 SACREMOSES_IMPORT_ERROR = """
 {0} requires the sacremoses library but it was not found in your environment. You can install it with pip:
-`pip install sacremoses`
-Please note that you may need to restart your runtime after installation.
+`pip install sacremoses`. Please note that you may need to restart your runtime after installation.
 """
 
 
 # docstyle-ignore
 SCIPY_IMPORT_ERROR = """
 {0} requires the scipy library but it was not found in your environment. You can install it with pip:
-`pip install scipy`
-Please note that you may need to restart your runtime after installation.
+`pip install scipy`. Please note that you may need to restart your runtime after installation.
 """
 
 
 # docstyle-ignore
 SPEECH_IMPORT_ERROR = """
 {0} requires the torchaudio library but it was not found in your environment. You can install it with pip:
-`pip install torchaudio`
-Please note that you may need to restart your runtime after installation.
+`pip install torchaudio`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 TIMM_IMPORT_ERROR = """
 {0} requires the timm library but it was not found in your environment. You can install it with pip:
-`pip install timm`
-Please note that you may need to restart your runtime after installation.
+`pip install timm`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 VISION_IMPORT_ERROR = """
 {0} requires the PIL library but it was not found in your environment. You can install it with pip:
-`pip install pillow`
-Please note that you may need to restart your runtime after installation.
+`pip install pillow`. Please note that you may need to restart your runtime after installation.
 """
 
 
 # docstyle-ignore
 PYTESSERACT_IMPORT_ERROR = """
 {0} requires the PyTesseract library but it was not found in your environment. You can install it with pip:
-`pip install pytesseract`
-Please note that you may need to restart your runtime after installation.
+`pip install pytesseract`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 PYCTCDECODE_IMPORT_ERROR = """
 {0} requires the pyctcdecode library but it was not found in your environment. You can install it with pip:
-`pip install pyctcdecode`
-Please note that you may need to restart your runtime after installation.
+`pip install pyctcdecode`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 ACCELERATE_IMPORT_ERROR = """
 {0} requires the accelerate library but it was not found in your environment. You can install it with pip:
-`pip install accelerate`
-Please note that you may need to restart your runtime after installation.
+`pip install accelerate`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
