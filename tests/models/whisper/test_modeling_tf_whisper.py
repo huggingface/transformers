@@ -940,7 +940,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         # Kill the child process if we can't get outputs from it in time: otherwise, the hanging subprocess prevents
         # the test to exit properly.
         try:
-            results = output_queue.get(timeout=30)
+            results = output_queue.get(timeout=120)
             output_queue.task_done()
         except Exception as e:
             process.terminate()
