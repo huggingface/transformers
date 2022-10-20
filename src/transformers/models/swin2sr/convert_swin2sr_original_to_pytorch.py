@@ -49,18 +49,6 @@ def get_config(checkpoint_url):
         config.img_range = 255.0
         config.upsampler = ""
 
-    # elif "real-sr-large" in model_name:
-    #     config.upscale = 4
-    #     config.upsampler = "nearest+conv"
-    #     config.resi_connection = "3conv"
-
-    # elif "color-jpeg-car" in model_name:
-    #     config.upscale = 1
-    #     config.image_size = 126
-    #     config.window_size = 7
-    #     config.img_range = 255.0
-    #     config.upsampler = ""
-
     return config
 
 
@@ -162,6 +150,9 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
     new_state_dict = convert_state_dict(state_dict, config)
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
+
+    print("Missing:", missing_keys)
+    print("Unexpected:", unexpected_keys)
 
     if len(missing_keys) > 0:
         raise ValueError("Missing keys when converting: {}".format(missing_keys))
