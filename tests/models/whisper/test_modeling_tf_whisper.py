@@ -637,7 +637,7 @@ def _load_datasamples(num_samples):
     return [x["array"] for x in speech_samples]
 
 
-def child(in_queue, out_queue):
+def _test_large_batched_generation(in_queue, out_queue):
 
     error = None
     try:
@@ -932,10 +932,11 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         output_queue = ctx.JoinableQueue(1)
 
         # We can't send `self` to the child, otherwise hanging forever.
+        # No input to be sent here.
         _inputs = None
         input_queue.put(_inputs, timeout=30)
 
-        process = ctx.Process(target=child, args=(input_queue, output_queue))
+        process = ctx.Process(target=_test_large_batched_generation, args=(input_queue, output_queue))
         process.start()
         # Kill the child process if we can't get outputs from it in time: otherwise, the hanging subprocess prevents
         # the test to exit properly.
