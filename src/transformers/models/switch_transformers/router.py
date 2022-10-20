@@ -209,7 +209,7 @@ class Router(nn.Module):
     def __init__(self, config, **kwargs):
         super().__init__()
         self.num_experts = config.num_experts
-        self.router_weights = nn.Linear(config.hidden_size, self.num_experts, bias=config.router_bias)
+        self.classifier = nn.Linear(config.hidden_size, self.num_experts, bias=config.router_bias)
         self.jitter_noise = config.router_jitter_noise
         self.ignore_padding_tokens = config.router_ignore_padding_tokens
         self.dtype = getattr(torch, config.router_dtype)
@@ -258,7 +258,7 @@ class Router(nn.Module):
             token_inputs *= uniform_distrib
 
         # Shape: [num_groups, tokens_per_group, num_experts]
-        router_logits = self.router_weights(token_inputs)
+        router_logits = self.classifier(token_inputs)
 
         router_probabilities = torch.nn.Softmax(dim=-1)(router_logits)
 
