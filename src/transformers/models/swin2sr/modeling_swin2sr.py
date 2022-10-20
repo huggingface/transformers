@@ -770,12 +770,7 @@ class Swin2SREncoder(nn.Module):
                     create_custom_forward(stage_module), hidden_states, input_dimensions, layer_head_mask
                 )
             else:
-                # TODO remove print statements
-                # print(f"Shape of hidden states before stage {i}: {hidden_states.shape}")
-                # print(f"First values of hidden states before stage {i}: {hidden_states[0, :3, :3]}")
                 layer_outputs = stage_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
-                # print(f"Shape of hidden states after stage {i}: {layer_outputs[0].shape}")
-                # print(f"First values of hidden states after stage {i}: {hidden_states[0, :3, :3]}")
 
             hidden_states = layer_outputs[0]
             output_dimensions = layer_outputs[1]
@@ -971,10 +966,6 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
 
         sequence_output = self.patch_unembed(sequence_output, (height, width))
         sequence_output = self.conv_after_body(sequence_output) + embeddings
-
-        # TODO remove
-        # print("Shape of sequence output after body:", sequence_output.shape)
-        # print("First values of sequence output after body:", sequence_output[0, 0, :3, :3])
 
         if not return_dict:
             output = (sequence_output,) + encoder_outputs[1:]
