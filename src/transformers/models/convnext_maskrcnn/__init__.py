@@ -34,6 +34,9 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
+    _import_structure["feature_extraction_convnext_maskrnn"] = [
+        "ConvNextMaskRCNNFeatureExtractor",
+    ]
     _import_structure["modeling_convnext_maskrcnn"] = [
         "CONVNEXTMASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ConvNextMaskRCNNForObjectDetection",
@@ -50,6 +53,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
+        from .feature_extraction_convnext_maskrcnn import ConvNextMaskRCNNFeatureExtractor
         from .modeling_convnext_maskrcnn import (
             CONVNEXTMASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST,
             ConvNextMaskRCNNForObjectDetection,
