@@ -729,13 +729,8 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         self.block = nn.ModuleList()
         for i in range(config.num_layers):
 
-            # is_sparse = (i % sparse_step == 1) if sparse_step > 0 else False
-            if self.is_decoder:
-                even = 1
-            else:
-                even = 0
 
-            is_sparse = (i % sparse_step == even) if sparse_step > 0 else False
+            is_sparse = (i % sparse_step == 1) if sparse_step > 0 else False
 
             self.block.append(
                 SwitchTransformersBlock(config, has_relative_attention_bias=bool(i == 0), is_sparse=is_sparse)
