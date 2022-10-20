@@ -638,6 +638,8 @@ def _load_datasamples(num_samples):
 
 def child(in_queue, out_queue):
 
+    _inputs = in_queue.get(timeout=30)
+
     set_seed(0)
     processor = WhisperProcessor.from_pretrained("openai/whisper-base")
     model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-base")
@@ -645,6 +647,11 @@ def child(in_queue, out_queue):
     input_speech = _load_datasamples(4)
     input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
     generated_ids = model.generate(input_features, max_length=20)
+
+    error = "bye"
+    results = {"error": error}
+    out_queue.put(results, timeout=30)
+    out_queue.join()
 
     # # fmt: off
     # EXPECTED_LOGITS = tf.convert_to_tensor(
