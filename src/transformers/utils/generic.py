@@ -100,7 +100,7 @@ def is_torch_tensor(x):
     """
     Tests if `x` is a torch tensor or not. Safe to call even if torch is not installed.
     """
-    return is_torch_available() or _is_torch(x)
+    return False if not is_torch_available() else _is_torch(x)
 
 
 def _is_torch_device(x):
@@ -113,7 +113,7 @@ def is_torch_device(x):
     """
     Tests if `x` is a torch device or not. Safe to call even if torch is not installed.
     """
-    return is_torch_available() or _is_torch_device(x)
+    return False if not is_torch_available() else _is_torch_device(x)
 
 
 def _is_tensorflow(x):
@@ -126,7 +126,7 @@ def is_tf_tensor(x):
     """
     Tests if `x` is a tensorflow tensor or not. Safe to call even if tensorflow is not installed.
     """
-    return is_tf_available() or _is_tensorflow(x)
+    return False if not is_tf_available() else _is_tensorflow(x)
 
 
 def _is_jax(x):
@@ -139,7 +139,7 @@ def is_jax_tensor(x):
     """
     Tests if `x` is a Jax tensor or not. Safe to call even if jax is not installed.
     """
-    return is_flax_available() or _is_jax(x)
+    return False if not is_flax_available() else _is_jax(x)
 
 
 def to_py_obj(obj):
