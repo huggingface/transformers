@@ -92,14 +92,14 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         pass  # TODO add if relevant
 
     def test_full_tokenizer(self):
-        tokenizer = self.tokenizer_class(self.vocab_file)
+        tokenizer = self.tokenizer_class(vocab_file=self.vocab_file, spm_file=None)
 
         tokens = tokenizer.tokenize("こんにちは、世界。\nこんばんは、世界。")
         self.assertListEqual(tokens, ["こんにちは", "、", "世界", "。", "こん", "##ばんは", "、", "世界", "。"])
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [3, 12, 10, 14, 4, 9, 12, 10, 14])
 
     def test_pickle_mecab_tokenizer(self):
-        tokenizer = self.tokenizer_class(self.vocab_file, word_tokenizer_type="mecab")
+        tokenizer = self.tokenizer_class(vocab_file=self.vocab_file, spm_file=None, word_tokenizer_type="mecab")
         self.assertIsNotNone(tokenizer)
 
         text = "こんにちは、世界。\nこんばんは、世界。"
@@ -180,7 +180,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @require_sudachi
     def test_pickle_sudachi_tokenizer(self):
-        tokenizer = self.tokenizer_class(self.vocab_file, word_tokenizer_type="sudachi")
+        tokenizer = self.tokenizer_class(vocab_file=self.vocab_file, spm_file=None, word_tokenizer_type="sudachi")
         self.assertIsNotNone(tokenizer)
 
         text = "こんにちは、世界。\nこんばんは、世界。"
@@ -261,7 +261,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @require_jumanpp
     def test_pickle_jumanpp_tokenizer(self):
-        tokenizer = self.tokenizer_class(self.vocab_file, word_tokenizer_type="jumanpp")
+        tokenizer = self.tokenizer_class(vocab_file=self.vocab_file, spm_file=None, word_tokenizer_type="jumanpp")
         self.assertIsNotNone(tokenizer)
 
         text = "こんにちは、世界。\nこんばんは、世界。"
@@ -394,7 +394,7 @@ class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestC
         pass  # TODO add if relevant
 
     def test_full_tokenizer(self):
-        tokenizer = self.tokenizer_class(self.vocab_file, subword_tokenizer_type="character")
+        tokenizer = self.tokenizer_class(vocab_file=self.vocab_file, spm_file=None, subword_tokenizer_type="character")
 
         tokens = tokenizer.tokenize("こんにちは、世界。 \nこんばんは、世界。")
         self.assertListEqual(
