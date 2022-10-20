@@ -176,11 +176,21 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     url = "https://github.com/mv-lab/swin2sr/blob/main/testsets/real-inputs/shanghai.jpg?raw=true"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
+    image_size = 126 if "Jpeg" in checkpoint_url else 256
     transforms = Compose(
-        [Resize((256, 256)), ToTensor(), Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])]
+        [
+            Resize((image_size, image_size)),
+            ToTensor(),
+            Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
     )
 
     pixel_values = transforms(image).unsqueeze(0)
+
+    if config.num_channels == 1:
+        pixel_values = pixel_values[:, 0, :, :].unsqueeze(1)
+
+    print("Shape of pixel values:", pixel_values.shape)
 
     outputs = model(pixel_values)
 
@@ -234,6 +244,9 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
             ),
             "https://github.com/mv-lab/swin2sr/releases/download/v0.0.1/Swin2SR_Lightweight_X2_64.pth": (
                 "swin2SR-lightweight-x2-64"
+            ),
+            "https://github.com/mv-lab/swin2sr/releases/download/v0.0.1/Swin2SR_RealworldSR_X4_64_BSRGAN_PSNR.pth": (
+                "swin2SR-realworld-sr-x4-64-bsrgan-psnr"
             ),
         }
         model_name = url_to_name[checkpoint_url]

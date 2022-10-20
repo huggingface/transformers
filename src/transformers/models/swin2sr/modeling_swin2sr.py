@@ -807,11 +807,12 @@ class Swin2SREncoder(nn.Module):
                     create_custom_forward(stage_module), hidden_states, input_dimensions, layer_head_mask
                 )
             else:
-                print(f"Shape of hidden states before stage {i}: {hidden_states.shape}")
-                print(f"First values of hidden states before stage {i}: {hidden_states[0, :3, :3]}")
+                # TODO remove print statements
+                # print(f"Shape of hidden states before stage {i}: {hidden_states.shape}")
+                # print(f"First values of hidden states before stage {i}: {hidden_states[0, :3, :3]}")
                 layer_outputs = stage_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
-                print(f"Shape of hidden states after stage {i}: {layer_outputs[0].shape}")
-                print(f"First values of hidden states after stage {i}: {hidden_states[0, :3, :3]}")
+                # print(f"Shape of hidden states after stage {i}: {layer_outputs[0].shape}")
+                # print(f"First values of hidden states after stage {i}: {hidden_states[0, :3, :3]}")
 
             hidden_states = layer_outputs[0]
             output_dimensions = layer_outputs[1]
@@ -1007,8 +1008,9 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         sequence_output = self.patch_unembed(sequence_output, (height, width))
         sequence_output = self.conv_after_body(sequence_output) + embeddings
 
-        print("Shape of sequence output after body:", sequence_output.shape)
-        print("First values of sequence output after body:", sequence_output[0, 0, :3, :3])
+        # TODO remove
+        # print("Shape of sequence output after body:", sequence_output.shape)
+        # print("First values of sequence output after body:", sequence_output[0, 0, :3, :3])
 
         # TODO add pooled output
         pooled_output = None
@@ -1185,7 +1187,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         if self.upsampler == "pixelshuffle":
             sequence_output = self.conv_before_upsample(sequence_output)
             sequence_output = self.upsample(sequence_output)
-            sequence_output = self.conv_last(sequence_output)
+            reconstruction = self.conv_last(sequence_output)
         elif self.upsampler == "pixelshuffle_aux":
             sequence_output = self.conv_before_upsample(sequence_output)
             aux = self.conv_aux(sequence_output)
@@ -1194,10 +1196,10 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
                 self.upsample(sequence_output)[:, :, : height * self.upscale, : width * self.upscale]
                 + bicubic[:, :, : height * self.upscale, : width * self.upscale]
             )
-            sequence_output = self.conv_last(sequence_output)
+            reconstruction = self.conv_last(sequence_output)
             aux = aux / self.swin2sr.img_range + self.swin2sr.mean
         elif self.upsampler == "pixelshuffledirect":
-            sequence_output = self.upsample(sequence_output)
+            reconstruction = self.upsample(sequence_output)
         elif self.upsampler == "nearest+conv":
             # for real-world SR
             sequence_output = self.conv_before_upsample(sequence_output)
@@ -1207,25 +1209,24 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             sequence_output = self.lrelu(
                 self.conv_up2(torch.nn.functional.interpolate(sequence_output, scale_factor=2, mode="nearest"))
             )
-            sequence_output = self.conv_last(self.lrelu(self.conv_hr(sequence_output)))
+            reconstruction = self.conv_last(self.lrelu(self.conv_hr(sequence_output)))
+        else:
+            reconstruction = pixel_values + self.conv_last(sequence_output)
 
-        x = sequence_output / self.swin2sr.img_range + self.swin2sr.mean
-        result = x[:, :, : height * self.upscale, : width * self.upscale]
-
-        print("Shape of result:", result.shape)
-        print("First values of result:", result[0, 0, :3, :3])
+        reconstruction = reconstruction / self.swin2sr.img_range + self.swin2sr.mean
+        reconstruction = reconstruction[:, :, : height * self.upscale, : width * self.upscale]
 
         loss = None
         if labels is not None:
             raise NotImplementedError("To do")
 
         if not return_dict:
-            output = (result,) + outputs[2:]
+            output = (reconstruction,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutput(
             loss=loss,
-            logits=result,
+            logits=reconstruction,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
