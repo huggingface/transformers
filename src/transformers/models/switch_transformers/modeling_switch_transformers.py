@@ -221,7 +221,7 @@ class SwitchTransformersAttention(nn.Module):
         self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
 
         if self.has_relative_attention_bias:
-            self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
+            self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, 32 ) #self.n_heads)
         self.pruned_heads = set()
         self.gradient_checkpointing = False
 
