@@ -38,10 +38,10 @@ from ..tokenization_utils import PreTrainedTokenizer
 from ..tokenization_utils_fast import PreTrainedTokenizerFast
 from ..utils import (
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
+    is_kenlm_available,
+    is_pyctcdecode_available,
     is_tf_available,
     is_torch_available,
-    is_pyctcdecode_available,
-    is_kenlm_available,
     logging,
 )
 from .audio_classification import AudioClassificationPipeline
