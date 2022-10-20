@@ -125,6 +125,7 @@ src/transformers/models/speech_to_text/configuration_speech_to_text.py
 src/transformers/models/speech_to_text/modeling_speech_to_text.py
 src/transformers/models/speech_to_text_2/modeling_speech_to_text_2.py
 src/transformers/models/segformer/modeling_tf_segformer.py
+src/transformers/models/squeezebert/configuration_squeezebert.py
 src/transformers/models/swin/configuration_swin.py
 src/transformers/models/swin/modeling_swin.py
 src/transformers/models/swinv2/configuration_swinv2.py
