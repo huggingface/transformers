@@ -154,7 +154,6 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         pass
 
     @require_torch
-    @unittest.skip("No weights found for hf-internal-testing/tiny-detr-mobilenetsv3-panoptic")
     def test_small_model_pt(self):
         model_id = "hf-internal-testing/tiny-detr-mobilenetsv3-panoptic"
 
@@ -166,6 +165,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             "http://images.cocodataset.org/val2017/000000039769.jpg",
             subtask="panoptic",
             threshold=0.0,
+            mask_threshold=0.0,
             overlap_mask_area_threshold=0.0,
         )
 
@@ -179,12 +179,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 {
                     "score": 0.004,
                     "label": "LABEL_215",
-                    "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
-                },
-                {
-                    "score": 0.004,
-                    "label": "LABEL_215",
-                    "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+                    "mask": {"hash": "a01498ca7c", "shape": (480, 640), "white_pixels": 307200},
                 },
             ],
         )
@@ -195,6 +190,8 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 "http://images.cocodataset.org/val2017/000000039769.jpg",
             ],
             threshold=0.0,
+            mask_threshold=0.0,
+            overlap_mask_area_threshold=0.0,
         )
         for output in outputs:
             for o in output:
@@ -207,24 +204,14 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                     {
                         "score": 0.004,
                         "label": "LABEL_215",
-                        "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
-                    },
-                    {
-                        "score": 0.004,
-                        "label": "LABEL_215",
-                        "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+                        "mask": {"hash": "a01498ca7c", "shape": (480, 640), "white_pixels": 307200},
                     },
                 ],
                 [
                     {
                         "score": 0.004,
                         "label": "LABEL_215",
-                        "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
-                    },
-                    {
-                        "score": 0.004,
-                        "label": "LABEL_215",
-                        "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+                        "mask": {"hash": "a01498ca7c", "shape": (480, 640), "white_pixels": 307200},
                     },
                 ],
             ],
