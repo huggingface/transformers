@@ -34,7 +34,6 @@ substantially fewer computational resources to train.*
 
 Tips:
 
-- Demo notebooks regarding inference as well as fine-tuning ViT on custom data can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer).
 - To feed images to the Transformer encoder, each image is split into a sequence of fixed-size non-overlapping patches,
   which are then linearly embedded. A [CLS] token is added to serve as representation of an entire image, which can be
   used for classification. The authors also add absolute position embeddings, and feed the resulting sequence of
@@ -86,6 +85,24 @@ found [here](https://github.com/google-research/vision_transformer).
 Note that we converted the weights from Ross Wightman's [timm library](https://github.com/rwightman/pytorch-image-models), who already converted the weights from JAX to PyTorch. Credits
 go to him!
 
+## Resources
+
+PyTorch:
+
+- [`ViTForImageClassification`] is supported by the official [image classification scripts](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebooks](https://github.com/huggingface/notebooks/tree/main/examples).
+- Demo notebooks regarding inference as well as fine-tuning ViT on custom data can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer).
+- [`ViTForMaskedImageModeling`] is supported by the official [image pretraining script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
+- [Blog](https://huggingface.co/blog/fine-tune-vit): Fine-Tune ViT for Image Classification with 🤗 Transformers. 
+
+TensorFlow:
+- [`TFViTForImageClassification`] is supported by the [example scripts](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [example notebooks](https://github.com/huggingface/notebooks/tree/main/examples).
+- [Blog](https://www.philschmid.de/image-classification-huggingface-transformers-keras): Image Classification with Hugging Face Transformers and `Keras`. 
+- [Blog](Deploying TensorFlow Vision Models in Hugging Face with TF Serving) Deploying TensorFlow Vision Models in Hugging Face with TF Serving.
+- [Blog](https://huggingface.co/blog/deploy-tfserving-kubernetes): Deploying 🤗 ViT on Kubernetes with TF Serving.
+- [Blog](https://huggingface.co/blog/deploy-vertex-ai): Deploying 🤗 ViT on Vertex AI.
+
+Optimum:
+- [Blog](https://www.philschmid.de/optimizing-vision-transformer): Accelerate Vision Transformer (ViT) with Quantization using Optimum.
 
 ## ViTConfig
 
