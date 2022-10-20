@@ -638,10 +638,11 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         logits = model(input_values).logits
 
-        # change default start method, which should trigger a warning if different than fork
-        multiprocessing.set_start_method("spawn")
-        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl:
-            transcription = processor.batch_decode(logits.numpy()).text
+        # use a spawn pool, which should trigger a warning if different than fork
+        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl, multiprocessing.get_context("spawn").Pool(
+            1
+        ) as pool:
+            transcription = processor.batch_decode(logits.numpy(), pool).text
 
         self.assertIn("Falling back to sequential decoding.", cl.out)
         self.assertEqual(transcription[0], "el libro ha sido escrito por cervantes")

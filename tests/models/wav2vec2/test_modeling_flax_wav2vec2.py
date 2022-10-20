@@ -575,7 +575,7 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         # test user-managed pool
         with multiprocessing.get_context("fork").Pool(2) as pool:
-            transcription = processor.batch_decode(logits.numpy(), pool).text
+            transcription = processor.batch_decode(np.array(logits), pool).text
 
         self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
 
@@ -583,7 +583,7 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
         with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl, multiprocessing.get_context("fork").Pool(
             2
         ) as pool:
-            transcription = processor.batch_decode(logits.numpy(), pool, num_processes=2).text
+            transcription = processor.batch_decode(np.array(logits), pool, num_processes=2).text
 
         self.assertIn("num_process", cl.out)
         self.assertIn("it will be ignored", cl.out)
@@ -605,10 +605,11 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         logits = model(input_values).logits
 
-        # change default start method, which should trigger a warning if different than fork
-        multiprocessing.set_start_method("spawn")
-        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl:
-            transcription = processor.batch_decode(logits.numpy()).text
+        # use a spawn pool, which should trigger a warning if different than fork
+        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl, multiprocessing.get_context("spawn").Pool(
+            1
+        ) as pool:
+            transcription = processor.batch_decode(np.array(logits), pool).text
 
         self.assertIn("Falling back to sequential decoding.", cl.out)
         self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
