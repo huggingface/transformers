@@ -718,6 +718,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         self.assertTrue(np.allclose(logits[0, 0, :30], EXPECTED_LOGITS, atol=1e-4))
 
     @slow
+    @unittest.skip(reason="TF uses almost all GPU and won't release it, causing some PT tests GPU OOM.")
     def test_large_logits_librispeech(self):
         set_seed(0)
 
@@ -815,6 +816,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         self.assertEqual(transcript_xla, EXPECTED_TRANSCRIPT)
 
     @slow
+    @unittest.skip(reason="TF uses almost all GPU and won't release it, causing some PT tests GPU OOM.")
     def test_large_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
@@ -831,6 +833,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
+    @unittest.skip(reason="TF uses almost all GPU and won't release it, causing some PT tests GPU OOM.")
     def test_large_generation_multilingual(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
@@ -867,6 +870,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
+    @unittest.skip(reason="TF uses almost all GPU and won't release it, causing some PT tests GPU OOM.")
     def test_large_batched_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
