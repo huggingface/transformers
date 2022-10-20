@@ -52,7 +52,7 @@ from .utils import (
     logging,
     replace_return_docstrings,
 )
-from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files, hf_url_exists
+from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 
 
 logger = logging.get_logger(__name__)
