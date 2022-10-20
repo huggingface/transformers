@@ -121,7 +121,7 @@ class MishActivation(nn.Module):
 
     def __init__(self):
         super().__init__()
-        if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.9"):
+        if version.parse(torch.__version__) < version.parse("1.9.0"):
             self.act = self._mish_python
         else:
             self.act = nn.functional.mish
