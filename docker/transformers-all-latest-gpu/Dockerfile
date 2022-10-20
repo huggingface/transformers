@@ -9,7 +9,7 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='1.12.0'
+ARG PYTORCH='1.12.1'
 # (not always a valid torch version)
 ARG INTEL_TORCH_EXT='1.11.0'
 # Example: `cu102`, `cu113`, etc.
@@ -33,6 +33,7 @@ RUN echo torch=$VERSION
 RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA || python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
 
 RUN python3 -m pip install --no-cache-dir -U tensorflow
+RUN python3 -m pip install --no-cache-dir -U tensorflow_probability
 RUN python3 -m pip uninstall -y flax jax
 
 # Use installed torch version for `torch-scatter` to avid to deal with PYTORCH='pre'.
@@ -44,6 +45,11 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/facebookresearc
 RUN python3 -m pip install -U "itsdangerous<2.1.0"
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
+
+# Add bitsandbytes for mixed int8 testing
+RUN python3 -m pip install --no-cache-dir bitsandbytes
+
+RUN python3 -m pip install --no-cache-dir decord
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.

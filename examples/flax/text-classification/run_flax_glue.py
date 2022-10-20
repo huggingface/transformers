@@ -54,7 +54,7 @@ from transformers.utils import check_min_version, get_full_repo_name, send_examp
 
 logger = logging.getLogger(__name__)
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.22.0.dev0")
+check_min_version("4.24.0.dev0")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
@@ -105,7 +105,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },

@@ -17,13 +17,17 @@ import copy
 import sys
 import tempfile
 import unittest
+from collections import OrderedDict
 from pathlib import Path
 
-from transformers import BertConfig, is_torch_available
+import pytest
+
+from transformers import BertConfig, GPT2Model, is_torch_available
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
+    RequestCounter,
     require_scatter,
     require_torch,
     slow,
@@ -354,3 +358,39 @@ class AutoModelTest(unittest.TestCase):
     def test_model_from_flax_suggestion(self):
         with self.assertRaisesRegex(EnvironmentError, "Use `from_flax=True` to load this model"):
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
+
+    def test_cached_model_has_minimum_calls_to_head(self):
+        # Make sure we have cached the model.
+        _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with RequestCounter() as counter:
+            _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+            self.assertEqual(counter.get_request_count, 0)
+            self.assertEqual(counter.head_request_count, 1)
+            self.assertEqual(counter.other_request_count, 0)
+
+        # With a sharded checkpoint
+        _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
+        with RequestCounter() as counter:
+            _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
+            self.assertEqual(counter.get_request_count, 0)
+            self.assertEqual(counter.head_request_count, 1)
+            self.assertEqual(counter.other_request_count, 0)
+
+    def test_attr_not_existing(self):
+
+        from transformers.models.auto.auto_factory import _LazyAutoMapping
+
+        _CONFIG_MAPPING_NAMES = OrderedDict([("bert", "BertConfig")])
+        _MODEL_MAPPING_NAMES = OrderedDict([("bert", "GhostModel")])
+        _MODEL_MAPPING = _LazyAutoMapping(_CONFIG_MAPPING_NAMES, _MODEL_MAPPING_NAMES)
+
+        with pytest.raises(ValueError, match=r"Could not find GhostModel neither in .* nor in .*!"):
+            _MODEL_MAPPING[BertConfig]
+
+        _MODEL_MAPPING_NAMES = OrderedDict([("bert", "BertModel")])
+        _MODEL_MAPPING = _LazyAutoMapping(_CONFIG_MAPPING_NAMES, _MODEL_MAPPING_NAMES)
+        self.assertEqual(_MODEL_MAPPING[BertConfig], BertModel)
+
+        _MODEL_MAPPING_NAMES = OrderedDict([("bert", "GPT2Model")])
+        _MODEL_MAPPING = _LazyAutoMapping(_CONFIG_MAPPING_NAMES, _MODEL_MAPPING_NAMES)
+        self.assertEqual(_MODEL_MAPPING[BertConfig], GPT2Model)

@@ -16,6 +16,8 @@
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, List, Mapping, Optional
 
+from packaging import version
+
 from transformers import is_torch_available
 
 
@@ -31,11 +33,11 @@ logger = logging.get_logger(__name__)
 
 BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "bigscience/bloom": "https://huggingface.co/bigscience/bloom/resolve/main/config.json",
-    "bigscience/bloom-350m": "https://huggingface.co/bigscience/bloom-350m/blob/main/config.json",
-    "bigscience/bloom-760m": "https://huggingface.co/bigscience/bloom-760m/blob/main/config.json",
-    "bigscience/bloom-1b3": "https://huggingface.co/bigscience/bloom-1b3/blob/main/config.json",
-    "bigscience/bloom-2b5": "https://huggingface.co/bigscience/bloom-2b5/blob/main/config.json",
-    "bigscience/bloom-6b3": "https://huggingface.co/bigscience/bloom-6b3/blob/main/config.json",
+    "bigscience/bloom-560m": "https://huggingface.co/bigscience/bloom-560m/blob/main/config.json",
+    "bigscience/bloom-1b1": "https://huggingface.co/bigscience/bloom-1b1/blob/main/config.json",
+    "bigscience/bloom-1b7": "https://huggingface.co/bigscience/bloom-1b7/blob/main/config.json",
+    "bigscience/bloom-3b": "https://huggingface.co/bigscience/bloom-3b/blob/main/config.json",
+    "bigscience/bloom-7b1": "https://huggingface.co/bigscience/bloom-7b1/blob/main/config.json",
 }
 
 
@@ -51,27 +53,23 @@ class BloomConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50257):
-            Vocabulary size of the Bloom model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`BloomModel`].
-        hidden_size (`int`, *optional*, defaults to 768):
+        vocab_size (`int`, *optional*, defaults to 250880):
+            Vocabulary size of the Bloom model. Defines the maximum number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`BloomModel`]. Check [this
+            discussion](https://huggingface.co/bigscience/bloom/discussions/120#633d28389addb8530b406c2a) on how the
+            `vocab_size` has been defined.
+        hidden_size (`int`, *optional*, defaults to 64):
             Dimensionality of the embeddings and hidden states.
-        n_layer (`int`, *optional*, defaults to 12):
+        n_layer (`int`, *optional*, defaults to 2):
             Number of hidden layers in the Transformer encoder.
-        n_head (`int`, *optional*, defaults to 12):
+        n_head (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
-        attn_pdrop (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
             The epsilon to use in the layer normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         apply_residual_connection_post_layernorm (`bool`, *optional*, defaults to `False`):
             If enabled, use the layer norm of the hidden states as the residual in the transformer blocks
-        skip_bias_add (`bool`, *optional*, defaults to `True`):
-            If set to `True`, it will skip bias add for each linear layer in the transformer blocks
-        skip_bias_add_qkv (`bool`, *optional*, defaults to `False`):
-            If set to `True`, it will skip bias add for the first linear layer in the transformer blocks
         hidden_dropout (`float`, *optional*, defaults to 0.1):
             Dropout rate of the dropout function on the bias dropout.
         attention_dropout (`float`, *optional*, defaults to 0.1):
@@ -95,12 +93,12 @@ class BloomConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BloomModel, BloomConfig
+    >>> from transformers import BloomConfig, BloomModel
 
     >>> # Initializing a Bloom configuration
     >>> configuration = BloomConfig()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = BloomModel(configuration)
 
     >>> # Accessing the model configuration
@@ -122,7 +120,7 @@ class BloomConfig(PretrainedConfig):
         n_head=8,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
-        use_cache=False,
+        use_cache=True,
         bos_token_id=1,
         eos_token_id=2,
         apply_residual_connection_post_layernorm=False,
@@ -154,6 +152,8 @@ class BloomConfig(PretrainedConfig):
 
 
 class BloomOnnxConfig(OnnxConfigWithPast):
+    torch_onnx_minimum_version = version.parse("1.12")
+
     def __init__(
         self,
         config: PretrainedConfig,
@@ -170,7 +170,8 @@ class BloomOnnxConfig(OnnxConfigWithPast):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         common_inputs = OrderedDict({"input_ids": {0: "batch", 1: "sequence"}})
         if self.use_past:
-            self.fill_with_past_key_values_(common_inputs, direction="inputs")
+            # BLOOM stores values on dynamic axis 2. For more details see: https://github.com/huggingface/transformers/pull/18344
+            self.fill_with_past_key_values_(common_inputs, direction="inputs", inverted_values_shape=True)
             common_inputs["attention_mask"] = {0: "batch", 1: "past_sequence + sequence"}
         else:
             common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
@@ -214,14 +215,19 @@ class BloomOnnxConfig(OnnxConfigWithPast):
                 batch, seqlen = common_inputs["input_ids"].shape
                 # Not using the same length for past_key_values
                 past_key_values_length = seqlen + 2
-                past_shape = (
-                    batch,
+                head_dim = self._config.hidden_size // self.num_attention_heads
+                past_key_shape = (
+                    batch * self.num_attention_heads,
+                    head_dim,
                     past_key_values_length,
-                    self.num_attention_heads,
-                    self._config.hidden_size // self.num_attention_heads,
+                )
+                past_value_shape = (
+                    batch * self.num_attention_heads,
+                    past_key_values_length,
+                    head_dim,
                 )
                 ordered_inputs["past_key_values"] = [
-                    (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(self.num_layers)
+                    (torch.zeros(past_key_shape), torch.zeros(past_value_shape)) for _ in range(self.num_layers)
                 ]
 
         ordered_inputs["attention_mask"] = common_inputs["attention_mask"]

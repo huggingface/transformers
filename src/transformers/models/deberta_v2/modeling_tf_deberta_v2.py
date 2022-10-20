@@ -102,29 +102,6 @@ class TFDebertaV2XSoftmax(tf.keras.layers.Layer):
         return output
 
 
-# Copied from transformers.models.deberta.modeling_tf_deberta.get_mask
-def get_mask(input, dropout):
-    mask = tf.cast(
-        1 - tf.compat.v1.distributions.Bernoulli(probs=1 - dropout).sample(sample_shape=shape_list(input)), tf.bool
-    )
-    return mask, dropout
-
-
-@tf.custom_gradient
-# Copied from transformers.models.deberta.modeling_tf_deberta.TFDebertaXDropout
-def TFDebertaV2XDropout(input, local_ctx):
-    mask, dropout = get_mask(input, local_ctx)
-    scale = tf.convert_to_tensor(1.0 / (1 - dropout), dtype=tf.float32)
-    input = tf.cond(dropout > 0, lambda: tf.where(mask, 0.0, input) * scale, lambda: input)
-
-    def custom_grad(upstream_grad):
-        return tf.cond(
-            scale > 1, lambda: (tf.where(mask, 0.0, upstream_grad) * scale, None), lambda: (upstream_grad, None)
-        )
-
-    return input, custom_grad
-
-
 # Copied from transformers.models.deberta.modeling_tf_deberta.TFDebertaStableDropout with Deberta->DebertaV2
 class TFDebertaV2StableDropout(tf.keras.layers.Layer):
     """
@@ -136,11 +113,33 @@ class TFDebertaV2StableDropout(tf.keras.layers.Layer):
 
     def __init__(self, drop_prob, **kwargs):
         super().__init__(**kwargs)
-        self.drop_prob = tf.convert_to_tensor(drop_prob, dtype=tf.float32)
+        self.drop_prob = drop_prob
+
+    @tf.custom_gradient
+    def xdropout(self, inputs):
+        """
+        Applies dropout to the inputs, as vanilla dropout, but also scales the remaining elements up by 1/drop_prob.
+        """
+        mask = tf.cast(
+            1
+            - tf.compat.v1.distributions.Bernoulli(probs=1.0 - self.drop_prob).sample(sample_shape=shape_list(inputs)),
+            tf.bool,
+        )
+        scale = tf.convert_to_tensor(1.0 / (1 - self.drop_prob), dtype=tf.float32)
+        if self.drop_prob > 0:
+            inputs = tf.where(mask, 0.0, inputs) * scale
+
+        def grad(upstream):
+            if self.drop_prob > 0:
+                return tf.where(mask, 0.0, upstream) * scale
+            else:
+                return upstream
+
+        return inputs, grad
 
     def call(self, inputs: tf.Tensor, training: tf.Tensor = False):
-        if training and self.drop_prob > 0:
-            return TFDebertaV2XDropout(inputs, self.drop_prob)
+        if training:
+            return self.xdropout(inputs)
         return inputs
 
 
@@ -525,10 +524,18 @@ def pos_dynamic_expand(pos_index, p2c_att, key_layer):
 def take_along_axis(x, indices):
     # Only a valid port of np.take_along_axis when the gather axis is -1
 
-    flat_x = tf.reshape(x, (-1, x.shape[-1]))
-    flat_indices = tf.reshape(indices, (-1, indices.shape[-1]))
-    gathered = tf.gather(flat_x, flat_indices, batch_dims=1)
-    gathered = tf.reshape(gathered, indices.shape)
+    # TPU + gathers and reshapes don't go along well -- see https://github.com/huggingface/transformers/issues/18239
+    if isinstance(tf.distribute.get_strategy(), tf.distribute.TPUStrategy):
+        # [B, S, P] -> [B, S, P, D]
+        one_hot_indices = tf.one_hot(indices, depth=x.shape[-1], dtype=x.dtype)
+
+        # if we ignore the first two dims, this is equivalent to multiplying a matrix (one hot) by a vector (x)
+        # grossly abusing notation: [B, S, P, D] . [B, S, D] = [B, S, P]
+        gathered = tf.einsum("ijkl,ijl->ijk", one_hot_indices, x)
+
+    # GPUs, on the other hand, prefer gathers instead of large one-hot+matmuls
+    else:
+        gathered = tf.gather(x, indices, batch_dims=2)
 
     return gathered
 
@@ -865,6 +872,16 @@ class TFDebertaV2Embeddings(tf.keras.layers.Layer):
             raise ValueError("Need to provide either `input_ids` or `input_embeds`.")
 
         if input_ids is not None:
+            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+            tf.debugging.assert_less(
+                input_ids,
+                tf.cast(self.vocab_size, dtype=input_ids.dtype),
+                message=(
+                    "input_ids must be smaller than the embedding layer's input dimension (got"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                ),
+            )
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
         input_shape = shape_list(inputs_embeds)[:-1]
@@ -1090,22 +1107,27 @@ DEBERTA_START_DOCSTRING = r"""
 
     <Tip>
 
-    TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
     - having all inputs as keyword arguments (like PyTorch models), or
-    - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
-    tensors in the first argument of the model call function: `model(inputs)`.
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
-    first positional argument :
-
-    - a single Tensor with `input_ids` only and nothing else: `model(inputs_ids)`
+    - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
     `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
     `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
 

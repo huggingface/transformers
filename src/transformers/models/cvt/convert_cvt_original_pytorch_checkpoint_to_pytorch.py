@@ -282,9 +282,9 @@ def convert_cvt_checkpoint(cvt_model, image_size, cvt_file_name, pytorch_dump_fo
     img_labels_file = "imagenet-1k-id2label.json"
     num_labels = 1000
 
-    repo_id = "datasets/huggingface/label-files"
+    repo_id = "huggingface/label-files"
     num_labels = num_labels
-    id2label = json.load(open(cached_download(hf_hub_url(repo_id, img_labels_file)), "r"))
+    id2label = json.load(open(cached_download(hf_hub_url(repo_id, img_labels_file, repo_type="dataset")), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label

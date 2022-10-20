@@ -15,35 +15,14 @@
 import contextlib
 import importlib
 import io
-import json
-import tempfile
 import unittest
-from pathlib import Path
 
 import transformers
 
 # Try to import everything from transformers to ensure every object can be loaded.
 from transformers import *  # noqa F406
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
-from transformers.utils import (
-    CONFIG_NAME,
-    FLAX_WEIGHTS_NAME,
-    TF2_WEIGHTS_NAME,
-    WEIGHTS_NAME,
-    ContextManagers,
-    EntryNotFoundError,
-    RepositoryNotFoundError,
-    RevisionNotFoundError,
-    filename_to_url,
-    find_labels,
-    get_file_from_repo,
-    get_from_cache,
-    has_file,
-    hf_bucket_url,
-    is_flax_available,
-    is_tf_available,
-    is_torch_available,
-)
+from transformers.utils import ContextManagers, find_labels, is_flax_available, is_tf_available, is_torch_available
 
 
 MODEL_ID = DUMMY_UNKNOWN_IDENTIFIER
@@ -82,92 +61,6 @@ class TestImportMechanisms(unittest.TestCase):
         # If the spec is missing, importlib would not be able to import the module dynamically.
         assert transformers.__spec__ is not None
         assert importlib.util.find_spec("transformers") is not None
-
-
-class GetFromCacheTests(unittest.TestCase):
-    def test_bogus_url(self):
-        # This lets us simulate no connection
-        # as the error raised is the same
-        # `ConnectionError`
-        url = "https://bogus"
-        with self.assertRaisesRegex(ValueError, "Connection error"):
-            _ = get_from_cache(url)
-
-    def test_file_not_found(self):
-        # Valid revision (None) but missing file.
-        url = hf_bucket_url(MODEL_ID, filename="missing.bin")
-        with self.assertRaisesRegex(EntryNotFoundError, "404 Client Error"):
-            _ = get_from_cache(url)
-
-    def test_model_not_found_not_authenticated(self):
-        # Invalid model id.
-        url = hf_bucket_url("bert-base", filename="pytorch_model.bin")
-        with self.assertRaisesRegex(RepositoryNotFoundError, "401 Client Error"):
-            _ = get_from_cache(url)
-
-    @unittest.skip("No authentication when testing against prod")
-    def test_model_not_found_authenticated(self):
-        # Invalid model id.
-        url = hf_bucket_url("bert-base", filename="pytorch_model.bin")
-        with self.assertRaisesRegex(RepositoryNotFoundError, "404 Client Error"):
-            _ = get_from_cache(url, use_auth_token="hf_sometoken")
-            # ^ TODO - if we decide to unskip this: use a real / functional token
-
-    def test_revision_not_found(self):
-        # Valid file but missing revision
-        url = hf_bucket_url(MODEL_ID, filename=CONFIG_NAME, revision=REVISION_ID_INVALID)
-        with self.assertRaisesRegex(RevisionNotFoundError, "404 Client Error"):
-            _ = get_from_cache(url)
-
-    def test_standard_object(self):
-        url = hf_bucket_url(MODEL_ID, filename=CONFIG_NAME, revision=REVISION_ID_DEFAULT)
-        filepath = get_from_cache(url, force_download=True)
-        metadata = filename_to_url(filepath)
-        self.assertEqual(metadata, (url, f'"{PINNED_SHA1}"'))
-
-    def test_standard_object_rev(self):
-        # Same object, but different revision
-        url = hf_bucket_url(MODEL_ID, filename=CONFIG_NAME, revision=REVISION_ID_ONE_SPECIFIC_COMMIT)
-        filepath = get_from_cache(url, force_download=True)
-        metadata = filename_to_url(filepath)
-        self.assertNotEqual(metadata[1], f'"{PINNED_SHA1}"')
-        # Caution: check that the etag is *not* equal to the one from `test_standard_object`
-
-    def test_lfs_object(self):
-        url = hf_bucket_url(MODEL_ID, filename=WEIGHTS_NAME, revision=REVISION_ID_DEFAULT)
-        filepath = get_from_cache(url, force_download=True)
-        metadata = filename_to_url(filepath)
-        self.assertEqual(metadata, (url, f'"{PINNED_SHA256}"'))
-
-    def test_has_file(self):
-        self.assertTrue(has_file("hf-internal-testing/tiny-bert-pt-only", WEIGHTS_NAME))
-        self.assertFalse(has_file("hf-internal-testing/tiny-bert-pt-only", TF2_WEIGHTS_NAME))
-        self.assertFalse(has_file("hf-internal-testing/tiny-bert-pt-only", FLAX_WEIGHTS_NAME))
-
-    def test_get_file_from_repo_distant(self):
-        # `get_file_from_repo` returns None if the file does not exist
-        self.assertIsNone(get_file_from_repo("bert-base-cased", "ahah.txt"))
-
-        # The function raises if the repository does not exist.
-        with self.assertRaisesRegex(EnvironmentError, "is not a valid model identifier"):
-            get_file_from_repo("bert-base-case", "config.json")
-
-        # The function raises if the revision does not exist.
-        with self.assertRaisesRegex(EnvironmentError, "is not a valid git identifier"):
-            get_file_from_repo("bert-base-cased", "config.json", revision="ahaha")
-
-        resolved_file = get_file_from_repo("bert-base-cased", "config.json")
-        # The name is the cached name which is not very easy to test, so instead we load the content.
-        config = json.loads(open(resolved_file, "r").read())
-        self.assertEqual(config["hidden_size"], 768)
-
-    def test_get_file_from_repo_local(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            filename = Path(tmp_dir) / "a.txt"
-            filename.touch()
-            self.assertEqual(get_file_from_repo(tmp_dir, "a.txt"), str(filename))
-
-            self.assertIsNone(get_file_from_repo(tmp_dir, "b.txt"))
 
 
 class GenericUtilTests(unittest.TestCase):

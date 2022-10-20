@@ -25,7 +25,7 @@ In this section we have a look at a few tricks to reduce the memory footprint an
 | DataLoader | Yes | No |
 | DeepSpeed Zero | No | Yes |
 
-A bracket means that it might not be strictly the case but is usually either not a main concern or negligable. Before we start make sure you have installed the following libraries:
+A bracket means that it might not be strictly the case but is usually either not a main concern or negligible. Before we start make sure you have installed the following libraries:
 
 ```bash
 pip install transformers datasets accelerate nvidia-ml-py3
@@ -288,7 +288,7 @@ Even when we set the batch size to 1 and use gradient accumulation we can still 
 
 Gradient checkpointing strikes a compromise between the two approaches and saves strategically selected activations throughout the computational graph so only a fraction of the activations need to be re-computed for the gradients. See [this great article](https://medium.com/tensorflow/fitting-larger-networks-into-memory-583e3c758ff9) explaining the ideas behind gradient checkpointing.
 
-To enable gradient checkpointing in the [`Trainer`] we only need ot pass it as a flag to the [`TrainingArguments`]. Everything else is handled under the hood:
+To enable gradient checkpointing in the [`Trainer`] we only need to pass it as a flag to the [`TrainingArguments`]. Everything else is handled under the hood:
 
 ```py
 training_args = TrainingArguments(
@@ -311,7 +311,7 @@ We can see that this saved some more memory but at the same time training became
 
 ## Floating Data Types
 
-The idea of mixed precision training is that no all variables need to be stored in full (32-bit) floating point precision. If we can reduce the precision the variales and their computations are faster. Here are the commonly used floating point data types choice of which impacts both memory usage and throughput:
+The idea of mixed precision training is that no all variables need to be stored in full (32-bit) floating point precision. If we can reduce the precision the variables and their computations are faster. Here are the commonly used floating point data types choice of which impacts both memory usage and throughput:
 
 - fp32 (`float32`)
 - fp16 (`float16`)
@@ -425,7 +425,7 @@ $ python examples/pytorch/translation/run_translation.py -h | grep "\-optim"
 
 For example, if you have [NVIDIA/apex](https://github.com/NVIDIA/apex) installed `--optim adamw_apex_fused` will give you the fastest training experience among all supported AdamW optimizers.
 
-On the other hand [8bit BNB optimizer](https://github.com/facebookresearch/bitsandbytes) can save 3/4 of memory normally used by a typical AdamW optimizer if it is configured to quantize all optimizer states, but in some situations only some optimizer states are quintized and then more memory is used. XXX: update once  https://github.com/huggingface/transformers/pull/15622 is merged.
+On the other hand [8bit BNB optimizer](https://github.com/facebookresearch/bitsandbytes) can save 3/4 of memory normally used by a typical AdamW optimizer if it is configured to quantize all optimizer states, but in some situations only some optimizer states are quintized and then more memory is used.
 
 Let's get a feel for the numbers and use for example use a 3B-parameter model, like `t5-3b`. Note that since a Gigabyte correpsonds to a billion bytes we can simply multiply the parameters (in billions) with the number of necessary bytes per parameter to get Gigabytes of GPU memory usage:
 
@@ -609,7 +609,7 @@ for step, batch in enumerate(dataloader, start=1):
         optimizer.zero_grad()
 ```
 
-First we wrap the dataset in a [`DataLoader`](https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader). Then we can enable gradient checkpointing by calling the model's [`~PreTrainedModel.gradient_checkpointing_enable`] method. When we initialize the [`Accelerator`](https://huggingface.co/docs/accelerate/accelerator.html#accelerate.Accelerator) we can specifiy if we want to use mixed precision training and it will take care of it for us in the [`prepare`] call. During the [`prepare`](https://huggingface.co/docs/accelerate/accelerator.html#accelerate.Accelerator.prepare) call the dataloader will also be distributed across workers should we use multiple GPUs. We use the same 8-bit optimizer from the earlier experiments.
+First we wrap the dataset in a [`DataLoader`](https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader). Then we can enable gradient checkpointing by calling the model's [`~PreTrainedModel.gradient_checkpointing_enable`] method. When we initialize the [`Accelerator`](https://huggingface.co/docs/accelerate/package_reference/accelerator#accelerate.Accelerator) we can specifiy if we want to use mixed precision training and it will take care of it for us in the [`prepare`] call. During the [`prepare`](https://huggingface.co/docs/accelerate/package_reference/accelerator#accelerate.Accelerator.prepare) call the dataloader will also be distributed across workers should we use multiple GPUs. We use the same 8-bit optimizer from the earlier experiments.
 
 Finally, we can write the main training loop. Note that the `backward` call is handled by 🤗 Accelerate. We can also see how gradient accumulation works: we normalize the loss so we get the average at the end of accumulation and once we have enough steps we run the optimization. Now the question is: does this use the same amount of memory as the previous steps? Let's check:
 
@@ -719,13 +719,16 @@ For some applications, such as pretraining large language models, applying all t
 Another use case for training on many GPUs is if the model does not fit on a single GPU with all the mentioned tricks. There are still more methods we can apply although life starts to get a bit more complicated. This usually involves some form of pipeline or tensor parallelism where the model itself is distributed across several GPUs. One can also make use of DeepSpeed which implements some of these parallelism strategies along with some more optimization to reduce the memory footprint such as partitioning the optimizer states. You can read more about this in the ["Multi-GPU training" section](perf_train_gpu_many).
 
 ## Inference with torchdynamo
+
 TorchDynamo is a new tracer that uses Python’s frame evaluation API to automatically create FX traces from existing PyTorch programs. After capturing the FX graph, different backends can be deployed to lower the graph to an optimized engine. One solution is using the [TensorRT](https://developer.nvidia.com/tensorrt) or NVFuser as backend. You can choose one option below for performance boost.
+
 ```
 TrainingArguments(torchdynamo="eager")      #enable eager model GPU. No performance boost
 TrainingArguments(torchdynamo="nvfuser")    #enable nvfuser
 TrainingArguments(torchdynamo="fx2trt")     #enable tensorRT fp32
 TrainingArguments(torchdynamo="fx2trt-f16") #enable tensorRT fp16
 ```
+
 This feature involves 3 different libraries. To install them, please follow the instructions below:  
 - [Torchdynamo installation](https://github.com/pytorch/torchdynamo#requirements-and-setup)  
 - [Functorch installation](https://github.com/pytorch/functorch#install)  

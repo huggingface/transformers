@@ -71,10 +71,10 @@ class PegasusConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         scale_embedding (`bool`, *optional*, defaults to `False`):
@@ -88,12 +88,12 @@ class PegasusConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import PegasusModel, PegasusConfig
+    >>> from transformers import PegasusConfig, PegasusModel
 
     >>> # Initializing a PEGASUS google/pegasus-large style configuration
     >>> configuration = PegasusConfig()
 
-    >>> # Initializing a model from the google/pegasus-large style configuration
+    >>> # Initializing a model (with random weights) from the google/pegasus-large style configuration
     >>> model = PegasusModel(configuration)
 
     >>> # Accessing the model configuration

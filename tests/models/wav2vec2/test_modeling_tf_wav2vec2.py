@@ -18,6 +18,7 @@ import copy
 import glob
 import inspect
 import math
+import multiprocessing
 import unittest
 
 import numpy as np
@@ -26,7 +27,7 @@ from datasets import load_dataset
 
 from huggingface_hub import snapshot_download
 from transformers import Wav2Vec2Config, is_tf_available
-from transformers.testing_utils import require_librosa, require_pyctcdecode, require_tf, slow
+from transformers.testing_utils import CaptureLogger, is_flaky, require_librosa, require_pyctcdecode, require_tf, slow
 from transformers.utils import is_librosa_available, is_pyctcdecode_available
 
 from ...test_configuration_common import ConfigTester
@@ -42,6 +43,7 @@ if is_tf_available():
 
 if is_pyctcdecode_available():
     from transformers import Wav2Vec2ProcessorWithLM
+    from transformers.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
 
 
 if is_librosa_available():
@@ -53,7 +55,7 @@ class TFWav2Vec2ModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=3,
         seq_length=1024,
         is_training=False,
         hidden_size=16,
@@ -309,6 +311,7 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_ctc_loss(*config_and_inputs)
 
+    @is_flaky()
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
@@ -336,6 +339,14 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
+
+    @unittest.skip(reason="Dataset conversion goes OOM and crashes with the default options!")
+    def test_dataset_conversion(self):
+        pass
+
+    @unittest.skip(reason="Training goes OOM and crashes with the default options!")
+    def test_keras_fit(self):
+        pass
 
 
 @require_tf
@@ -427,6 +438,8 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_ctc_loss(*config_and_inputs)
 
+    # TODO (Joao): fix me
+    @unittest.skip("Broke with TF 2.10")
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
@@ -454,6 +467,14 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
+
+    @unittest.skip(reason="Dataset conversion goes OOM and crashes with the default options!")
+    def test_dataset_conversion(self):
+        pass
+
+    @unittest.skip(reason="Training goes OOM and crashes with the default options!")
+    def test_keras_fit(self):
+        pass
 
 
 @require_tf
@@ -570,4 +591,57 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         transcription = processor.batch_decode(logits.numpy()).text
 
+        self.assertEqual(transcription[0], "el libro ha sido escrito por cervantes")
+
+    @require_pyctcdecode
+    @require_librosa
+    def test_wav2vec2_with_lm_pool(self):
+        downloaded_folder = snapshot_download("patrickvonplaten/common_voice_es_sample")
+        file_path = glob.glob(downloaded_folder + "/*")[0]
+        sample = librosa.load(file_path, sr=16_000)[0]
+
+        model = TFWav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+
+        input_values = processor(sample, return_tensors="tf").input_values
+
+        logits = model(input_values).logits
+
+        # test user-managed pool
+        with multiprocessing.get_context("fork").Pool(2) as pool:
+            transcription = processor.batch_decode(logits.numpy(), pool).text
+
+        self.assertEqual(transcription[0], "el libro ha sido escrito por cervantes")
+
+        # user-managed pool + num_processes should trigger a warning
+        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl, multiprocessing.get_context("fork").Pool(
+            2
+        ) as pool:
+            transcription = processor.batch_decode(logits.numpy(), pool, num_processes=2).text
+
+        self.assertIn("num_process", cl.out)
+        self.assertIn("it will be ignored", cl.out)
+
+        self.assertEqual(transcription[0], "el libro ha sido escrito por cervantes")
+
+    @require_pyctcdecode
+    @require_librosa
+    def test_wav2vec2_with_lm_invalid_pool(self):
+        downloaded_folder = snapshot_download("patrickvonplaten/common_voice_es_sample")
+        file_path = glob.glob(downloaded_folder + "/*")[0]
+        sample = librosa.load(file_path, sr=16_000)[0]
+
+        model = TFWav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+
+        input_values = processor(sample, return_tensors="tf").input_values
+
+        logits = model(input_values).logits
+
+        # change default start method, which should trigger a warning if different than fork
+        multiprocessing.set_start_method("spawn")
+        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl:
+            transcription = processor.batch_decode(logits.numpy()).text
+
+        self.assertIn("Falling back to sequential decoding.", cl.out)
         self.assertEqual(transcription[0], "el libro ha sido escrito por cervantes")

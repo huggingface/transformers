@@ -15,9 +15,10 @@
 # limitations under the License.
 
 
+import inspect
 import warnings
 from functools import partial
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import numpy as np
 
@@ -34,6 +35,11 @@ from .generation_flax_logits_process import (
     FlaxTemperatureLogitsWarper,
     FlaxTopKLogitsWarper,
     FlaxTopPLogitsWarper,
+)
+from .models.auto import (
+    FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
+    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
 from .utils import ModelOutput, logging
 
@@ -160,6 +166,48 @@ class FlaxGenerationMixin:
         """
         return logits
 
+    def _validate_model_class(self):
+        """
+        Confirms that the model class is compatible with generation. If not, raises an exception that points to the
+        right class to use.
+        """
+        if not hasattr(self, "prepare_inputs_for_generation"):
+            generate_compatible_mappings = [
+                FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
+                FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
+                FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+            ]
+            generate_compatible_classes = set()
+            for model_mapping in generate_compatible_mappings:
+                supported_models = model_mapping.get(type(self.config), default=None)
+                if supported_models is not None:
+                    generate_compatible_classes.add(supported_models.__name__)
+            exception_message = (
+                f"The current model class ({self.__class__.__name__}) is not compatible with `.generate()`, as "
+                "it doesn't have a language model head."
+            )
+            if generate_compatible_classes:
+                exception_message += f" Please use one of the following classes instead: {generate_compatible_classes}"
+            raise TypeError(exception_message)
+
+    def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
+        """Validates model kwargs for generation. Generate argument typos will also be caught here."""
+        unused_model_args = []
+        model_args = set(inspect.signature(self.prepare_inputs_for_generation).parameters)
+        # `kwargs` if often used to handle optional forward pass inputs like `attention_mask`. If
+        # `prepare_inputs_for_generation` doesn't accept `kwargs`, then a stricter check can be made ;)
+        if "kwargs" in model_args:
+            model_args |= set(inspect.signature(self.__call__).parameters)
+        for key, value in model_kwargs.items():
+            if value is not None and key not in model_args:
+                unused_model_args.append(key)
+
+        if unused_model_args:
+            raise ValueError(
+                f"The following `model_kwargs` are not used by the model: {unused_model_args} (note: typos in the"
+                " generate arguments will also show up in this list)"
+            )
+
     def generate(
         self,
         input_ids: jnp.ndarray,
@@ -208,7 +256,6 @@ class FlaxGenerationMixin:
         post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
-
             input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             max_length (`int`, *optional*, defaults to `model.config.max_length`):
@@ -263,6 +310,10 @@ class FlaxGenerationMixin:
         >>> outputs = model.generate(input_ids=input_ids, max_length=20, top_k=30, do_sample=True)
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ```"""
+        # Validate the `.generate()` call
+        self._validate_model_class()
+        self._validate_model_kwargs(model_kwargs.copy())
+
         # set init values
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
@@ -274,6 +325,14 @@ class FlaxGenerationMixin:
 
         if decoder_start_token_id is None and self.config.is_encoder_decoder:
             raise ValueError("`decoder_start_token_id` has to be defined for encoder-decoder generation.")
+
+        # decoder-only models should use left-padding for generation (can't be checked with `trace=True`)
+        if not self.config.is_encoder_decoder and not trace:
+            if pad_token_id is not None and jnp.sum(input_ids[:, -1] == pad_token_id) > 0:
+                logger.warning(
+                    "A decoder-only architecture is being used, but right-padding was detected! For correct "
+                    "generation results, please set `padding_side='left'` when initializing the tokenizer."
+                )
 
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
@@ -678,7 +737,7 @@ class FlaxGenerationMixin:
                 else:
                     return tensor[batch_indices, beam_indices]
 
-            return jax.tree_map(gather_fn, nested)
+            return jax.tree_util.tree_map(gather_fn, nested)
 
         # init values
         max_length = max_length if max_length is not None else self.config.max_length
@@ -767,7 +826,7 @@ class FlaxGenerationMixin:
             model_outputs = model(input_token, params=params, **state.model_kwargs)
 
             logits = unflatten_beam_dim(model_outputs.logits[:, -1], batch_size, num_beams)
-            cache = jax.tree_map(
+            cache = jax.tree_util.tree_map(
                 lambda tensor: unflatten_beam_dim(tensor, batch_size, num_beams), model_outputs.past_key_values
             )
 
@@ -853,7 +912,7 @@ class FlaxGenerationMixin:
             # With these, gather the top k beam-associated caches.
             next_running_indices = gather_beams(topk_beam_indices, next_topk_indices, batch_size, num_beams)
             next_cache = gather_beams(cache, next_running_indices, batch_size, num_beams)
-            model_outputs["past_key_values"] = jax.tree_map(lambda x: flatten_beam_dim(x), next_cache)
+            model_outputs["past_key_values"] = jax.tree_util.tree_map(lambda x: flatten_beam_dim(x), next_cache)
             next_model_kwargs = self.update_inputs_for_generation(model_outputs, state.model_kwargs)
 
             return BeamSearchState(

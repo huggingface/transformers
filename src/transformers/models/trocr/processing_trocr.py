@@ -54,27 +54,23 @@ class TrOCRProcessor(ProcessorMixin):
         if self._in_target_context_manager:
             return self.current_processor(*args, **kwargs)
 
-        if "raw_speech" in kwargs:
-            warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
-            audio = kwargs.pop("raw_speech")
-        else:
-            audio = kwargs.pop("audio", None)
+        images = kwargs.pop("images", None)
         text = kwargs.pop("text", None)
         if len(args) > 0:
-            audio = args[0]
+            images = args[0]
             args = args[1:]
 
-        if audio is None and text is None:
-            raise ValueError("You need to specify either an `audio` or `text` input to process.")
+        if images is None and text is None:
+            raise ValueError("You need to specify either an `images` or `text` input to process.")
 
-        if audio is not None:
-            inputs = self.feature_extractor(audio, *args, **kwargs)
+        if images is not None:
+            inputs = self.feature_extractor(images, *args, **kwargs)
         if text is not None:
             encodings = self.tokenizer(text, **kwargs)
 
         if text is None:
             return inputs
-        elif audio is None:
+        elif images is None:
             return encodings
         else:
             inputs["labels"] = encodings["input_ids"]
@@ -102,7 +98,7 @@ class TrOCRProcessor(ProcessorMixin):
         warnings.warn(
             "`as_target_processor` is deprecated and will be removed in v5 of Transformers. You can process your "
             "labels by using the argument `text` of the regular `__call__` method (either in the same call as "
-            "your audio inputs, or in a separate call."
+            "your images inputs, or in a separate call."
         )
         self._in_target_context_manager = True
         self.current_processor = self.tokenizer

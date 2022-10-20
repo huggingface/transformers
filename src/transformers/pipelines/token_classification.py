@@ -172,7 +172,8 @@ class TokenClassificationPipeline(Pipeline):
             corresponding input, or each entity if this pipeline was instantiated with an aggregation_strategy) with
             the following keys:
 
-            - **word** (`str`) -- The token/word classified.
+            - **word** (`str`) -- The token/word classified. This is obtained by decoding the selected tokens. If you
+              want to have the exact string in the original sentence, use `start` and `stop`.
             - **score** (`float`) -- The corresponding probability for `entity`.
             - **entity** (`str`) -- The entity predicted for that token/word (it is named *entity_group* when
               *aggregation_strategy* is not `"none"`.
@@ -291,7 +292,7 @@ class TokenClassificationPipeline(Pipeline):
                         AggregationStrategy.MAX,
                     }:
                         warnings.warn("Tokenizer does not support real words, using fallback heuristic", UserWarning)
-                    is_subword = sentence[start_ind - 1 : start_ind] != " " if start_ind > 0 else False
+                    is_subword = start_ind > 0 and " " not in sentence[start_ind - 1 : start_ind + 1]
 
                 if int(input_ids[idx]) == self.tokenizer.unk_token_id:
                     word = word_ref

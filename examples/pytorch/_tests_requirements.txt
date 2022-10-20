@@ -22,5 +22,4 @@ protobuf
 torchvision
 jiwer
 librosa
-torch < 1.12
 evaluate >= 0.2.0

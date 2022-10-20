@@ -23,7 +23,6 @@ from typing import Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import torch
-from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -102,10 +101,9 @@ class Embeddings(nn.Module):
 
         self.LayerNorm = nn.LayerNorm(config.dim, eps=1e-12)
         self.dropout = nn.Dropout(config.dropout)
-        if version.parse(torch.__version__) > version.parse("1.6.0"):
-            self.register_buffer(
-                "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-            )
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         """

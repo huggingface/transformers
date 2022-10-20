@@ -22,6 +22,8 @@ https://huggingface.co/models?filter=text-generation
 """
 # You can also adapt this script on your own clm task. Pointers for this are left as comments.
 
+import json
+
 # region Imports
 import logging
 import math
@@ -46,8 +48,8 @@ from transformers import (
     TF_MODEL_FOR_CAUSAL_LM_MAPPING,
     AutoConfig,
     AutoTokenizer,
-    DefaultDataCollator,
     HfArgumentParser,
+    PushToHubCallback,
     TFAutoModelForCausalLM,
     TFTrainingArguments,
     create_optimizer,
@@ -114,7 +116,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -207,21 +209,6 @@ class DataTrainingArguments:
 
 # endregion
 
-# region Helper classes
-class SavePretrainedCallback(tf.keras.callbacks.Callback):
-    # Hugging Face models have a save_pretrained() method that saves both the weights and the necessary
-    # metadata to allow them to be loaded as a pretrained model in future. This is a simple Keras callback
-    # that saves the model with this method after each epoch.
-    def __init__(self, output_dir, **kwargs):
-        super().__init__()
-        self.output_dir = output_dir
-
-    def on_epoch_end(self, epoch, logs=None):
-        self.model.save_pretrained(self.output_dir)
-
-
-# endregion
-
 
 def main():
     # region Argument Parsing
@@ -299,6 +286,7 @@ def main():
         raw_datasets = load_dataset(
             data_args.dataset_name,
             data_args.dataset_config_name,
+            cache_dir=model_args.cache_dir,
             use_auth_token=True if model_args.use_auth_token else None,
         )
         if "validation" not in raw_datasets.keys():
@@ -306,12 +294,14 @@ def main():
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[:{data_args.validation_split_percentage}%]",
+                cache_dir=model_args.cache_dir,
                 use_auth_token=True if model_args.use_auth_token else None,
             )
             raw_datasets["train"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[{data_args.validation_split_percentage}%:]",
+                cache_dir=model_args.cache_dir,
                 use_auth_token=True if model_args.use_auth_token else None,
             )
     else:
@@ -321,16 +311,39 @@ def main():
             data_files["train"] = data_args.train_file
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
-        extension = data_args.train_file.split(".")[-1]
+        extension = (
+            data_args.train_file.split(".")[-1]
+            if data_args.train_file is not None
+            else data_args.validation_file.split(".")[-1]
+        )
         if extension == "txt":
             extension = "text"
             dataset_args["keep_linebreaks"] = data_args.keep_linebreaks
         raw_datasets = load_dataset(
             extension,
             data_files=data_files,
+            cache_dir=model_args.cache_dir,
             use_auth_token=True if model_args.use_auth_token else None,
             **dataset_args,
         )
+        # If no validation data is there, validation_split_percentage will be used to divide the dataset.
+        if "validation" not in raw_datasets.keys():
+            raw_datasets["validation"] = load_dataset(
+                extension,
+                data_files=data_files,
+                split=f"train[:{data_args.validation_split_percentage}%]",
+                cache_dir=model_args.cache_dir,
+                use_auth_token=True if model_args.use_auth_token else None,
+                **dataset_args,
+            )
+            raw_datasets["train"] = load_dataset(
+                extension,
+                data_files=data_files,
+                split=f"train[{data_args.validation_split_percentage}%:]",
+                cache_dir=model_args.cache_dir,
+                use_auth_token=True if model_args.use_auth_token else None,
+                **dataset_args,
+            )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
     # endregion
@@ -446,7 +459,7 @@ def main():
         eval_dataset = eval_dataset.select(range(max_eval_samples))
 
     # Log a few random samples from the training set:
-    for index in random.sample(range(len(train_dataset)), 3):
+    for index in random.sample(range(len(train_dataset)), min(3, len(train_dataset))):
         logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
     # endregion
 
@@ -465,44 +478,88 @@ def main():
 
         # region TF Dataset preparation
         num_replicas = training_args.strategy.num_replicas_in_sync
-        data_collator = DefaultDataCollator(return_tensors="tf")
         options = tf.data.Options()
         options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
 
-        tf_train_dataset = train_dataset.to_tf_dataset(
-            # labels are passed as input, as we will use the model's internal loss
-            columns=[col for col in train_dataset.features if col != "special_tokens_mask"],
+        # model.prepare_tf_dataset() wraps a Hugging Face dataset in a tf.data.Dataset which is ready to use in
+        # training. This is the recommended way to use a Hugging Face dataset when training with Keras. You can also
+        # use the lower-level dataset.to_tf_dataset() method, but you will have to specify things like column names
+        # yourself if you use this method, whereas they are automatically inferred from the model input names when
+        # using model.prepare_tf_dataset()
+        # For more info see the docs:
+        # https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.TFPreTrainedModel.prepare_tf_dataset
+        # https://huggingface.co/docs/datasets/main/en/package_reference/main_classes#datasets.Dataset.to_tf_dataset
+
+        tf_train_dataset = model.prepare_tf_dataset(
+            train_dataset,
             shuffle=True,
             batch_size=num_replicas * training_args.per_device_train_batch_size,
-            collate_fn=data_collator,
-            drop_remainder=True,
         ).with_options(options)
 
-        tf_eval_dataset = eval_dataset.to_tf_dataset(
-            # labels are passed as input, as we will use the model's internal loss
-            columns=[col for col in eval_dataset.features if col != "special_tokens_mask"],
+        tf_eval_dataset = model.prepare_tf_dataset(
+            eval_dataset,
             shuffle=False,
-            batch_size=num_replicas * training_args.per_device_train_batch_size,
-            collate_fn=data_collator,
+            batch_size=num_replicas * training_args.per_device_eval_batch_size,
             drop_remainder=True,
         ).with_options(options)
         # endregion
 
         # region Optimizer and loss
-        batches_per_epoch = len(train_dataset) // (num_replicas * training_args.per_device_train_batch_size)
+        num_train_steps = len(tf_train_dataset) * int(training_args.num_train_epochs)
+        if training_args.warmup_steps > 0:
+            num_warmup_steps = training_args.warmup_steps
+        elif training_args.warmup_ratio > 0:
+            num_warmup_steps = int(num_train_steps * training_args.warmup_ratio)
+        else:
+            num_warmup_steps = 0
+
         # Bias and layernorm weights are automatically excluded from the decay
         optimizer, lr_schedule = create_optimizer(
             init_lr=training_args.learning_rate,
-            num_train_steps=int(training_args.num_train_epochs * batches_per_epoch),
-            num_warmup_steps=training_args.warmup_steps,
+            num_train_steps=num_train_steps,
+            num_warmup_steps=num_warmup_steps,
             adam_beta1=training_args.adam_beta1,
             adam_beta2=training_args.adam_beta2,
             adam_epsilon=training_args.adam_epsilon,
             weight_decay_rate=training_args.weight_decay,
+            adam_global_clipnorm=training_args.max_grad_norm,
         )
 
         # no user-specified loss = will use the model internal loss
-        model.compile(optimizer=optimizer)
+        model.compile(optimizer=optimizer, jit_compile=training_args.xla)
+        # endregion
+
+        # region Preparing push_to_hub and model card
+        push_to_hub_model_id = training_args.push_to_hub_model_id
+        model_name = model_args.model_name_or_path.split("/")[-1]
+        if not push_to_hub_model_id:
+            if data_args.dataset_name is not None:
+                push_to_hub_model_id = f"{model_name}-finetuned-{data_args.dataset_name}"
+            else:
+                push_to_hub_model_id = f"{model_name}-finetuned-clm"
+
+        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "text-generation"}
+        if data_args.dataset_name is not None:
+            model_card_kwargs["dataset_tags"] = data_args.dataset_name
+            if data_args.dataset_config_name is not None:
+                model_card_kwargs["dataset_args"] = data_args.dataset_config_name
+                model_card_kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            else:
+                model_card_kwargs["dataset"] = data_args.dataset_name
+
+        if training_args.push_to_hub:
+            callbacks = [
+                PushToHubCallback(
+                    output_dir=training_args.output_dir,
+                    model_id=push_to_hub_model_id,
+                    organization=training_args.push_to_hub_organization,
+                    token=training_args.push_to_hub_token,
+                    tokenizer=tokenizer,
+                    **model_card_kwargs,
+                )
+            ]
+        else:
+            callbacks = []
         # endregion
 
         # region Training and validation
@@ -512,33 +569,45 @@ def main():
         logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
         logger.info(f"  Total train batch size = {training_args.per_device_train_batch_size * num_replicas}")
 
+        # For long training runs, you may wish to use the PushToHub() callback here to save intermediate checkpoints
+        # to the Hugging Face Hub rather than just pushing the finished model.
+        # See https://huggingface.co/docs/transformers/main_classes/keras_callbacks#transformers.PushToHubCallback
+
         history = model.fit(
             tf_train_dataset,
             validation_data=tf_eval_dataset,
             epochs=int(training_args.num_train_epochs),
-            steps_per_epoch=len(train_dataset) // (training_args.per_device_train_batch_size * num_replicas),
-            callbacks=[SavePretrainedCallback(output_dir=training_args.output_dir)],
+            callbacks=callbacks,
         )
+        train_loss = history.history["loss"][-1]
         try:
-            train_perplexity = math.exp(history.history["loss"][-1])
+            train_perplexity = math.exp(train_loss)
         except OverflowError:
             train_perplexity = math.inf
+        logger.info(f"  Final train loss: {train_loss:.3f}")
+        logger.info(f"  Final train perplexity: {train_perplexity:.3f}")
+        validation_loss = history.history["val_loss"][-1]
         try:
-            validation_perplexity = math.exp(history.history["val_loss"][-1])
+            validation_perplexity = math.exp(validation_loss)
         except OverflowError:
             validation_perplexity = math.inf
-        logger.info(f"  Final train loss: {history.history['loss'][-1]:.3f}")
-        logger.info(f"  Final train perplexity: {train_perplexity:.3f}")
-        logger.info(f"  Final validation loss: {history.history['val_loss'][-1]:.3f}")
+        logger.info(f"  Final validation loss: {validation_loss:.3f}")
         logger.info(f"  Final validation perplexity: {validation_perplexity:.3f}")
-        # endregion
 
         if training_args.output_dir is not None:
-            model.save_pretrained(training_args.output_dir)
+            output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+            results_dict = dict()
+            results_dict["train_loss"] = train_loss
+            results_dict["train_perplexity"] = train_perplexity
+            results_dict["eval_loss"] = validation_loss
+            results_dict["eval_perplexity"] = validation_perplexity
+            with open(output_eval_file, "w") as writer:
+                writer.write(json.dumps(results_dict))
+        # endregion
 
-    if training_args.push_to_hub:
-        # You'll probably want to include some of your own metadata here!
-        model.push_to_hub()
+    if training_args.output_dir is not None and not training_args.push_to_hub:
+        # If we're not pushing to hub, at least save a local copy when we're done
+        model.save_pretrained(training_args.output_dir)
 
 
 if __name__ == "__main__":

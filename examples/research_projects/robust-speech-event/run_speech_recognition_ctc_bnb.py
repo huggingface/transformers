@@ -231,7 +231,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "If :obj:`True`, will use the token generated when running"
-                ":obj:`transformers-cli login` as HTTP bearer authorization for remote files."
+                ":obj:`huggingface-cli login` as HTTP bearer authorization for remote files."
             )
         },
     )

@@ -27,6 +27,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoModelForCausalLM,
         AutoModelForSeq2SeqLM,
         AutoTokenizer,
         BartForConditionalGeneration,
@@ -34,9 +35,12 @@ if is_torch_available():
         GPT2LMHeadModel,
         GPT2Tokenizer,
         ImageGPTForCausalImageModeling,
+        OPTForCausalLM,
         Speech2TextForConditionalGeneration,
         SpeechEncoderDecoderModel,
+        T5ForConditionalGeneration,
         VisionEncoderDecoderModel,
+        pipeline,
         top_k_top_p_filtering,
     )
     from transformers.generation_beam_constraints import DisjunctiveConstraint, PhrasalConstraint
@@ -75,21 +79,25 @@ class GenerationTesterMixin:
 
     def _get_input_ids_and_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
         input_ids = inputs_dict[self.input_name]
-        attention_mask = torch.ones_like(input_ids, dtype=torch.long)
 
         # cut to half length & take max batch_size 3
         max_batch_size = 2
         sequence_length = input_ids.shape[-1] // 2
         input_ids = input_ids[:max_batch_size, :sequence_length]
-        attention_mask = attention_mask[:max_batch_size, :sequence_length]
 
         # generate max 3 tokens
         max_length = input_ids.shape[-1] + 3
         if config.eos_token_id is not None and config.pad_token_id is None:
             # hack to allow generate for models such as GPT2 as is done in `generate()`
             config.pad_token_id = config.eos_token_id
+
+        # TransfoXL has no attention mask
+        if "transfoxl" in config.__class__.__name__.lower():
+            attention_mask = None
+        else:
+            attention_mask = torch.ones_like(input_ids, dtype=torch.long)[:max_batch_size, :sequence_length]
+
         return config, input_ids, attention_mask, max_length
 
     @staticmethod
@@ -252,10 +260,9 @@ class GenerationTesterMixin:
         )
 
         kwargs = {}
-
+        model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
-            attention_mask=attention_mask,
             do_sample=False,
             num_beams=1,
             max_length=max_length,
@@ -265,6 +272,7 @@ class GenerationTesterMixin:
             return_dict_in_generate=return_dict_in_generate,
             remove_invalid_values=True,
             **logits_process_kwargs,
+            **model_kwargs,
         )
 
         if model.config.is_encoder_decoder:
@@ -278,16 +286,17 @@ class GenerationTesterMixin:
             kwargs["encoder_outputs"] = encoder_outputs
 
         with torch.no_grad():
+            model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
             output_greedy = model.greedy_search(
                 input_ids,
                 max_length=max_length,
-                attention_mask=attention_mask,
                 logits_processor=logits_processor,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
                 **kwargs,
+                **model_kwargs,
             )
         return output_greedy, output_generate
 
@@ -308,13 +317,13 @@ class GenerationTesterMixin:
         return_dict_in_generate=False,
     ):
         torch.manual_seed(0)
+        model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
             do_sample=True,
             num_beams=1,
             max_length=max_length,
             num_return_sequences=num_return_sequences,
-            attention_mask=attention_mask,
             output_scores=output_scores,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -322,12 +331,13 @@ class GenerationTesterMixin:
             remove_invalid_values=True,
             **logits_warper_kwargs,
             **process_kwargs,
+            **model_kwargs,
         )
 
         torch.manual_seed(0)
         kwargs = {}
         if model.config.is_encoder_decoder:
-            encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
+            encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
                 model,
                 input_ids,
                 attention_mask,
@@ -336,18 +346,16 @@ class GenerationTesterMixin:
                 output_hidden_states=output_hidden_states,
             )
             kwargs["encoder_outputs"] = encoder_outputs
-            input_ids_clone = input_ids_clone.repeat_interleave(num_return_sequences, dim=0)
-        else:
-            attention_mask_clone = attention_mask.repeat_interleave(num_return_sequences, dim=0)
-            input_ids_clone = input_ids.repeat_interleave(num_return_sequences, dim=0)
+        elif attention_mask is not None:
+            attention_mask = attention_mask.repeat_interleave(num_return_sequences, dim=0)
 
         # prevent flaky generation test failures
         logits_processor.append(InfNanRemoveLogitsProcessor())
 
         with torch.no_grad():
+            model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
             output_sample = model.sample(
-                input_ids_clone,
-                attention_mask=attention_mask_clone,
+                input_ids.repeat_interleave(num_return_sequences, dim=0),
                 max_length=max_length,
                 logits_processor=logits_processor,
                 logits_warper=logits_warper,
@@ -356,7 +364,9 @@ class GenerationTesterMixin:
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
                 **kwargs,
+                **model_kwargs,
             )
+
         return output_sample, output_generate
 
     def _beam_search_generate(
@@ -374,9 +384,9 @@ class GenerationTesterMixin:
         output_hidden_states=False,
         return_dict_in_generate=False,
     ):
+        model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
-            attention_mask=attention_mask,
             do_sample=False,
             max_length=max_length,
             output_scores=output_scores,
@@ -386,12 +396,13 @@ class GenerationTesterMixin:
             remove_invalid_values=True,
             **beam_kwargs,
             **logits_process_kwargs,
+            **model_kwargs,
         )
 
         # beam_search does not automatically interleave `batch_size` dim for `num_beams`
         kwargs = {}
         if model.config.is_encoder_decoder:
-            encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
+            encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
                 model,
                 input_ids,
                 attention_mask,
@@ -400,23 +411,22 @@ class GenerationTesterMixin:
                 output_hidden_states=output_hidden_states,
             )
             kwargs["encoder_outputs"] = encoder_outputs
-            input_ids_clone = input_ids_clone.repeat_interleave(beam_scorer.num_beams, dim=0)
-        else:
-            attention_mask_clone = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
-            input_ids_clone = input_ids.repeat_interleave(beam_scorer.num_beams, dim=0)
+        elif attention_mask is not None:
+            attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
 
         with torch.no_grad():
+            model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
             output_beam_search = model.beam_search(
-                input_ids_clone,
+                input_ids.repeat_interleave(beam_scorer.num_beams, dim=0),
                 beam_scorer,
                 max_length=max_length,
-                attention_mask=attention_mask_clone,
                 logits_processor=logits_processor,
                 output_scores=output_scores,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
                 **kwargs,
+                **model_kwargs,
             )
         return output_generate, output_beam_search
 
@@ -437,9 +447,9 @@ class GenerationTesterMixin:
         return_dict_in_generate=False,
     ):
         torch.manual_seed(0)
+        model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
-            attention_mask=attention_mask,
             do_sample=True,
             max_length=max_length,
             output_scores=output_scores,
@@ -449,6 +459,7 @@ class GenerationTesterMixin:
             remove_invalid_values=True,
             **beam_kwargs,
             **logits_warper_kwargs,
+            **model_kwargs,
         )
         # beam_search does not automatically interleave `batch_size` dim for `num_beams * num_return_sequences`
         kwargs = {}
@@ -462,7 +473,7 @@ class GenerationTesterMixin:
                 output_hidden_states=output_hidden_states,
             )
             kwargs["encoder_outputs"] = encoder_outputs
-        else:
+        elif attention_mask is not None:
             attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams * num_return_sequences, dim=0)
 
         # prevent flaky generation test failures
@@ -471,11 +482,11 @@ class GenerationTesterMixin:
 
         torch.manual_seed(0)
         with torch.no_grad():
+            model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
             output_beam_sample = model.beam_sample(
                 input_ids.repeat_interleave(beam_scorer.num_beams * num_return_sequences, dim=0),
                 beam_scorer,
                 max_length=max_length,
-                attention_mask=attention_mask,
                 logits_warper=logits_warper,
                 logits_processor=logits_processor,
                 output_scores=output_scores,
@@ -483,6 +494,7 @@ class GenerationTesterMixin:
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
                 **kwargs,
+                **model_kwargs,
             )
 
         return output_generate, output_beam_sample
@@ -502,9 +514,9 @@ class GenerationTesterMixin:
         output_hidden_states=False,
         return_dict_in_generate=False,
     ):
+        model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
-            attention_mask=attention_mask,
             do_sample=False,
             max_length=max_length,
             output_scores=output_scores,
@@ -514,12 +526,13 @@ class GenerationTesterMixin:
             remove_invalid_values=True,
             **beam_kwargs,
             **logits_process_kwargs,
+            **model_kwargs,
         )
 
         # group_beam_search does not automatically interleave `batch_size` dim for `num_beams`
         kwargs = {}
         if model.config.is_encoder_decoder:
-            encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
+            encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
                 model,
                 input_ids,
                 attention_mask,
@@ -528,23 +541,22 @@ class GenerationTesterMixin:
                 output_hidden_states=output_hidden_states,
             )
             kwargs["encoder_outputs"] = encoder_outputs
-            input_ids_clone = input_ids_clone.repeat_interleave(beam_scorer.num_beams, dim=0)
-        else:
-            attention_mask_clone = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
-            input_ids_clone = input_ids.repeat_interleave(beam_scorer.num_beams, dim=0)
+        elif attention_mask is not None:
+            attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
 
         with torch.no_grad():
+            model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
             output_group_beam_search = model.group_beam_search(
-                input_ids_clone,
+                input_ids.repeat_interleave(beam_scorer.num_beams, dim=0),
                 beam_scorer,
                 max_length=max_length,
-                attention_mask=attention_mask_clone,
                 logits_processor=logits_processor,
                 output_scores=output_scores,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
                 **kwargs,
+                **model_kwargs,
             )
         return output_generate, output_group_beam_search
 
@@ -564,9 +576,9 @@ class GenerationTesterMixin:
         output_hidden_states=False,
         return_dict_in_generate=False,
     ):
+        model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
-            attention_mask=attention_mask,
             do_sample=False,
             max_length=max_length,
             output_scores=output_scores,
@@ -577,12 +589,13 @@ class GenerationTesterMixin:
             constraints=constraints,
             **beam_kwargs,
             **logits_process_kwargs,
+            **model_kwargs,
         )
 
         # group_beam_search does not automatically interleave `batch_size` dim for `num_beams`
         kwargs = {}
         if model.config.is_encoder_decoder:
-            encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
+            encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
                 model,
                 input_ids,
                 attention_mask,
@@ -591,23 +604,22 @@ class GenerationTesterMixin:
                 output_hidden_states=output_hidden_states,
             )
             kwargs["encoder_outputs"] = encoder_outputs
-            input_ids_clone = input_ids_clone.repeat_interleave(constrained_beam_scorer.num_beams, dim=0)
-        else:
-            attention_mask_clone = attention_mask.repeat_interleave(constrained_beam_scorer.num_beams, dim=0)
-            input_ids_clone = input_ids.repeat_interleave(constrained_beam_scorer.num_beams, dim=0)
+        elif attention_mask is not None:
+            attention_mask = attention_mask.repeat_interleave(constrained_beam_scorer.num_beams, dim=0)
 
         with torch.no_grad():
+            model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
             output_group_beam_search = model.constrained_beam_search(
-                input_ids_clone,
+                input_ids.repeat_interleave(constrained_beam_scorer.num_beams, dim=0),
                 constrained_beam_scorer,
                 max_length=max_length,
-                attention_mask=attention_mask_clone,
                 logits_processor=logits_processor,
                 output_scores=output_scores,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
                 **kwargs,
+                **model_kwargs,
             )
         return output_generate, output_group_beam_search
 
@@ -1044,12 +1056,7 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device)
             model.eval()
 
-            output_ids_generate = model.generate(
-                do_sample=False,
-                max_length=max_length,
-                remove_invalid_values=True,
-            )
-
+            output_ids_generate = model.generate(do_sample=False, max_length=max_length, remove_invalid_values=True)
             self.assertIsNotNone(output_ids_generate)
 
     def test_group_beam_search_generate(self):
@@ -1689,6 +1696,140 @@ class GenerationIntegrationTests(unittest.TestCase):
             ],
         )
 
+    @slow
+    def test_contrastive_search_bart(self):
+        article = """ New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York.
+A year later, she got married again in Westchester County, but to a different man and without divorcing her first husband.
+Only 18 days after that marriage, she got hitched yet again. Then, Barrientos declared "I do" five more times, sometimes only within two weeks of each other.
+In 2010, she married once more, this time in the Bronx. In an application for a marriage license, she stated it was her "first and only" marriage.
+Barrientos, now 39, is facing two criminal counts of "offering a false instrument for filing in the first degree," referring to her false statements on the
+2010 marriage license application, according to court documents.
+Prosecutors said the marriages were part of an immigration scam.
+On Friday, she pleaded not guilty at State Supreme Court in the Bronx, according to her attorney, Christopher Wright, who declined to comment further.
+After leaving court, Barrientos was arrested and charged with theft of service and criminal trespass for allegedly sneaking into the New York subway through an emergency exit, said Detective
+Annette Markowski, a police spokeswoman. In total, Barrientos has been married 10 times, with nine of her marriages occurring between 1999 and 2002.
+All occurred either in Westchester County, Long Island, New Jersey or the Bronx. She is believed to still be married to four men, and at one time, she was married to eight men at once, prosecutors say.
+Prosecutors said the immigration scam involved some of her husbands, who filed for permanent residence status shortly after the marriages.
+Any divorces happened only after such filings were approved. It was unclear whether any of the men will be prosecuted.
+The case was referred to the Bronx District Attorney\'s Office by Immigration and Customs Enforcement and the Department of Homeland Security\'s
+Investigation Division. Seven of the men are from so-called "red-flagged" countries, including Egypt, Turkey, Georgia, Pakistan and Mali.
+Her eighth husband, Rashid Rajput, was deported in 2006 to his native Pakistan after an investigation by the Joint Terrorism Task Force.
+If convicted, Barrientos faces up to four years in prison.  Her next court appearance is scheduled for May 18.
+"""
+        bart_tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
+        bart_model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn").to(torch_device)
+        input_ids = bart_tokenizer(
+            article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
+        ).input_ids.to(torch_device)
+
+        outputs = bart_model.generate(input_ids, penalty_alpha=0.5, top_k=5, max_length=64)
+        generated_text = bart_tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                """Liana Barrientos, 39, pleaded not guilty to two counts of "offering a false instrument" Prosecutors say the marriages were part of an immigration scam. In total, Barriento has been married 10 times, with nine of her marriages occurring between 1999 and 2002."""
+            ],
+        )
+
+    @slow
+    def test_contrastive_search_t5(self):
+        article = """ New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York.
+A year later, she got married again in Westchester County, but to a different man and without divorcing her first husband.
+Only 18 days after that marriage, she got hitched yet again. Then, Barrientos declared "I do" five more times, sometimes only within two weeks of each other.
+In 2010, she married once more, this time in the Bronx. In an application for a marriage license, she stated it was her "first and only" marriage.
+Barrientos, now 39, is facing two criminal counts of "offering a false instrument for filing in the first degree," referring to her false statements on the
+2010 marriage license application, according to court documents.
+Prosecutors said the marriages were part of an immigration scam.
+On Friday, she pleaded not guilty at State Supreme Court in the Bronx, according to her attorney, Christopher Wright, who declined to comment further.
+After leaving court, Barrientos was arrested and charged with theft of service and criminal trespass for allegedly sneaking into the New York subway through an emergency exit, said Detective
+Annette Markowski, a police spokeswoman. In total, Barrientos has been married 10 times, with nine of her marriages occurring between 1999 and 2002.
+All occurred either in Westchester County, Long Island, New Jersey or the Bronx. She is believed to still be married to four men, and at one time, she was married to eight men at once, prosecutors say.
+Prosecutors said the immigration scam involved some of her husbands, who filed for permanent residence status shortly after the marriages.
+Any divorces happened only after such filings were approved. It was unclear whether any of the men will be prosecuted.
+The case was referred to the Bronx District Attorney\'s Office by Immigration and Customs Enforcement and the Department of Homeland Security\'s
+Investigation Division. Seven of the men are from so-called "red-flagged" countries, including Egypt, Turkey, Georgia, Pakistan and Mali.
+Her eighth husband, Rashid Rajput, was deported in 2006 to his native Pakistan after an investigation by the Joint Terrorism Task Force.
+If convicted, Barrientos faces up to four years in prison.  Her next court appearance is scheduled for May 18.
+"""
+        article = "summarize: " + article.strip()
+        t5_tokenizer = AutoTokenizer.from_pretrained("flax-community/t5-base-cnn-dm")
+        t5_model = T5ForConditionalGeneration.from_pretrained("flax-community/t5-base-cnn-dm").to(torch_device)
+        input_ids = t5_tokenizer(
+            article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
+        ).input_ids.to(torch_device)
+
+        outputs = t5_model.generate(input_ids, penalty_alpha=0.5, top_k=5, max_length=64)
+        generated_text = t5_tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                """Liana Barrientos has been married 10 times, nine of them in the Bronx. Her husbands filed for permanent residence after the marriages, prosecutors say."""
+            ],
+        )
+
+    @slow
+    def test_contrastive_search_opt(self):
+        article = r"""A chat between a curious human and the Statue of Liberty.
+
+Human: What is your name?
+Statue: I am the Statue of Liberty.
+Human: Where do you live?
+Statue: New York City.
+Human: How long have you lived there?"""
+
+        opt_tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-6.7b")
+        opt_model = OPTForCausalLM.from_pretrained("facebook/opt-6.7b").to(torch_device)
+        input_ids = opt_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        outputs = opt_model.generate(input_ids, penalty_alpha=0.6, top_k=5, max_length=256)
+        generated_text = opt_tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                """A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I am the Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have you lived there?\nStatue: Since 1884.\nHuman: Why did you come to America?\nStatue: I was given to the United States by France as a gift for helping the French during the Franco-Prussian War.\nHuman: What do you think of America?\nStatue: I love it. It is the greatest country in the world.\nHuman: What’s the weather like in New York?\nStatue: It is cold.\nHuman: Is it safe to walk around at night?\nStatue: Yes. There are policemen everywhere.\nHuman: Do you have any children?\nStatue: Not yet. My pedestal is empty.\nHuman: What would you like to say to people who want to immigrate to America?\nStatue: Come on over. You will be happy here. We have everything you need.\nSource: http://www.statueofliberty.org/index.cf"""
+            ],
+        )
+
+    @slow
+    def test_contrastive_search_gptj(self):
+        article = """DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"""
+
+        opt_tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
+        opt_model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-j-6B").to(torch_device)
+        input_ids = opt_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        outputs = opt_model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
+        generated_text = opt_tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                """DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, United Kingdom with offices in Mountain View, San Francisco, New York City, Paris, Tokyo, Seoul, Beijing, Singapore, Tel Aviv, Dublin, Sydney, and Melbourne.[1]\n\nContents\n\nIn 2010, Google\'s parent company, Alphabet, announced a $500 million investment in DeepMind, with the aim of creating a company that would apply deep learning to problems in healthcare, energy, transportation, and other areas.[2]\n\nOn April 23, 2014, Google announced that it had acquired DeepMind for $400 million in cash and stock.[3] The acquisition was seen as a move to strengthen Google\'s position in the fast-growing field of artificial intelligence (AI), which it had invested in since 2010.[4] Google CEO Larry Page said that the company was "excited to have DeepMind on board" and that "this is a step towards our goal of building AI that works for everyone, not just a few".[5]\n\nDeepMind\'s co-founders, Demis Hassabis and Mustafa Suleyman, were named CEO and C"""
+            ],
+        )
+
+    @slow
+    def test_contrastive_search_gpt2(self):
+        article = """DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"""
+
+        gpt2_tokenizer = AutoTokenizer.from_pretrained("gpt2-large")
+        gpt2_model = GPT2LMHeadModel.from_pretrained("gpt2-large").to(torch_device)
+        input_ids = gpt2_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        outputs = gpt2_model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
+
+        generated_text = gpt2_tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                """DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, United Kingdom\n\nGoogle has a lot of data on its users and uses it to improve its products, such as Google Now, which helps users find the information they\'re looking for on the web. But the company is not the only one to collect data on its users. Facebook, for example, has its own facial recognition technology, as well as a database of millions of photos that it uses to personalize its News Feed.\n\nFacebook\'s use of data is a hot topic in the tech industry, with privacy advocates concerned about the company\'s ability to keep users\' information private. In a blog post last year, Facebook CEO Mark Zuckerberg said his company would "do our best to be transparent about our data use and how we use it."\n\n"We have made it clear that we do not sell or share your data with third parties," Zuckerberg wrote. "If you have questions or concerns, please reach out to us at privacy@facebook.com."\n\nGoogle declined to comment on the privacy implications of its use of data, but said in a statement to The Associated Press that"""
+            ],
+        )
+
     def test_max_length_backward_compat_greedy(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
         bart_tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
@@ -1976,6 +2117,25 @@ class GenerationIntegrationTests(unittest.TestCase):
             [1, 18],
         )
 
+    def test_stop_sequence_stopping_criteria(self):
+
+        prompt = """Hello I believe in"""
+        generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-bart")
+        output = generator(prompt)
+        self.assertEqual(
+            output,
+            [
+                {
+                    "generated_text": (
+                        "Hello I believe in in in number number number number number number number number number"
+                    )
+                }
+            ],
+        )
+
+        output = generator(prompt, stop_sequence=" number")
+        self.assertEqual(output, [{"generated_text": "Hello I believe in in in number"}])
+
     def test_custom_logits_processor(self):
         bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
@@ -2027,6 +2187,134 @@ class GenerationIntegrationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             bart_model.generate(decoder_input_ids=input_ids, max_new_tokens=10, max_length=20)
 
+    def test_max_new_tokens_decoder_only_contrastive_search_t5(self):
+        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
+        t5_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-t5")
+        t5_model = T5ForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-t5").to(torch_device)
+        input_ids = t5_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        self.assertEqual(list(input_ids.shape), [1, 56])
+
+        max_new_tokens = 3
+        t5_model.config.max_length = 20
+        t5_model.config.eos_token_id = None
+
+        # Encoder decoder call
+        outputs = t5_model.generate(input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4)
+        # 1 BOS + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 4])
+
+        # Decoder only call
+        outputs = t5_model.generate(
+            decoder_input_ids=input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4
+        )
+        # 56 + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 59])
+
+        # Encoder decoder call > 20
+        outputs = t5_model.generate(max_new_tokens=max_new_tokens + 20, penalty_alpha=0.6, top_k=4)
+
+        # 1 BOS + 20 + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 24])
+
+        # max_new_tokens and max_length serve the same purpose and must not be used together.
+        with self.assertRaises(ValueError):
+            t5_model.generate(
+                decoder_input_ids=input_ids, max_new_tokens=10, max_length=20, penalty_alpha=0.6, top_k=4
+            )
+
+    def test_max_new_tokens_decoder_only_contrastive_search_bart(self):
+        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
+        bart_tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+        bart_model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(
+            torch_device
+        )
+        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        self.assertEqual(list(input_ids.shape), [1, 29])
+
+        max_new_tokens = 3
+        bart_model.config.max_length = 20
+        bart_model.config.eos_token_id = None
+
+        # Encoder decoder call
+        outputs = bart_model.generate(input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4)
+        # 1 BOS + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 4])
+
+        # Decoder only call
+        outputs = bart_model.generate(
+            decoder_input_ids=input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4
+        )
+        # 29 + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 32])
+
+        # Encoder decoder call > 20
+        outputs = bart_model.generate(max_new_tokens=max_new_tokens + 20, penalty_alpha=0.6, top_k=4)
+
+        # 1 BOS + 20 + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 24])
+
+        # max_new_tokens and max_length serve the same purpose and must not be used together.
+        with self.assertRaises(ValueError):
+            bart_model.generate(
+                decoder_input_ids=input_ids, max_new_tokens=10, max_length=20, penalty_alpha=0.6, top_k=4
+            )
+
+    def test_max_new_tokens_decoder_only_contrastive_search_gptj(self):
+        article = """Justin Timberlake."""
+        gptj_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gptj")
+        gptj_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gptj").to(torch_device)
+        input_ids = gptj_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        self.assertEqual(list(input_ids.shape), [1, 9])
+
+        max_new_tokens = 3
+        gptj_model.config.max_length = 20
+
+        # call < 20
+        outputs = gptj_model.generate(input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4)
+
+        # 9 input_ids + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 12])
+
+        # call > 20
+        outputs = gptj_model.generate(max_new_tokens=max_new_tokens + 20, penalty_alpha=0.6, top_k=4)
+
+        # 1 BOS token + 23 new tokens
+        self.assertEqual(list(outputs.shape), [1, 24])
+
+        # max_new_tokens and max_length serve the same purpose and must not be used together.
+        with self.assertRaises(ValueError):
+            gptj_model.generate(input_ids=input_ids, max_new_tokens=10, max_length=20, penalty_alpha=0.6, top_k=4)
+
+    def test_max_new_tokens_decoder_only_contrastive_search_gpt2(self):
+        article = """Justin Timberlake."""
+        gpt2_tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        gpt2_model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        input_ids = gpt2_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        self.assertEqual(list(input_ids.shape), [1, 9])
+
+        max_new_tokens = 3
+        gpt2_model.config.max_length = 20
+
+        # call < 20
+        outputs = gpt2_model.generate(input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4)
+
+        # 9 input_ids + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 12])
+
+        # call > 20
+        outputs = gpt2_model.generate(max_new_tokens=max_new_tokens + 20, penalty_alpha=0.6, top_k=4)
+
+        # 1 BOS token + 23 new tokens
+        self.assertEqual(list(outputs.shape), [1, 24])
+
+        # max_new_tokens and max_length serve the same purpose and must not be used together.
+        with self.assertRaises(ValueError):
+            gpt2_model.generate(input_ids=input_ids, max_new_tokens=10, max_length=20, penalty_alpha=0.6, top_k=4)
+
     def test_max_new_tokens_decoder_only(self):
         article = """Justin Timberlake."""
         gpt2_tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
@@ -2052,7 +2340,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # max_new_tokens and max_length serve the same purpose and must not be used together.
         with self.assertRaises(ValueError):
-            gpt2_model.generate(decoder_input_ids=input_ids, max_new_tokens=10, max_length=20)
+            gpt2_model.generate(input_ids=input_ids, max_new_tokens=10, max_length=20)
 
     def test_encoder_decoder_generate_with_inputs_embeds(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
@@ -2699,3 +2987,19 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             model.generate(input_ids, force_words_ids=[[[-1]]])
+
+    def test_validate_generation_inputs(self):
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-t5")
+        model = AutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-t5")
+
+        encoder_input_str = "Hello world"
+        input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
+
+        # typos are quickly detected (the correct argument is `do_sample`)
+        with self.assertRaisesRegex(ValueError, "do_samples"):
+            model.generate(input_ids, do_samples=True)
+
+        # arbitrary arguments that will not be used anywhere are also not accepted
+        with self.assertRaisesRegex(ValueError, "foo"):
+            fake_model_kwargs = {"foo": "bar"}
+            model.generate(input_ids, **fake_model_kwargs)

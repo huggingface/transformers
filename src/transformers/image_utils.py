@@ -14,30 +14,150 @@
 # limitations under the License.
 
 import os
-from typing import List, Union
+from typing import TYPE_CHECKING, List, Tuple, Union
 
 import numpy as np
-import PIL.Image
-import PIL.ImageOps
+from packaging import version
 
 import requests
 
-from .utils import is_torch_available
-from .utils.generic import _is_torch
+from .utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
+from .utils.constants import (  # noqa: F401
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+)
+from .utils.generic import ExplicitEnum, _is_jax, _is_tensorflow, _is_torch, to_numpy
 
 
-IMAGENET_DEFAULT_MEAN = [0.485, 0.456, 0.406]
-IMAGENET_DEFAULT_STD = [0.229, 0.224, 0.225]
-IMAGENET_STANDARD_MEAN = [0.5, 0.5, 0.5]
-IMAGENET_STANDARD_STD = [0.5, 0.5, 0.5]
+if is_vision_available():
+    import PIL.Image
+    import PIL.ImageOps
+
+    if version.parse(version.parse(PIL.__version__).base_version) >= version.parse("9.1.0"):
+        PILImageResampling = PIL.Image.Resampling
+    else:
+        PILImageResampling = PIL.Image
+
+if TYPE_CHECKING:
+    if is_torch_available():
+        import torch
+
 
 ImageInput = Union[
-    PIL.Image.Image, np.ndarray, "torch.Tensor", List[PIL.Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
-]
+    "PIL.Image.Image", np.ndarray, "torch.Tensor", List["PIL.Image.Image"], List[np.ndarray], List["torch.Tensor"]
+]  # noqa
+
+
+class ChannelDimension(ExplicitEnum):
+    FIRST = "channels_first"
+    LAST = "channels_last"
 
 
 def is_torch_tensor(obj):
     return _is_torch(obj) if is_torch_available() else False
+
+
+def is_tf_tensor(obj):
+    return _is_tensorflow(obj) if is_tf_available() else False
+
+
+def is_jax_tensor(obj):
+    return _is_jax(obj) if is_flax_available() else False
+
+
+def is_valid_image(img):
+    return (
+        isinstance(img, (PIL.Image.Image, np.ndarray))
+        or is_torch_tensor(img)
+        or is_tf_tensor(img)
+        or is_jax_tensor(img)
+    )
+
+
+def valid_images(imgs):
+    return all(is_valid_image(img) for img in imgs)
+
+
+def is_batched(img):
+    if isinstance(img, (list, tuple)):
+        return is_valid_image(img[0])
+    return False
+
+
+def to_numpy_array(img) -> np.ndarray:
+    if isinstance(img, PIL.Image.Image):
+        return np.array(img)
+    return to_numpy(img)
+
+
+def infer_channel_dimension_format(image: np.ndarray) -> ChannelDimension:
+    """
+    Infers the channel dimension format of `image`.
+
+    Args:
+        image (`np.ndarray`):
+            The image to infer the channel dimension of.
+
+    Returns:
+        The channel dimension of the image.
+    """
+    if image.ndim == 3:
+        first_dim, last_dim = 0, 2
+    elif image.ndim == 4:
+        first_dim, last_dim = 1, 3
+    else:
+        raise ValueError(f"Unsupported number of image dimensions: {image.ndim}")
+
+    if image.shape[first_dim] in (1, 3):
+        return ChannelDimension.FIRST
+    elif image.shape[last_dim] in (1, 3):
+        return ChannelDimension.LAST
+    raise ValueError("Unable to infer channel dimension format")
+
+
+def get_channel_dimension_axis(image: np.ndarray) -> int:
+    """
+    Returns the channel dimension axis of the image.
+
+    Args:
+        image (`np.ndarray`):
+            The image to get the channel dimension axis of.
+
+    Returns:
+        The channel dimension axis of the image.
+    """
+    channel_dim = infer_channel_dimension_format(image)
+    if channel_dim == ChannelDimension.FIRST:
+        return image.ndim - 3
+    elif channel_dim == ChannelDimension.LAST:
+        return image.ndim - 1
+    raise ValueError(f"Unsupported data format: {channel_dim}")
+
+
+def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> Tuple[int, int]:
+    """
+    Returns the (height, width) dimensions of the image.
+
+    Args:
+        image (`np.ndarray`):
+            The image to get the dimensions of.
+        channel_dim (`ChannelDimension`, *optional*):
+            Which dimension the channel dimension is in. If `None`, will infer the channel dimension from the image.
+
+    Returns:
+        A tuple of the image's height and width.
+    """
+    if channel_dim is None:
+        channel_dim = infer_channel_dimension_format(image)
+
+    if channel_dim == ChannelDimension.FIRST:
+        return image.shape[-2], image.shape[-1]
+    elif channel_dim == ChannelDimension.LAST:
+        return image.shape[-3], image.shape[-2]
+    else:
+        raise ValueError(f"Unsupported data format: {channel_dim}")
 
 
 def load_image(image: Union[str, "PIL.Image.Image"]) -> "PIL.Image.Image":
@@ -130,6 +250,13 @@ class ImageFeatureExtractionMixin:
 
         return image.convert("RGB")
 
+    def rescale(self, image: np.ndarray, scale: Union[float, int]) -> np.ndarray:
+        """
+        Rescale a numpy image by scale amount
+        """
+        self._ensure_format_supported(image)
+        return image * scale
+
     def to_numpy_array(self, image, rescale=None, channel_first=True):
         """
         Converts `image` to a numpy array. Optionally rescales it and puts the channel dimension as the first
@@ -152,11 +279,10 @@ class ImageFeatureExtractionMixin:
         if is_torch_tensor(image):
             image = image.numpy()
 
-        if rescale is None:
-            rescale = isinstance(image.flat[0], np.integer)
+        rescale = isinstance(image.flat[0], np.integer) if rescale is None else rescale
 
         if rescale:
-            image = image.astype(np.float32) / 255.0
+            image = self.rescale(image.astype(np.float32), 1 / 255.0)
 
         if channel_first and image.ndim == 3:
             image = image.transpose(2, 0, 1)
@@ -183,7 +309,7 @@ class ImageFeatureExtractionMixin:
             image = np.expand_dims(image, axis=0)
         return image
 
-    def normalize(self, image, mean, std):
+    def normalize(self, image, mean, std, rescale=False):
         """
         Normalizes `image` with `mean` and `std`. Note that this will trigger a conversion of `image` to a NumPy array
         if it's a PIL Image.
@@ -195,11 +321,21 @@ class ImageFeatureExtractionMixin:
                 The mean (per channel) to use for normalization.
             std (`List[float]` or `np.ndarray` or `torch.Tensor`):
                 The standard deviation (per channel) to use for normalization.
+            rescale (`bool`, *optional*, defaults to `False`):
+                Whether or not to rescale the image to be between 0 and 1. If a PIL image is provided, scaling will
+                happen automatically.
         """
         self._ensure_format_supported(image)
 
         if isinstance(image, PIL.Image.Image):
-            image = self.to_numpy_array(image)
+            image = self.to_numpy_array(image, rescale=True)
+        # If the input image is a PIL image, it automatically gets rescaled. If it's another
+        # type it may need rescaling.
+        elif rescale:
+            if isinstance(image, np.ndarray):
+                image = self.rescale(image.astype(np.float32), 1 / 255.0)
+            elif is_torch_tensor(image):
+                image = self.rescale(image.float(), 1 / 255.0)
 
         if isinstance(image, np.ndarray):
             if not isinstance(mean, np.ndarray):
@@ -219,7 +355,7 @@ class ImageFeatureExtractionMixin:
         else:
             return (image - mean) / std
 
-    def resize(self, image, size, resample=PIL.Image.BILINEAR, default_to_square=True, max_size=None):
+    def resize(self, image, size, resample=None, default_to_square=True, max_size=None):
         """
         Resizes `image`. Enforces conversion of input to PIL.Image.
 
@@ -233,7 +369,7 @@ class ImageFeatureExtractionMixin:
                 If `size` is an int and `default_to_square` is `True`, then image will be resized to (size, size). If
                 `size` is an int and `default_to_square` is `False`, then smaller edge of the image will be matched to
                 this number. i.e, if height > width, then image will be rescaled to (size * height / width, size).
-            resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
+            resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
                 The filter to user for resampling.
             default_to_square (`bool`, *optional*, defaults to `True`):
                 How to convert `size` when it is a single int. If set to `True`, the `size` will be converted to a
@@ -249,6 +385,8 @@ class ImageFeatureExtractionMixin:
         Returns:
             image: A resized `PIL.Image.Image`.
         """
+        resample = resample if resample is not None else PILImageResampling.BILINEAR
+
         self._ensure_format_supported(image)
 
         if not isinstance(image, PIL.Image.Image):
@@ -375,3 +513,27 @@ class ImageFeatureExtractionMixin:
             image = self.to_numpy_array(image)
 
         return image[::-1, :, :]
+
+    def rotate(self, image, angle, resample=None, expand=0, center=None, translate=None, fillcolor=None):
+        """
+        Returns a rotated copy of `image`. This method returns a copy of `image`, rotated the given number of degrees
+        counter clockwise around its centre.
+
+        Args:
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
+                The image to rotate. If `np.ndarray` or `torch.Tensor`, will be converted to `PIL.Image.Image` before
+                rotating.
+
+        Returns:
+            image: A rotated `PIL.Image.Image`.
+        """
+        resample = resample if resample is not None else PIL.Image.NEAREST
+
+        self._ensure_format_supported(image)
+
+        if not isinstance(image, PIL.Image.Image):
+            image = self.to_pil_image(image)
+
+        return image.rotate(
+            angle, resample=resample, expand=expand, center=center, translate=translate, fillcolor=fillcolor
+        )

@@ -1398,7 +1398,6 @@ class TapexTokenizer(PreTrainedTokenizer):
     ):
         """
         Args:
-
         table_content:
             {"header": xxx, "rows": xxx, "id" (Optionally): xxx}
 

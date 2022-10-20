@@ -16,9 +16,16 @@
 
 import copy
 import os
-from typing import Union
+from collections import OrderedDict
+from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
+
+
+if TYPE_CHECKING:
+    from ...processing_utils import ProcessorMixin
+    from ...utils import TensorType
 
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -73,12 +80,12 @@ class CLIPTextConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CLIPTextModel, CLIPTextConfig
+    >>> from transformers import CLIPTextConfig, CLIPTextModel
 
-    >>> # Initializing a CLIPTextModel with openai/clip-vit-base-patch32 style configuration
+    >>> # Initializing a CLIPTextConfig with openai/clip-vit-base-patch32 style configuration
     >>> configuration = CLIPTextConfig()
 
-    >>> # Initializing a CLIPTextConfig from the openai/clip-vit-base-patch32 style configuration
+    >>> # Initializing a CLIPTextModel (with random weights) from the openai/clip-vit-base-patch32 style configuration
     >>> model = CLIPTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -179,12 +186,12 @@ class CLIPVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CLIPVisionModel, CLIPVisionConfig
+    >>> from transformers import CLIPVisionConfig, CLIPVisionModel
 
-    >>> # Initializing a CLIPVisionModel with openai/clip-vit-base-patch32 style configuration
+    >>> # Initializing a CLIPVisionConfig with openai/clip-vit-base-patch32 style configuration
     >>> configuration = CLIPVisionConfig()
 
-    >>> # Initializing a CLIPVisionModel model from the openai/clip-vit-base-patch32 style configuration
+    >>> # Initializing a CLIPVisionModel (with random weights) from the openai/clip-vit-base-patch32 style configuration
     >>> model = CLIPVisionModel(configuration)
 
     >>> # Accessing the model configuration
@@ -263,7 +270,29 @@ class CLIPConfig(PretrainedConfig):
             The inital value of the *logit_scale* paramter. Default is used as per the original CLIP implementation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
-    """
+
+    Example:
+
+    ```python
+    >>> from transformers import CLIPConfig, CLIPModel
+
+    >>> # Initializing a CLIPConfig with openai/clip-vit-base-patch32 style configuration
+    >>> configuration = CLIPConfig()
+
+    >>> # Initializing a CLIPModel (with random weights) from the openai/clip-vit-base-patch32 style configuration
+    >>> model = CLIPModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+
+    >>> # We can also initialize a CLIPConfig from a CLIPTextConfig and a CLIPVisionConfig
+
+    >>> # Initializing a CLIPText and CLIPVision configuration
+    >>> config_text = CLIPTextConfig()
+    >>> config_vision = CLIPVisionConfig()
+
+    >>> config = CLIPConfig.from_text_vision_configs(config_text, config_vision)
+    ```"""
 
     model_type = "clip"
     is_composition = True
@@ -317,3 +346,50 @@ class CLIPConfig(PretrainedConfig):
         output["vision_config"] = self.vision_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
+
+
+class CLIPOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("input_ids", {0: "batch", 1: "sequence"}),
+                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
+                ("attention_mask", {0: "batch", 1: "sequence"}),
+            ]
+        )
+
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("logits_per_image", {0: "batch"}),
+                ("logits_per_text", {0: "batch"}),
+                ("text_embeds", {0: "batch"}),
+                ("image_embeds", {0: "batch"}),
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4
+
+    def generate_dummy_inputs(
+        self,
+        processor: "ProcessorMixin",
+        batch_size: int = -1,
+        seq_length: int = -1,
+        framework: Optional["TensorType"] = None,
+    ) -> Mapping[str, Any]:
+
+        text_input_dict = super().generate_dummy_inputs(
+            processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
+        )
+        image_input_dict = super().generate_dummy_inputs(
+            processor.feature_extractor, batch_size=batch_size, framework=framework
+        )
+        return {**text_input_dict, **image_input_dict}
+
+    @property
+    def default_onnx_opset(self) -> int:
+        return 14

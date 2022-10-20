@@ -815,23 +815,23 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             special_tokens_mask = [
                 self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
             ]
-            special_tokens_mask = np.array(special_tokens_mask, dtype=np.bool)
+            special_tokens_mask = np.array(special_tokens_mask, dtype=bool)
         else:
-            special_tokens_mask = special_tokens_mask.astype(np.bool)
+            special_tokens_mask = special_tokens_mask.astype(bool)
 
         probability_matrix[special_tokens_mask] = 0
         # Numpy doesn't have bernoulli, so we use a binomial with 1 trial
-        masked_indices = np.random.binomial(1, probability_matrix, size=probability_matrix.shape).astype(np.bool)
+        masked_indices = np.random.binomial(1, probability_matrix, size=probability_matrix.shape).astype(bool)
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = np.random.binomial(1, 0.8, size=labels.shape).astype(np.bool) & masked_indices
+        indices_replaced = np.random.binomial(1, 0.8, size=labels.shape).astype(bool) & masked_indices
         inputs[indices_replaced] = self.tokenizer.mask_token_id
 
         # 10% of the time, we replace masked input tokens with random word
         # indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
         indices_random = (
-            np.random.binomial(1, 0.5, size=labels.shape).astype(np.bool) & masked_indices & ~indices_replaced
+            np.random.binomial(1, 0.5, size=labels.shape).astype(bool) & masked_indices & ~indices_replaced
         )
         random_words = np.random.randint(
             low=0, high=len(self.tokenizer), size=np.count_nonzero(indices_random), dtype=np.int64
@@ -1086,12 +1086,12 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         labels = np.copy(inputs)
         # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
 
-        masked_indices = mask_labels.astype(np.bool)
+        masked_indices = mask_labels.astype(bool)
 
         special_tokens_mask = [
             self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
         ]
-        masked_indices[np.array(special_tokens_mask, dtype=np.bool)] = 0
+        masked_indices[np.array(special_tokens_mask, dtype=bool)] = 0
         if self.tokenizer._pad_token is not None:
             padding_mask = labels == self.tokenizer.pad_token_id
             masked_indices[padding_mask] = 0
@@ -1099,13 +1099,13 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
         # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = np.random.binomial(1, 0.8, size=labels.shape).astype(np.bool) & masked_indices
+        indices_replaced = np.random.binomial(1, 0.8, size=labels.shape).astype(bool) & masked_indices
         inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
 
         # 10% of the time, we replace masked input tokens with random word
         # indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
         indices_random = (
-            np.random.binomial(1, 0.5, size=labels.shape).astype(np.bool) & masked_indices & ~indices_replaced
+            np.random.binomial(1, 0.5, size=labels.shape).astype(bool) & masked_indices & ~indices_replaced
         )
         random_words = np.random.randint(low=0, high=len(self.tokenizer), size=labels.shape, dtype=np.int64)
         inputs[indices_random] = random_words[indices_random]
@@ -1363,7 +1363,7 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
 
         labels = tf.identity(inputs)
         # Creating the mask and target_mapping tensors
-        masked_indices = np.full(labels.shape.as_list(), 0, dtype=np.bool)
+        masked_indices = np.full(labels.shape.as_list(), 0, dtype=bool)
         labels_shape = tf.shape(labels)
         target_mapping = np.zeros((labels_shape[0], labels_shape[1], labels_shape[1]), dtype=np.float32)
 
@@ -1472,7 +1472,7 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
 
         labels = np.copy(inputs)
         # Creating the mask and target_mapping tensors
-        masked_indices = np.full(labels.shape, 0, dtype=np.bool)
+        masked_indices = np.full(labels.shape, 0, dtype=bool)
         target_mapping = np.zeros((labels.shape[0], labels.shape[1], labels.shape[1]), dtype=np.float32)
 
         for i in range(labels.shape[0]):
@@ -1497,7 +1497,7 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
 
         special_tokens_mask = np.array(
             [self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()],
-            dtype=np.bool,
+            dtype=bool,
         )
         masked_indices[special_tokens_mask] = 0
         if self.tokenizer._pad_token is not None:
