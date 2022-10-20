@@ -125,10 +125,9 @@ class Swin2SRModelTester:
         model.eval()
         result = model(pixel_values)
 
-        expected_seq_len = ((config.image_size // config.patch_size) ** 2) // (4 ** (len(config.depths) - 1))
-        expected_dim = int(config.embed_dim * 2 ** (len(config.depths) - 1))
-
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, expected_dim))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.embed_dim, self.image_size, self.image_size)
+        )
 
     def create_and_check_for_image_super_resolution(self, config, pixel_values, labels):
         model = Swin2SRForImageSuperResolution(config)

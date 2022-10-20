@@ -976,10 +976,8 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         # print("Shape of sequence output after body:", sequence_output.shape)
         # print("First values of sequence output after body:", sequence_output[0, 0, :3, :3])
 
-        # TODO add pooled output
-        pooled_output = None
         if not return_dict:
-            output = (sequence_output, pooled_output) + encoder_outputs[1:]
+            output = (sequence_output,) + encoder_outputs[1:]
 
             return output
 
