@@ -51,7 +51,8 @@ _EXPECTED_OUTPUT_SHAPE = [1, 64, 768]
 
 
 SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "caidas/swin2sr-classicalsr-x2-64",
+    # TODO update to appropriate organization
+    "nielsr/swin2SR-classical-sr-x2-64",
     # See all Swin2SR models at https://huggingface.co/models?filter=swin2sr
 ]
 

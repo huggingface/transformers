@@ -358,7 +358,6 @@ MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
     [
         ("deit", "DeiTForMaskedImageModeling"),
         ("swin", "SwinForMaskedImageModeling"),
-        ("swin2sr", "Swin2SRForMaskedImageModeling"),
         ("swinv2", "Swinv2ForMaskedImageModeling"),
         ("vit", "ViTForMaskedImageModeling"),
     ]
@@ -401,7 +400,6 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("resnet", "ResNetForImageClassification"),
         ("segformer", "SegformerForImageClassification"),
         ("swin", "SwinForImageClassification"),
-        ("swin2sr", "Swin2SRForImageClassification"),
         ("swinv2", "Swinv2ForImageClassification"),
         ("van", "VanForImageClassification"),
         ("vit", "ViTForImageClassification"),

@@ -13,16 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Testing suite for the PyTorch Swin2SR model. """
-import collections
 import inspect
 import unittest
 
 from transformers import Swin2SRConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -35,8 +34,6 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
-
 
 class Swin2SRModelTester:
     def __init__(
@@ -44,7 +41,7 @@ class Swin2SRModelTester:
         parent,
         batch_size=13,
         image_size=32,
-        patch_size=2,
+        patch_size=1,
         num_channels=3,
         embed_dim=16,
         depths=[1, 2, 1],
@@ -62,9 +59,8 @@ class Swin2SRModelTester:
         layer_norm_eps=1e-5,
         is_training=True,
         scope=None,
-        use_labels=True,
-        type_sequence_label_size=10,
-        encoder_stride=8,
+        use_labels=False,
+        upscale=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -88,8 +84,7 @@ class Swin2SRModelTester:
         self.is_training = is_training
         self.scope = scope
         self.use_labels = use_labels
-        self.type_sequence_label_size = type_sequence_label_size
-        self.encoder_stride = encoder_stride
+        self.upscale = upscale
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -121,7 +116,7 @@ class Swin2SRModelTester:
             path_norm=self.patch_norm,
             layer_norm_eps=self.layer_norm_eps,
             initializer_range=self.initializer_range,
-            encoder_stride=self.encoder_stride,
+            upscale=self.upscale,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -136,12 +131,15 @@ class Swin2SRModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, expected_dim))
 
     def create_and_check_for_image_super_resolution(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
         model = Swin2SRForImageSuperResolution(config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        result = model(pixel_values)
+
+        expected_image_size = self.image_size * self.upscale
+        self.parent.assertEqual(
+            result.reconstruction.shape, (self.batch_size, self.num_channels, expected_image_size, expected_image_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -159,6 +157,7 @@ class Swin2SRModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Swin2SRModelTester(self)
@@ -176,8 +175,20 @@ class Swin2SRModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_model_for_image_super_resolution(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_image_super_resolution(*config_and_inputs)
+
     @unittest.skip(reason="Swin2SR does not use inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Swin2SR does not support training yet")
+    def test_training(self):
+        pass
+
+    @unittest.skip(reason="Swin2SR does not support training yet")
+    def test_training_gradient_checkpointing(self):
         pass
 
     def test_model_common_attributes(self):
@@ -201,194 +212,20 @@ class Swin2SRModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            expected_num_attentions = len(self.model_tester.depths)
-            self.assertEqual(len(attentions), expected_num_attentions)
-
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            window_size_squared = config.window_size**2
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), expected_num_attentions)
-
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
-            )
-            out_len = len(outputs)
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            if hasattr(self.model_tester, "num_hidden_states_types"):
-                added_hidden_states = self.model_tester.num_hidden_states_types
-            else:
-                # also another +1 for reshaped_hidden_states
-                added_hidden_states = 2
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
-
-            self_attentions = outputs.attentions
-
-            self.assertEqual(len(self_attentions), expected_num_attentions)
-
-            self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_heads[0], window_size_squared, window_size_squared],
-            )
-
-    def check_hidden_states_output(self, inputs_dict, config, model_class, image_size):
-        model = model_class(config)
-        model.to(torch_device)
-        model.eval()
-
-        with torch.no_grad():
-            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-        hidden_states = outputs.hidden_states
-
-        expected_num_layers = getattr(
-            self.model_tester, "expected_num_hidden_layers", len(self.model_tester.depths) + 1
-        )
-        self.assertEqual(len(hidden_states), expected_num_layers)
-
-        # Swin2SR has a different seq_length
-        patch_size = (
-            config.patch_size
-            if isinstance(config.patch_size, collections.abc.Iterable)
-            else (config.patch_size, config.patch_size)
-        )
-
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-
-        self.assertListEqual(
-            list(hidden_states[0].shape[-2:]),
-            [num_patches, self.model_tester.embed_dim],
-        )
-
-        reshaped_hidden_states = outputs.reshaped_hidden_states
-        self.assertEqual(len(reshaped_hidden_states), expected_num_layers)
-
-        batch_size, num_channels, height, width = reshaped_hidden_states[0].shape
-        reshaped_hidden_states = (
-            reshaped_hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
-        )
-        self.assertListEqual(
-            list(reshaped_hidden_states.shape[-2:]),
-            [num_patches, self.model_tester.embed_dim],
-        )
-
-    def test_hidden_states_output(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        image_size = (
-            self.model_tester.image_size
-            if isinstance(self.model_tester.image_size, collections.abc.Iterable)
-            else (self.model_tester.image_size, self.model_tester.image_size)
-        )
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            self.check_hidden_states_output(inputs_dict, config, model_class, image_size)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            self.check_hidden_states_output(inputs_dict, config, model_class, image_size)
-
-    def test_hidden_states_output_with_padding(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.patch_size = 3
-
-        image_size = (
-            self.model_tester.image_size
-            if isinstance(self.model_tester.image_size, collections.abc.Iterable)
-            else (self.model_tester.image_size, self.model_tester.image_size)
-        )
-        patch_size = (
-            config.patch_size
-            if isinstance(config.patch_size, collections.abc.Iterable)
-            else (config.patch_size, config.patch_size)
-        )
-
-        padded_height = image_size[0] + patch_size[0] - (image_size[0] % patch_size[0])
-        padded_width = image_size[1] + patch_size[1] - (image_size[1] % patch_size[1])
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-            self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
-
-    def test_for_masked_image_modeling(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
-
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = Swin2SRModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if "embeddings" not in name and "logit_scale" not in name and param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
 
 @require_vision
 @require_torch
 class Swin2SRModelIntegrationTest(unittest.TestCase):
-    @cached_property
-    def default_feature_extractor(self):
-        return (
-            AutoFeatureExtractor.from_pretrained("caidas/swin2sr-classicalsr-x2-64") if is_vision_available() else None
-        )
-
     @slow
     def test_inference_image_super_resolution_head(self):
-        model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2sr-classicalsr-x2-64").to(torch_device)
+        # TODO update to appropriate organization
+        model = Swin2SRForImageSuperResolution.from_pretrained("nielsr/swin2SR-classical-sr-x2-64").to(torch_device)
         feature_extractor = self.default_feature_extractor
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
