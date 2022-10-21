@@ -114,7 +114,7 @@ class OwlViTOutput(ModelOutput):
 
 
 # Copied from transformers.models.detr.feature_extraction_detr.center_to_corners_format
-def center_to_corners_format(x: torch.Tensor) -> torch.Tensor:
+def center_to_corners_format(x):
     """
     Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
     (x_0, y_0, x_1, y_1).
@@ -168,7 +168,7 @@ def box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
 
 
 # Copied from transformers.models.detr.modeling_detr.generalized_box_iou
-def generalized_box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
+def generalized_box_iou(boxes1, boxes2):
     """
     Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
 
