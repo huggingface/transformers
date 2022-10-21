@@ -670,6 +670,7 @@ class ModelTesterMixin:
                     )  # when traced model is checked, an error is produced due to name mangling
                 else:
                     main_input = inputs[main_input_name]
+                    model(main_input)
                     traced_model = torch.jit.trace(model, main_input)
             except RuntimeError:
                 self.fail("Couldn't trace module.")
