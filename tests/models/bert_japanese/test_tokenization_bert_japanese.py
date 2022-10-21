@@ -26,16 +26,12 @@ from transformers.models.bert_japanese.tokenization_bert_japanese import (
     CharacterTokenizer,
     JumanppTokenizer,
     MecabTokenizer,
-    SentencepieceTokenizer,
     SudachiTokenizer,
     WordpieceTokenizer,
 )
-from transformers.testing_utils import custom_tokenizers, get_tests_dir, require_jumanpp, require_sudachi
+from transformers.testing_utils import custom_tokenizers, require_jumanpp, require_sudachi
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
-
-SAMPLE_VOCAB = get_tests_dir("fixtures/spiece_ja.model")
 
 
 @custom_tokenizers
@@ -92,14 +88,14 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         pass  # TODO add if relevant
 
     def test_full_tokenizer(self):
-        tokenizer = self.tokenizer_class(vocab_file=self.vocab_file, spm_file=None)
+        tokenizer = self.tokenizer_class(self.vocab_file)
 
         tokens = tokenizer.tokenize("こんにちは、世界。\nこんばんは、世界。")
         self.assertListEqual(tokens, ["こんにちは", "、", "世界", "。", "こん", "##ばんは", "、", "世界", "。"])
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [3, 12, 10, 14, 4, 9, 12, 10, 14])
 
     def test_pickle_mecab_tokenizer(self):
-        tokenizer = self.tokenizer_class(vocab_file=self.vocab_file, spm_file=None, word_tokenizer_type="mecab")
+        tokenizer = self.tokenizer_class(self.vocab_file, word_tokenizer_type="mecab")
         self.assertIsNotNone(tokenizer)
 
         text = "こんにちは、世界。\nこんばんは、世界。"
@@ -180,7 +176,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @require_sudachi
     def test_pickle_sudachi_tokenizer(self):
-        tokenizer = self.tokenizer_class(vocab_file=self.vocab_file, spm_file=None, word_tokenizer_type="sudachi")
+        tokenizer = self.tokenizer_class(self.vocab_file, word_tokenizer_type="sudachi")
         self.assertIsNotNone(tokenizer)
 
         text = "こんにちは、世界。\nこんばんは、世界。"
@@ -261,7 +257,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @require_jumanpp
     def test_pickle_jumanpp_tokenizer(self):
-        tokenizer = self.tokenizer_class(vocab_file=self.vocab_file, spm_file=None, word_tokenizer_type="jumanpp")
+        tokenizer = self.tokenizer_class(self.vocab_file, word_tokenizer_type="jumanpp")
         self.assertIsNotNone(tokenizer)
 
         text = "こんにちは、世界。\nこんばんは、世界。"
@@ -339,12 +335,13 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokenizer.tokenize("こんばんは こんばんにちは こんにちは"), ["こん", "##ばんは", "[UNK]", "こんにちは"])
 
     def test_sentencepiece_tokenizer(self):
-        tokenizer = SentencepieceTokenizer(vocab=SAMPLE_VOCAB, unk_token="[UNK]")
+        tokenizer = BertJapaneseTokenizer.from_pretrained("nlp-waseda/roberta-base-japanese-with-auto-jumanpp")
+        subword_tokenizer = tokenizer.subword_tokenizer
 
-        tokens = tokenizer.tokenize("国境 の 長い トンネル を 抜ける と 雪国 であった 。")
+        tokens = subword_tokenizer.tokenize("国境 の 長い トンネル を 抜ける と 雪国 であった 。")
         self.assertListEqual(tokens, ["▁国境", "▁の", "▁長い", "▁トンネル", "▁を", "▁抜ける", "▁と", "▁雪", "国", "▁であった", "▁。"])
 
-        tokens = tokenizer.tokenize("こんばんは こんばん にち は こんにちは")
+        tokens = subword_tokenizer.tokenize("こんばんは こんばん にち は こんにちは")
         self.assertListEqual(tokens, ["▁こん", "ばん", "は", "▁こん", "ばん", "▁に", "ち", "▁は", "▁こんにちは"])
 
     def test_sequence_builders(self):
@@ -394,7 +391,7 @@ class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestC
         pass  # TODO add if relevant
 
     def test_full_tokenizer(self):
-        tokenizer = self.tokenizer_class(vocab_file=self.vocab_file, spm_file=None, subword_tokenizer_type="character")
+        tokenizer = self.tokenizer_class(self.vocab_file, subword_tokenizer_type="character")
 
         tokens = tokenizer.tokenize("こんにちは、世界。 \nこんばんは、世界。")
         self.assertListEqual(

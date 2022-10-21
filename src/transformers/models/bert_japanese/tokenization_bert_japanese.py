@@ -111,6 +111,9 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
     Args:
         vocab_file (`str`):
             Path to a one-wordpiece-per-line vocabulary file.
+        spm_file (`str`, *optional*):
+            Path to [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .spm or .model extension) that
+            contains the vocabulary.
         do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether to lower case the input. Only has an effect when do_basic_tokenize=True.
         do_word_tokenize (`bool`, *optional*, defaults to `True`):
@@ -137,7 +140,7 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
     def __init__(
         self,
         vocab_file,
-        spm_file,
+        spm_file=None,
         do_lower_case=False,
         do_word_tokenize=True,
         do_subword_tokenize=True,
@@ -155,6 +158,7 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
         **kwargs
     ):
         super().__init__(
+            spm_file=spm_file,
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,
@@ -928,9 +932,11 @@ class WordpieceTokenizer(object):
         return output_tokens
 
 
-# Based on transformers.models.albert.tokenization_albert.AlbertTokenizer
 class SentencepieceTokenizer(object):
-    """Runs sentencepiece tokenization."""
+    """
+    Runs sentencepiece tokenization.
+    Based on transformers.models.albert.tokenization_albert.AlbertTokenizer.
+    """
 
     def __init__(
         self,
