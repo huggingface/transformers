@@ -924,7 +924,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_large_batched_generation(self):
         timeout = os.environ.get("PYTEST_TIMEOUT", 120)
-        run_test_in_subprocess(inputs=None, target_func=_test_large_batched_generation, timeout=timeout)
+        run_test_in_subprocess(test_case=self, inputs=None, target_func=_test_large_batched_generation, timeout=timeout)
 
     @slow
     def test_tiny_en_batched_generation(self):
