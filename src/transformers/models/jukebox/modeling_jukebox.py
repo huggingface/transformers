@@ -50,7 +50,7 @@ def filter_logits(logits, top_k=0, top_p=0.0, filter_value=-float("Inf")):
     """
     logits = logits.clone()
     top_k = min(top_k, logits.size(-1))  # Safety check
-    assert (top_k == 0) or (top_p == 0.0)
+
     if top_k > 0:
         # Remove all tokens with a probability less than the last token of the top-k
         indices_to_remove = logits < torch.topk(logits, top_k, dim=-1)[0][..., -1:]
@@ -83,7 +83,7 @@ def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, off
 
     Args:
         full_tokens (`List[int]`):
-            List containing the ids of the entire lyrics.
+            List containing the token ids of the entire lyrics.
         total_length (`int`):
             Total expected length of the music (not all of it is generated, see duration), in samples.
         offset (`int`):
@@ -116,7 +116,7 @@ def get_starts(total_length, n_ctx, hop_length):
     return starts
 
 
-def get_alignment(music_tokens, labels, prior, fp16, config):
+def get_alignment(music_tokens, labels, prior, config):
     level = prior.levels - 1  # Top level used
     n_ctx = prior.n_ctx
     tokens = music_tokens[level]
@@ -148,7 +148,7 @@ def get_alignment(music_tokens, labels, prior, fp16, config):
             tokens_i = tokens_i.to("cuda")
             metadata_i = metadata_i.to("cuda")
             w_hop = prior.forward_tokens(
-                tokens_i[:, start:end], [], metadata_i, fp16=fp16, get_attn_weights=attn_layers
+                tokens_i[:, start:end], [], metadata_i, get_attn_weights=attn_layers
             )
             w_hops.append(w_hop[0][:, alignment_head])
             del w_hop
@@ -162,8 +162,6 @@ def get_alignment(music_tokens, labels, prior, fp16, config):
         indices_hops[start] = indices_hop
         alignment_hops[start] = alignment_hop
     prior.cpu()
-    # gc.collect()
-    # torch.cuda.empty_cache()
 
     # Combine attn for each hop into attn for full range
     # Use indices to place them into correct place for corresponding source tokens
@@ -687,6 +685,7 @@ Ringer, Tom Ash, John Hughes, David MacLeod, Jamie Dougherty](https://arxiv.org/
     JUKEBOX_START_DOCSTRING,
 )
 class JukeboxVQVAE(PreTrainedModel):
+    config_class = JukeboxConfig
     def __init__(self, config):
         super().__init__(config)
         if not config.sample_length:
@@ -859,11 +858,12 @@ class JukeboxVQVAE(PreTrainedModel):
         Example:
         ```python
         >>> from transformers import JukeboxVQVAE, set_seed
-
-        >>> model = JukeboxVQVAE.from_pretrained("openai/jukebox-1b-lyrics").eval()
+        >>> import torch
+        >>> model = JukeboxVQVAE.from_pretrained("ArthurZ/vqvae-dummy").eval()
         >>> set_seed(0)
-        >>> zs = [torch.random(1, 0, dtype=torch.long).cuda() for _ in range(3)]
-        >>> model.decode(zs)
+        >>> zs = [torch.randint(100,(4,1))]
+        >>> model.decode(zs).shape
+        torch.Size([4, 8, 1])
         ```"""
 
         # Encode/Decode
@@ -954,15 +954,22 @@ class JukeboxAttention(nn.Module):
 
         # Sequence of length seq_len is factored as [blocks, seq_len // blocks]
         self.attn_func = attn_func
-        self.qkv, self.attn, self.attn_mask = {
-            0: (self.factored_qkv, self.dense_attn, "autoregressive"),  # Attend to all positions
-            1: (self.factored_qkv, self.block_attn, "autoregressive"),  # Attend to your block
-            2: (self.factored_qkv, self.transpose_block_attn, "autoregressive"),  # Attend to transpose block
-            3: (self.factored_qkv, self.prev_block_attn, None),  # Attend to previous block
-            4: (self.factored_qkv, self.summary_attn, "summary"),  # Attend to last position of each block
-            5: (self.factored_qkv, self.summary_spread_attn, "summary"),
-            6: (self.decode_qkv, self.decode_attn, None),
-            7: (self.prime_qkv, self.prime_attn, "prime"),
+        if attn_func == 6 : 
+            self.qkv = self.decode_qkv 
+        elif attn_func == 7:
+            self.qkv = self.prime_qkv
+        else:
+            self.qkv = self.factored_qkv
+            
+        self.attn, self.attn_mask = {
+            0: (self.dense_attn, "autoregressive"),  # Attend to all positions
+            1: (self.block_attn, "autoregressive"),  # Attend to your block
+            2: (self.transpose_block_attn, "autoregressive"),  # Attend to transpose block
+            3: (self.prev_block_attn, None),  # Attend to previous block
+            4: (self.summary_attn, "summary"),  # Attend to last position of each block
+            5: (self.summary_spread_attn, "summary"),
+            6: (self.dense_attn, None),
+            7: (self.prime_attn, "prime"),
         }[
             attn_func
         ]  # Attend to last key position of each block
@@ -1039,13 +1046,9 @@ class JukeboxAttention(nn.Module):
         return context_states
 
     def block_attn(self, query, key, value, sample):
-        _, block_ctx = (
-            self.blocks,
-            self.block_ctx,
-        )  # block_ctx is seq_len // blocks for complete seq_len ie seq_len = n_ctx. Sampling has less l
+        block_ctx = self.block_ctx
         batch_size, seq_len, embed_dim = value.shape  # For sample, query_len= 1, key_len = value_len = sample_t
         if sample:
-            assert seq_len == self._suff_cache_len(), f"{seq_len} != {self._suff_cache_len()}"
             return self.dense_attn(query, key, value, sample).view(batch_size, 1, embed_dim)
         else:
             query_length = query.shape[1]
@@ -1059,10 +1062,7 @@ class JukeboxAttention(nn.Module):
             return self.dense_attn(query, key, value, sample).view(batch_size, seq_len, embed_dim)
 
     def transpose_block_attn(self, query, key, value, sample):
-        _, block_ctx = (
-            self.blocks,
-            self.block_ctx,
-        )  # block_ctx is seq_len // blocks for complete seq_len ie seq_len = n_ctx. Sampling has less l
+        block_ctx = self.block_ctx
         batch_size, seq_len, embed_dim = value.shape  # For sample, query_len= 1, key_len = value_len = sample_t
         if sample:
             block_len = (seq_len - 1) % block_ctx
@@ -1071,44 +1071,32 @@ class JukeboxAttention(nn.Module):
             return self.dense_attn(query, key, value, sample).view(batch_size, 1, embed_dim)
         else:
             query_length = query.shape[1]
-            query = (
-                query.view(batch_size, query_length // block_ctx, block_ctx, embed_dim)
-                .transpose(1, 2)
-                .contiguous()
-                .view(batch_size * block_ctx, query_length // block_ctx, embed_dim)
-            )
-            key = (
-                key.view(batch_size, seq_len // block_ctx, block_ctx, embed_dim)
-                .transpose(1, 2)
-                .contiguous()
-                .view(batch_size * block_ctx, seq_len // block_ctx, embed_dim)
-            )
-            value = (
-                value.view(batch_size, seq_len // block_ctx, block_ctx, embed_dim)
-                .transpose(1, 2)
-                .contiguous()
-                .view(batch_size * block_ctx, seq_len // block_ctx, embed_dim)
-            )
-            return (
-                self.dense_attn(query, key, value, sample)
-                .view(batch_size, block_ctx, query_length // block_ctx, embed_dim)
-                .transpose(1, 2)
-                .contiguous()
-                .view(batch_size, query_length, embed_dim)
-            )
+            query = query.view(batch_size, query_length // block_ctx, block_ctx, embed_dim)
+            query = query.transpose(1, 2).contiguous()
+            query = query.view(batch_size * block_ctx, query_length // block_ctx, embed_dim)
+
+            key = key.view(batch_size, seq_len // block_ctx, block_ctx, embed_dim)
+            key = key.transpose(1, 2).contiguous()
+            key = key.view(batch_size * block_ctx, seq_len // block_ctx, embed_dim)
+
+            value = value.view(batch_size, seq_len // block_ctx, block_ctx, embed_dim)
+            value = value.transpose(1, 2).contiguous()
+            value = value.view(batch_size * block_ctx, seq_len // block_ctx, embed_dim)
+
+            block_attn = self.dense_attn(query, key, value, sample)
+            block_attn = block_attn.view(batch_size, block_ctx, query_length // block_ctx, embed_dim)
+            block_attn = block_attn.transpose(1, 2).contiguous()
+            block_attn = block_attn.view(batch_size, query_length, embed_dim)
+            
+            return block_attn
 
     def prev_block_attn(self, query, key, value, sample):
-        _, block_ctx = (
-            self.blocks,
-            self.block_ctx,
-        )  # block_ctx is seq_len // blocks for complete seq_len ie seq_len = n_ctx. Sampling has less l
+        block_ctx = self.block_ctx
         batch_size, seq_len, embed_dim = value.shape  # For sample, query_len= 1, key_len = value_len = sample_t
         if sample:
-            assert seq_len == self._suff_cache_len(), f"{seq_len} != {self._suff_cache_len()}"
             block = (seq_len - 1) // block_ctx
             prev_l = (block - 1) * block_ctx
             if block > 0:
-                assert prev_l == 0
                 key = key[:, prev_l : prev_l + block_ctx, :]
                 value = value[:, prev_l : prev_l + block_ctx, :]
             else:
@@ -1118,77 +1106,62 @@ class JukeboxAttention(nn.Module):
         else:
             query_length = query.shape[1]
             query = query.view(batch_size * query_length // block_ctx, block_ctx, embed_dim)
-            key = torch.nn.functional.pad(
-                key.view(batch_size, seq_len // block_ctx, block_ctx, embed_dim)[:, :-1, :, :], (0, 0, 0, 0, 1, 0)
-            ).view(batch_size * seq_len // block_ctx, block_ctx, embed_dim)
-            value = torch.nn.functional.pad(
-                value.view(batch_size, seq_len // block_ctx, block_ctx, embed_dim)[:, :-1, :, :], (0, 0, 0, 0, 1, 0)
-            ).view(batch_size * seq_len // block_ctx, block_ctx, embed_dim)
+            
+            key = key.view(batch_size, seq_len // block_ctx, block_ctx, embed_dim)[:, :-1, :, :]
+            key = torch.nn.functional.pad(key, (0, 0, 0, 0, 1, 0))
+            key = key.view(batch_size * seq_len // block_ctx, block_ctx, embed_dim)
+            
+            value = value.view(batch_size, seq_len // block_ctx, block_ctx, embed_dim)[:, :-1, :, :]
+            value = torch.nn.functional.pad(value, (0, 0, 0, 0, 1, 0))
+            value = value.view(batch_size * seq_len // block_ctx, block_ctx, embed_dim)
+
             if query_length < seq_len:
                 qb = query_length // block_ctx
                 kb = seq_len // block_ctx
                 seq_len = query_length
-                key = (
-                    key.view(batch_size, kb, block_ctx, embed_dim)[:, -qb:]
-                    .contiguous()
-                    .view(batch_size * qb, block_ctx, embed_dim)
-                )
-                value = (
-                    value.view(batch_size, kb, block_ctx, embed_dim)[:, -qb:]
-                    .contiguous()
-                    .view(batch_size * qb, block_ctx, embed_dim)
-                )
+                key = key.view(batch_size, kb, block_ctx, embed_dim)[:, -qb:]
+                key = key.contiguous().view(batch_size * qb, block_ctx, embed_dim)
+
+                value = value.view(batch_size, kb, block_ctx, embed_dim)[:, -qb:]
+                value = value.contiguous().view(batch_size * qb, block_ctx, embed_dim)
+
             return self.dense_attn(query, key, value, sample).view(batch_size, seq_len, embed_dim)
 
     def summary_attn(self, query, key, value, sample):
-        blocks, block_ctx = (
-            self.blocks,
-            self.block_ctx,
-        )  # block_ctx is seq_len // blocks for complete seq_len ie seq_len = n_ctx. Sampling has less l
+        blocks = self.blocks
+        block_ctx = self.block_ctx
         batch_size, seq_len, embed_dim = value.shape  # For sample, query_len= 1, key_len = value_len = sample_t
         if sample:
-            key = torch.nn.functional.pad(key[:, block_ctx - 1 : blocks * block_ctx - 1 : block_ctx, :], (0, 0, 1, 0))
-            value = torch.nn.functional.pad(
-                value[:, block_ctx - 1 : blocks * block_ctx - 1 : block_ctx, :], (0, 0, 1, 0)
-            )
+            key = key[:, block_ctx - 1 : blocks * block_ctx - 1 : block_ctx, :]
+            key = torch.nn.functional.pad(key, (0, 0, 1, 0))
+
+            value = value[:, block_ctx - 1 : blocks * block_ctx - 1 : block_ctx, :]
+            value = torch.nn.functional.pad(value, (0, 0, 1, 0))
             return self.dense_attn(query, key, value, sample).view(batch_size, 1, embed_dim)
         else:
-            key = torch.nn.functional.pad(
-                key.view(batch_size, blocks, seq_len // blocks, embed_dim)[:, :-1, -1, :], (0, 0, 1, 0)
-            )  # batch_size, blocks, embed_dim
-            value = torch.nn.functional.pad(
-                value.view(batch_size, blocks, seq_len // blocks, embed_dim)[:, :-1, -1, :], (0, 0, 1, 0)
-            )  # batch_size, blocks, embed_dim
+            key = key.view(batch_size, blocks, seq_len // blocks, embed_dim)[:, :-1, -1, :]
+            key = torch.nn.functional.pad(key, (0, 0, 1, 0))  # batch_size, blocks, embed_dim
+
+            value = value.view(batch_size, blocks, seq_len // blocks, embed_dim)[:, :-1, -1, :]
+            value = torch.nn.functional.pad(value, (0, 0, 1, 0))  # batch_size, blocks, embed_dim
             return self.dense_attn(query, key, value, sample).view(batch_size, seq_len, embed_dim)
 
     def summary_spread_attn(self, query, key, value, sample):
-        blocks, _, spread = (
-            self.blocks,
-            self.block_ctx,
-            self.spread,
-        )  # block_ctx is seq_len // blocks for complete seq_len ie seq_len = n_ctx. Sampling has less l
+        blocks = self.blocks
+        spread = self.spread
+        
         batch_size, seq_len, embed_dim = value.shape  # For sample, query_len= 1, key_len = value_len = sample_t
         if sample:
-            assert False, "Not yet implemented"
-            # key = torch.nn.functional.pad(k,(0,0,block_ctx,(-l)%block_ctx)).view(batch_size, -1, block_ctx, embed_dim)[:,:-1,-spread:,:].contiguous().view(batch_size, -1, embed_dim)
-            # value = torch.nn.functional.pad(value,(0,0,block_ctx,(-l)%block_ctx)).view(batch_size, -1, block_ctx, embed_dim)[:,:-1,-spread:,:].contiguous().view(batch_size, -1, embed_dim)
-            # return self.dense_attn(query, key, value, sample).view(batch_size, 1, embed_dim)
+            raise NotImplementedError
         else:
-            key = (
-                torch.nn.functional.pad(
-                    key.view(batch_size, blocks, seq_len // blocks, embed_dim)[:, :-1, -spread:, :], (0, 0, 0, 0, 1, 0)
-                )
-                .contiguous()
-                .view(batch_size, blocks * spread, embed_dim)
-            )  # batch_size, blocks * spread, embed_dim
-            value = (
-                torch.nn.functional.pad(
-                    value.view(batch_size, blocks, seq_len // blocks, embed_dim)[:, :-1, -spread:, :],
-                    (0, 0, 0, 0, 1, 0),
-                )
-                .contiguous()
-                .view(batch_size, blocks * spread, embed_dim)
-            )  # batch_size, blocks * spread, embed_dim
+            key = key.view(batch_size, blocks, seq_len // blocks, embed_dim)[:, :-1, -spread:, :]
+            key = torch.nn.functional.pad(key, (0, 0, 0, 0, 1, 0)).contiguous()
+            key = key.view(batch_size, blocks * spread, embed_dim)
+            
+            value = value.view(batch_size, blocks, seq_len // blocks, embed_dim)[:, :-1, -spread:, :]
+            value = torch.nn.functional.pad(value, (0, 0, 0, 0, 1, 0)).contiguous()
+            value = value.view(batch_size, blocks * spread, embed_dim)
+            
             return self.dense_attn(query, key, value, sample).view(batch_size, seq_len, embed_dim)
 
     def prime_attn(self, query, key, value, sample):
@@ -1197,15 +1170,11 @@ class JukeboxAttention(nn.Module):
         value = value[:, :lyric_enc_len]
         return self.dense_attn(query, key, value, sample)
 
-    def decode_attn(self, query, key, value, sample):
-        assert (
-            key.shape[1] == value.shape[1] == self.encoder_dims
-        ), f"k: {key.shape}, v: {value.shape}, enc_dims: {self.encoder_dims}"
-        return self.dense_attn(query, key, value, sample)
-
     def factored_qkv(self, hidden_states, lyric_encoder_states=None, sample=False):
         curr_ctx = hidden_states.shape[1]
-        assert lyric_encoder_states is None
+        if lyric_encoder_states is not None: 
+            raise TypeError("lyric_encoder_states should be None")
+
         query, key, value = hidden_states.chunk(3, dim=2)
         if sample:
             self.sample_t += curr_ctx
@@ -1226,7 +1195,8 @@ class JukeboxAttention(nn.Module):
 
     def prime_qkv(self, hidden_states, lyric_encoder_states=None, sample=False):
         curr_ctx = hidden_states.shape[1]
-        assert lyric_encoder_states is None
+        if lyric_encoder_states is not None: 
+            raise TypeError("lyric_encoder_states should be None")
         query, key, value = hidden_states.chunk(3, dim=2)
         if sample:
             if self._cache_len() < self._lyric_enc_len:
@@ -1447,25 +1417,7 @@ class JukeboxTransformer(nn.Module):
         res_scale = 1.0 / n_depth if res_scale else 1.0
 
         # Orders of attn_func
-        attn_func = {
-            0: lambda d: 0,  # Complete dense attn
-            1: lambda d: [1, 2][d % 2],  # Alternate row and column attn
-            2: lambda d: [1, 2, 3][d % 3],  # Alternate row, column and previous row attn
-            3: lambda d: [1, 4][d % 2],  # Alternate row and last column
-            4: lambda d: [1, 5][d % 2],  # Alternate row and last k columns
-            5: lambda d: [1, 4, 1, 1][d % 4],  # Alternate row, last column, row, row
-            6: lambda d: [1, 2, 3, 6][d % 4],
-            7: lambda d: [*[1, 2, 3] * 5, 6][d % 16],
-            8: lambda d: [1, 2, 3, 1, 2, 3, 1, 2, 3, 6][d % 10],  # Used by separated_enc_dec model with lyrics
-            9: lambda d: [1, 2, 3, 0][d % 4],
-            10: lambda d: [*[1, 2, 3, 1, 2, 3, 1, 2, 3], *[1, 2, 3, 1, 2, 3, 1, 2, 3, 6] * 7][
-                d % 79
-            ],  # Used by large separated_enc_dec model with lyrics
-            11: lambda d: [6, 6, 0][d % 3] if d % 16 == 15 else [1, 2, 3][d % 3],
-            12: lambda d: [7, 7, 0][d % 3]
-            if d % 16 == 15
-            else [1, 2, 3][d % 3],  # Used by single_enc_dec model with lyrics
-        }[attn_order]
+        attn_func = self.get_attn_func(attn_order)
 
         def attn_block(d):
             return JukeboxBlock(
@@ -1495,6 +1447,43 @@ class JukeboxTransformer(nn.Module):
 
         self.saved_attn_weights = []
 
+
+    def get_attn_func(self, attn_order : int):
+        """
+        Get the correct attention order pattern.  
+        """
+        
+        if attn_order == 0 : 
+            attn_func = lambda layer : 0
+        if attn_order == 1 : 
+            attn_func = lambda layer: [1, 2][layer % 2]
+        elif attn_order == 2 : 
+            attn_func = lambda layer: [1, 2, 3][layer % 3]  # Alternate row, column and previous row attn
+        elif attn_order == 3 : 
+            attn_func = lambda layer: [1, 4][layer % 2]  # Alternate row and last column
+        elif attn_order == 4 : 
+            attn_func = lambda layer: [1, 5][layer % 2]  # Alternate row and last k columns
+        elif attn_order == 5 : 
+            attn_func = lambda layer: [1, 4, 1, 1][layer % 4]  # Alternate row, last column, row, row
+        elif attn_order == 6 : 
+            attn_func = lambda layer: [1, 2, 3, 6][layer % 4]
+        elif attn_order == 7 : 
+            attn_func = lambda layer: [*[1, 2, 3] * 5, 6][layer % 16]
+        elif attn_order == 8 : 
+            attn_func = lambda layer: [1, 2, 3, 1, 2, 3, 1, 2, 3, 6][layer % 10]  # Used by separated_enc_dec model with lyrics
+        elif attn_order == 9 : 
+            attn_func = lambda layer: [1, 2, 3, 0][layer % 4]
+        elif attn_order == 10 : 
+            attn_func = lambda layer: [*[1, 2, 3, 1, 2, 3, 1, 2, 3], *[1, 2, 3, 1, 2, 3, 1, 2, 3, 6] * 7][
+                layer % 79
+            ]  # Used by large separated_enc_dec model with lyrics
+        elif attn_order == 11 : 
+            attn_func = lambda layer: [6, 6, 0][layer % 3] if layer % 16 == 15 else [1, 2, 3][layer % 3]
+        elif attn_order == 12 : 
+            attn_func = lambda layer: [7, 7, 0][layer % 3] if layer % 16 == 15 else [1, 2, 3][layer % 3]  # Used by single_enc_dec model with lyrics
+        
+        return attn_func
+
     def set_record_attn(self, record_attn):
         """
         Arguments:
@@ -1510,19 +1499,13 @@ class JukeboxTransformer(nn.Module):
 
         for i, layer in enumerate(self._attn_mods):
             layer.attn.record_attn = _should_record_attn(i)
-        if record_attn:
-            assert self.saved_attn_weights == []
-            for layer in self._attn_mods:
-                assert layer.attn.w is None
-        else:
+
+        if not record_attn:
             self.saved_attn_weights = []
             for layer in self._attn_mods:
                 layer.attn.w = None
 
-    def forward(self, hidden_states, lyric_encoder_states=None, sample=False, fp16=False, fp16_out=False):
-        if fp16:
-            hidden_states = hidden_states.half()
-
+    def forward(self, hidden_states, lyric_encoder_states=None, sample=False):
         # Blocks
         for i, attn_layer in enumerate(self._attn_mods):
             if attn_layer.attn_func == 6:  # attend to the lyrics
@@ -1531,8 +1514,6 @@ class JukeboxTransformer(nn.Module):
                 hidden_states = attn_layer(hidden_states, lyric_encoder_states=None, sample=sample)
             if attn_layer.attn.record_attn:
                 self.saved_attn_weights.append(attn_layer.attn.c_attn.weight)
-        if not fp16_out:
-            hidden_states = hidden_states.float()
         return hidden_states
 
     def del_cache(self):
@@ -1669,7 +1650,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
         audio_conditioning=None,
         metadata_conditioning=None,
         lyric_encoder_states=None,
-        fp16=False,
         get_preds=False,
         get_acts=False,
         get_sep_loss=False,
@@ -1699,9 +1679,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             self.embed_tokens_dropout(hidden_states) + self.pos_emb_dropout(self.pos_emb()) + audio_conditioning
         )  # Pos emb and dropout
 
-        hidden_states = self.transformer(
-            hidden_states, lyric_encoder_states=lyric_encoder_states, fp16=fp16, fp16_out=fp16
-        )  # Transformer
+        hidden_states = self.transformer(hidden_states, lyric_encoder_states=lyric_encoder_states)  # Transformer
         if self.add_cond_after_transformer:  # Piped doesnt add x_cond
             hidden_states = hidden_states + audio_conditioning
 
@@ -1756,7 +1734,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
         audio_conditioning=None,
         metadata_conditioning=None,
         lyric_encoder_states=None,
-        fp16=False,
         temp=1.0,
         top_k=0,
         top_p=0.0,
@@ -1783,9 +1760,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
                     sample_t, n_samples, tokens, audio_conditioning, metadata_conditioning
                 )
 
-                hidden_states = self.transformer(
-                    hidden_states, lyric_encoder_states=lyric_encoder_states, sample=True, fp16=fp16, fp16_out=fp16
-                )
+                hidden_states = self.transformer(hidden_states, lyric_encoder_states=lyric_encoder_states, sample=True)
                 if self.add_cond_after_transformer:
                     hidden_states = hidden_states + cond
                 hidden_states = self.fc_proj_out(hidden_states)  # Predictions
@@ -1822,7 +1797,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
         audio_conditioning=None,
         metadata_conditioning=None,
         lyric_encoder_states=None,
-        fp16=False,
         temp=1.0,
         top_k=0,
         top_p=0.0,
@@ -1870,7 +1844,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 del conds_prime
                 if not get_preds:
                     del cond_prime
-                x_prime = self.transformer(x_prime, lyric_encoder_states=lyric_encoder_states, sample=True, fp16=fp16)
+                x_prime = self.transformer(x_prime, lyric_encoder_states=lyric_encoder_states, sample=True)
 
                 if get_preds:
                     if self.add_cond_after_transformer:
@@ -1895,7 +1869,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 )
 
                 hidden_states = self.transformer(
-                    hidden_states, lyric_encoder_states=lyric_encoder_states, sample=True, fp16=fp16, fp16_out=fp16
+                    hidden_states, lyric_encoder_states=lyric_encoder_states, sample=True
                 )  # Transformer
                 if self.add_cond_after_transformer:
                     hidden_states = hidden_states + cond
@@ -2000,23 +1974,20 @@ class JukeboxRangeEmbedding(nn.Module):
 
     def forward(self, pos_start, pos_end=None):
         # Check if [pos_start,pos_end] in [pos_min, pos_max)
-        assert len(pos_start.shape) == 2, f"Expected shape with 2 dims, got {pos_start.shape}"
-        assert (self.pos_min <= pos_start).all() and (
-            pos_start < self.pos_max
-        ).all(), f"Range is [{self.pos_min},{self.pos_max}), got {pos_start}"
+        if not len(pos_start.shape) == 2:
+            raise TypeError(f"Expected shape with 2 dims, got {pos_start.shape}")
+        if not (self.pos_min <= pos_start).all() and (pos_start < self.pos_max).all() :
+            raise TypeError(f"Range is [{self.pos_min},{self.pos_max}), got {pos_start}")
+        
         pos_start = pos_start.float()
         if pos_end is not None:
-            assert len(pos_end.shape) == 2, f"Expected shape with 2 dims, got {pos_end.shape}"
             if self.clamp:
                 pos_end = pos_end.clamp(self.pos_min, self.pos_max)
-            assert (self.pos_min <= pos_end).all() and (
-                pos_end <= self.pos_max
-            ).all(), f"Range is [{self.pos_min},{self.pos_max}), got {pos_end}"
+
             pos_end = pos_end.float()
         # Interpolate so that [pos_start, ..., pos_end] <-> position tensor of length n_ctx
         n_time = self.n_time
         if n_time != 1:
-            assert pos_end is not None
             interpolation = (
                 torch.arange(0, n_time, dtype=torch.float, device=pos_start.device).view(1, n_time) / n_time
             )
@@ -2081,7 +2052,6 @@ class LabelConditioner(nn.Module):
         mask = (genre >= 0).float().unsqueeze(2)
         genre_emb = (self.bow_genre_emb(genre.clamp(0)) * mask).sum(dim=1, keepdim=True)
         start_emb = genre_emb + artist_emb
-        # assert_shape(start_emb, (batch_size, 1, self.out_width))
 
         # Pos embedding of length n_ctx
         if self.include_time_signal:
@@ -2137,11 +2107,8 @@ class JukeboxPrior(nn.Module):
 
         self.music_tokens_shapes = music_tokens_shapes
         self.levels = len(self.music_tokens_shapes)
-
-        self.music_tokens_shape = self.music_tokens_shapes[level]
-
         self.level = level
-
+        self.music_tokens_shape = self.music_tokens_shapes[level]
         self.latent_dim = config.prior_latent_dim
 
         prior_kwargs = dict(
@@ -2463,7 +2430,6 @@ class JukeboxPrior(nn.Module):
         music_tokens=None,
         music_tokens_conds=None,
         metadata=None,
-        fp16=False,
         temp=1.0,
         top_k=0,
         top_p=0.0,
@@ -2496,7 +2462,6 @@ class JukeboxPrior(nn.Module):
                     music_tokens,
                     audio_conditioning,
                     metadata_conditioning,
-                    fp16=fp16,
                     temp=temp,
                     top_k=top_k,
                     top_p=top_p,
@@ -2505,14 +2470,13 @@ class JukeboxPrior(nn.Module):
                 )
                 music_tokens = self.prior_postprocess(tokens)
             else:
-                lyric_encoder_states = self.get_lyric_encoder_states(lyric_tokens, fp16=fp16, sample=True)
+                lyric_encoder_states = self.get_lyric_encoder_states(lyric_tokens, sample=True)
                 if no_past_context:
                     music_tokens = self.prior.sample(
                         n_samples,
                         audio_conditioning,
                         metadata_conditioning,
                         lyric_encoder_states,
-                        fp16=fp16,
                         temp=temp,
                         top_k=top_k,
                         top_p=top_p,
@@ -2525,7 +2489,6 @@ class JukeboxPrior(nn.Module):
                         audio_conditioning,
                         metadata_conditioning,
                         lyric_encoder_states,
-                        fp16=fp16,
                         temp=temp,
                         top_k=top_k,
                         top_p=top_p,
@@ -2534,7 +2497,7 @@ class JukeboxPrior(nn.Module):
                     )
         return music_tokens
 
-    def get_lyric_encoder_states(self, lyric_tokens, fp16=False, sample=False):
+    def get_lyric_encoder_states(self, lyric_tokens, sample=False):
         """
         Retreive the last hidden_states of the lyric encoder that will be attended to by the decoder. Forwards through
         the lyric encoder.
@@ -2542,7 +2505,7 @@ class JukeboxPrior(nn.Module):
         if self.nb_relevant_lyric_tokens != 0 and self.lyric_conditioning:
             if sample:
                 self.lyric_encoder = self.lyric_encoder.to(lyric_tokens.device)
-            lyric_acts = self.lyric_encoder(lyric_tokens, None, None, None, fp16=fp16)
+            lyric_acts = self.lyric_encoder(lyric_tokens, None, None, None)
             lyric_acts = self.lyric_encoder.proj_in(lyric_acts)
             lyric_encoder_states = self.lyric_encoder.final_layer_norm(lyric_acts)
             if sample:
@@ -2566,7 +2529,7 @@ class JukeboxPrior(nn.Module):
         return lyric_enc_loss
 
     def forward_tokens(
-        self, music_tokens, music_tokens_conds=[], metadata=None, fp16=False, get_preds=False, get_attn_weights=False
+        self, music_tokens, music_tokens_conds=[], metadata=None, get_preds=False, get_attn_weights=False
     ):
         """
         Applies a forward pass using the conditioning tokens. Different from the classic forward as it does not use the
@@ -2586,17 +2549,16 @@ class JukeboxPrior(nn.Module):
                 [lyric_tokens, music_tokens], [None, audio_conditioning]
             )
             (lyric_enc_loss, gen_loss), preds = self.prior(
-                tokens, audio_conditioning, metadata_conditioning, fp16=fp16, get_sep_loss=True, get_preds=get_preds
+                tokens, audio_conditioning, metadata_conditioning, get_sep_loss=True, get_preds=get_preds
             )
         else:
-            lyric_encoder_states = self.get_lyric_encoder_states(lyric_tokens, fp16=fp16)
+            lyric_encoder_states = self.get_lyric_encoder_states(lyric_tokens)
             lyric_enc_loss = self.get_lyric_enc_loss(lyric_encoder_states, lyric_tokens)
             gen_loss, preds = self.prior(
                 music_tokens,
                 audio_conditioning,
                 metadata_conditioning,
                 lyric_encoder_states,
-                fp16=fp16,
                 get_preds=get_preds,
             )
         loss = (self.lyric_enc_loss_fraction * lyric_enc_loss * self.lyrics_enc_loss_dims / self.total_loss_dims) + (
@@ -2616,14 +2578,13 @@ class JukeboxPrior(nn.Module):
         else:
             return loss, metrics
 
-    def forward(self, hidden_states, metadata=None, fp16=False, decode=False, get_preds=False):
+    def forward(self, hidden_states, metadata=None, decode=False, get_preds=False):
         batch_size = hidden_states.shape[0]
         music_tokens, *music_tokens_conds = self.encode(hidden_states, bs_chunks=batch_size)
         loss, metrics = self.forward_tokens(
             music_tokens=music_tokens,
             music_tokens_conds=music_tokens_conds,
             metadata=metadata,
-            fp16=fp16,
             get_preds=get_preds,
         )
         if decode:
@@ -2752,8 +2713,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
         # set metadata offset, sample_length and lyrics tokens
         metadata = prior.get_metadata(labels, start, self.total_length, offset)
 
-        # gc.collect()
-        # torch.cuda.empty_cache()
         max_batch_size = sampling_kwargs["max_batch_size"]
         del sampling_kwargs["max_batch_size"]
 
@@ -2814,7 +2773,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
         offset=0,
         save_results=True,
         sample_length=None,
-        fp16=False,
     ) -> List[torch.LongTensor]:
         """
         Core sampling function used to generate music tokens. Iterates over the provided list of levels, while saving
@@ -2856,9 +2814,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 time.
             sample_length (`int`, *optional*, defaults to None):
                 Desired lenght of the generation in samples.
-            fp16 (`bool`, *optional*, defaults to False):
-                Whether or not to cast the hidden states to float16 in the attention layer. Defaults to False.
-
 
         Example:
         ```python
@@ -2891,21 +2846,18 @@ class JukeboxModel(JukeboxPreTrainedModel):
         sampling_kwargs = [
             dict(
                 temp=0.99,
-                fp16=fp16,
                 max_batch_size=lower_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
             ),
             dict(
                 temp=0.99,
-                fp16=fp16,
                 max_batch_size=lower_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
             ),
             dict(
                 temp=sampling_temperature,
-                fp16=fp16,
                 max_batch_size=max_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
@@ -2945,9 +2897,9 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 save_wav(logdir, level, metas=metas, aud=raw_audio.float(), sampling_rate=self.config.sampling_rate)
                 if compute_alignments and self.priors[-1] is not None and self.priors[-1].nb_relevant_lyric_tokens > 0:
                     with torch.no_grad():
-                        alignments = get_alignment(music_tokens, labels[-1], self.priors[-1], fp16, self.config)
+                        alignments = get_alignment(music_tokens, labels[-1], self.priors[-1], self.config)
                     torch.save({"alignments": alignments}, f"{logdir}/lyric_alignments.pt")
-                    # disabled saving to html, as it requires too many dependencies.
+
         return music_tokens
 
     @add_start_docstrings(
