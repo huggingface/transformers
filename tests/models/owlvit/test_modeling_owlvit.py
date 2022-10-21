@@ -841,3 +841,31 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
             [[0.0691, 0.0445, 0.1373], [0.1592, 0.0456, 0.3192], [0.1632, 0.0423, 0.2478]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
+
+    @slow
+    def test_inference_one_shot_object_detection(self):
+        model_name = "google/owlvit-base-patch32"
+        model = OwlViTForObjectDetection.from_pretrained(model_name).to(torch_device)
+
+        processor = OwlViTProcessor.from_pretrained(model_name)
+
+        image = prepare_img()
+        query_image = prepare_img()
+        inputs = processor(
+            images=image,
+            query_images=query_image,
+            max_length=16,
+            padding="max_length",
+            return_tensors="pt",
+        ).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        num_queries = int((model.config.vision_config.image_size / model.config.vision_config.patch_size) ** 2)
+        self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
+
+        expected_slice_boxes = torch.tensor(
+            [[0.0594, 0.0445, 0.1025], [0.1297, 0.0451, 0.2027], [0.1488, 0.0429, 0.1585]]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))

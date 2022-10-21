@@ -43,7 +43,7 @@ class OwlViTProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    def __call__(self, text=None, query_image=None, images=None, padding="max_length", return_tensors="np", **kwargs):
+    def __call__(self, text=None, images=None, query_images=None, padding="max_length", return_tensors="np", **kwargs):
         """
         Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
         `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode:
@@ -56,16 +56,16 @@ class OwlViTProcessor(ProcessorMixin):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            query_image (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`,
-            `List[torch.Tensor]`):
-                The image or batch of query images to be prepared. Each image can be a PIL image, NumPy array or
-                PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where
-                C is a number of channels, H and W are image height and width.
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`,
             `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
+            query_images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`,:
+            `List[torch.Tensor]`):
+                The query image or batch of query images to be prepared. Each image can be a PIL image, NumPy array or
+                PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where
+                C is a number of channels, H and W are image height and width.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
@@ -81,7 +81,7 @@ class OwlViTProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
 
-        if text is None and query_image is None and images is None:
+        if text is None and query_images is None and images is None:
             raise ValueError(
                 "You have to specify at least one text or query image or image. All three cannot be none."
             )
@@ -135,10 +135,10 @@ class OwlViTProcessor(ProcessorMixin):
             encoding["input_ids"] = input_ids
             encoding["attention_mask"] = attention_mask
 
-        if query_image is not None:
+        if query_images is not None:
             encoding = BatchEncoding()
             query_pixel_values = self.feature_extractor(
-                query_image, return_tensors=return_tensors, **kwargs
+                query_images, return_tensors=return_tensors, **kwargs
             ).pixel_values
             encoding["query_pixel_values"] = query_pixel_values
 
@@ -148,10 +148,10 @@ class OwlViTProcessor(ProcessorMixin):
         if text is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values
             return encoding
-        elif query_image is not None and images is not None:
+        elif query_images is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values
             return encoding
-        elif text is not None or query_image is not None:
+        elif text is not None or query_images is not None:
             return encoding
         else:
             return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
