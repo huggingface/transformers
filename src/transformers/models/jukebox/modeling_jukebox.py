@@ -16,7 +16,6 @@
 
 import math
 import os
-import time
 from typing import List
 
 import numpy as np
@@ -178,9 +177,8 @@ def get_alignment(music_tokens, labels, prior, config):
     return alignments
 
 
-def save_wav(fname, lvl, metas, aud, sampling_rate):
+def save_temp_audio(fname, lvl, metas, aud, sampling_rate):
     aud = torch.clamp(aud, -1, 1).cpu().numpy()
-    return
     for i in list(range(aud.shape[0])):
         if metas is not None:
             artists, genres, lyrics = list(metas)[i].values()
@@ -1615,12 +1613,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 self.fc_proj_out.weight = self.embed_tokens.weight
             self.loss = torch.nn.CrossEntropyLoss()
 
-    def preprocess(self, tokens):
-        # Input: hidden_states is NHWC and uint8. Converted to NL and long
-        # Can include stuff like bitpacking, reordering here.
-        batch_size = tokens.shape[0]
-        return tokens.view(batch_size, -1).long()
-
     def postprocess(self, tokens, sample_tokens=None):
         # Convert back from NL and long to NHWC
         batch_size = tokens.shape[0]
@@ -1643,10 +1635,10 @@ class JukeboxConditionalAutoregressive(nn.Module):
         - tokens : composed of both music tokens and lyrics tokens or just music tokens
         """
         # Preprocess.
-        with torch.no_grad():
-            tokens = self.preprocess(tokens)
-
         batch_size = tokens.shape[0]
+        with torch.no_grad():
+            tokens = tokens.view(batch_size, -1).long()
+
         if not self.audio_conditioning:
             audio_conditioning = torch.zeros(
                 (batch_size, 1, self.width),
@@ -1798,8 +1790,9 @@ class JukeboxConditionalAutoregressive(nn.Module):
         if sample_tokens is None:
             sample_tokens = self.input_dims
         # Preprocess.
+        batch_size = hidden_states.shape[0]
         with torch.no_grad():
-            hidden_states = self.preprocess(hidden_states)
+            hidden_states = hidden_states.view(batch_size, -1).long()
 
         sampled_audio = torch.split(hidden_states, 1, dim=1)
         sampled_audio = list(sampled_audio)
@@ -1872,12 +1865,12 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 # Adjust logits
                 hidden_states = hidden_states / temp
                 hidden_states = filter_logits(hidden_states, top_k=top_k, top_p=top_p)
-                hidden_states = torch.distributions.Categorical(
+                tokens = torch.distributions.Categorical(
                     logits=hidden_states
                 ).sample()  # Sample and replace hidden_states
-                sampled_audio.append(hidden_states.clone())
+                sampled_audio.append(tokens.clone())
 
-            del hidden_states
+            del tokens
             self.transformer.del_cache()
 
             hidden_states = torch.cat(sampled_audio, dim=1)
@@ -2309,14 +2302,12 @@ class JukeboxPrior(nn.Module):
         Extracts current level's conditioning music tokens.
         """
         if self.level != self.levels - 1:
-            music_tokens_cond = music_tokens[self.level + 1][
-                :, start // self.cond_downsample : end // self.cond_downsample
-            ]
+            music_tokens_cond = music_tokens[self.level + 1]
+            music_tokens = music_tokens[:, start // self.cond_downsample : end // self.cond_downsample]
             missing_cond_len = self.n_ctx // self.cond_downsample - music_tokens_cond[-1].shape[-1]
             if missing_cond_len > 0:
-                music_tokens_cond = torch.cat(
-                    (music_tokens_cond, torch.zeros(1, missing_cond_len).to(music_tokens_cond.device)), dim=-1
-                ).long()
+                init_cond = torch.zeros(1, missing_cond_len).to(music_tokens_cond.device)
+                music_tokens_cond = torch.cat((music_tokens_cond, init_cond), dim=-1).long()
             music_tokens_conds = [music_tokens_cond]
         else:
             music_tokens_conds = None
@@ -2708,8 +2699,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         # set metadata offset, sample_length and lyrics tokens
         metadata = prior.get_metadata(labels, start, self.total_length, offset)
 
-        max_batch_size = sampling_kwargs["max_batch_size"]
-        del sampling_kwargs["max_batch_size"]
+        max_batch_size = sampling_kwargs.pop("max_batch_size")
 
         music_tokens_list = self.split_batch(previous_sampled_tokens, n_samples, max_batch_size)
         music_tokens_conds_list = self.split_batch(music_tokens_conds, n_samples, max_batch_size)
@@ -2727,8 +2717,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
             )
             tokens.append(tokens_i)
         sampled_tokens = torch.cat(tokens, dim=0)
-
-        sampling_kwargs["max_batch_size"] = max_batch_size
 
         # Update music_tokens with new sample
         music_tokens_new = sampled_tokens[:, -new_tokens:]
@@ -2838,42 +2826,28 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 int(sample_length_in_seconds * self.config.sampling_rate) // top_prior.raw_to_tokens
             ) * top_prior.raw_to_tokens
 
-        sampling_kwargs = [
-            dict(
-                temp=0.99,
-                max_batch_size=lower_batch_size,
-                chunk_size=chunk_size,
-                sample_tokens=sample_tokens,
-            ),
-            dict(
-                temp=0.99,
-                max_batch_size=lower_batch_size,
-                chunk_size=chunk_size,
-                sample_tokens=sample_tokens,
-            ),
-            dict(
-                temp=sampling_temperature,
-                max_batch_size=max_batch_size,
-                chunk_size=chunk_size,
-                sample_tokens=sample_tokens,
-            ),
-        ]
-        self.start_time = time.strftime("%Y-%m-%d-%Hh%M")
         if sample_levels is None:
             sample_levels = range(len(self.priors))
 
-        self.total_length = total_length  # total length of the signal, might be bit different
+        self.total_length = (
+            total_length  # total length of the signal, might be bit different from the actual generated length
+        )
         for level in reversed(sample_levels):
+            sampling_kwargs = dict(
+                temp=0.99 if level == 0 else sampling_temperature,
+                max_batch_size=lower_batch_size if level != sample_levels else max_batch_size,
+                chunk_size=chunk_size,
+                sample_tokens=sample_tokens,
+            )
 
-            # from the actual generated length
             self.priors[level].to(music_tokens[level].device).eval()
             # Set correct total_length, hop_length, labels and sampling_kwargs for level
-            # self.priors[level].total_length = total_length // self.priors[level].raw_to_tokens
+
             total_token_to_sample = total_length // self.priors[level].raw_to_tokens
             hop_length = int(self.config.hop_fraction[-level - 1] * self.priors[level].n_ctx)
 
             music_tokens = self.sample_level(
-                music_tokens, labels[level], offset, sampling_kwargs[level], level, total_token_to_sample, hop_length
+                music_tokens, labels[level], offset, sampling_kwargs, level, total_token_to_sample, hop_length
             )
 
             self.priors[level].to("cpu")
@@ -2883,13 +2857,15 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 raw_audio = self.vqvae.decode(
                     music_tokens[level:], start_level=level, bs_chunks=music_tokens[level].shape[0]
                 )
-            self.vqvae.to("cpu")
+            self.vqvae.to("cpu")  # save RAM
 
             if save_results:
-                logdir = f"{self.start_time}/level_{level}"
+                logdir = f"jukebox/level_{level}"
                 if not os.path.exists(logdir):
                     os.makedirs(logdir)
-                save_wav(logdir, level, metas=metas, aud=raw_audio.float(), sampling_rate=self.config.sampling_rate)
+                save_temp_audio(
+                    logdir, level, metas=metas, aud=raw_audio.float(), sampling_rate=self.config.sampling_rate
+                )
                 if compute_alignments and self.priors[-1] is not None and self.priors[-1].nb_relevant_lyric_tokens > 0:
                     with torch.no_grad():
                         alignments = get_alignment(music_tokens, labels[-1], self.priors[-1], self.config)
