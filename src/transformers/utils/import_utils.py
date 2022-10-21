@@ -698,7 +698,7 @@ then restarting your kernel.
 
 Note that if you have a local folder named `datasets` or a local python file named `datasets.py` in your current
 working directory, python may try to import this instead of the 🤗 Datasets library. You should rename this folder or
-that python file if that's the case.
+that python file if that's the case. Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -712,6 +712,7 @@ In a notebook or a colab, you can install it by executing a cell with
 ```
 !pip install tokenizers
 ```
+Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -719,7 +720,7 @@ In a notebook or a colab, you can install it by executing a cell with
 SENTENCEPIECE_IMPORT_ERROR = """
 {0} requires the SentencePiece library but it was not found in your environment. Checkout the instructions on the
 installation page of its repo: https://github.com/google/sentencepiece#installation and follow the ones
-that match your environment.
+that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -727,7 +728,7 @@ that match your environment.
 PROTOBUF_IMPORT_ERROR = """
 {0} requires the protobuf library but it was not found in your environment. Checkout the instructions on the
 installation page of its repo: https://github.com/protocolbuffers/protobuf/tree/master/python#installation and follow the ones
-that match your environment.
+that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -735,7 +736,7 @@ that match your environment.
 FAISS_IMPORT_ERROR = """
 {0} requires the faiss library but it was not found in your environment. Checkout the instructions on the
 installation page of its repo: https://github.com/facebookresearch/faiss/blob/master/INSTALL.md and follow the ones
-that match your environment.
+that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -743,6 +744,7 @@ that match your environment.
 PYTORCH_IMPORT_ERROR = """
 {0} requires the PyTorch library but it was not found in your environment. Checkout the instructions on the
 installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
+Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
@@ -772,7 +774,7 @@ installation page https://www.tensorflow.org/install that match your environment
 # docstyle-ignore
 BS4_IMPORT_ERROR = """
 {0} requires the Beautiful Soup library but it was not found in your environment. You can install it with pip:
-`pip install beautifulsoup4`
+`pip install beautifulsoup4`. Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -786,6 +788,7 @@ In a notebook or a colab, you can install it by executing a cell with
 ```
 !pip install -U scikit-learn
 ```
+Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -793,6 +796,7 @@ In a notebook or a colab, you can install it by executing a cell with
 TENSORFLOW_IMPORT_ERROR = """
 {0} requires the TensorFlow library but it was not found in your environment. Checkout the instructions on the
 installation page: https://www.tensorflow.org/install and follow the ones that match your environment.
+Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -800,7 +804,7 @@ installation page: https://www.tensorflow.org/install and follow the ones that m
 DETECTRON2_IMPORT_ERROR = """
 {0} requires the detectron2 library but it was not found in your environment. Checkout the instructions on the
 installation page: https://github.com/facebookresearch/detectron2/blob/master/INSTALL.md and follow the ones
-that match your environment.
+that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -808,38 +812,41 @@ that match your environment.
 FLAX_IMPORT_ERROR = """
 {0} requires the FLAX library but it was not found in your environment. Checkout the instructions on the
 installation page: https://github.com/google/flax and follow the ones that match your environment.
+Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 FTFY_IMPORT_ERROR = """
 {0} requires the ftfy library but it was not found in your environment. Checkout the instructions on the
 installation section: https://github.com/rspeer/python-ftfy/tree/master#installing and follow the ones
-that match your environment.
+that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
 
 # docstyle-ignore
 SCATTER_IMPORT_ERROR = """
 {0} requires the torch-scatter library but it was not found in your environment. You can install it with pip as
-explained here: https://github.com/rusty1s/pytorch_scatter.
+explained here: https://github.com/rusty1s/pytorch_scatter. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 PYTORCH_QUANTIZATION_IMPORT_ERROR = """
 {0} requires the pytorch-quantization library but it was not found in your environment. You can install it with pip:
 `pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`
+Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 TENSORFLOW_PROBABILITY_IMPORT_ERROR = """
 {0} requires the tensorflow_probability library but it was not found in your environment. You can install it with pip as
-explained here: https://github.com/tensorflow/probability.
+explained here: https://github.com/tensorflow/probability. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 TENSORFLOW_TEXT_IMPORT_ERROR = """
 {0} requires the tensorflow_text library but it was not found in your environment. You can install it with pip as
 explained here: https://www.tensorflow.org/text/guide/tf_text_intro.
+Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -847,71 +854,73 @@ explained here: https://www.tensorflow.org/text/guide/tf_text_intro.
 PANDAS_IMPORT_ERROR = """
 {0} requires the pandas library but it was not found in your environment. You can install it with pip as
 explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/install.html.
+Please note that you may need to restart your runtime after installation.
 """
 
 
 # docstyle-ignore
 PHONEMIZER_IMPORT_ERROR = """
 {0} requires the phonemizer library but it was not found in your environment. You can install it with pip:
-`pip install phonemizer`
+`pip install phonemizer`. Please note that you may need to restart your runtime after installation.
 """
 
 
 # docstyle-ignore
 SACREMOSES_IMPORT_ERROR = """
 {0} requires the sacremoses library but it was not found in your environment. You can install it with pip:
-`pip install sacremoses`
+`pip install sacremoses`. Please note that you may need to restart your runtime after installation.
 """
 
 
 # docstyle-ignore
 SCIPY_IMPORT_ERROR = """
 {0} requires the scipy library but it was not found in your environment. You can install it with pip:
-`pip install scipy`
+`pip install scipy`. Please note that you may need to restart your runtime after installation.
 """
 
 
 # docstyle-ignore
 SPEECH_IMPORT_ERROR = """
 {0} requires the torchaudio library but it was not found in your environment. You can install it with pip:
-`pip install torchaudio`
+`pip install torchaudio`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 TIMM_IMPORT_ERROR = """
 {0} requires the timm library but it was not found in your environment. You can install it with pip:
-`pip install timm`
+`pip install timm`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 VISION_IMPORT_ERROR = """
 {0} requires the PIL library but it was not found in your environment. You can install it with pip:
-`pip install pillow`
+`pip install pillow`. Please note that you may need to restart your runtime after installation.
 """
 
 
 # docstyle-ignore
 PYTESSERACT_IMPORT_ERROR = """
 {0} requires the PyTesseract library but it was not found in your environment. You can install it with pip:
-`pip install pytesseract`
+`pip install pytesseract`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 PYCTCDECODE_IMPORT_ERROR = """
 {0} requires the pyctcdecode library but it was not found in your environment. You can install it with pip:
-`pip install pyctcdecode`
+`pip install pyctcdecode`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 ACCELERATE_IMPORT_ERROR = """
 {0} requires the accelerate library but it was not found in your environment. You can install it with pip:
-`pip install accelerate`
+`pip install accelerate`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 CCL_IMPORT_ERROR = """
 {0} requires the torch ccl library but it was not found in your environment. You can install it with pip:
 `pip install oneccl_bind_pt -f https://developer.intel.com/ipex-whl-stable`
+Please note that you may need to restart your runtime after installation.
 """
 
 BACKENDS_MAPPING = OrderedDict(
