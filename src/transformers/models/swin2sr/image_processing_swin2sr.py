@@ -14,13 +14,13 @@
 # limitations under the License.
 """Image processor class for Swin2SR."""
 
-from typing import Optional, Union, List
+from typing import List, Optional, Union
 
 import numpy as np
-from PIL import Image
+import PIL.Image
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_utils import ChannelDimension, is_torch_tensor, to_numpy_array, valid_images
+from ...image_utils import ChannelDimension, is_batched, to_numpy_array, valid_images
 from ...utils import TensorType, logging
 
 
@@ -64,7 +64,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         return image
 
     def preprocess(
-        self, 
+        self,
         images: Union["PIL.Image.Image", TensorType, List["PIL.Image.Image"], List[TensorType]],
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
@@ -100,14 +100,9 @@ class Swin2SRImageProcessor(BaseImageProcessor):
             - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
               width).
         """
-        is_batched = bool(
-            isinstance(images, (list, tuple))
-            and (isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]))
-        )
-
         if not valid_images(images):
             raise ValueError("Invalid image(s)")
-        
+
         if not is_batched:
             images = [images]
 
