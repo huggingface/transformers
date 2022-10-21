@@ -780,7 +780,6 @@ class Swin2SREncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.swinv2.modeling_swinv2.Swinv2PreTrainedModel with Swinv2->Swin2SR, swinv2->swin2sr
 class Swin2SRPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -795,9 +794,7 @@ class Swin2SRPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            torch.nn.init.trunc_normal_(module.weight.data, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):

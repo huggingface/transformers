@@ -101,6 +101,7 @@ class Swin2SRConfig(PretrainedConfig):
     model_type = "swin2sr"
 
     attribute_map = {
+        "hidden_size": "embed_dim",
         "num_attention_heads": "num_heads",
         "num_hidden_layers": "num_layers",
     }

@@ -21,7 +21,7 @@ from transformers.testing_utils import require_torch, require_vision, slow, torc
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -86,7 +86,10 @@ class Swin2SRModelTester:
         self.use_labels = use_labels
         self.upscale = upscale
 
+        # here we set some attributes to make tests pass
         self.num_hidden_layers = len(depths)
+        self.hidden_size = embed_dim
+        self.seq_length = (image_size // patch_size) ** 2
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -218,6 +221,23 @@ class Swin2SRModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = Swin2SRModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    # overwriting because of `logit_scale` parameter
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if "logit_scale" in name:
+                    continue
+                if param.requires_grad:
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
