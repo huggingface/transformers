@@ -58,7 +58,6 @@ SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
-# Copied from transformers.models.swin.modeling_swin.SwinEncoderOutput with Swin->Swin2SR
 class Swin2SREncoderOutput(ModelOutput):
     """
     Swin2SR encoder's outputs, with potential hidden states and attentions.
@@ -77,18 +76,11 @@ class Swin2SREncoderOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-            shape `(batch_size, hidden_size, height, width)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
-            include the spatial dimensions.
     """
 
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # Copied from transformers.models.swin.modeling_swin.window_partition
@@ -744,16 +736,10 @@ class Swin2SREncoder(nn.Module):
     ) -> Union[Tuple, Swin2SREncoderOutput]:
         all_input_dimensions = ()
         all_hidden_states = () if output_hidden_states else None
-        all_reshaped_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
         if output_hidden_states:
-            batch_size, _, hidden_size = hidden_states.shape
-            # rearrange b (h w) c -> b c h w
-            reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size)
-            reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
             all_hidden_states += (hidden_states,)
-            all_reshaped_hidden_states += (reshaped_hidden_state,)
 
         for i, stage_module in enumerate(self.stages):
             layer_head_mask = head_mask[i] if head_mask is not None else None
@@ -779,12 +765,7 @@ class Swin2SREncoder(nn.Module):
             all_input_dimensions += (input_dimensions,)
 
             if output_hidden_states:
-                batch_size, _, hidden_size = hidden_states.shape
-                # rearrange b (h w) c -> b c h w
-                reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size)
-                reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
                 all_hidden_states += (hidden_states,)
-                all_reshaped_hidden_states += (reshaped_hidden_state,)
 
             if output_attentions:
                 all_self_attentions += layer_outputs[2:]
@@ -796,7 +777,6 @@ class Swin2SREncoder(nn.Module):
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
-            reshaped_hidden_states=all_reshaped_hidden_states,
         )
 
 
@@ -1164,10 +1144,10 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
 
         loss = None
         if labels is not None:
-            raise NotImplementedError("To do")
+            raise NotImplementedError("Training is not supported at the moment")
 
         if not return_dict:
-            output = (reconstruction,) + outputs[2:]
+            output = (reconstruction,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return ImageSuperResolutionOutput(
