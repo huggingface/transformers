@@ -2765,9 +2765,10 @@ class JukeboxModel(JukeboxPreTrainedModel):
            music_tokens (`List[torch.LongTensor`] of length `self.levels` ) :
                 A sequence of music tokens which will be used as context to continue the sampling process. Should have
                 `self.levels` tensors, each corresponding to the generation at a certain level.
-            labels (`List[torch.Tensor]`):
-                Raw list of tokens. Should be the same length as `self.levels`, the number of priors or the length of
-                `sample_levels`.
+            labels (`List[Torch.LongTensor]` of lenght `n_sample`, and shape `(self.levels, 4 +
+            self.config.max_nb_genre + lyric_sequence_lenght)` :
+                List of metadata such as `artist_id`, `genre_id` and the full list of lyric tokens which are used to
+                condition the generation.
             sample_levels (`List[int]`):
                 List of the desired levels at which the sampling will be done. A level is equivalent to the index of
                 the prior in the list of priors
@@ -2798,7 +2799,10 @@ class JukeboxModel(JukeboxPreTrainedModel):
             sample_length (`int`, *optional*, defaults to None):
                 Desired lenght of the generation in samples.
 
+        Returns:
+
         Example:
+
         ```python
         >>> from transformers import JukeboxTokenizer, JukeboxModel, set_seed
         >>> import torch
@@ -2879,8 +2883,13 @@ class JukeboxModel(JukeboxPreTrainedModel):
         upsample the sequence. If you want to create the audio, you should call `model.decode(tokens)`, which will use
         the VQ-VAE decoder to convert the music tokens to raw audio.
 
-        Args:""",
-        JUKEBOX_SAMPLING_INPUT_DOCSTRING,
+        Args:
+            labels (`List[Torch.LongTensor]` of lenght `n_sample`, and shape `(self.levels, 4 + self.config.max_nb_genre + lyric_sequence_lenght)` :
+                List of metadata such as `artist_id`, `genre_id` and the full list of lyric tokens which are used to
+                condition the generation.
+            n_samples (`int`, *optional*, default to 1) :
+                Number of samples to be generated in parallel.
+        """,
     )
     def ancestral_sample(self, labels, n_samples=1, **sampling_kwargs) -> List[torch.LongTensor]:
         """
@@ -2934,7 +2943,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
             music_tokens (`List[torch.LongTensor`] of length `self.levels` ) :
                 A sequence of music tokens which will be used as context to continue the sampling process. Should have
                 `self.levels` tensors, each corresponding to the generation at a certain level.
-
         """,
         JUKEBOX_SAMPLING_INPUT_DOCSTRING,
     )
