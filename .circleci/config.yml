@@ -75,6 +75,7 @@ jobs:
             - image: cimg/python:3.7.12
         parallelism: 1
         steps:
+            - checkout
             - run: pip install --upgrade pip
             - run: pip install .
             - run: |
