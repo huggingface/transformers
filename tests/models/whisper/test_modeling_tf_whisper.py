@@ -644,8 +644,8 @@ def _test_large_batched_generation(in_queue, out_queue, timeout):
         _inputs = in_queue.get(timeout=timeout)
 
         set_seed(0)
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
+        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
 
         input_speech = _load_datasamples(4)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
@@ -662,7 +662,7 @@ def _test_large_batched_generation(in_queue, out_queue, timeout):
         )
         # fmt: on
 
-        # unittest.TestCase().assertTrue(np.allclose(generated_ids, EXPECTED_LOGITS))
+        unittest.TestCase().assertTrue(np.allclose(generated_ids, EXPECTED_LOGITS))
 
         # fmt: off
         EXPECTED_TRANSCRIPT = [
@@ -674,7 +674,7 @@ def _test_large_batched_generation(in_queue, out_queue, timeout):
         # fmt: on
 
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
-        # unittest.TestCase().assertListEqual(transcript, EXPECTED_TRANSCRIPT)
+        unittest.TestCase().assertListEqual(transcript, EXPECTED_TRANSCRIPT)
     except Exception:
         error = f"{traceback.format_exc()}"
 
@@ -923,7 +923,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_batched_generation(self):
-        timeout = os.environ.get("PYTEST_TIMEOUT", 120)
+        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
         run_test_in_subprocess(test_case=self, target_func=_test_large_batched_generation, inputs=None, timeout=timeout)
 
     @slow
