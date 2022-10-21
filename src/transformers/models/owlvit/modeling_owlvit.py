@@ -119,8 +119,8 @@ def center_to_corners_format(x: torch.Tensor) -> torch.Tensor:
     Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
     (x_0, y_0, x_1, y_1).
     """
-    x_c, y_c, w, h = x.unbind(-1)
-    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
+    center_x, center_y, width, height = x.unbind(-1)
+    b = [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)]
     return torch.stack(b, dim=-1)
 
 
@@ -177,15 +177,17 @@ def generalized_box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Ten
     """
     # degenerate boxes gives inf / nan results
     # so do an early check
-    assert (boxes1[:, 2:] >= boxes1[:, :2]).all()
-    assert (boxes2[:, 2:] >= boxes2[:, :2]).all()
+    if not (boxes1[:, 2:] >= boxes1[:, :2]).all():
+        raise ValueError(f"boxes1 must be in [x0, y0, x1, y1] (corner) format, but got {boxes1}")
+    if not (boxes2[:, 2:] >= boxes2[:, :2]).all():
+        raise ValueError(f"boxes2 must be in [x0, y0, x1, y1] (corner) format, but got {boxes2}")
     iou, union = box_iou(boxes1, boxes2)
 
-    lt = torch.min(boxes1[:, None, :2], boxes2[:, :2])
-    rb = torch.max(boxes1[:, None, 2:], boxes2[:, 2:])
+    top_left = torch.min(boxes1[:, None, :2], boxes2[:, :2])
+    bottom_right = torch.max(boxes1[:, None, 2:], boxes2[:, 2:])
 
-    wh = (rb - lt).clamp(min=0)  # [N,M,2]
-    area = wh[:, :, 0] * wh[:, :, 1]
+    width_height = (bottom_right - top_left).clamp(min=0)  # [N,M,2]
+    area = width_height[:, :, 0] * width_height[:, :, 1]
 
     return iou - (area - union) / area
 
@@ -1207,11 +1209,11 @@ class OwlViTClassPredictionHead(nn.Module):
         super().__init__()
 
         out_dim = config.text_config.hidden_size
-        query_dim = config.vision_config.hidden_size
+        self.query_dim = config.vision_config.hidden_size
 
-        self.dense0 = nn.Linear(query_dim, out_dim)
-        self.logit_shift = nn.Linear(query_dim, 1)
-        self.logit_scale = nn.Linear(query_dim, 1)
+        self.dense0 = nn.Linear(self.query_dim, out_dim)
+        self.logit_shift = nn.Linear(self.query_dim, 1)
+        self.logit_scale = nn.Linear(self.query_dim, 1)
         self.elu = nn.ELU()
 
     def forward(
@@ -1220,9 +1222,13 @@ class OwlViTClassPredictionHead(nn.Module):
         query_embeds: Optional[torch.FloatTensor],
         query_mask: Optional[torch.Tensor],
     ) -> Tuple[torch.FloatTensor]:
+
         image_class_embeds = self.dense0(image_embeds)
         if query_embeds is None:
-            return (None, image_class_embeds)
+            device = image_class_embeds.device
+            batch_size, num_patches = image_class_embeds.shape[:2]
+            pred_logits = torch.zeros((batch_size, num_patches, self.query_dim)).to(device)
+            return (pred_logits, image_class_embeds)
 
         # Normalize image and text features
         image_class_embeds /= torch.linalg.norm(image_class_embeds, dim=-1, keepdim=True) + 1e-6
@@ -1458,9 +1464,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         )
         image_embeds = image_embeds.reshape(new_size)
 
-        # Similar for query
-
-        # Resize class token
+        # Repeat the process for the query image
         new_size = tuple(np.array(query_image_embeds.shape) - np.array((0, 1, 0)))
         class_token_out = torch.broadcast_to(query_image_embeds[:, :1, :], new_size)
 

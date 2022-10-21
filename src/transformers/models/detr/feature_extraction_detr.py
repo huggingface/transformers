@@ -39,7 +39,7 @@ ImageInput = Union[Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], L
 
 
 # 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
-def center_to_corners_format(x):
+def center_to_corners_format(x: torch.Tensor) -> torch.Tensor:
     """
     Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
     (x_0, y_0, x_1, y_1).

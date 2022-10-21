@@ -2219,7 +2219,7 @@ class DetrHungarianMatcher(nn.Module):
 # below: bounding box utilities taken from https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
 
 
-def _upcast(t: Tensor) -> Tensor:
+def _upcast(t: torch.Tensor) -> torch.Tensor:
     # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
     if t.is_floating_point():
         return t if t.dtype in (torch.float32, torch.float64) else t.float()
@@ -2260,7 +2260,7 @@ def box_iou(boxes1, boxes2):
     return iou, union
 
 
-def generalized_box_iou(boxes1, boxes2):
+def generalized_box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
     """
     Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
 
@@ -2285,7 +2285,7 @@ def generalized_box_iou(boxes1, boxes2):
 
 
 # Copied from transformers.models.detr.feature_extraction_detr.center_to_corners_format
-def center_to_corners_format(x):
+def center_to_corners_format(x: torch.Tensor) -> torch.Tensor:
     """
     Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
     (x_0, y_0, x_1, y_1).
