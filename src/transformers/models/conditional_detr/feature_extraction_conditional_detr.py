@@ -821,6 +821,51 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return encoded_inputs
 
+    def post_process(self, outputs, target_sizes):
+        """
+        Args:
+        Converts the output of [`ConditionalDetrForObjectDetection`] into the format expected by the COCO api. Only
+        supports PyTorch.
+            outputs ([`ConditionalDetrObjectDetectionOutput`]):
+                Raw outputs of the model.
+            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
+                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
+                image size (before any data augmentation). For visualization, this should be the image size after data
+                augment, but before padding.
+        Returns:
+            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            in the batch as predicted by the model.
+        """
+        warnings.warn(
+            "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
+            " `post_process_object_detection`",
+            FutureWarning,
+        )
+
+        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
+
+        if len(out_logits) != len(target_sizes):
+            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+        if target_sizes.shape[1] != 2:
+            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
+
+        prob = out_logits.sigmoid()
+        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 300, dim=1)
+        scores = topk_values
+        topk_boxes = topk_indexes // out_logits.shape[2]
+        labels = topk_indexes % out_logits.shape[2]
+        boxes = center_to_corners_format(out_bbox)
+        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
+
+        # and from relative [0, 1] to absolute [0, height] coordinates
+        img_h, img_w = target_sizes.unbind(1)
+        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
+        boxes = boxes * scale_fct[:, None, :]
+
+        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
+
+        return results
+
     # Copied from transformers.models.deformable_detr.feature_extraction_deformable_detr.DeformableDetrFeatureExtractor.post_process_object_detection with DeformableDetr->ConditionalDetr
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None
