@@ -117,7 +117,7 @@ def main():
 
         onnx_inputs, onnx_outputs = export(
             preprocessor,
-            model,
+            decoder_model,
             decoder_onnx_config,
             args.opset,
             args.output.parent.joinpath("decoder_model.onnx"),
@@ -126,7 +126,7 @@ def main():
         validate_model_outputs(
             decoder_onnx_config,
             preprocessor,
-            model,
+            decoder_model,
             args.output.parent.joinpath("decoder_model.onnx"),
             onnx_outputs,
             args.atol if args.atol else decoder_onnx_config.atol_for_validation,

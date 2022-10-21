@@ -383,7 +383,7 @@ class OnnxExportTestCaseV2(TestCase):
         onnx_opset = max(encoder_onnx_config.default_onnx_opset, decoder_onnx_config.default_onnx_opset)
 
         with NamedTemporaryFile("w") as encoder_output:
-            _, onnx_outputs = export(
+            onnx_inputs, onnx_outputs = export(
                 preprocessor, encoder_model, encoder_onnx_config, onnx_opset, Path(encoder_output.name), device=device
             )
             validate_model_outputs(
@@ -400,7 +400,7 @@ class OnnxExportTestCaseV2(TestCase):
         with NamedTemporaryFile("w") as decoder_output:
             _, onnx_outputs = export(
                 preprocessor,
-                model,
+                decoder_model,
                 decoder_onnx_config,
                 onnx_config.default_onnx_opset,
                 Path(decoder_output.name),
@@ -409,7 +409,7 @@ class OnnxExportTestCaseV2(TestCase):
             validate_model_outputs(
                 decoder_onnx_config,
                 preprocessor,
-                model,
+                decoder_model,
                 Path(decoder_output.name),
                 onnx_outputs,
                 decoder_onnx_config.atol_for_validation,

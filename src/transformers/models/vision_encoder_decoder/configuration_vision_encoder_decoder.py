@@ -190,8 +190,9 @@ class VisionEncoderDecoderOnnxConfig(OnnxConfig):
 
     def get_encoder_config(self, encoder_config: PretrainedConfig) -> OnnxConfig:
         r"""
-        Args:
         Returns ONNX encoder config for `VisionEncoderDecoder` model.
+
+        Args:
             encoder_config (`PretrainedConfig`):
                 The encoder model's configuration to use when exporting to ONNX.
         Returns:
@@ -203,8 +204,9 @@ class VisionEncoderDecoderOnnxConfig(OnnxConfig):
         self, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig, feature: str = "default"
     ) -> OnnxConfig:
         r"""
-        Args:
         Returns ONNX decoder config for `VisionEncoderDecoder` model.
+
+        Args:
             encoder_config (`PretrainedConfig`):
                 The encoder model's configuration to use when exporting to ONNX.
             decoder_config (`PretrainedConfig`):
