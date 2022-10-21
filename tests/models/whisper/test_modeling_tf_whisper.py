@@ -762,7 +762,7 @@ def _test_large_batched_generation(in_queue, out_queue, timeout):
 
     error = None
     try:
-        _inputs = in_queue.get(timeout=timeout)
+        _ = in_queue.get(timeout=timeout)
 
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
