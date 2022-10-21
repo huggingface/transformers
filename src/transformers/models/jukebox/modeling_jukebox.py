@@ -147,9 +147,7 @@ def get_alignment(music_tokens, labels, prior, config):
         for tokens_i, metadata_i in zip(tokens_bs, metadata_bs):
             tokens_i = tokens_i.to("cuda")
             metadata_i = metadata_i.to("cuda")
-            w_hop = prior.forward_tokens(
-                tokens_i[:, start:end], [], metadata_i, get_attn_weights=attn_layers
-            )
+            w_hop = prior.forward_tokens(tokens_i[:, start:end], [], metadata_i, get_attn_weights=attn_layers)
             w_hops.append(w_hop[0][:, alignment_head])
             del w_hop
         w = torch.cat(w_hops, dim=0)
@@ -686,14 +684,15 @@ Ringer, Tom Ash, John Hughes, David MacLeod, Jamie Dougherty](https://arxiv.org/
 )
 class JukeboxVQVAE(PreTrainedModel):
     config_class = JukeboxConfig
+
     def __init__(self, config):
         super().__init__(config)
         if not config.sample_length:
             downsamples = [stride**down for stride, down in zip(config.vqvae_strides_t, config.vqvae_down_t)]
             top_raw_to_tokens = np.prod(downsamples)
             config.sample_length = (
-                (config.sample_length_in_seconds * config.sampling_rate // top_raw_to_tokens) * top_raw_to_tokens
-            )
+                config.sample_length_in_seconds * config.sampling_rate // top_raw_to_tokens
+            ) * top_raw_to_tokens
             config.sample_length = config.sample_length.astype(int)
 
         input_shape = (config.sample_length, 1)
@@ -860,9 +859,10 @@ class JukeboxVQVAE(PreTrainedModel):
         ```python
         >>> from transformers import JukeboxVQVAE, set_seed
         >>> import torch
+
         >>> model = JukeboxVQVAE.from_pretrained("ArthurZ/vqvae-dummy").eval()
         >>> set_seed(0)
-        >>> zs = [torch.randint(100,(4,1))]
+        >>> zs = [torch.randint(100, (4, 1))]
         >>> model.decode(zs).shape
         torch.Size([4, 8, 1])
         ```"""
@@ -955,13 +955,13 @@ class JukeboxAttention(nn.Module):
 
         # Sequence of length seq_len is factored as [blocks, seq_len // blocks]
         self.attn_func = attn_func
-        if attn_func == 6 : 
-            self.qkv = self.decode_qkv 
+        if attn_func == 6:
+            self.qkv = self.decode_qkv
         elif attn_func == 7:
             self.qkv = self.prime_qkv
         else:
             self.qkv = self.factored_qkv
-            
+
         self.attn, self.attn_mask = {
             0: (self.dense_attn, "autoregressive"),  # Attend to all positions
             1: (self.block_attn, "autoregressive"),  # Attend to your block
@@ -1087,7 +1087,7 @@ class JukeboxAttention(nn.Module):
             block_attn = block_attn.view(batch_size, block_ctx, query_length // block_ctx, embed_dim)
             block_attn = block_attn.transpose(1, 2).contiguous()
             block_attn = block_attn.view(batch_size, query_length, embed_dim)
-            
+
             return block_attn
 
     def prev_block_attn(self, query, key, value, sample):
@@ -1106,11 +1106,11 @@ class JukeboxAttention(nn.Module):
         else:
             query_length = query.shape[1]
             query = query.view(batch_size * query_length // block_ctx, block_ctx, embed_dim)
-            
+
             key = key.view(batch_size, seq_len // block_ctx, block_ctx, embed_dim)[:, :-1, :, :]
             key = torch.nn.functional.pad(key, (0, 0, 0, 0, 1, 0))
             key = key.view(batch_size * seq_len // block_ctx, block_ctx, embed_dim)
-            
+
             value = value.view(batch_size, seq_len // block_ctx, block_ctx, embed_dim)[:, :-1, :, :]
             value = torch.nn.functional.pad(value, (0, 0, 0, 0, 1, 0))
             value = value.view(batch_size * seq_len // block_ctx, block_ctx, embed_dim)
@@ -1149,7 +1149,7 @@ class JukeboxAttention(nn.Module):
     def summary_spread_attn(self, query, key, value, sample):
         blocks = self.blocks
         spread = self.spread
-        
+
         batch_size, seq_len, embed_dim = value.shape  # For sample, query_len= 1, key_len = value_len = sample_t
         if sample:
             raise NotImplementedError
@@ -1157,11 +1157,11 @@ class JukeboxAttention(nn.Module):
             key = key.view(batch_size, blocks, seq_len // blocks, embed_dim)[:, :-1, -spread:, :]
             key = torch.nn.functional.pad(key, (0, 0, 0, 0, 1, 0)).contiguous()
             key = key.view(batch_size, blocks * spread, embed_dim)
-            
+
             value = value.view(batch_size, blocks, seq_len // blocks, embed_dim)[:, :-1, -spread:, :]
             value = torch.nn.functional.pad(value, (0, 0, 0, 0, 1, 0)).contiguous()
             value = value.view(batch_size, blocks * spread, embed_dim)
-            
+
             return self.dense_attn(query, key, value, sample).view(batch_size, seq_len, embed_dim)
 
     def prime_attn(self, query, key, value, sample):
@@ -1172,7 +1172,7 @@ class JukeboxAttention(nn.Module):
 
     def factored_qkv(self, hidden_states, lyric_encoder_states=None, sample=False):
         curr_ctx = hidden_states.shape[1]
-        if lyric_encoder_states is not None: 
+        if lyric_encoder_states is not None:
             raise TypeError("lyric_encoder_states should be None")
 
         query, key, value = hidden_states.chunk(3, dim=2)
@@ -1195,7 +1195,7 @@ class JukeboxAttention(nn.Module):
 
     def prime_qkv(self, hidden_states, lyric_encoder_states=None, sample=False):
         curr_ctx = hidden_states.shape[1]
-        if lyric_encoder_states is not None: 
+        if lyric_encoder_states is not None:
             raise TypeError("lyric_encoder_states should be None")
         query, key, value = hidden_states.chunk(3, dim=2)
         if sample:
@@ -1419,7 +1419,7 @@ class JukeboxTransformer(nn.Module):
         # Orders of attn_func
         attn_func = self.get_attn_func(attn_order)
 
-        def attn_block(d):
+        def attn_block(depth):
             return JukeboxBlock(
                 width=width,
                 n_ctx=n_ctx,
@@ -1429,12 +1429,12 @@ class JukeboxTransformer(nn.Module):
                 afn=afn,
                 scale=scale,
                 mask=mask,
-                zero_out=zero_out if attn_func(d) != 6 else True,
+                zero_out=zero_out if attn_func(depth) != 6 else True,
                 init_scale=init_scale,
                 res_scale=res_scale,
                 m_attn=m_attn,
                 m_mlp=m_mlp,
-                attn_func=attn_func(d),
+                attn_func=attn_func(depth),
                 blocks=blocks,
                 spread=spread,
                 encoder_dims=encoder_dims,
@@ -1442,47 +1442,34 @@ class JukeboxTransformer(nn.Module):
             )
 
         self._attn_mods = nn.ModuleList()
-        for d in range(n_depth):
-            self._attn_mods.append(attn_block(d))
+        for depth in range(n_depth):
+            self._attn_mods.append(attn_block(depth))
 
         self.saved_attn_weights = []
 
+    def get_attn_func(self, attn_order: int):
+        """
+        Get the correct attention order pattern.
+        """
+        mapping = {
+            0: lambda layer: 0,
+            1: lambda layer: [1, 2][layer % 2],
+            2: lambda layer: [1, 2, 3][layer % 3],  # Alternate row, column and previous row attn
+            3: lambda layer: [1, 4][layer % 2],  # Alternate row and last column
+            4: lambda layer: [1, 5][layer % 2],  # Alternate row and last k columns
+            5: lambda layer: [1, 4, 1, 1][layer % 4],  # Alternate row, last column, row, row
+            6: lambda layer: [1, 2, 3, 6][layer % 4],
+            7: lambda layer: [*[1, 2, 3] * 5, 6][layer % 16],
+            8: lambda layer: [1, 2, 3, 1, 2, 3, 1, 2, 3, 6][layer % 10],  # Used by separated_enc_dec model with lyrics
+            9: lambda layer: [1, 2, 3, 0][layer % 4],
+            # Used by large separated_enc_dec model with lyrics
+            10: lambda layer: [*[1, 2, 3, 1, 2, 3, 1, 2, 3], *[1, 2, 3, 1, 2, 3, 1, 2, 3, 6] * 7][layer % 79],
+            11: lambda layer: [6, 6, 0][layer % 3] if layer % 16 == 15 else [1, 2, 3][layer % 3],
+            # Used by single_enc_dec model with lyrics
+            12: lambda layer: [7, 7, 0][layer % 3] if layer % 16 == 15 else [1, 2, 3][layer % 3],
+        }
 
-    def get_attn_func(self, attn_order : int):
-        """
-        Get the correct attention order pattern.  
-        """
-        
-        if attn_order == 0 : 
-            attn_func = lambda layer : 0
-        if attn_order == 1 : 
-            attn_func = lambda layer: [1, 2][layer % 2]
-        elif attn_order == 2 : 
-            attn_func = lambda layer: [1, 2, 3][layer % 3]  # Alternate row, column and previous row attn
-        elif attn_order == 3 : 
-            attn_func = lambda layer: [1, 4][layer % 2]  # Alternate row and last column
-        elif attn_order == 4 : 
-            attn_func = lambda layer: [1, 5][layer % 2]  # Alternate row and last k columns
-        elif attn_order == 5 : 
-            attn_func = lambda layer: [1, 4, 1, 1][layer % 4]  # Alternate row, last column, row, row
-        elif attn_order == 6 : 
-            attn_func = lambda layer: [1, 2, 3, 6][layer % 4]
-        elif attn_order == 7 : 
-            attn_func = lambda layer: [*[1, 2, 3] * 5, 6][layer % 16]
-        elif attn_order == 8 : 
-            attn_func = lambda layer: [1, 2, 3, 1, 2, 3, 1, 2, 3, 6][layer % 10]  # Used by separated_enc_dec model with lyrics
-        elif attn_order == 9 : 
-            attn_func = lambda layer: [1, 2, 3, 0][layer % 4]
-        elif attn_order == 10 : 
-            attn_func = lambda layer: [*[1, 2, 3, 1, 2, 3, 1, 2, 3], *[1, 2, 3, 1, 2, 3, 1, 2, 3, 6] * 7][
-                layer % 79
-            ]  # Used by large separated_enc_dec model with lyrics
-        elif attn_order == 11 : 
-            attn_func = lambda layer: [6, 6, 0][layer % 3] if layer % 16 == 15 else [1, 2, 3][layer % 3]
-        elif attn_order == 12 : 
-            attn_func = lambda layer: [7, 7, 0][layer % 3] if layer % 16 == 15 else [1, 2, 3][layer % 3]  # Used by single_enc_dec model with lyrics
-        
-        return attn_func
+        return mapping[attn_order]
 
     def set_record_attn(self, record_attn):
         """
@@ -1502,8 +1489,6 @@ class JukeboxTransformer(nn.Module):
 
         if not record_attn:
             self.saved_attn_weights = []
-            for layer in self._attn_mods:
-                layer.attn.w = None
 
     def forward(self, hidden_states, lyric_encoder_states=None, sample=False):
         # Blocks
@@ -1663,7 +1648,11 @@ class JukeboxConditionalAutoregressive(nn.Module):
 
         batch_size = tokens.shape[0]
         if not self.audio_conditioning:
-            audio_conditioning = torch.zeros((batch_size, 1, self.width), device=tokens.device, dtype=torch.float)
+            audio_conditioning = torch.zeros(
+                (batch_size, 1, self.width),
+                device=tokens.device,
+                dtype=self.transformer._attn_mods[0].mlp.c_fc.weight.dtype,
+            )
 
         target = tokens  # Target
         hidden_states = self.embed_tokens(tokens)  # music_tokens embedding
@@ -1712,7 +1701,9 @@ class JukeboxConditionalAutoregressive(nn.Module):
 
     def get_emb(self, sample_t, n_samples, tokens, audio_conditioning, metadata_conditioning):
         if sample_t == 0:
-            hidden_states = torch.empty(n_samples, 1, self.width).to(audio_conditioning.device)
+            hidden_states = torch.empty(n_samples, 1, self.width, dtype=self.embed_tokens.weight.dtype).to(
+                audio_conditioning.device
+            )
             if self.metadata_conditioning:
                 hidden_states[:, 0] = metadata_conditioning.view(n_samples, self.width)
             else:
@@ -1744,9 +1735,9 @@ class JukeboxConditionalAutoregressive(nn.Module):
             sample_tokens = self.input_dims
 
         if not self.audio_conditioning:
-            audio_conditioning = torch.zeros((n_samples, 1, self.width), dtype=torch.float).to(
-                "cpu" if torch.cuda.is_available() else "cpu"
-            )
+            audio_conditioning = torch.zeros(
+                (n_samples, 1, self.width), dtype=self.transformer._attn_mods[0].mlp.c_fc.weight.dtype
+            ).to("cpu" if torch.cuda.is_available() else "cpu")
 
         with torch.no_grad():
             sampled_tokens, tokens = [], None
@@ -1814,7 +1805,9 @@ class JukeboxConditionalAutoregressive(nn.Module):
         sampled_audio = list(sampled_audio)
 
         if not self.audio_conditioning:
-            audio_conditioning = torch.zeros((n_samples, 1, self.width), dtype=torch.float).to(hidden_states.device)
+            audio_conditioning = torch.zeros(
+                (n_samples, 1, self.width), dtype=self.transformer._attn_mods[0].mlp.c_fc.weight.dtype
+            ).to(hidden_states.device)
 
         with torch.no_grad():
             if get_preds:
@@ -1976,9 +1969,9 @@ class JukeboxRangeEmbedding(nn.Module):
         # Check if [pos_start,pos_end] in [pos_min, pos_max)
         if not len(pos_start.shape) == 2:
             raise TypeError(f"Expected shape with 2 dims, got {pos_start.shape}")
-        if not (self.pos_min <= pos_start).all() and (pos_start < self.pos_max).all() :
+        if not (self.pos_min <= pos_start).all() and (pos_start < self.pos_max).all():
             raise TypeError(f"Range is [{self.pos_min},{self.pos_max}), got {pos_start}")
-        
+
         pos_start = pos_start.float()
         if pos_end is not None:
             if self.clamp:
@@ -2342,7 +2335,9 @@ class JukeboxPrior(nn.Module):
             cond, dims = conds[i], self.prior_dims[i]
             if cond is None:
                 conds[i] = torch.zeros(
-                    (batch_size, dims, self.prior_width), dtype=torch.float, device=tokens[0].device
+                    (batch_size, dims, self.prior_width),
+                    dtype=self.prior.transformer._attn_mods[0].mlp.c_fc.weight.dtype,
+                    device=tokens[0].device,
                 )
 
         return torch.cat(tokens, dim=1), torch.cat(conds, dim=1)
