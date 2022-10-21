@@ -644,7 +644,7 @@ def _test_large_batched_generation(in_queue, out_queue, timeout):
         _inputs = in_queue.get(timeout=timeout)
 
         set_seed(0)
-        processor = WhisperProcessor.from_pretrained("openai/whisper-tine")
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
 
         input_speech = _load_datasamples(4)
