@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
 from typing import Dict, Iterable, Optional, Union
 
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
@@ -85,8 +84,6 @@ def get_size_dict(
         default_to_square (`bool`, *optional*, defaults to `True`):
             If `size` is an int, whether to default to a square image or not.
     """
-    size_dict = {}
-
     # If a dict is passed, we check if it's a valid size dict and then return it.
     if isinstance(size, dict):
         size_keys = set(size.keys())
@@ -117,9 +114,8 @@ def get_size_dict(
     elif isinstance(size, (tuple, list)) and not height_width_order:
         size_dict = {"height": size[1], "width": size[0]}
 
-    warnings.warn(
+    logging.warn(
         "The size parameter should be a dictionary with keys ('height', 'width'), ('shortest_edge', 'longest_edge')"
-        f" or ('shortest_edge',) instead of an int. Setting configuration as {size_dict}.",
-        FutureWarning,
+        f" or ('shortest_edge',) got {size}. Setting configuration as {size_dict}.",
     )
     return size_dict
