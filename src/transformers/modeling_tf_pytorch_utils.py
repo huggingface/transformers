@@ -130,9 +130,9 @@ def apply_transpose(transpose: TransposeType, weight, match_shape=None, pt_to_tf
 
     if list(match_shape) != list(weight.shape):
         try:
-            weight = reshape(weight, weight.shape)
+            weight = reshape(weight, match_shape)
         except AssertionError as e:
-            e.args += (match_shape, weight.shape)
+            e.args += (match_shape, match_shape)
             raise e
 
     return weight
