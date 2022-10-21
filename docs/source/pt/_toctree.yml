@@ -19,6 +19,8 @@
     title: Usando os Tokenizers do 🤗 Tokenizers
   - local: create_a_model
     title: Criando uma arquitetura customizada
+  - local: custom_models
+    title: Compartilhando modelos customizados 
   - sections:
     - local: tasks/sequence_classification
       title: Classificação de texto
