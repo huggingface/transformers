@@ -67,10 +67,12 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="",
     if len(tf_name) > 1:
         tf_name = tf_name[1:]  # Remove level zero
 
+    tf_weight_shape = list(tf_weight_shape)
+
     # When should we transpose the weights
-    if tf_name[-1] == "kernel" and tf_weight_shape is not None and tf_weight_shape.rank == 4:
+    if tf_name[-1] == "kernel" and tf_weight_shape is not None and len(tf_weight_shape) == 4:
         transpose = TransposeType.CONV2D
-    elif tf_name[-1] == "kernel" and tf_weight_shape is not None and tf_weight_shape.rank == 3:
+    elif tf_name[-1] == "kernel" and tf_weight_shape is not None and len(tf_weight_shape) == 3:
         transpose = TransposeType.CONV1D
     elif bool(
         tf_name[-1] in ["kernel", "pointwise_kernel", "depthwise_kernel"]
@@ -391,7 +393,7 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
         )
         raise
 
-    tf_state_dict = {tf_weight.shape: tf_weight.numpy() for tf_weight in tf_weights}
+    tf_state_dict = {tf_weight.name: tf_weight.numpy() for tf_weight in tf_weights}
     return load_tf2_state_dict_in_pytorch_model(
         pt_model, tf_state_dict, allow_missing_keys=allow_missing_keys, output_loading_info=output_loading_info
     )
@@ -411,7 +413,7 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
 
     # Build a map from potential PyTorch weight names to TF 2.0 Variables
     tf_weights_map = {}
-    for name, tf_weight in tf_state_dict:
+    for name, tf_weight in tf_state_dict.items():
         pt_name, transpose = convert_tf_weight_name_to_pt_weight_name(
             name, start_prefix_to_remove=start_prefix_to_remove, tf_weight_shape=tf_weight.shape
         )
@@ -444,7 +446,7 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
             # Make sure we have a proper numpy array
             if numpy.isscalar(array):
                 array = numpy.array(array)
-                array = torch.from_numpy(array)
+            array = torch.from_numpy(array)
 
         new_pt_params_dict[pt_weight_name] = array
         loaded_pt_weights_data_ptr[pt_weight.data_ptr()] = array
