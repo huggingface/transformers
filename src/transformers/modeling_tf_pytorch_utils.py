@@ -269,8 +269,6 @@ def load_pytorch_state_dict_in_tf2_model(
                     continue
             raise AttributeError(f"{name} not found in PyTorch model")
 
-        array = pt_state_dict[name].numpy()
-
         array = apply_transpose(transpose, pt_state_dict[name], symbolic_weight.shape)
 
         tf_loaded_numel += array.size
