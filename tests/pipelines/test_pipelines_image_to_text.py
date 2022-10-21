@@ -56,7 +56,7 @@ class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
 
     @require_tf
     def test_small_model_tf(self):
-        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2")
+        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2", framework="tf")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
 
         outputs = pipe(image)
