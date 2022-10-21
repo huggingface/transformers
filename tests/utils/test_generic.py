@@ -36,7 +36,7 @@ if is_flax_available():
 if is_tf_available():
     import tensorflow as tf
 
-if is_torch_available:
+if is_torch_available():
     import torch
 
 
