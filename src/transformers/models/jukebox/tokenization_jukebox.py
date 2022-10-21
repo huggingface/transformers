@@ -72,10 +72,9 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     >>> from transformers import JukeboxTokenizer
     >>> tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
     >>> tokenizer("Alan Jackson", "Country Rock", "old town road")['input_ids']
-    [tensor([[  0,   0,   0, 145,   0]]),
-     tensor([[  0,   0,   0, 145,   0]]),
-     tensor([[   0,    0,    0, 6785,  546,   41,   38,   30,   76,   46,   41,   49,
-                40,   76,   44,   41,   27,   30]])]
+    [tensor([[  0,   0,   0, 145,   0]]), tensor([[  0,   0,   0, 145,   0]]), tensor([[   0,    0,    0, 6785,  546,   41,   38,   30,   76,   46,   41,   49,
+               40,   76,   44,   41,   27,   30]])]
+
     ```
 
     You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you

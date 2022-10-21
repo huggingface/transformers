@@ -863,6 +863,7 @@ class JukeboxVQVAE(PreTrainedModel):
         >>> zs = [torch.randint(100, (4, 1))]
         >>> model.decode(zs).shape
         torch.Size([4, 8, 1])
+
         ```"""
 
         # Encode/Decode
@@ -1776,7 +1777,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
     def primed_sample(
         self,
         n_samples,
-        hidden_states,
+        music_tokens,
         audio_conditioning=None,
         metadata_conditioning=None,
         lyric_encoder_states=None,
@@ -1790,17 +1791,17 @@ class JukeboxConditionalAutoregressive(nn.Module):
         if sample_tokens is None:
             sample_tokens = self.input_dims
         # Preprocess.
-        batch_size = hidden_states.shape[0]
+        batch_size = music_tokens.shape[0]
         with torch.no_grad():
-            hidden_states = hidden_states.view(batch_size, -1).long()
+            music_tokens = music_tokens.view(batch_size, -1).long()
 
-        sampled_audio = torch.split(hidden_states, 1, dim=1)
+        sampled_audio = torch.split(music_tokens, 1, dim=1)
         sampled_audio = list(sampled_audio)
 
         if not self.audio_conditioning:
             audio_conditioning = torch.zeros(
                 (n_samples, 1, self.width), dtype=self.transformer._attn_mods[0].mlp.c_fc.weight.dtype
-            ).to(hidden_states.device)
+            ).to(music_tokens.device)
 
         with torch.no_grad():
             if get_preds:
@@ -1813,15 +1814,15 @@ class JukeboxConditionalAutoregressive(nn.Module):
             chunk_sizes = self.split_chunks(len(sampled_audio), chunk_size)
             x_primes = []
             start = 0
-            hidden_states = None
+            music_tokens = None
 
             for current_chunk_size in tqdm(chunk_sizes, desc="Preparing past key value", leave=False):
                 sampled_audio_prime, conds_prime = [], []
                 for sample_t in range(start, start + current_chunk_size):
                     x_prime, cond_prime = self.get_emb(
-                        sample_t, n_samples, hidden_states, audio_conditioning, metadata_conditioning
+                        sample_t, n_samples, music_tokens, audio_conditioning, metadata_conditioning
                     )
-                    hidden_states = sampled_audio[sample_t]
+                    music_tokens = sampled_audio[sample_t]
                     sampled_audio_prime.append(x_prime)
                     conds_prime.append(cond_prime)
                 start = start + current_chunk_size
@@ -1845,13 +1846,13 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 x_prime = self.fc_proj_out(x_prime)  # Predictions
                 preds.append(x_prime)
 
-            hidden_states = sampled_audio[-1]
+            music_tokens = sampled_audio[-1]
 
             iter = tqdm(range(len(sampled_audio), sample_tokens))
             for sample_t in iter:
                 iter.set_description(f"Primed sampling {len(iter)} music tokens", refresh=True)
                 hidden_states, cond = self.get_emb(
-                    sample_t, n_samples, hidden_states, audio_conditioning, metadata_conditioning
+                    sample_t, n_samples, music_tokens, audio_conditioning, metadata_conditioning
                 )
 
                 hidden_states = self.transformer(
@@ -1865,22 +1866,22 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 # Adjust logits
                 hidden_states = hidden_states / temp
                 hidden_states = filter_logits(hidden_states, top_k=top_k, top_p=top_p)
-                tokens = torch.distributions.Categorical(
+                music_tokens = torch.distributions.Categorical(
                     logits=hidden_states
                 ).sample()  # Sample and replace hidden_states
-                sampled_audio.append(tokens.clone())
+                sampled_audio.append(music_tokens.clone())
 
-            del tokens
+            del music_tokens
             self.transformer.del_cache()
 
-            hidden_states = torch.cat(sampled_audio, dim=1)
+            music_tokens = torch.cat(sampled_audio, dim=1)
             if get_preds:
                 preds = torch.cat(preds, dim=1)
-            hidden_states = self.postprocess(hidden_states, sample_tokens)
+            music_tokens = self.postprocess(music_tokens, sample_tokens)
         if get_preds:
-            return hidden_states, preds
+            return music_tokens, preds
         else:
-            return hidden_states
+            return music_tokens
 
 
 class JukeboxMusicTokenConditioner(nn.Module):
@@ -2303,7 +2304,7 @@ class JukeboxPrior(nn.Module):
         """
         if self.level != self.levels - 1:
             music_tokens_cond = music_tokens[self.level + 1]
-            music_tokens = music_tokens[:, start // self.cond_downsample : end // self.cond_downsample]
+            music_tokens = music_tokens_cond[:, start // self.cond_downsample : end // self.cond_downsample]
             missing_cond_len = self.n_ctx // self.cond_downsample - music_tokens_cond[-1].shape[-1]
             if missing_cond_len > 0:
                 init_cond = torch.zeros(1, missing_cond_len).to(music_tokens_cond.device)
@@ -2820,6 +2821,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
               353, 1306, 1379, 1053,  519,  653, 1631, 1467, 1229, 1229,   10, 1647,
              1254, 1229, 1306, 1528, 1789,  216, 1631, 1434,  653,  475, 1150, 1528,
              1804,  541, 1804, 1434]])
+
         ```"""
 
         top_prior = self.priors[-1]
