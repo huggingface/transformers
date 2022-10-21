@@ -303,12 +303,14 @@ def normalize(
             raise ValueError(f"mean must have {num_channels} elements if it is an iterable, got {len(mean)}")
     else:
         mean = [mean] * num_channels
+    mean = np.array(mean, dtype=image.dtype)
 
     if isinstance(std, Iterable):
         if len(std) != num_channels:
             raise ValueError(f"std must have {num_channels} elements if it is an iterable, got {len(std)}")
     else:
         std = [std] * num_channels
+    std = np.array(std, dtype=image.dtype)
 
     if input_data_format == ChannelDimension.LAST:
         image = (image - mean) / std
