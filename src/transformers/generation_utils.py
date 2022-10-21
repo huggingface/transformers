@@ -1135,7 +1135,7 @@ class GenerationMixin:
                  Custom logits processors that complement the default logits processors built from arguments and a
                  model's config. If a logit processor is passed that is already created with the arguments or a model's
                  config an error is thrown. This feature is intended for advanced users.
-            renormalize_logits: (`bool`, *optional*, defaults to `False`):
+            renormalize_logits (`bool`, *optional*, defaults to `False`):
                 Whether to renormalize the logits after applying all the logits processors or warpers (including the
                 custom ones). It's highly recommended to set this flag to `True` as the search algorithms suppose the
                 score logits are normalized but some logit processors or warpers break the normalization.
