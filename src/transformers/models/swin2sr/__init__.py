@@ -18,7 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
@@ -40,6 +40,15 @@ else:
     ]
 
 
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_swin2sr"] = ["Swin2SRImageProcessor"]
+
+
 if TYPE_CHECKING:
     from .configuration_swin2sr import SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP, Swin2SRConfig
 
@@ -55,6 +64,14 @@ if TYPE_CHECKING:
             Swin2SRModel,
             Swin2SRPreTrainedModel,
         )
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_swin2sr import Swin2SRImageProcessor
 
 
 else:

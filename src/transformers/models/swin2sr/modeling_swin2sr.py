@@ -877,7 +877,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def check_image_size(self, pixel_values):
+    def pad(self, pixel_values):
         _, _, height, width = pixel_values.size()
 
         window_size = self.config.window_size
@@ -921,7 +921,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
 
         # some preprocessing: padding + normalization
         # TODO make this prettier
-        pixel_values = self.check_image_size(pixel_values)
+        pixel_values = self.pad(pixel_values)
 
         self.mean = self.mean.type_as(pixel_values)
         pixel_values = (pixel_values - self.mean) * self.img_range
@@ -999,7 +999,7 @@ class UpsampleOneStep(nn.Sequential):
 
 @add_start_docstrings(
     """
-    Swin2SR Model transformer with an image super resolution head on top.
+    Swin2SR Model transformer with an upsampler head on top for image super resolution and restoration.
     """,
     SWIN2SR_START_DOCSTRING,
 )

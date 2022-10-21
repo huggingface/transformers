@@ -12,27 +12,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for Swin2SR."""
+"""Image processor class for Swin2SR."""
 
-from typing import Optional, Union
+from typing import Optional, Union, List
 
 import numpy as np
 from PIL import Image
 
-from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...image_utils import ImageFeatureExtractionMixin, ImageInput, is_torch_tensor
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_utils import ChannelDimension, is_torch_tensor, to_numpy_array, valid_images
 from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Swin2SRFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
+class Swin2SRImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a Swin2SR feature extractor.
-
-    This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
-    should refer to this superclass for more information regarding those methods.
+    Constructs a Swin2SR image processor.
 
     Args:
         do_pad (`bool`, *optional*, defaults to `True`):
@@ -55,19 +52,23 @@ class Swin2SRFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixi
         self.size = size
         self.num_channels = num_channels
         self.do_normalize = do_normalize
-        self.mean = (0.4488, 0.4371, 0.4040) if num_channels == 3 else 1
+        self.mean = (0.4488, 0.4371, 0.4040) if num_channels == 3 else (0.0, 0.0, 0.0)
         self.range = 1.0 if num_channels == 3 else 255.0
 
-    def pad(image):
+    def pad(image: np.ndarray) -> np.ndarray:
         return -1
 
-    def normalize(self, image):
+    def normalize(self, image: np.ndarray) -> np.ndarray:
         image = (image - self.mean) * self.range
 
         return image
 
-    def __call__(
-        self, images: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
+    def preprocess(
+        self, 
+        images: Union["PIL.Image.Image", TensorType, List["PIL.Image.Image"], List[TensorType]],
+        return_tensors: Optional[Union[TensorType, str]] = None,
+        data_format: ChannelDimension = ChannelDimension.FIRST,
+        **kwargs
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several image(s).
@@ -99,33 +100,24 @@ class Swin2SRFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixi
             - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
               width).
         """
-        # Input type checking for clearer error
-        valid_images = False
-
-        # Check that images has a valid type
-        if isinstance(images, (Image.Image, np.ndarray)) or is_torch_tensor(images):
-            valid_images = True
-        elif isinstance(images, (list, tuple)):
-            if len(images) == 0 or isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]):
-                valid_images = True
-
-        if not valid_images:
-            raise ValueError(
-                "Images must of type `PIL.Image.Image`, `np.ndarray` or `torch.Tensor` (single example), "
-                "`List[PIL.Image.Image]`, `List[np.ndarray]` or `List[torch.Tensor]` (batch of examples)."
-            )
-
         is_batched = bool(
             isinstance(images, (list, tuple))
             and (isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]))
         )
 
+        if not valid_images(images):
+            raise ValueError("Invalid image(s)")
+        
         if not is_batched:
             images = [images]
+
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(img) for img in images]
 
         # transformations (padding + normalization)
         if self.do_pad and self.size is not None:
             images = [self.pad(image=image, size=self.size) for image in images]
+
         if self.do_normalize:
             images = [self.normalize(image=image) for image in images]
 
