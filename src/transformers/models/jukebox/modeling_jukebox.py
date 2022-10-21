@@ -694,7 +694,8 @@ class JukeboxVQVAE(PreTrainedModel):
             top_raw_to_tokens = np.prod(downsamples)
             config.sample_length = (
                 (config.sample_length_in_seconds * config.sampling_rate // top_raw_to_tokens) * top_raw_to_tokens
-            ).astype(int)
+            )
+            config.sample_length = config.sample_length.astype(int)
 
         input_shape = (config.sample_length, 1)
         block_kwargs = dict(
@@ -977,7 +978,6 @@ class JukeboxAttention(nn.Module):
         self.encoder_dims = encoder_dims
         self.lyric_enc_len = lyric_enc_len
         self.record_attn = False
-        self.w = None
 
     def _attn(self, query_states, key_states, value_states, sample):
         scale = 1.0 / math.sqrt(math.sqrt(self.hidden_dim // self.num_heads))
