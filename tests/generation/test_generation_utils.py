@@ -18,7 +18,7 @@ import inspect
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device, tooslow
+from transformers.testing_utils import require_torch, slow, tooslow, torch_device
 
 from ..test_modeling_common import floats_tensor, ids_tensor
 
@@ -1735,10 +1735,10 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(
             generated_text,
             [
-                'Liana Barrientos, 39, pleaded not guilty to charges related to false marriage statements. '
-                'Prosecutors say she married at least 10 times, sometimes within two weeks of each other. She is '
-                'accused of being part of an immigration scam to get permanent residency. If convicted, she faces up '
-                'to four years in'
+                "Liana Barrientos, 39, pleaded not guilty to charges related to false marriage statements. "
+                "Prosecutors say she married at least 10 times, sometimes within two weeks of each other. She is "
+                "accused of being part of an immigration scam to get permanent residency. If convicted, she faces up "
+                "to four years in"
             ],
         )
 
@@ -1782,17 +1782,17 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(
             generated_text,
             [
-                'Liana Barrientos has been married 10 times, nine of them in the Bronx. Her husbands filed for '
-                'permanent residence after the marriages, prosecutors say.'
+                "Liana Barrientos has been married 10 times, nine of them in the Bronx. Her husbands filed for "
+                "permanent residence after the marriages, prosecutors say."
             ],
         )
 
     @slow
     def test_contrastive_search_opt(self):
         article = (
-            'A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I am the '
-            'Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have you lived '
-            'there?'
+            "A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I am the "
+            "Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have you lived "
+            "there?"
         )
 
         opt_tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-1.3b")
@@ -1805,24 +1805,24 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(
             generated_text,
             [
-                'A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I '
-                'am the Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have '
-                'you lived there?\nStatue: A hundred years.\nHuman: And you’re from what country?\nStatue: The United '
-                'States of America.\nHuman: Why did you come to America?\nStatue: I came to escape the tyranny of my '
-                'country.\nHuman: What tyranny?\nStatue: They didn’t let me speak my mind.\nHuman: What was your '
-                'country?\nStatue: It was a country of immigrants.\nHuman: Who were the immigrants?\nStatue: They '
-                'were from all over the world.\nHuman: What language did they speak?\nStatue: French, Spanish, '
-                'Italian, German, English—you name it.\nHuman: And where did they come from?\nStatue: They came from '
-                'every country in the world.\nHuman: And you were born in what country?\nStatue: I was born in '
-                'France.\nHuman: And your parents were French?\nStatue'
+                "A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I "
+                "am the Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have "
+                "you lived there?\nStatue: A hundred years.\nHuman: And you’re from what country?\nStatue: The United "
+                "States of America.\nHuman: Why did you come to America?\nStatue: I came to escape the tyranny of my "
+                "country.\nHuman: What tyranny?\nStatue: They didn’t let me speak my mind.\nHuman: What was your "
+                "country?\nStatue: It was a country of immigrants.\nHuman: Who were the immigrants?\nStatue: They "
+                "were from all over the world.\nHuman: What language did they speak?\nStatue: French, Spanish, "
+                "Italian, German, English—you name it.\nHuman: And where did they come from?\nStatue: They came from "
+                "every country in the world.\nHuman: And you were born in what country?\nStatue: I was born in "
+                "France.\nHuman: And your parents were French?\nStatue"
             ],
         )
 
     @tooslow
     def test_contrastive_search_gptj(self):
         article = (
-            'DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and '
-            'research laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based'
+            "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and "
+            "research laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"
         )
 
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
@@ -1837,27 +1837,27 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(
             generated_text,
             [
-                'DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research '
-                'laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, '
-                'United Kingdom with offices in Mountain View, San Francisco, New York City, Paris, Tokyo, Seoul, '
-                'Beijing, Singapore, Tel Aviv, Dublin, Sydney, and Melbourne.[1]\n\nContents\n\nIn 2010, Google\'s '
-                'parent company, Alphabet, announced a $500 million investment in DeepMind, with the aim of creating '
-                'a company that would apply deep learning to problems in healthcare, energy, transportation, and '
-                'other areas.[2]\n\nOn April 23, 2014, Google announced that it had acquired DeepMind for $400 '
-                'million in cash and stock.[3] The acquisition was seen as a way for Google to enter the '
-                'fast-growing field of artificial intelligence (AI), which it had so far avoided due to concerns '
+                "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
+                "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, "
+                "United Kingdom with offices in Mountain View, San Francisco, New York City, Paris, Tokyo, Seoul, "
+                "Beijing, Singapore, Tel Aviv, Dublin, Sydney, and Melbourne.[1]\n\nContents\n\nIn 2010, Google's "
+                "parent company, Alphabet, announced a $500 million investment in DeepMind, with the aim of creating "
+                "a company that would apply deep learning to problems in healthcare, energy, transportation, and "
+                "other areas.[2]\n\nOn April 23, 2014, Google announced that it had acquired DeepMind for $400 "
+                "million in cash and stock.[3] The acquisition was seen as a way for Google to enter the "
+                "fast-growing field of artificial intelligence (AI), which it had so far avoided due to concerns "
                 'about ethical and social implications.[4] Google co-founder Sergey Brin said that he was "thrilled" '
                 'to have acquired DeepMind, and that it would "help us push the boundaries of AI even further."'
-                '[5]\n\nDeepMind\'s founders, Demis Hassabis and Mustafa Suleyman, were joined by a number of Google '
-                'employees'
+                "[5]\n\nDeepMind's founders, Demis Hassabis and Mustafa Suleyman, were joined by a number of Google "
+                "employees"
             ],
         )
 
     @slow
     def test_contrastive_search_gpt2(self):
         article = (
-            'DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research '
-            'laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based'
+            "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
+            "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"
         )
 
         gpt2_tokenizer = AutoTokenizer.from_pretrained("gpt2-large")
@@ -1871,19 +1871,19 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(
             generated_text,
             [
-                'DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research '
-                'laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, '
-                'United Kingdom\n\nGoogle has a lot of data on its users and uses it to improve its products, such as '
-                'Google Now, which helps users find the information they\'re looking for on the web. But the company '
-                'is not the only one to collect data on its users. Facebook, for example, has its own facial '
-                'recognition technology, as well as a database of millions of photos that it uses to personalize its '
-                'News Feed.\n\nFacebook\'s use of data is a hot topic in the tech industry, with privacy advocates '
-                'concerned about the company\'s ability to keep users\' information private. In a blog post last '
+                "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
+                "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, "
+                "United Kingdom\n\nGoogle has a lot of data on its users and uses it to improve its products, such as "
+                "Google Now, which helps users find the information they're looking for on the web. But the company "
+                "is not the only one to collect data on its users. Facebook, for example, has its own facial "
+                "recognition technology, as well as a database of millions of photos that it uses to personalize its "
+                "News Feed.\n\nFacebook's use of data is a hot topic in the tech industry, with privacy advocates "
+                "concerned about the company's ability to keep users' information private. In a blog post last "
                 'year, Facebook CEO Mark Zuckerberg said his company would "do our best to be transparent about our '
                 'data use and how we use it."\n\n"We have made it clear that we do not sell or share your data with '
                 'third parties," Zuckerberg wrote. "If you have questions or concerns, please reach out to us at '
                 'privacy@facebook.com."\n\nGoogle declined to comment on the privacy implications of its use of data, '
-                'but said in a statement to The Associated Press that'
+                "but said in a statement to The Associated Press that"
             ],
         )
 
