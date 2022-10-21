@@ -637,6 +637,127 @@ def _load_datasamples(num_samples):
     return [x["array"] for x in speech_samples]
 
 
+def _test_large_logits_librispeech(in_queue, out_queue, timeout):
+
+    error = None
+    try:
+        _ = in_queue.get(timeout=timeout)
+
+        set_seed(0)
+
+        model = TFWhisperModel.from_pretrained("openai/whisper-large")
+
+        input_speech = _load_datasamples(1)
+
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
+        processed_inputs = processor(audio=input_speech, text="This part of the speech", return_tensors="tf")
+        input_features = processed_inputs.input_features
+        labels = processed_inputs.labels
+
+        logits = model(
+            input_features,
+            decoder_input_ids=labels,
+            output_hidden_states=False,
+            output_attentions=False,
+            use_cache=False,
+        )
+
+        logits = logits.last_hidden_state @ tf.transpose(model.model.decoder.embed_tokens.weights[0])
+
+        # fmt: off
+        EXPECTED_LOGITS = tf.convert_to_tensor(
+            [
+                2.1382, 0.9381, 4.4671, 3.5589, 2.4022, 3.8576, -0.6521, 2.5472,
+                1.8301, 1.9957, 2.3432, 1.4678, 0.5459, 2.2597, 1.5179, 2.5357,
+                1.1624, 0.6194, 1.0757, 1.8259, 2.4076, 1.6601, 2.3503, 1.3376,
+                1.9891, 1.8635, 3.8931, 5.3699, 4.4772, 3.9184
+            ]
+        )
+        # fmt: on
+
+        unittest.TestCase().assertTrue(np.allclose(logits[0, 0, :30], EXPECTED_LOGITS, atol=1e-4))
+    except Exception:
+        error = f"{traceback.format_exc()}"
+
+    results = {"error": error}
+    out_queue.put(results, timeout=timeout)
+    out_queue.join()
+
+
+def _test_large_generation(in_queue, out_queue, timeout):
+
+    error = None
+    try:
+        _ = in_queue.get(timeout=timeout)
+
+        set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
+        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
+
+        input_speech = _load_datasamples(1)
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
+
+        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
+        generated_ids = model.generate(input_features, do_sample=False, max_length=20)
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we are glad"
+        unittest.TestCase().assertEqual(transcript, EXPECTED_TRANSCRIPT)
+    except Exception:
+        error = f"{traceback.format_exc()}"
+
+    results = {"error": error}
+    out_queue.put(results, timeout=timeout)
+    out_queue.join()
+
+
+def _test_large_generation_multilingual(in_queue, out_queue, timeout):
+
+    error = None
+    try:
+        _ = in_queue.get(timeout=timeout)
+
+        set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
+        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
+
+        ds = load_dataset("common_voice", "ja", split="test", streaming=True)
+        ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+        input_speech = next(iter(ds))["audio"]["array"]
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
+
+        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="transcribe")
+        generated_ids = model.generate(input_features, do_sample=False, max_length=20)
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        EXPECTED_TRANSCRIPT = "木村さんに電話を貸してもらいました"
+        unittest.TestCase().assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
+        generated_ids = model.generate(
+            input_features,
+            do_sample=False,
+            max_length=20,
+        )
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        EXPECTED_TRANSCRIPT = " Kimura san ni denwa wo kaite moraimashita"
+        unittest.TestCase().assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="translate")
+        generated_ids = model.generate(input_features, do_sample=False, max_length=20)
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        EXPECTED_TRANSCRIPT = " I borrowed a phone from Kimura san"
+        unittest.TestCase().assertEqual(transcript, EXPECTED_TRANSCRIPT)
+    except Exception:
+        error = f"{traceback.format_exc()}"
+
+    results = {"error": error}
+    out_queue.put(results, timeout=timeout)
+    out_queue.join()
+
+
 def _test_large_batched_generation(in_queue, out_queue, timeout):
 
     error = None
@@ -770,41 +891,11 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         self.assertTrue(np.allclose(logits[0, 0, :30], EXPECTED_LOGITS, atol=1e-4))
 
     @slow
-    @unittest.skip(reason="TF uses almost all GPU and won't release it, causing some PT tests GPU OOM.")
     def test_large_logits_librispeech(self):
-        set_seed(0)
-
-        model = TFWhisperModel.from_pretrained("openai/whisper-large")
-
-        input_speech = self._load_datasamples(1)
-
-        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        processed_inputs = processor(audio=input_speech, text="This part of the speech", return_tensors="tf")
-        input_features = processed_inputs.input_features
-        labels = processed_inputs.labels
-
-        logits = model(
-            input_features,
-            decoder_input_ids=labels,
-            output_hidden_states=False,
-            output_attentions=False,
-            use_cache=False,
+        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
+        run_test_in_subprocess(
+            test_case=self, target_func=_test_large_logits_librispeech, inputs=None, timeout=timeout
         )
-
-        logits = logits.last_hidden_state @ tf.transpose(model.model.decoder.embed_tokens.weights[0])
-
-        # fmt: off
-        EXPECTED_LOGITS = tf.convert_to_tensor(
-            [
-                2.1382, 0.9381, 4.4671, 3.5589, 2.4022, 3.8576, -0.6521, 2.5472,
-                1.8301, 1.9957, 2.3432, 1.4678, 0.5459, 2.2597, 1.5179, 2.5357,
-                1.1624, 0.6194, 1.0757, 1.8259, 2.4076, 1.6601, 2.3503, 1.3376,
-                1.9891, 1.8635, 3.8931, 5.3699, 4.4772, 3.9184
-            ]
-        )
-        # fmt: on
-
-        self.assertTrue(np.allclose(logits[0, 0, :30], EXPECTED_LOGITS, atol=1e-4))
 
     @slow
     def test_tiny_en_generation(self):
@@ -868,63 +959,23 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         self.assertEqual(transcript_xla, EXPECTED_TRANSCRIPT)
 
     @slow
-    @unittest.skip(reason="TF uses almost all GPU and won't release it, causing some PT tests GPU OOM.")
     def test_large_generation(self):
-        set_seed(0)
-        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
-
-        input_speech = self._load_datasamples(1)
-        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
-
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
-        generated_ids = model.generate(input_features, do_sample=False, max_length=20)
-        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-
-        EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we are glad"
-        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
+        run_test_in_subprocess(test_case=self, target_func=_test_large_generation, inputs=None, timeout=timeout)
 
     @slow
-    @unittest.skip(reason="TF uses almost all GPU and won't release it, causing some PT tests GPU OOM.")
     def test_large_generation_multilingual(self):
-        set_seed(0)
-        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
-
-        ds = load_dataset("common_voice", "ja", split="test", streaming=True)
-        ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
-        input_speech = next(iter(ds))["audio"]["array"]
-        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
-
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="transcribe")
-        generated_ids = model.generate(input_features, do_sample=False, max_length=20)
-        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-
-        EXPECTED_TRANSCRIPT = "木村さんに電話を貸してもらいました"
-        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
-
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
-        generated_ids = model.generate(
-            input_features,
-            do_sample=False,
-            max_length=20,
+        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
+        run_test_in_subprocess(
+            test_case=self, target_func=_test_large_generation_multilingual, inputs=None, timeout=timeout
         )
-        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-
-        EXPECTED_TRANSCRIPT = " Kimura san ni denwa wo kaite moraimashita"
-        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
-
-        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="translate")
-        generated_ids = model.generate(input_features, do_sample=False, max_length=20)
-        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-
-        EXPECTED_TRANSCRIPT = " I borrowed a phone from Kimura san"
-        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
     def test_large_batched_generation(self):
         timeout = os.environ.get("PYTEST_TIMEOUT", 600)
-        run_test_in_subprocess(test_case=self, target_func=_test_large_batched_generation, inputs=None, timeout=timeout)
+        run_test_in_subprocess(
+            test_case=self, target_func=_test_large_batched_generation, inputs=None, timeout=timeout
+        )
 
     @slow
     def test_tiny_en_batched_generation(self):
