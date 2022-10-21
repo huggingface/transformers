@@ -608,7 +608,8 @@ OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
-            IDs?](../glossary#input-ids) Either pass `input_ids` or `query_pixel_values`.
+            IDs?](../glossary#input-ids). Either pass `input_ids` to perform zero-shot / text-guided object detection
+            or `query_pixel_values` to perform one-shot / image-guided object detection.
         query_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, *optional*):
             Pixel values of query image(s) to be detected. Either pass `input_ids` or `query_pixel_values`.
         attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
@@ -616,10 +617,11 @@ OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
             [What are attention masks?](../glossary#attention-mask)
-        iou_threshold (`float`, *optional*):
-            When `query_pixel_values` is passed, we run first run inference on the query image itself. The model
-            predicts embeddings for multiple bounding boxes, from which we only take those that has IoU >
-            `iou_threshold` with the query image. Default threshold is 0.65
+        iou_threshold (`float`, *optional*, defaults to 0.65):
+            Intersection over Union threshold to select a final query image class embedding that has a corresponding
+            proposed boundary box with IoU > `iou_threshold` with the query image, defaults to 0.65. When
+            `query_pixel_values` is passed, OWL-ViT computes multiple class embedding and boundary box proposals for
+            the query image and uses the selected class embedding to query the input image.
 """
 
 
