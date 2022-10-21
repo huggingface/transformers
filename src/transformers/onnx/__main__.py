@@ -22,7 +22,7 @@ from .convert import export, validate_model_outputs
 from .features import FeaturesManager
 
 
-ENCODER_DECODER_MODELS = ["vision-encoder-decoder", "whisper"]
+ENCODER_DECODER_MODELS = ["vision-encoder-decoder"]
 
 
 def main():
@@ -65,8 +65,6 @@ def main():
     args = parser.parse_args()
     args.output = args.output if args.output.is_file() else args.output.joinpath("model.onnx")
 
-    use_past = True if "-with-past" in args.feature else False
-
     if not args.output.parent.exists():
         args.output.parent.mkdir(parents=True)
 
@@ -84,7 +82,7 @@ def main():
 
         encoder_onnx_config = onnx_config.get_encoder_config(encoder_model.config)
         decoder_onnx_config = onnx_config.get_decoder_config(
-            encoder_model.config, decoder_model.config, feature=args.feature, use_past=use_past
+            encoder_model.config, decoder_model.config, feature=args.feature
         )
 
         if args.opset is None:

@@ -217,11 +217,11 @@ PYTORCH_EXPORT_MODELS = {
     ("yolos", "hustvl/yolos-tiny"),
     ("segformer", "nvidia/segformer-b0-finetuned-ade-512-512"),
     ("swin", "microsoft/swin-tiny-patch4-window7-224"),
+    ("whisper", "openai/whisper-tiny.en"),
 }
 
 PYTORCH_EXPORT_ENCODER_DECODER_MODELS = {
     ("vision-encoder-decoder", "nlpconnect/vit-gpt2-image-captioning"),
-    ("whisper", "openai/whisper-tiny.en"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
@@ -375,12 +375,8 @@ class OnnxExportTestCaseV2(TestCase):
         encoder_model = model.get_encoder()
         decoder_model = model.get_decoder()
 
-        use_past = True if "-with-past" in feature else False
-
         encoder_onnx_config = onnx_config.get_encoder_config(encoder_model.config)
-        decoder_onnx_config = onnx_config.get_decoder_config(
-            encoder_model.config, decoder_model.config, feature, use_past
-        )
+        decoder_onnx_config = onnx_config.get_decoder_config(encoder_model.config, decoder_model.config, feature)
 
         preprocessor = AutoFeatureExtractor.from_pretrained(model_name)
 

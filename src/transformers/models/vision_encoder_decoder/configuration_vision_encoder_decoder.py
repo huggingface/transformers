@@ -176,18 +176,11 @@ class VisionEncoderDecoderDecoderOnnxConfig(OnnxConfig):
 
         batch, encoder_sequence = dummy_input["input_ids"].shape
         encoder_hidden_states_shape = (batch, encoder_sequence, self._config.encoder_hidden_size)
-        common_inputs["decoder_input_ids"] = dummy_input.pop("input_ids")
-        common_inputs["decoder_attention_mask"] = dummy_input.pop("attention_mask")
-        common_inputs["encoder_outputs"] = (torch.zeros(encoder_hidden_states_shape), None, None)
+        common_inputs["input_ids"] = dummy_input.pop("input_ids")
+        common_inputs["attention_mask"] = dummy_input.pop("attention_mask")
+        common_inputs["encoder_hidden_states"] = torch.zeros(encoder_hidden_states_shape)
 
         return common_inputs
-
-    def generate_dummy_inputs_onnxruntime(self, reference_model_inputs: Mapping[str, Any]) -> Mapping[str, Any]:
-        reference_model_inputs["input_ids"] = reference_model_inputs.pop("decoder_input_ids")
-        reference_model_inputs["attention_mask"] = reference_model_inputs.pop("decoder_attention_mask")
-        reference_model_inputs["encoder_hidden_states"] = reference_model_inputs.pop("encoder_outputs")[0]
-
-        return reference_model_inputs
 
 
 class VisionEncoderDecoderOnnxConfig(OnnxConfig):
@@ -195,39 +188,29 @@ class VisionEncoderDecoderOnnxConfig(OnnxConfig):
     def inputs(self) -> None:
         pass
 
-    def get_encoder_config(self, encoder_config: PretrainedConfig) -> VisionEncoderDecoderEncoderOnnxConfig:
+    def get_encoder_config(self, encoder_config: PretrainedConfig) -> OnnxConfig:
         r"""
-        Returns ONNX encoder config for `VisionEncoderDecoder` model.
-
         Args:
+        Returns ONNX encoder config for `VisionEncoderDecoder` model.
             encoder_config (`PretrainedConfig`):
                 The encoder model's configuration to use when exporting to ONNX.
-
         Returns:
             [`VisionEncoderDecoderEncoderOnnxConfig`]: An instance of the ONNX configuration object
         """
         return VisionEncoderDecoderEncoderOnnxConfig(encoder_config)
 
     def get_decoder_config(
-        self,
-        encoder_config: PretrainedConfig,
-        decoder_config: PretrainedConfig,
-        feature: str = "default",
-        use_past: bool = False,
-    ) -> VisionEncoderDecoderDecoderOnnxConfig:
+        self, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig, feature: str = "default"
+    ) -> OnnxConfig:
         r"""
-        Returns ONNX decoder config for `VisionEncoderDecoder` model.
-
         Args:
+        Returns ONNX decoder config for `VisionEncoderDecoder` model.
             encoder_config (`PretrainedConfig`):
                 The encoder model's configuration to use when exporting to ONNX.
             decoder_config (`PretrainedConfig`):
                 The decoder model's configuration to use when exporting to ONNX
             feature (`str`, *optional*):
                 The type of feature to export the model with.
-            use_past (bool, *optional*):
-                Leverages the precomputed key/values hidden states when True
-
         Returns:
             [`VisionEncoderDecoderDecoderOnnxConfig`]: An instance of the ONNX configuration object.
         """
