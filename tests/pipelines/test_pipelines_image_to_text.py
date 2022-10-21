@@ -64,12 +64,7 @@ class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
             outputs,
             [
                 {
-                    "generated_text": (
-                        " intermedi intermedi intermedi intermedi intermedi "
-                        "explorer explorer explorer explorer explorer explorer "
-                        "explorer medicine medicine medicine medicine medicine "
-                        "medicine medicine"
-                    )
+                    "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
                 },
             ],
         )
@@ -80,23 +75,13 @@ class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
             [
                 [
                     {
-                        "generated_text": (
-                            " intermedi intermedi intermedi intermedi intermedi "
-                            "explorer explorer explorer explorer explorer explorer "
-                            "explorer medicine medicine medicine medicine medicine "
-                            "medicine medicine"
-                        )
-                    },
+                        "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
+                    }
                 ],
                 [
                     {
-                        "generated_text": (
-                            " intermedi intermedi intermedi intermedi intermedi "
-                            "explorer explorer explorer explorer explorer explorer "
-                            "explorer medicine medicine medicine medicine medicine "
-                            "medicine medicine"
-                        )
-                    },
+                        "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
+                    }
                 ],
             ],
         )
