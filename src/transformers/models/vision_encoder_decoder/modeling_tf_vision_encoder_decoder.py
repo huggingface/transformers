@@ -15,6 +15,8 @@
 """ Classes to support TF Vision-Encoder-Text-Decoder architectures"""
 
 
+import gc
+import os
 import tempfile
 import warnings
 from typing import Optional
@@ -294,22 +296,6 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""
-        Initializing `TFVisionEncoderDecoderModel` from a pytorch checkpoint is not supported currently.
-
-        If there are only pytorch checkpoints for a particular encoder-decoder model, a workaround is:
-
-        ```python
-        >>> # a workaround to load from pytorch checkpoint
-        >>> _model = VisionEncoderDecoderModel.from_pretrained("ydshieh/vit-gpt2-coco-en")
-        >>> _model.encoder.save_pretrained("./encoder")
-        >>> _model.decoder.save_pretrained("./decoder")
-        >>> model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-        ...     "./encoder", "./decoder", encoder_from_pt=True, decoder_from_pt=True
-        ... )
-        >>> # This is only for copying some specific attributes of this particular model.
-        >>> model.config = _model.config
-        ```
-
         Example:
 
         ```python
@@ -337,12 +323,42 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
 
         from_pt = kwargs.pop("from_pt", False)
         if from_pt:
-            raise ValueError(
-                "Initializing `TFVisionEncoderDecoderModel` from a pytorch checkpoint is not supported currently. Use"
-                " a tensorflow checkpoint instead. If only the pytorch checkpoints are available, create the encoder"
-                " and decoder models separately, and use them to initialize `TFVisionEncoderDecoderModel`. Check"
-                " `TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained()` for more details."
-            )
+            import torch
+
+            from transformers import VisionEncoderDecoderModel
+
+            # a workaround to load from pytorch checkpoint
+            _model = VisionEncoderDecoderModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+            config = _model.config
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                encoder_dir = os.path.join(tmpdirname, "encoder")
+                decoder_dir = os.path.join(tmpdirname, "decoder")
+                _model.encoder.save_pretrained(encoder_dir)
+                _model.decoder.save_pretrained(decoder_dir)
+
+                if hasattr(_model, "enc_to_dec_proj"):
+                    enc_to_dec_proj_kernel = tf.transpose(
+                        tf.constant(_model.enc_to_dec_proj.weight.detach().to("cpu").numpy()), perm=(1, 0)
+                    )
+                    enc_to_dec_proj_bias = tf.constant(_model.enc_to_dec_proj.bias.detach().to("cpu").numpy())
+
+                del _model
+                gc.collect()
+                torch.cuda.empty_cache()
+
+                model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+                    encoder_dir, decoder_dir, encoder_from_pt=True, decoder_from_pt=True
+                )
+                # This is only for copying some specific attributes of this particular model.
+                model.config = config
+
+                if hasattr(model, "enc_to_dec_proj"):
+                    model(model.dummy_inputs)
+                    model.enc_to_dec_proj.kernel.assign(enc_to_dec_proj_kernel)
+                    model.enc_to_dec_proj.bias.assign(enc_to_dec_proj_bias)
+
+                return model
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
@@ -450,7 +466,8 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             kwargs_encoder["load_weight_prefix"] = cls.load_weight_prefix
             encoder = TFAutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
 
-            # This is necessary to make `from_pretrained` following `save_pretrained` work correctly
+            # Necessary to make `save_pretrained -> from_pretrained` work correctly for the converted PT -> TF model.
+            # See https://github.com/huggingface/transformers/pull/14016#issuecomment-944046313
             if kwargs_encoder.get("from_pt", None):
                 del kwargs_encoder["from_pt"]
                 with tempfile.TemporaryDirectory() as tmp_dirname:
@@ -492,7 +509,8 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             kwargs_decoder["load_weight_prefix"] = cls.load_weight_prefix
             decoder = TFAutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
-            # This is necessary to make `from_pretrained` following `save_pretrained` work correctly
+            # Necessary to make `save_pretrained -> from_pretrained` work correctly for the converted PT -> TF model.
+            # See https://github.com/huggingface/transformers/pull/14016#issuecomment-944046313
             if kwargs_decoder.get("from_pt", None):
                 del kwargs_decoder["from_pt"]
                 with tempfile.TemporaryDirectory() as tmp_dirname:

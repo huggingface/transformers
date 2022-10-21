@@ -21,14 +21,21 @@ from packaging import version
 
 import requests
 
-from .utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
+from .utils import (
+    ExplicitEnum,
+    is_jax_tensor,
+    is_tf_tensor,
+    is_torch_available,
+    is_torch_tensor,
+    is_vision_available,
+    to_numpy,
+)
 from .utils.constants import (  # noqa: F401
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
 )
-from .utils.generic import ExplicitEnum, _is_jax, _is_tensorflow, _is_torch, to_numpy
 
 
 if is_vision_available():
@@ -53,18 +60,6 @@ ImageInput = Union[
 class ChannelDimension(ExplicitEnum):
     FIRST = "channels_first"
     LAST = "channels_last"
-
-
-def is_torch_tensor(obj):
-    return _is_torch(obj) if is_torch_available() else False
-
-
-def is_tf_tensor(obj):
-    return _is_tensorflow(obj) if is_tf_available() else False
-
-
-def is_jax_tensor(obj):
-    return _is_jax(obj) if is_flax_available() else False
 
 
 def is_valid_image(img):
