@@ -15,7 +15,7 @@
 """ Testing suite for the TensorFlow Whisper model. """
 
 import inspect
-import multiprocessing
+import os
 import tempfile
 import traceback
 import unittest
@@ -23,7 +23,7 @@ import unittest
 import numpy as np
 
 from transformers import WhisperConfig, WhisperFeatureExtractor, WhisperProcessor
-from transformers.testing_utils import is_tf_available, require_tf, require_tokenizers, slow
+from transformers.testing_utils import is_tf_available, require_tf, require_tokenizers, run_test_in_subprocess, slow
 from transformers.utils import cached_property
 from transformers.utils.import_utils import is_datasets_available
 
@@ -637,11 +637,11 @@ def _load_datasamples(num_samples):
     return [x["array"] for x in speech_samples]
 
 
-def _test_large_batched_generation(in_queue, out_queue):
+def _test_large_batched_generation(in_queue, out_queue, timeout):
 
     error = None
     try:
-        _inputs = in_queue.get(timeout=30)
+        _inputs = in_queue.get(timeout=timeout)
 
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
@@ -679,7 +679,7 @@ def _test_large_batched_generation(in_queue, out_queue):
         error = f"{traceback.format_exc()}"
 
     results = {"error": error}
-    out_queue.put(results, timeout=120)
+    out_queue.put(results, timeout=timeout)
     out_queue.join()
 
 
@@ -922,35 +922,10 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
-    # @unittest.skip(reason="TF uses almost all GPU and won't release it, causing some PT tests GPU OOM.")
     def test_large_batched_generation(self):
+        timeout = os.environ.get("PYTEST_TIMEOUT", 120)
+        run_test_in_subprocess(inputs=None, target_func=_test_large_batched_generation, timeout=timeout)
 
-        start_methohd = "spawn"
-        ctx = multiprocessing.get_context(start_methohd)
-
-        input_queue = ctx.Queue(1)
-        output_queue = ctx.JoinableQueue(1)
-
-        # We can't send `self` to the child, otherwise hanging forever.
-        # No input to be sent here.
-        _inputs = None
-        input_queue.put(_inputs, timeout=30)
-
-        process = ctx.Process(target=_test_large_batched_generation, args=(input_queue, output_queue))
-        process.start()
-        # Kill the child process if we can't get outputs from it in time: otherwise, the hanging subprocess prevents
-        # the test to exit properly.
-        try:
-            results = output_queue.get(timeout=120)
-            output_queue.task_done()
-        except Exception as e:
-            process.terminate()
-            self.fail(e)
-        process.join(timeout=30)
-
-        if results["error"] is not None:
-            self.fail(f'{results["error"]}')
-            
     @slow
     def test_tiny_en_batched_generation(self):
         set_seed(0)

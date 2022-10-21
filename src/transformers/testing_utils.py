@@ -17,6 +17,7 @@ import contextlib
 import functools
 import inspect
 import logging
+import multiprocessing
 import os
 import re
 import shlex
@@ -1672,3 +1673,30 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None):
         return wrapper
 
     return decorator
+
+
+def run_test_in_subprocess(test_case, target_func, inputs, timeout):
+
+    start_methohd = "spawn"
+    ctx = multiprocessing.get_context(start_methohd)
+
+    input_queue = ctx.Queue(1)
+    output_queue = ctx.JoinableQueue(1)
+
+    # We can't send `self` to the child, otherwise hanging forever.
+    input_queue.put(inputs, timeout=timeout)
+
+    process = ctx.Process(target=target_func, args=(input_queue, output_queue, timeout))
+    process.start()
+    # Kill the child process if we can't get outputs from it in time: otherwise, the hanging subprocess prevents
+    # the test to exit properly.
+    try:
+        results = output_queue.get(timeout=timeout)
+        output_queue.task_done()
+    except Exception as e:
+        process.terminate()
+        test_case.fail(e)
+    process.join(timeout=timeout)
+
+    if results["error"] is not None:
+        test_case.fail(f'{results["error"]}')
