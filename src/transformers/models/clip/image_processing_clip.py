@@ -248,7 +248,7 @@ class CLIPImageProcessor(BaseImageProcessor):
                 has an effect if `do_resize` is set to `True`.
             do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
                 Whether to center crop the image.
-            crop_size (`int`, *optional*, defaults to `self.crop_size`):
+            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
                 Size of the center crop. Only has an effect if `do_center_crop` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image.
@@ -277,9 +277,12 @@ class CLIPImageProcessor(BaseImageProcessor):
                 - Unset: defaults to the channel dimension format of the input image.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
+        size = size if size is not None else self.size
+        size = get_size_dict(size, default_to_square=False)
         resample = resample if resample is not None else self.resample
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         crop_size = crop_size if crop_size is not None else self.crop_size
+        crop_size = get_size_dict(crop_size)
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
@@ -287,8 +290,6 @@ class CLIPImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        size = size if size is not None else self.size
-        size = get_size_dict(size, default_to_square=False)
 
         if not is_batched(images):
             images = [images]
