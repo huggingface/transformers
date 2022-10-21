@@ -234,10 +234,8 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
         )
         if self.use_past:
             common_inputs["decoder_input_ids"] = {0: "batch"}
-            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
         else:
             common_inputs["decoder_input_ids"] = {0: "batch", 1: "decoder_sequence"}
-            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "decoder_sequence"}
 
         if self.use_past:
             self.fill_with_past_key_values_(common_inputs, direction="inputs")
@@ -271,7 +269,6 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
 
         dummy_inputs["input_features"] = encoder_inputs.pop("input_features")
         dummy_inputs["decoder_input_ids"] = decoder_inputs.pop("decoder_input_ids")
-        dummy_inputs["decoder_attention_mask"] = decoder_inputs.pop("attention_mask")
 
         if "past_key_values" in decoder_inputs:
             dummy_inputs["past_key_values"] = decoder_inputs.pop("past_key_values")

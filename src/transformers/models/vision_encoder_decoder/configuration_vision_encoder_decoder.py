@@ -195,6 +195,7 @@ class VisionEncoderDecoderOnnxConfig(OnnxConfig):
         Args:
             encoder_config (`PretrainedConfig`):
                 The encoder model's configuration to use when exporting to ONNX.
+
         Returns:
             [`VisionEncoderDecoderEncoderOnnxConfig`]: An instance of the ONNX configuration object
         """
@@ -213,6 +214,7 @@ class VisionEncoderDecoderOnnxConfig(OnnxConfig):
                 The decoder model's configuration to use when exporting to ONNX
             feature (`str`, *optional*):
                 The type of feature to export the model with.
+
         Returns:
             [`VisionEncoderDecoderDecoderOnnxConfig`]: An instance of the ONNX configuration object.
         """
