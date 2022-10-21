@@ -275,6 +275,8 @@
         title: LayoutLM
       - local: model_doc/led
         title: LED
+      - local: model_doc/lilt
+        title: LiLT
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
@@ -410,6 +412,8 @@
         title: Swin Transformer
       - local: model_doc/swinv2
         title: Swin Transformer V2
+      - local: model_doc/table-transformer
+        title: Table Transformer
       - local: model_doc/van
         title: VAN
       - local: model_doc/videomae
@@ -519,6 +523,8 @@
       title: Utilities for Trainer
     - local: internal/generation_utils
       title: Utilities for Generation
+    - local: internal/image_processing_utils
+      title: Utilities for Image Processors
     - local: internal/file_utils
       title: General Utilities
     title: Internal Helpers

@@ -1262,6 +1262,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 eos_token_id=eos_token_id,
                 forced_bos_token_id=None,
                 forced_eos_token_id=None,
+                input_ids_seq_length=tf.shape(decoder_input_ids)[-1],
             )
             model_kwargs["attention_mask"] = context_attention_mask
 

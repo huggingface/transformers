@@ -14,8 +14,10 @@
 
 import hashlib
 import unittest
+from typing import Dict
 
 import datasets
+import numpy as np
 from datasets import load_dataset
 
 from transformers import (
@@ -48,7 +50,14 @@ else:
 
 def hashimage(image: Image) -> str:
     m = hashlib.md5(image.tobytes())
-    return m.hexdigest()
+    return m.hexdigest()[:10]
+
+
+def mask_to_test_readable(mask: Image) -> Dict:
+    npimg = np.array(mask)
+    white_pixels = (npimg == 255).sum()
+    shape = npimg.shape
+    return {"hash": hashimage(mask), "white_pixels": white_pixels, "shape": shape}
 
 
 @require_vision
@@ -138,39 +147,60 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         pass
 
     @require_torch
-    @unittest.skip("No weights found for hf-internal-testing/tiny-detr-mobilenetsv3-panoptic")
     def test_small_model_pt(self):
         model_id = "hf-internal-testing/tiny-detr-mobilenetsv3-panoptic"
 
         model = AutoModelForImageSegmentation.from_pretrained(model_id)
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-        image_segmenter = ImageSegmentationPipeline(model=model, feature_extractor=feature_extractor)
-
-        outputs = image_segmenter(
-            "http://images.cocodataset.org/val2017/000000039769.jpg",
-            task="panoptic",
+        image_segmenter = ImageSegmentationPipeline(
+            model=model,
+            feature_extractor=feature_extractor,
+            task="semantic",
             threshold=0.0,
             overlap_mask_area_threshold=0.0,
         )
 
+        outputs = image_segmenter(
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+        )
+
         # Shortening by hashing
         for o in outputs:
-            o["mask"] = hashimage(o["mask"])
+            o["mask"] = mask_to_test_readable(o["mask"])
 
+        # This is extremely brittle, and those values are made specific for the CI.
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
                 {
-                    "score": 0.004,
-                    "label": "LABEL_215",
-                    "mask": "34eecd16bbfb0f476083ef947d81bf66",
+                    "label": "LABEL_88",
+                    "mask": {"hash": "7f0bf661a4", "shape": (480, 640), "white_pixels": 3},
+                    "score": None,
                 },
                 {
-                    "score": 0.004,
-                    "label": "LABEL_215",
-                    "mask": "34eecd16bbfb0f476083ef947d81bf66",
+                    "label": "LABEL_101",
+                    "mask": {"hash": "10ab738dc9", "shape": (480, 640), "white_pixels": 8948},
+                    "score": None,
                 },
-            ],
+                {
+                    "label": "LABEL_215",
+                    "mask": {"hash": "b431e0946c", "shape": (480, 640), "white_pixels": 298249},
+                    "score": None,
+                },
+            ]
+            # Temporary: Keeping around the old values as they might provide useful later
+            # [
+            #     {
+            #         "score": 0.004,
+            #         "label": "LABEL_215",
+            #         "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+            #     },
+            #     {
+            #         "score": 0.004,
+            #         "label": "LABEL_215",
+            #         "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+            #     },
+            # ],
         )
 
         outputs = image_segmenter(
@@ -182,35 +212,69 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         )
         for output in outputs:
             for o in output:
-                o["mask"] = hashimage(o["mask"])
+                o["mask"] = mask_to_test_readable(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
                 [
                     {
-                        "score": 0.004,
-                        "label": "LABEL_215",
-                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
+                        "label": "LABEL_88",
+                        "mask": {"hash": "7f0bf661a4", "shape": (480, 640), "white_pixels": 3},
+                        "score": None,
                     },
                     {
-                        "score": 0.004,
+                        "label": "LABEL_101",
+                        "mask": {"hash": "10ab738dc9", "shape": (480, 640), "white_pixels": 8948},
+                        "score": None,
+                    },
+                    {
                         "label": "LABEL_215",
-                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
+                        "mask": {"hash": "b431e0946c", "shape": (480, 640), "white_pixels": 298249},
+                        "score": None,
                     },
                 ],
                 [
                     {
-                        "score": 0.004,
-                        "label": "LABEL_215",
-                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
+                        "label": "LABEL_88",
+                        "mask": {"hash": "7f0bf661a4", "shape": (480, 640), "white_pixels": 3},
+                        "score": None,
                     },
                     {
-                        "score": 0.004,
-                        "label": "LABEL_215",
-                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
+                        "label": "LABEL_101",
+                        "mask": {"hash": "10ab738dc9", "shape": (480, 640), "white_pixels": 8948},
+                        "score": None,
                     },
-                ],
+                    {
+                        "label": "LABEL_215",
+                        "mask": {"hash": "b431e0946c", "shape": (480, 640), "white_pixels": 298249},
+                        "score": None,
+                    },
+                ]
+                # [
+                #     {
+                #         "score": 0.004,
+                #         "label": "LABEL_215",
+                #         "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+                #     },
+                #     {
+                #         "score": 0.004,
+                #         "label": "LABEL_215",
+                #         "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+                #     },
+                # ],
+                # [
+                #     {
+                #         "score": 0.004,
+                #         "label": "LABEL_215",
+                #         "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+                #     },
+                #     {
+                #         "score": 0.004,
+                #         "label": "LABEL_215",
+                #         "mask": {"hash": "34eecd16bb", "shape": (480, 640), "white_pixels": 0},
+                #     },
+                # ],
             ],
         )
 
@@ -221,7 +285,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg")
         for o in outputs:
             # shortening by hashing
-            o["mask"] = hashimage(o["mask"])
+            o["mask"] = mask_to_test_readable(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
@@ -229,12 +293,12 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 {
                     "score": None,
                     "label": "LABEL_0",
-                    "mask": "775518a7ed09eea888752176c6ba8f38",
+                    "mask": {"hash": "42d0907228", "shape": (480, 640), "white_pixels": 10714},
                 },
                 {
                     "score": None,
                     "label": "LABEL_1",
-                    "mask": "a12da23a46848128af68c63aa8ba7a02",
+                    "mask": {"hash": "46b8cc3976", "shape": (480, 640), "white_pixels": 296486},
                 },
             ],
         )
@@ -254,17 +318,41 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
 
         # Shortening by hashing
         for o in outputs:
-            o["mask"] = hashimage(o["mask"])
+            o["mask"] = mask_to_test_readable(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9094, "label": "blanket", "mask": "dcff19a97abd8bd555e21186ae7c066a"},
-                {"score": 0.9941, "label": "cat", "mask": "9c0af87bd00f9d3a4e0c8888e34e70e2"},
-                {"score": 0.9987, "label": "remote", "mask": "c7870600d6c02a1f6d96470fc7220e8e"},
-                {"score": 0.9995, "label": "remote", "mask": "ef899a25fd44ec056c653f0ca2954fdd"},
-                {"score": 0.9722, "label": "couch", "mask": "37b8446ac578a17108aa2b7fccc33114"},
-                {"score": 0.9994, "label": "cat", "mask": "6a09d3655efd8a388ab4511e4cbbb797"},
+                {
+                    "score": 0.9094,
+                    "label": "blanket",
+                    "mask": {"hash": "dcff19a97a", "shape": (480, 640), "white_pixels": 16617},
+                },
+                {
+                    "score": 0.9941,
+                    "label": "cat",
+                    "mask": {"hash": "9c0af87bd0", "shape": (480, 640), "white_pixels": 59185},
+                },
+                {
+                    "score": 0.9987,
+                    "label": "remote",
+                    "mask": {"hash": "c7870600d6", "shape": (480, 640), "white_pixels": 4182},
+                },
+                {
+                    "score": 0.9995,
+                    "label": "remote",
+                    "mask": {"hash": "ef899a25fd", "shape": (480, 640), "white_pixels": 2275},
+                },
+                {
+                    "score": 0.9722,
+                    "label": "couch",
+                    "mask": {"hash": "37b8446ac5", "shape": (480, 640), "white_pixels": 172380},
+                },
+                {
+                    "score": 0.9994,
+                    "label": "cat",
+                    "mask": {"hash": "6a09d3655e", "shape": (480, 640), "white_pixels": 52561},
+                },
             ],
         )
 
@@ -281,26 +369,74 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         # Shortening by hashing
         for output in outputs:
             for o in output:
-                o["mask"] = hashimage(o["mask"])
+                o["mask"] = mask_to_test_readable(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
                 [
-                    {"score": 0.9094, "label": "blanket", "mask": "dcff19a97abd8bd555e21186ae7c066a"},
-                    {"score": 0.9941, "label": "cat", "mask": "9c0af87bd00f9d3a4e0c8888e34e70e2"},
-                    {"score": 0.9987, "label": "remote", "mask": "c7870600d6c02a1f6d96470fc7220e8e"},
-                    {"score": 0.9995, "label": "remote", "mask": "ef899a25fd44ec056c653f0ca2954fdd"},
-                    {"score": 0.9722, "label": "couch", "mask": "37b8446ac578a17108aa2b7fccc33114"},
-                    {"score": 0.9994, "label": "cat", "mask": "6a09d3655efd8a388ab4511e4cbbb797"},
+                    {
+                        "score": 0.9094,
+                        "label": "blanket",
+                        "mask": {"hash": "dcff19a97a", "shape": (480, 640), "white_pixels": 16617},
+                    },
+                    {
+                        "score": 0.9941,
+                        "label": "cat",
+                        "mask": {"hash": "9c0af87bd0", "shape": (480, 640), "white_pixels": 59185},
+                    },
+                    {
+                        "score": 0.9987,
+                        "label": "remote",
+                        "mask": {"hash": "c7870600d6", "shape": (480, 640), "white_pixels": 4182},
+                    },
+                    {
+                        "score": 0.9995,
+                        "label": "remote",
+                        "mask": {"hash": "ef899a25fd", "shape": (480, 640), "white_pixels": 2275},
+                    },
+                    {
+                        "score": 0.9722,
+                        "label": "couch",
+                        "mask": {"hash": "37b8446ac5", "shape": (480, 640), "white_pixels": 172380},
+                    },
+                    {
+                        "score": 0.9994,
+                        "label": "cat",
+                        "mask": {"hash": "6a09d3655e", "shape": (480, 640), "white_pixels": 52561},
+                    },
                 ],
                 [
-                    {"score": 0.9094, "label": "blanket", "mask": "dcff19a97abd8bd555e21186ae7c066a"},
-                    {"score": 0.9941, "label": "cat", "mask": "9c0af87bd00f9d3a4e0c8888e34e70e2"},
-                    {"score": 0.9987, "label": "remote", "mask": "c7870600d6c02a1f6d96470fc7220e8e"},
-                    {"score": 0.9995, "label": "remote", "mask": "ef899a25fd44ec056c653f0ca2954fdd"},
-                    {"score": 0.9722, "label": "couch", "mask": "37b8446ac578a17108aa2b7fccc33114"},
-                    {"score": 0.9994, "label": "cat", "mask": "6a09d3655efd8a388ab4511e4cbbb797"},
+                    {
+                        "score": 0.9094,
+                        "label": "blanket",
+                        "mask": {"hash": "dcff19a97a", "shape": (480, 640), "white_pixels": 16617},
+                    },
+                    {
+                        "score": 0.9941,
+                        "label": "cat",
+                        "mask": {"hash": "9c0af87bd0", "shape": (480, 640), "white_pixels": 59185},
+                    },
+                    {
+                        "score": 0.9987,
+                        "label": "remote",
+                        "mask": {"hash": "c7870600d6", "shape": (480, 640), "white_pixels": 4182},
+                    },
+                    {
+                        "score": 0.9995,
+                        "label": "remote",
+                        "mask": {"hash": "ef899a25fd", "shape": (480, 640), "white_pixels": 2275},
+                    },
+                    {
+                        "score": 0.9722,
+                        "label": "couch",
+                        "mask": {"hash": "37b8446ac5", "shape": (480, 640), "white_pixels": 172380},
+                    },
+                    {
+                        "score": 0.9994,
+                        "label": "cat",
+                        "mask": {"hash": "6a09d3655e", "shape": (480, 640), "white_pixels": 52561},
+                    },
                 ],
             ],
         )
@@ -316,13 +452,21 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         )
         # Shortening by hashing
         for o in outputs:
-            o["mask"] = hashimage(o["mask"])
+            o["mask"] = mask_to_test_readable(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9995, "label": "remote", "mask": "d02404f5789f075e3b3174adbc3fd5b8"},
-                {"score": 0.9994, "label": "cat", "mask": "eaa115b40c96d3a6f4fe498963a7e470"},
+                {
+                    "score": 0.9995,
+                    "label": "remote",
+                    "mask": {"hash": "d02404f578", "shape": (480, 640), "white_pixels": 2789},
+                },
+                {
+                    "score": 0.9994,
+                    "label": "cat",
+                    "mask": {"hash": "eaa115b40c", "shape": (480, 640), "white_pixels": 304411},
+                },
             ],
         )
 
@@ -331,16 +475,36 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         )
 
         for o in outputs:
-            o["mask"] = hashimage(o["mask"])
+            o["mask"] = mask_to_test_readable(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9941, "label": "cat", "mask": "9c0af87bd00f9d3a4e0c8888e34e70e2"},
-                {"score": 0.9987, "label": "remote", "mask": "c7870600d6c02a1f6d96470fc7220e8e"},
-                {"score": 0.9995, "label": "remote", "mask": "ef899a25fd44ec056c653f0ca2954fdd"},
-                {"score": 0.9722, "label": "couch", "mask": "37b8446ac578a17108aa2b7fccc33114"},
-                {"score": 0.9994, "label": "cat", "mask": "6a09d3655efd8a388ab4511e4cbbb797"},
+                {
+                    "score": 0.9941,
+                    "label": "cat",
+                    "mask": {"hash": "9c0af87bd0", "shape": (480, 640), "white_pixels": 59185},
+                },
+                {
+                    "score": 0.9987,
+                    "label": "remote",
+                    "mask": {"hash": "c7870600d6", "shape": (480, 640), "white_pixels": 4182},
+                },
+                {
+                    "score": 0.9995,
+                    "label": "remote",
+                    "mask": {"hash": "ef899a25fd", "shape": (480, 640), "white_pixels": 2275},
+                },
+                {
+                    "score": 0.9722,
+                    "label": "couch",
+                    "mask": {"hash": "37b8446ac5", "shape": (480, 640), "white_pixels": 172380},
+                },
+                {
+                    "score": 0.9994,
+                    "label": "cat",
+                    "mask": {"hash": "6a09d3655e", "shape": (480, 640), "white_pixels": 52561},
+                },
             ],
         )
 
@@ -361,17 +525,45 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
 
         # Shortening by hashing
         for o in outputs:
-            o["mask"] = hashimage(o["mask"])
+            o["mask"] = mask_to_test_readable(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9974, "label": "wall", "mask": "a547b7c062917f4f3e36501827ad3cd6"},
-                {"score": 0.949, "label": "house", "mask": "0da9b7b38feac47bd2528a63e5ea7b19"},
-                {"score": 0.9995, "label": "grass", "mask": "1d07ea0a263dcf38ca8ae1a15fdceda1"},
-                {"score": 0.9976, "label": "tree", "mask": "6cdc97c7daf1dc596fa181f461ddd2ba"},
-                {"score": 0.8239, "label": "plant", "mask": "1ab4ce378f6ceff57d428055cfbd742f"},
-                {"score": 0.9942, "label": "road, route", "mask": "39c5d17be53b2d1b0f46aad8ebb15813"},
-                {"score": 1.0, "label": "sky", "mask": "a3756324a692981510c39b1a59510a36"},
+                {
+                    "score": 0.9974,
+                    "label": "wall",
+                    "mask": {"hash": "a547b7c062", "shape": (512, 683), "white_pixels": 14252},
+                },
+                {
+                    "score": 0.949,
+                    "label": "house",
+                    "mask": {"hash": "0da9b7b38f", "shape": (512, 683), "white_pixels": 132177},
+                },
+                {
+                    "score": 0.9995,
+                    "label": "grass",
+                    "mask": {"hash": "1d07ea0a26", "shape": (512, 683), "white_pixels": 53444},
+                },
+                {
+                    "score": 0.9976,
+                    "label": "tree",
+                    "mask": {"hash": "6cdc97c7da", "shape": (512, 683), "white_pixels": 7944},
+                },
+                {
+                    "score": 0.8239,
+                    "label": "plant",
+                    "mask": {"hash": "1ab4ce378f", "shape": (512, 683), "white_pixels": 4136},
+                },
+                {
+                    "score": 0.9942,
+                    "label": "road, route",
+                    "mask": {"hash": "39c5d17be5", "shape": (512, 683), "white_pixels": 1941},
+                },
+                {
+                    "score": 1.0,
+                    "label": "sky",
+                    "mask": {"hash": "a3756324a6", "shape": (512, 683), "white_pixels": 135802},
+                },
             ],
         )

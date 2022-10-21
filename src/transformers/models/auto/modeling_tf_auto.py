@@ -39,6 +39,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("convbert", "TFConvBertModel"),
         ("convnext", "TFConvNextModel"),
         ("ctrl", "TFCTRLModel"),
+        ("cvt", "TFCvtModel"),
         ("data2vec-vision", "TFData2VecVisionModel"),
         ("deberta", "TFDebertaModel"),
         ("deberta-v2", "TFDebertaV2Model"),
@@ -46,6 +47,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("distilbert", "TFDistilBertModel"),
         ("dpr", "TFDPRQuestionEncoder"),
         ("electra", "TFElectraModel"),
+        ("esm", "TFEsmModel"),
         ("flaubert", "TFFlaubertModel"),
         ("funnel", ("TFFunnelModel", "TFFunnelBaseModel")),
         ("gpt2", "TFGPT2Model"),
@@ -80,6 +82,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("vit", "TFViTModel"),
         ("vit_mae", "TFViTMAEModel"),
         ("wav2vec2", "TFWav2Vec2Model"),
+        ("whisper", "TFWhisperModel"),
         ("xglm", "TFXGLMModel"),
         ("xlm", "TFXLMModel"),
         ("xlm-roberta", "TFXLMRobertaModel"),
@@ -127,6 +130,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("ctrl", "TFCTRLLMHeadModel"),
         ("distilbert", "TFDistilBertForMaskedLM"),
         ("electra", "TFElectraForMaskedLM"),
+        ("esm", "TFEsmForMaskedLM"),
         ("flaubert", "TFFlaubertWithLMHeadModel"),
         ("funnel", "TFFunnelForMaskedLM"),
         ("gpt2", "TFGPT2LMHeadModel"),
@@ -145,6 +149,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("t5", "TFT5ForConditionalGeneration"),
         ("tapas", "TFTapasForMaskedLM"),
         ("transfo-xl", "TFTransfoXLLMHeadModel"),
+        ("whisper", "TFWhisperForConditionalGeneration"),
         ("xlm", "TFXLMWithLMHeadModel"),
         ("xlm-roberta", "TFXLMRobertaForMaskedLM"),
         ("xlnet", "TFXLNetLMHeadModel"),
@@ -182,6 +187,7 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image-classsification
         ("convnext", "TFConvNextForImageClassification"),
+        ("cvt", "TFCvtForImageClassification"),
         ("data2vec-vision", "TFData2VecVisionForImageClassification"),
         ("deit", ("TFDeiTForImageClassification", "TFDeiTForImageClassificationWithTeacher")),
         ("mobilevit", "TFMobileViTForImageClassification"),
@@ -219,6 +225,7 @@ TF_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("deberta-v2", "TFDebertaV2ForMaskedLM"),
         ("distilbert", "TFDistilBertForMaskedLM"),
         ("electra", "TFElectraForMaskedLM"),
+        ("esm", "TFEsmForMaskedLM"),
         ("flaubert", "TFFlaubertWithLMHeadModel"),
         ("funnel", "TFFunnelForMaskedLM"),
         ("layoutlm", "TFLayoutLMForMaskedLM"),
@@ -253,6 +260,7 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
         ("speech_to_text", "TFSpeech2TextForConditionalGeneration"),
+        ("whisper", "TFWhisperForConditionalGeneration"),
     ]
 )
 
@@ -268,6 +276,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("deberta-v2", "TFDebertaV2ForSequenceClassification"),
         ("distilbert", "TFDistilBertForSequenceClassification"),
         ("electra", "TFElectraForSequenceClassification"),
+        ("esm", "TFEsmForSequenceClassification"),
         ("flaubert", "TFFlaubertForSequenceClassification"),
         ("funnel", "TFFunnelForSequenceClassification"),
         ("gpt2", "TFGPT2ForSequenceClassification"),
@@ -341,6 +350,7 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("deberta-v2", "TFDebertaV2ForTokenClassification"),
         ("distilbert", "TFDistilBertForTokenClassification"),
         ("electra", "TFElectraForTokenClassification"),
+        ("esm", "TFEsmForTokenClassification"),
         ("flaubert", "TFFlaubertForTokenClassification"),
         ("funnel", "TFFunnelForTokenClassification"),
         ("layoutlm", "TFLayoutLMForTokenClassification"),
