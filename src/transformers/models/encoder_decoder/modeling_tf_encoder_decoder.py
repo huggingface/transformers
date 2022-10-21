@@ -15,6 +15,8 @@
 """ Classes to support TF Encoder-Decoder architectures"""
 
 
+import gc
+import os
 import tempfile
 import warnings
 from typing import Optional
