@@ -544,7 +544,7 @@ class Trillsson_efficientModel(Trillsson_efficientPreTrainedModel):
 
         if input_values is None:
             raise ValueError("You have to specify input_values")
-        batch_size, num_mel_bins, _, frame_width = input_values.shape
+        batch_size, _, frame_width, num_mel_bins = input_values.shape
         input_values = torch.reshape(input_values, [-1, 1, frame_width, num_mel_bins])
 
         all_hidden_states = () if output_hidden_states else None

@@ -48,7 +48,7 @@ class Trillson_efficientModelTester(unittest.TestCase):
 
         input_values = processor(input_speech, return_tensors="pt").input_values.to(torch_device)
 
-        EXPECTED_INPUT_SHAPE = torch.Size([1, 80, 39, 195])
+        EXPECTED_INPUT_SHAPE = torch.Size([1, 39, 195, 80])
         self.assertEqual(input_values.shape, EXPECTED_INPUT_SHAPE)
 
         with torch.no_grad():
@@ -58,7 +58,7 @@ class Trillson_efficientModelTester(unittest.TestCase):
         EXPECTED_SHAPE = torch.Size((1, 1024))
         self.assertEqual(last_hidden_state.shape, EXPECTED_SHAPE)
 
-        EXPECTED_SUM = torch.tensor(1623.8915)
+        EXPECTED_SUM = torch.tensor(1258.8671)
         self.assertTrue(torch.allclose(torch.sum(last_hidden_state.abs()), EXPECTED_SUM))
 
     @slow
@@ -71,7 +71,7 @@ class Trillson_efficientModelTester(unittest.TestCase):
 
         input_values = processor(input_speech, return_tensors="pt", padding=True).input_values.to(torch_device)
 
-        EXPECTED_INPUT_SHAPE = torch.Size([2, 80, 66, 195])
+        EXPECTED_INPUT_SHAPE = torch.Size([2, 66, 195, 80])
         self.assertEqual(input_values.shape, EXPECTED_INPUT_SHAPE)
 
         with torch.no_grad():
@@ -81,7 +81,7 @@ class Trillson_efficientModelTester(unittest.TestCase):
         EXPECTED_SHAPE = torch.Size((2, 1024))
         self.assertEqual(last_hidden_state.shape, EXPECTED_SHAPE)
 
-        EXPECTED_SUM = torch.tensor(3183.4692)
+        EXPECTED_SUM = torch.tensor(2458.5457)
         self.assertTrue(torch.allclose(torch.sum(last_hidden_state.abs()), EXPECTED_SUM))
 
     @slow
@@ -94,7 +94,7 @@ class Trillson_efficientModelTester(unittest.TestCase):
 
         input_values = processor(input_speech, return_tensors="pt", padding=True).input_values.to(torch_device)
 
-        EXPECTED_INPUT_SHAPE = torch.Size([4, 80, 163, 195])
+        EXPECTED_INPUT_SHAPE = torch.Size([4, 163, 195, 80])
         self.assertEqual(input_values.shape, EXPECTED_INPUT_SHAPE)
 
         with torch.no_grad():
@@ -104,5 +104,5 @@ class Trillson_efficientModelTester(unittest.TestCase):
         EXPECTED_SHAPE = torch.Size((4, 1024))
         self.assertEqual(last_hidden_state.shape, EXPECTED_SHAPE)
 
-        EXPECTED_SUM = torch.tensor(6372.4956)
+        EXPECTED_SUM = torch.tensor(4763.9116)
         self.assertTrue(torch.allclose(torch.sum(last_hidden_state.abs()), EXPECTED_SUM))

@@ -209,7 +209,7 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
             mel_speech = self.log_mel_spectrogram(raw_speech, sampling_rate)
             mel_speech = tf.signal.frame(mel_speech, frame_length=frame_width, frame_step=frame_hop, axis=2).numpy()
             mel_speech = np.squeeze(mel_speech, axis=0)
-
+            mel_speech = np.transpose(mel_speech, (1, 2, 0))
             # rescale
             if self.do_normalize:
                 mel_speech = self.rescale(mel_speech)
