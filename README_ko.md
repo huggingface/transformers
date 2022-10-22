@@ -58,7 +58,7 @@ limitations under the License.
 
 🤗 Transformers는 분류, 정보 추출, 질문 답변, 요약, 번역, 문장 생성 등을 100개 이상의 언어로 수행할 수 있는 수천개의 사전학습된 모델을 제공합니다. 우리의 목표는 모두가 최첨단의 NLP 기술을 쉽게 사용하는 것입니다.
 
-🤗 Transformers는 이러한 사전학습 모델을 빠르게 다운로드해 특정 텍스트에 사용하고, 원하는 데이터로 fine-tuning해 커뮤니티나 우리의 [모델 허브](https://huggingface.co/models)에 공유할 수 있도록 API를 제공합니다. 또한, 모델 구조를 정의하는 각 파이썬 모듈은 완전히 독립적이여서 연구 실험을 위해 손쉽게 수정할 수 있습니다.
+🤗 Transformers는 이러한 사전학습 모델을 빠르게 다운로드해 특정 텍스트에 사용하고, 원하는 데이터로 fine-tuning해 커뮤니티나 우리의 [모델 허브](https://huggingface.co/models)에 공유할 수 있도록 API를 제공합니다. 또한, 모델 구조를 정의하는 각 파이선 모듈은 완전히 독립적 이어서 연구 실험을 위해 손쉽게 수정할 수 있습니다.
 
 🤗 Transformers는 가장 유명한 3개의 딥러닝 라이브러리를 지원합니다. 이들은 서로 완벽히 연동됩니다 — [Jax](https://jax.readthedocs.io/en/latest/), [PyTorch](https://pytorch.org/), [TensorFlow](https://www.tensorflow.org/). 간단하게 이 라이브러리 중 하나로 모델을 학습하고, 또 다른 라이브러리로 추론을 위해 모델을 불러올 수 있습니다.
 
@@ -67,7 +67,7 @@ limitations under the License.
 대부분의 모델을 [모델 허브](https://huggingface.co/models) 페이지에서 바로 테스트해볼 수 있습니다. 공개 및 비공개 모델을 위한 [비공개 모델 호스팅, 버전 관리, 추론 API](https://huggingface.co/pricing)도 제공합니다.
 
 예시:
-- [BERT로 마스킹된 단어 완성하기](https://huggingface.co/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
+- [BERT로 마스킹 된 단어 완성하기](https://huggingface.co/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
 - [Electra를 이용한 개체명 인식](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
 - [GPT-2로 텍스트 생성하기](https://huggingface.co/gpt2?text=A+long+time+ago%2C+)
 - [RoBERTa로 자연어 추론하기](https://huggingface.co/roberta-large-mnli?text=The+dog+was+lost.+Nobody+lost+any+animal)
