@@ -15,11 +15,18 @@
 from argparse import ArgumentParser
 from pathlib import Path
 
+from transformers.utils.import_utils import is_tf_available, is_torch_available
+
 from ..models.auto import AutoFeatureExtractor, AutoProcessor, AutoTokenizer
 from ..onnx.utils import get_preprocessor
 from ..utils import logging
 from .convert import export, validate_model_outputs
 from .features import FeaturesManager
+
+if is_torch_available():
+    from torch.nn import Module as TorchModule
+if is_tf_available():
+    from tensorflow import Module as TFModule
 
 
 ENCODER_DECODER_MODELS = ["vision-encoder-decoder"]
@@ -78,11 +85,12 @@ def main():
 
     if model_kind in ENCODER_DECODER_MODELS:
         encoder_model = model.get_encoder()
+        enc_to_dec_proj = model.get_enc_to_dec_proj()
         decoder_model = model.get_decoder()
 
         encoder_onnx_config = onnx_config.get_encoder_config(encoder_model.config)
         decoder_onnx_config = onnx_config.get_decoder_config(
-            encoder_model.config, decoder_model.config, feature=args.feature
+            decoder_model.config, feature=args.feature
         )
 
         if args.opset is None:
@@ -96,7 +104,7 @@ def main():
 
         preprocessor = AutoFeatureExtractor.from_pretrained(args.model)
 
-        onnx_inputs, onnx_outputs = export(
+        onnx_inputs, onnx_named_outputs = export(
             preprocessor,
             encoder_model,
             encoder_onnx_config,
@@ -104,14 +112,30 @@ def main():
             args.output.parent.joinpath("encoder_model.onnx"),
         )
 
-        validate_model_outputs(
+        onnx_outputs = validate_model_outputs(
             encoder_onnx_config,
             preprocessor,
             encoder_model,
             args.output.parent.joinpath("encoder_model.onnx"),
-            onnx_outputs,
+            onnx_named_outputs,
             args.atol if args.atol else encoder_onnx_config.atol_for_validation,
         )
+        encoder_output_shape = onnx_outputs[0].shape
+
+        if enc_to_dec_proj:
+            output = args.output.parent.joinpath("enc_to_dec_proj.onnx")
+            if is_torch_available() and isinstance(enc_to_dec_proj, TorchModule):
+                import torch
+                from torch.onnx import export as onnx_export
+                inputs = torch.zeros(encoder_output_shape)
+                onnx_export(enc_to_dec_proj, inputs, f=output.as_posix(), opset_version=args.opset)
+            if is_tf_available and isinstance(enc_to_dec_proj, TFModule):
+                import onnx
+                import tensorflow as tf
+                import tf2onnx
+                inputs = tf.zeros(encoder_output_shape)
+                onnx_model, _ = tf2onnx.convert.from_keras(model, inputs, opset=args.opset)
+                onnx.save(onnx_model, output.as_posix())
 
         preprocessor = AutoTokenizer.from_pretrained(args.model)
 

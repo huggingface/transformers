@@ -214,6 +214,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         self.decoder.config = self.config.decoder
 
         # encoder outputs might need to be projected to different dimension for decoder
+        self.enc_to_dec_proj: Optional[nn.Module] = None
         if (
             self.encoder.config.hidden_size != self.decoder.config.hidden_size
             and self.decoder.config.cross_attention_hidden_size is None
@@ -235,6 +236,9 @@ class VisionEncoderDecoderModel(PreTrainedModel):
 
     def get_decoder(self):
         return self.decoder
+
+    def get_enc_to_dec_proj(self):
+        return self.enc_to_dec_proj
 
     def get_output_embeddings(self):
         return self.decoder.get_output_embeddings()
@@ -319,7 +323,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
             tf_model = TFVisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
 
             # Deal with `enc_to_dec_proj`
-            if hasattr(_tf_model, "enc_to_dec_proj"):
+            if _tf_model.enc_to_dec_proj is not None:
                 tf_model(tf_model.dummy_inputs)
                 tf_model.enc_to_dec_proj.kernel.assign(_tf_model.enc_to_dec_proj.kernel)
                 tf_model.enc_to_dec_proj.bias.assign(_tf_model.enc_to_dec_proj.bias)
@@ -330,7 +334,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                 tf_model.encoder.save_pretrained(encoder_dir)
                 tf_model.decoder.save_pretrained(decoder_dir)
 
-                if hasattr(tf_model, "enc_to_dec_proj"):
+                if tf_model.enc_to_dec_proj is not None:
                     enc_to_dec_proj_weight = torch.transpose(
                         torch.from_numpy(tf_model.enc_to_dec_proj.kernel.numpy()), 1, 0
                     )
@@ -346,7 +350,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                 # This is only for copying some specific attributes of this particular model.
                 model.config = config
 
-                if hasattr(model, "enc_to_dec_proj"):
+                if model.enc_to_dec_proj is not None:
                     model.enc_to_dec_proj.weight.data = enc_to_dec_proj_weight
                     model.enc_to_dec_proj.bias.data = enc_to_dec_proj_bias
 

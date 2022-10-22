@@ -185,6 +185,7 @@ class FlaxVisionEncoderDecoderModule(nn.Module):
         self.decoder = decoder_module(decoder_config, dtype=self.dtype)
 
         # encoder outputs might need to be projected to different dimension for decoder
+        self.enc_to_dec_proj: Optional[nn.Module] = None
         if (
             self.encoder.config.hidden_size != self.decoder.config.hidden_size
             and self.decoder.config.cross_attention_hidden_size is None
@@ -194,8 +195,6 @@ class FlaxVisionEncoderDecoderModule(nn.Module):
                 kernel_init=jax.nn.initializers.normal(self.decoder.config.initializer_range),
                 dtype=self.dtype,
             )
-        else:
-            self.enc_to_dec_proj = None
 
     def _get_encoder_module(self):
         return self.encoder

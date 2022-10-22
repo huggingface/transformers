@@ -238,6 +238,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         self.decoder.config = self.config.decoder
 
         # encoder outputs might need to be projected to different dimension for decoder
+        self.enc_to_dec_proj: Optional[tf.Module] = None
         if (
             self.encoder.config.hidden_size != self.decoder.config.hidden_size
             and self.decoder.config.cross_attention_hidden_size is None
@@ -283,6 +284,9 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
 
     def get_decoder(self):
         return self.decoder
+
+    def get_enc_to_dec_proj(self):
+        return self.enc_to_dec_proj
 
     def get_input_embeddings(self):
         return self.encoder.get_input_embeddings()
@@ -337,7 +341,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
                 _model.encoder.save_pretrained(encoder_dir)
                 _model.decoder.save_pretrained(decoder_dir)
 
-                if hasattr(_model, "enc_to_dec_proj"):
+                if _model.enc_to_dec_proj is not None:
                     enc_to_dec_proj_kernel = tf.transpose(
                         tf.constant(_model.enc_to_dec_proj.weight.detach().to("cpu").numpy()), perm=(1, 0)
                     )
@@ -353,7 +357,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
                 # This is only for copying some specific attributes of this particular model.
                 model.config = config
 
-                if hasattr(model, "enc_to_dec_proj"):
+                if model.enc_to_dec_proj is not None:
                     model(model.dummy_inputs)
                     model.enc_to_dec_proj.kernel.assign(enc_to_dec_proj_kernel)
                     model.enc_to_dec_proj.bias.assign(enc_to_dec_proj_bias)
