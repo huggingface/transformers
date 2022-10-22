@@ -15,7 +15,7 @@
 """ Classes to support Speech-Encoder-Text-Decoder architectures"""
 
 
-from typing import Optional, Union, Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -444,7 +444,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
     def forward(
         self,
         inputs: Optional[torch.FloatTensor] = None,
-        attention_mask:  Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
         encoder_outputs: Optional[tuple(torch.FloatTensor)] = None,
