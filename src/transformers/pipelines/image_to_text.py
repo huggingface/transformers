@@ -53,7 +53,8 @@ class ImageToTextPipeline(Pipeline):
                 forward_kwargs["generate_kwargs"] = {}
             if "max_new_tokens" in forward_kwargs["generate_kwargs"]:
                 raise ValueError(
-                    "'max_new_tokens' is defined twice, once in 'generate_kwargs' and once as a direct parameter, please use only one"
+                    "'max_new_tokens' is defined twice, once in 'generate_kwargs' and once as a direct parameter,"
+                    " please use only one"
                 )
             forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
         return {}, forward_kwargs, {}
@@ -71,6 +72,12 @@ class ImageToTextPipeline(Pipeline):
                 - An image loaded in PIL directly
 
                 The pipeline accepts either a single image or a batch of images.
+
+            max_new_tokens (`int`, *optional*):
+                The amount of maximum tokens to generate. By default it will use `generate` default.
+
+            generate_kwargs (`Dict`, *optional*):
+                Pass it to send all of these arguments directly to `generate` allowing full control of this function.
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following key:
