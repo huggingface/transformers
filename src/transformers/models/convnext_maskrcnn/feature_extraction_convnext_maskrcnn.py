@@ -608,4 +608,18 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
             det_bboxes.append(det_bbox)
             det_labels.append(det_label)
 
-        return det_bboxes, det_labels
+        # turn into COCO API
+        results = []
+        for example_idx in range(len(det_bboxes)):
+            scores = det_bboxes[example_idx][:, -1]
+            boxes = det_bboxes[example_idx][:, :-1]
+            labels = det_labels[example_idx]
+            results.append(
+                {
+                    "scores": scores[scores > threshold],
+                    "labels": labels[scores > threshold],
+                    "boxes": boxes[scores > threshold],
+                }
+            )
+
+        return results
