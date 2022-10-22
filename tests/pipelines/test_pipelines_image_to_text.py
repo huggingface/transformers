@@ -86,6 +86,12 @@ class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
             ],
         )
 
+        outputs = pipe(image, max_new_tokens=1)
+        self.assertEqual(
+            outputs,
+            [{"generated_text": "growth"}],
+        )
+
     @require_torch
     def test_small_model_pt(self):
         pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2")

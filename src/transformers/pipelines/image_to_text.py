@@ -1,7 +1,5 @@
 from typing import List, Union
 
-import copy
-
 from ..utils import (
     add_end_docstrings,
     is_tf_available,
@@ -38,17 +36,27 @@ class ImageToTextPipeline(Pipeline):
     See the list of available models on
     [huggingface.co/models](https://huggingface.co/models?pipeline_tag=image-to-text).
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
         self.check_model_type(
             TF_MODEL_FOR_VISION_2_SEQ_MAPPING if self.framework == "tf" else MODEL_FOR_VISION_2_SEQ_MAPPING
         )
-        self._generate_kwargs = {}
 
-    def _sanitize_parameters(self, **kwargs):
-        self._generate_kwargs = copy.deepcopy(kwargs)
-        return {}, {}, {}
+    def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None):
+        forward_kwargs = {}
+        if generate_kwargs is not None:
+            forward_kwargs["generate_kwargs"] = generate_kwargs
+        if max_new_tokens is not None:
+            if "generate_kwargs" not in forward_kwargs:
+                forward_kwargs["generate_kwargs"] = {}
+            if "max_new_tokens" in forward_kwargs["generate_kwargs"]:
+                raise ValueError(
+                    "'max_new_tokens' is defined twice, once in 'generate_kwargs' and once as a direct parameter, please use only one"
+                )
+            forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
+        return {}, forward_kwargs, {}
 
     def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
         """
@@ -76,13 +84,15 @@ class ImageToTextPipeline(Pipeline):
         model_inputs = self.feature_extractor(images=image, return_tensors=self.framework)
         return model_inputs
 
-    def _forward(self, model_inputs):
+    def _forward(self, model_inputs, generate_kwargs=None):
+        if generate_kwargs is None:
+            generate_kwargs = {}
         # FIXME: We need to pop here due to a difference in how `generation_utils.py` and `generation_tf_utils.py`
         #  parse inputs. In the Tensorflow version, `generate` raises an error if we don't use `input_ids` whereas
         #  the PyTorch version matches it with `self.model.main_input_name` or `self.model.encoder.main_input_name`
         #  in the `_prepare_model_inputs` method.
         inputs = model_inputs.pop(self.model.main_input_name)
-        model_outputs = self.model.generate(inputs, **model_inputs, **self._generate_kwargs)
+        model_outputs = self.model.generate(inputs, **model_inputs, **generate_kwargs)
         return model_outputs
 
     def postprocess(self, model_outputs):
