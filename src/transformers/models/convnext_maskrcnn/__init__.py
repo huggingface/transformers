@@ -18,7 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
@@ -34,15 +34,21 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_convnext_maskrnn"] = [
-        "ConvNextMaskRCNNFeatureExtractor",
-    ]
     _import_structure["modeling_convnext_maskrcnn"] = [
         "CONVNEXTMASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ConvNextMaskRCNNForObjectDetection",
         "ConvNextMaskRCNNModel",
         "ConvNextMaskRCNNPreTrainedModel",
     ]
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["feature_extraction_convnext_maskrcnn"] = ["ConvNextMaskRCNNFeatureExtractor"]
+
 
 if TYPE_CHECKING:
     from .configuration_convnext_maskrcnn import CONVNEXTMASKRCNN_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextMaskRCNNConfig
@@ -53,13 +59,20 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_convnext_maskrcnn import ConvNextMaskRCNNFeatureExtractor
         from .modeling_convnext_maskrcnn import (
             CONVNEXTMASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST,
             ConvNextMaskRCNNForObjectDetection,
             ConvNextMaskRCNNModel,
             ConvNextMaskRCNNPreTrainedModel,
         )
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .feature_extraction_convnext_maskrcnn import ConvNextMaskRCNNFeatureExtractor
 
 else:
     import sys
