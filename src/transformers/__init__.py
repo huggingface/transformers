@@ -5517,7 +5517,6 @@ if TYPE_CHECKING:
         )
         from .models.convnext_maskrcnn import (
             CONVNEXTMASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ConvNextMaskRCNNFeatureExtractor,
             ConvNextMaskRCNNForObjectDetection,
             ConvNextMaskRCNNModel,
             ConvNextMaskRCNNPreTrainedModel,

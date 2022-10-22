@@ -15,16 +15,15 @@
 """Feature extractor class for ConvNext Mask-RCNN."""
 
 import warnings
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
+import torchvision
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import ImageFeatureExtractionMixin
 from ...utils import TensorType, is_torch_available, logging
-
-import torchvision
 
 
 if is_torch_available():
@@ -304,22 +303,6 @@ class ConvNextMaskRCNNDeltaXYWHBBoxCoder(nn.Module):
         self.add_ctr_clamp = add_ctr_clamp
         self.ctr_clamp = ctr_clamp
 
-    def encode(self, bboxes, gt_bboxes):
-        """Get box regression transformation deltas that can be used to
-        Args:
-        transform the `bboxes` into the `gt_bboxes`.
-            bboxes (torch.Tensor): Source boxes, e.g., object proposals. gt_bboxes (torch.Tensor): Target of the
-            transformation, e.g.,
-                ground-truth boxes.
-        Returns:
-            torch.Tensor: Box transformation deltas
-        """
-
-        assert bboxes.size(0) == gt_bboxes.size(0)
-        assert bboxes.size(-1) == gt_bboxes.size(-1) == 4
-        encoded_bboxes = bbox2delta(bboxes, gt_bboxes, self.means, self.stds)
-        return encoded_bboxes
-
     def decode(self, bboxes, pred_bboxes, max_shape=None, wh_ratio_clip=16 / 1000):
         """Apply transformation `pred_bboxes` to `boxes`.
 
@@ -483,15 +466,20 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
 
     model_input_names = ["pixel_values"]
 
-    def __init__(self, test_cfg,  bbox_head_bbox_coder_target_means=[0.0, 0.0, 0.0, 0.0], bbox_head_bbox_coder_target_stds=[0.1, 0.1, 0.2, 0.2],
-        **kwargs):
+    def __init__(
+        self,
+        test_cfg,
+        bbox_head_bbox_coder_target_means=[0.0, 0.0, 0.0, 0.0],
+        bbox_head_bbox_coder_target_stds=[0.1, 0.1, 0.2, 0.2],
+        **kwargs
+    ):
         super().__init__(**kwargs)
 
         self.test_cfg = test_cfg
         self.bbox_coder = ConvNextMaskRCNNDeltaXYWHBBoxCoder(
             target_means=bbox_head_bbox_coder_target_means, target_stds=bbox_head_bbox_coder_target_stds
         )
-    
+
     def __call__(self, **kwargs) -> BatchFeature:
         """
         Main method to prepare for the model one or several image(s) and optional annotations. Images are by default
@@ -523,7 +511,7 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
         # # some loss (Seesaw loss..) may have custom activation
         # if self.custom_cls_channels:
         #     scores = self.loss_cls.get_activation(cls_score)
-        # else:        
+        # else:
         scores = nn.functional.softmax(cls_score, dim=-1) if cls_score is not None else None
         # bbox_pred would be None in some detector when with_reg is False,
         # e.g. Grid R-CNN.
@@ -547,7 +535,7 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
             det_bboxes, det_labels = multiclass_nms(bboxes, scores, cfg["score_thr"], cfg["nms"], cfg["max_per_img"])
 
             return det_bboxes, det_labels
-    
+
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, img_metas: Union[TensorType, List[Tuple]] = None
     ):
@@ -588,7 +576,7 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
                 bbox_pred = self.bbox_head.bbox_pred_split(bbox_pred, num_proposals_per_img)
         else:
             bbox_pred = (None,) * len(proposals)
-        
+
         # apply bbox post-processing to each image individually
         img_shapes = tuple(meta["img_shape"] for meta in img_metas)
         scale_factors = tuple(meta["scale_factor"] for meta in img_metas)
@@ -621,5 +609,3 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
             det_labels.append(det_label)
 
         return det_bboxes, det_labels
-
-    
