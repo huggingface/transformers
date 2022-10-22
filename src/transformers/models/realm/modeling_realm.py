@@ -1163,8 +1163,8 @@ class RealmEmbedder(RealmPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, RealmEmbedderOutput]:
         r"""
@@ -1249,9 +1249,9 @@ class RealmScorer(RealmPreTrainedModel):
         candidate_inputs_embeds: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, RealmScorerOutput]:
         r"""
         candidate_input_ids (`torch.LongTensor` of shape `(batch_size, num_candidates, sequence_length)`):
@@ -1401,9 +1401,9 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
         relevance_score: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         mlm_mask: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MaskedLMOutput]:
         r"""
         relevance_score (`torch.FloatTensor` of shape `(batch_size, num_candidates)`, *optional*):
@@ -1544,9 +1544,9 @@ class RealmReader(RealmPreTrainedModel):
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
         has_answers: Optional[torch.BoolTensor] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, RealmReaderOutput]:
         r"""
         relevance_score (`torch.FloatTensor` of shape `(searcher_beam_size,)`, *optional*):
@@ -1763,7 +1763,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         answer_ids: Optional[torch.LongTensor] = None,
-        return_dict: Optional[bool] = True,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, RealmForOpenQAOutput]:
         r"""
         Returns:
