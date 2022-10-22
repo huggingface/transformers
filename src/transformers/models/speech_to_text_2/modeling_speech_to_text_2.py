@@ -791,7 +791,7 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
+    ) -> Union[Tuple[torch.FloatTensor], CausalLMOutputWithCrossAttentions]:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
