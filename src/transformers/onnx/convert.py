@@ -459,6 +459,7 @@ def validate_model_outputs(
             )
         else:
             logger.info(f"\t\t-[✓] all values close (atol: {atol})")
+    return onnx_outputs
 
 
 def ensure_model_and_config_inputs_match(
