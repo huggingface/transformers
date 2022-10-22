@@ -15,7 +15,7 @@
 """ Classes to support Speech-Encoder-Text-Decoder architectures"""
 
 
-from typing import Optional
+from typing import Optional, Union, Tuple
 
 import torch
 from torch import nn
