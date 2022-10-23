@@ -65,7 +65,7 @@ DPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class DPTViTEmbeddings(nn.Module):
+class DPTEmbeddings(nn.Module):
     """
     Construct the CLS token, position and patch embeddings.
 
@@ -75,7 +75,7 @@ class DPTViTEmbeddings(nn.Module):
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.patch_embeddings = DPTViTPatchEmbeddings(config)
+        self.patch_embeddings = DPTPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -120,7 +120,7 @@ class DPTViTEmbeddings(nn.Module):
         return embeddings
 
 
-class DPTViTPatchEmbeddings(nn.Module):
+class DPTPatchEmbeddings(nn.Module):
     """
     Image to Patch Embedding.
 
@@ -152,7 +152,7 @@ class DPTViTPatchEmbeddings(nn.Module):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->DPT
-class DPTViTSelfAttention(nn.Module):
+class DPTSelfAttention(nn.Module):
     def __init__(self, config: DPTConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -213,7 +213,7 @@ class DPTViTSelfAttention(nn.Module):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->DPT
-class DPTViTSelfOutput(nn.Module):
+class DPTSelfOutput(nn.Module):
     """
     The residual connection is defined in DPTLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
@@ -232,11 +232,11 @@ class DPTViTSelfOutput(nn.Module):
         return hidden_states
 
 
-class DPTViTAttention(nn.Module):
+class DPTAttention(nn.Module):
     def __init__(self, config: DPTConfig) -> None:
         super().__init__()
-        self.attention = DPTViTSelfAttention(config)
-        self.output = DPTViTSelfOutput(config)
+        self.attention = DPTSelfAttention(config)
+        self.output = DPTSelfOutput(config)
         self.pruned_heads = set()
 
     # Copied from transformers.models.vit.modeling_vit.ViTAttention.prune_heads
@@ -274,7 +274,7 @@ class DPTViTAttention(nn.Module):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->DPT
-class DPTViTIntermediate(nn.Module):
+class DPTIntermediate(nn.Module):
     def __init__(self, config: DPTConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -292,7 +292,7 @@ class DPTViTIntermediate(nn.Module):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->DPT
-class DPTViTOutput(nn.Module):
+class DPTOutput(nn.Module):
     def __init__(self, config: DPTConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -307,17 +307,17 @@ class DPTViTOutput(nn.Module):
         return hidden_states
 
 
-# copied from transformers.models.vit.modeling_vit.ViTLayer with ViTConfig->DPTConfig, ViTAttention->DPTViTAttention, ViTIntermediate->DPTViTIntermediate, ViTOutput->DPTViTOutput
-class DPTViTLayer(nn.Module):
+# copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->DPT
+class DPTLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: DPTConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = DPTViTAttention(config)
-        self.intermediate = DPTViTIntermediate(config)
-        self.output = DPTViTOutput(config)
+        self.attention = DPTAttention(config)
+        self.intermediate = DPTIntermediate(config)
+        self.output = DPTOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -350,12 +350,12 @@ class DPTViTLayer(nn.Module):
         return outputs
 
 
-# copied from transformers.models.vit.modeling_vit.ViTEncoder with ViTConfig -> DPTConfig, ViTLayer->DPTViTLayer
-class DPTViTEncoder(nn.Module):
+# copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->DPT
+class DPTEncoder(nn.Module):
     def __init__(self, config: DPTConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([DPTViTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([DPTLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -633,7 +633,7 @@ class DPTPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, DPTViTEncoder):
+        if isinstance(module, DPTEncoder):
             module.gradient_checkpointing = value
 
 
@@ -681,11 +681,11 @@ class DPTModel(DPTPreTrainedModel):
         self.config = config
 
         # vit encoder
-        self.embeddings = DPTViTEmbeddings(config)
-        self.encoder = DPTViTEncoder(config)
+        self.embeddings = DPTEmbeddings(config)
+        self.encoder = DPTEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = DPTViTPooler(config) if add_pooling_layer else None
+        self.pooler = DPTPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -758,7 +758,7 @@ class DPTModel(DPTPreTrainedModel):
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->DPT
-class DPTViTPooler(nn.Module):
+class DPTPooler(nn.Module):
     def __init__(self, config: DPTConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
