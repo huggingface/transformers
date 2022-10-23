@@ -25,10 +25,12 @@ def rename_key(name):
         name = name.replace("ln_1", "layer_norm1")
     if "ln_2" in name:
         name = name.replace("ln_2", "layer_norm2")
-    if "mlp.fc1" in name:
-        name = name.replace("mlp.fc1", "intermediate.dense")
-    if "mlp.fc2" in name:
-        name = name.replace("mlp.fc2", "output.dense")
+    if "c_fc" in name:
+        name = name.replace("c_fc", "fc1")
+    if "c_proj" in name:
+        name = name.replace("c_proj", "fc2")
+    if "attn" in name:
+        name = name.replace("attn", "self_attn")
     if "ln_final" in name:
         name = name.replace("ln_final", "final_layer_norm")
     # text encoder
@@ -43,6 +45,8 @@ def rename_key(name):
         name = name.replace("visual.positional_embedding", "vision_model.embeddings.position_embedding")
     if "ln_pre" in name:
         name = name.replace("ln_pre", "pre_layrnorm")
+    if "ln_post" in name:
+        name = name.replace("ln_post", "post_layernorm")
 
     return name
 
@@ -51,9 +55,29 @@ def convert_state_dict(orig_state_dict, config):
     for key in orig_state_dict.copy().keys():
         val = orig_state_dict.pop(key)
 
-        if "attn" in key:
-            # TODO
-            pass
+        if key.startswith("clip_model") and "attn.in_proj" in key:
+            key_split = key.split(".")
+            if "visual" in key:
+                layer_num = int(key_split[4])
+                dim = config.vision_config.hidden_size
+                prefix = "vision_model"
+            else:
+                layer_num = int(key_split[3])
+                dim = config.text_config.hidden_size
+                prefix = "text_model"
+
+            if "weight" in key:
+                orig_state_dict[f"clipseg.{prefix}.encoder.layers.{layer_num}.self_attn.q_proj.weight"] = val[:dim, :]
+                orig_state_dict[f"clipseg.{prefix}.encoder.layers.{layer_num}.self_attn.k_proj.weight"] = val[
+                    dim : dim * 2, :
+                ]
+                orig_state_dict[f"clipseg.{prefix}.encoder.layers.{layer_num}.self_attn.v_proj.weight"] = val[-dim:, :]
+            else:
+                orig_state_dict[f"clipseg.{prefix}.encoder.layers.{layer_num}.self_attn.q_proj.bias"] = val[:dim]
+                orig_state_dict[f"clipseg.{prefix}.encoder.layers.{layer_num}.self_attn.k_proj.bias"] = val[
+                    dim : dim * 2
+                ]
+                orig_state_dict[f"clipseg.{prefix}.encoder.layers.{layer_num}.self_attn.v_proj.bias"] = val[-dim:]
         else:
             orig_state_dict[rename_key(key)] = val
 
@@ -66,6 +90,15 @@ def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     model.eval()
 
     state_dict = torch.load(checkpoint_path, map_location="cpu")
+
+    for key in state_dict.copy().keys():
+        if key.startswith("model"):
+            state_dict.pop(key, None)
+
+    print("ORIGINAL STATE DICT")
+    for name, param in state_dict.items():
+        print(name, param.shape)
+
     state_dict = convert_state_dict(state_dict, config)
     model.load_state_dict(state_dict)
 
@@ -94,7 +127,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint_path",
-        default="/Users/nielsrogge/Downloads/clipseg_weights/rd64-uni.pth",
+        default="/Users/nielsrogge/Documents/CLIPSeg/test.pth",
         type=str,
         help="Path to the original checkpoint.",
     )
