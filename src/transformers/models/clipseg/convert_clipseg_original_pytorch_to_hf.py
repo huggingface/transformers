@@ -7,6 +7,7 @@ from transformers import CLIPSegConfig, CLIPSegForImageSegmentation
 
 def get_clipseg_config():
     config = CLIPSegConfig()
+    config.vision_config.patch_size = 16
     return config
 
 
@@ -31,22 +32,29 @@ def rename_key(name):
         name = name.replace("c_proj", "fc2")
     if "attn" in name:
         name = name.replace("attn", "self_attn")
-    if "ln_final" in name:
-        name = name.replace("ln_final", "final_layer_norm")
     # text encoder
     if "token_embedding" in name:
         name = name.replace("token_embedding", "text_model.embeddings.token_embedding")
-    if "positional_embedding" in name:
-        name = name.replace("positional_embedding", "text_model.embeddings.token_embedding.weight")
+    if "positional_embedding" in name and "visual" not in name:
+        name = name.replace("positional_embedding", "text_model.embeddings.position_embedding.weight")
+    if "ln_final" in name:
+        name = name.replace("ln_final", "text_model.final_layer_norm")
     # vision encoder
     if "visual.class_embedding" in name:
         name = name.replace("visual.class_embedding", "vision_model.embeddings.class_embedding")
+    if "visual.conv1" in name:
+        name = name.replace("visual.conv1", "vision_model.embeddings.patch_embedding")
     if "visual.positional_embedding" in name:
-        name = name.replace("visual.positional_embedding", "vision_model.embeddings.position_embedding")
-    if "ln_pre" in name:
-        name = name.replace("ln_pre", "pre_layrnorm")
-    if "ln_post" in name:
-        name = name.replace("ln_post", "post_layernorm")
+        name = name.replace("visual.positional_embedding", "vision_model.embeddings.position_embedding.weight")
+    if "visual.ln_pre" in name:
+        name = name.replace("visual.ln_pre", "vision_model.pre_layrnorm")
+    if "visual.ln_post" in name:
+        name = name.replace("visual.ln_post", "vision_model.post_layernorm")
+    # projection layers
+    if "visual.proj" in name:
+        name = name.replace("visual.proj", "visual_projection.weight")
+    if "text_projection" in name:
+        name = name.replace("text_projection", "text_projection.weight")
 
     return name
 
@@ -79,7 +87,10 @@ def convert_state_dict(orig_state_dict, config):
                 ]
                 orig_state_dict[f"clipseg.{prefix}.encoder.layers.{layer_num}.self_attn.v_proj.bias"] = val[-dim:]
         else:
-            orig_state_dict[rename_key(key)] = val
+            new_name = rename_key(key)
+            if "visual_projection" in new_name or "text_projection" in new_name:
+                val = val.T
+            orig_state_dict[new_name] = val
 
     return orig_state_dict
 
