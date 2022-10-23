@@ -14,35 +14,45 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The FAN model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>)  by <INSERT AUTHORS HERE>. <INSERT SHORT SUMMARY HERE>
+The FAN model was proposed in [Understanding The Robustness in Vision Transformers](https://arxiv.org/pdf/2204.12451.pdf)  by Daquan Zhou, Zhiding Yu, Enze Xie,
+Chaowei Xiao, Anima Anandkumar, Jiashi Feng, Jose M. Alvarez. <INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+Recent studies show that Vision Transformers
+(ViTs) exhibit strong robustness against various
+corruptions. Although this property is partly attributed to the self-attention mechanism, there
+is still a lack of systematic understanding. In
+this paper, we examine the role of self-attention
+in learning robust representations. Our study
+is motivated by the intriguing properties of the
+emerging visual grouping in Vision Transformers,
+which indicates that self-attention may promote
+robustness through improved mid-level representations. We further propose a family of fully attentional networks (FANs) that strengthen this
+capability by incorporating an attentional channel
+processing design. We validate the design comprehensively on various hierarchical backbones.
+Our model achieves a state-of-the-art 87.1% accuracy and 35.8% mCE on ImageNet-1k and
+ImageNet-C with 76.8M parameters. We also
+demonstrate state-of-the-art accuracy and robustness in two downstream tasks: semantic segmentation and object detection. Code will be available
+at https://github.com/NVlabs/FAN.
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- In order to obtain an identical forward pass to that of the original repository for the task of Semantic segmentation, the config attribute rounding_mode must be set to None.
+  Since the positional encoding for image classification uses a floor rounding_mode as can be seen [here](https://github.com/NVlabs/FAN/blob/master/models/fan.py), while for semantic segmentation
+  the same operation doesn't define rounding_mode explicitly as can be seen [here](https://github.com/NVlabs/FAN/blob/master/segmentation/mmseg/models/backbones/fan.py)
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>). The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [ksmcg](<https://huggingface.co/ksmcg). The original code can be found [here](https://github.com/NVlabs/FAN).
 
 ## FANConfig
 
 [[autodoc]] FANConfig
 
 
-## FANTokenizer
+## FANFeatureExtractor
 
-[[autodoc]] FANTokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
-
-
-## FANTokenizerFast
-
-[[autodoc]] FANTokenizerFast
+[[autodoc]] FANFeatureExtractor
+    - __call__
 
 
 ## FANModel
@@ -51,36 +61,14 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingfac
     - forward
 
 
-## FANForCausalLM
+## FANForImageClassification
 
-[[autodoc]] FANForCausalLM
+[[autodoc]] FANForImageClassification
     - forward
 
 
-## FANForMaskedLM
+## FANForSemanticSegmentation
 
-[[autodoc]] FANForMaskedLM
+[[autodoc]] FANForSemanticSegmentation
     - forward
 
-
-## FANForSequenceClassification
-
-[[autodoc]] transformers.FANForSequenceClassification
-    - forward
-
-## FANForMultipleChoice
-
-[[autodoc]] transformers.FANForMultipleChoice
-    - forward
-
-
-## FANForTokenClassification
-
-[[autodoc]] transformers.FANForTokenClassification
-    - forward
-
-
-## FANForQuestionAnswering
-
-[[autodoc]] FANForQuestionAnswering
-    - forward
