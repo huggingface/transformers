@@ -201,9 +201,7 @@ class VisionEncoderDecoderOnnxConfig(OnnxConfig):
         """
         return VisionEncoderDecoderEncoderOnnxConfig(encoder_config)
 
-    def get_decoder_config(
-        self, decoder_config: PretrainedConfig, feature: str = "default"
-    ) -> OnnxConfig:
+    def get_decoder_config(self, decoder_config: PretrainedConfig, feature: str = "default") -> OnnxConfig:
         r"""
         Returns ONNX decoder config for `VisionEncoderDecoder` model.
 

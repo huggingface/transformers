@@ -89,9 +89,7 @@ def main():
         decoder_model = model.get_decoder()
 
         encoder_onnx_config = onnx_config.get_encoder_config(encoder_model.config)
-        decoder_onnx_config = onnx_config.get_decoder_config(
-            decoder_model.config, feature=args.feature
-        )
+        decoder_onnx_config = onnx_config.get_decoder_config(decoder_model.config, feature=args.feature)
 
         if args.opset is None:
             args.opset = max(encoder_onnx_config.default_onnx_opset, decoder_onnx_config.default_onnx_opset)
@@ -127,12 +125,14 @@ def main():
             if is_torch_available() and isinstance(enc_to_dec_proj, TorchModule):
                 import torch
                 from torch.onnx import export as onnx_export
+
                 inputs = torch.zeros(encoder_output_shape)
                 onnx_export(enc_to_dec_proj, inputs, f=output.as_posix(), opset_version=args.opset)
             if is_tf_available and isinstance(enc_to_dec_proj, TFModule):
                 import onnx
                 import tensorflow as tf
                 import tf2onnx
+
                 inputs = tf.zeros(encoder_output_shape)
                 onnx_model, _ = tf2onnx.convert.from_keras(model, inputs, opset=args.opset)
                 onnx.save(onnx_model, output.as_posix())
