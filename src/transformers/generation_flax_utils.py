@@ -155,6 +155,43 @@ class FlaxGenerationMixin:
         model_kwargs["encoder_outputs"] = self.encode(input_ids, params=params, return_dict=True, **encoder_kwargs)
         return model_kwargs
 
+    def _prepare_decoder_input_ids_for_generation(
+        self,
+        batch_size: int,
+        decoder_start_token_id: int = None,
+        bos_token_id: int = None,
+        model_kwargs: Optional[Dict[str, int]] = None,
+    ):
+        if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
+            return model_kwargs.pop("decoder_input_ids")
+        else:
+            decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
+            return jnp.ones((batch_size, 1), dtype="i4") * decoder_start_token_id
+
+    def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
+        decoder_start_token_id = (
+            decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
+        )
+        bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
+
+        if decoder_start_token_id is not None:
+            return decoder_start_token_id
+        elif (
+            hasattr(self.config, "decoder")
+            and hasattr(self.config.decoder, "decoder_start_token_id")
+            and self.config.decoder.decoder_start_token_id is not None
+        ):
+            return self.config.decoder.decoder_start_token_id
+        elif bos_token_id is not None:
+            return bos_token_id
+        elif (
+            hasattr(self.config, "decoder")
+            and hasattr(self.config.decoder, "bos_token_id")
+            and self.config.decoder.bos_token_id is not None
+        ):
+            return self.config.decoder.bos_token_id
+        raise ValueError("`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation.")
+
     @staticmethod
     def _expand_to_num_beams(tensor, num_beams):
         return jnp.broadcast_to(tensor[:, None], (tensor.shape[0], num_beams) + tensor.shape[1:])
@@ -318,13 +355,7 @@ class FlaxGenerationMixin:
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
-        decoder_start_token_id = (
-            decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
-        )
         prng_key = prng_key if prng_key is not None else jax.random.PRNGKey(0)
-
-        if decoder_start_token_id is None and self.config.is_encoder_decoder:
-            raise ValueError("`decoder_start_token_id` has to be defined for encoder-decoder generation.")
 
         # decoder-only models should use left-padding for generation (can't be checked with `trace=True`)
         if not self.config.is_encoder_decoder and not trace:
@@ -339,7 +370,9 @@ class FlaxGenerationMixin:
             if model_kwargs.get("encoder_outputs") is None:
                 model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, params, model_kwargs)
             # prepare decoder_input_ids for generation
-            input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+            input_ids = self._prepare_decoder_input_ids_for_generation(
+                input_ids.shape[0], decoder_start_token_id, bos_token_id, model_kwargs
+            )
 
         # Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = input_ids.shape[-1]
@@ -860,9 +893,7 @@ class FlaxGenerationMixin:
             beams_to_keep = 2 * num_beams
             topk_log_probs, topk_indices = lax.top_k(log_probs, k=beams_to_keep)
             topk_beam_indices = topk_indices // vocab_size
-            topk_running_sequences = gather_beams(
-                state.running_sequences, topk_beam_indices, batch_size, beams_to_keep
-            )
+            topk_running_sequences = gather_beams(state.running_sequences, topk_beam_indices, batch_size, beams_to_keep)
             topk_ids = jnp.expand_dims(topk_indices % vocab_size, axis=2)
             topk_sequences = lax.dynamic_update_slice(topk_running_sequences, topk_ids, (0, 0, state.cur_len))
 
