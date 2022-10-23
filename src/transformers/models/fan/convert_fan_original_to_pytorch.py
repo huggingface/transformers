@@ -95,7 +95,32 @@ def remap_blocks(k):
     return k
 
 
-remap_fn = compose(remap_blocks, remap_encoder, remap_gamma, remap_head, remap_embeddings)
+def remap_segmentation_linear(k):
+    if "decode_head.linear_fuse.conv" in k:
+        return k.replace("decode_head.linear_fuse.conv", "decode_head.linear_fuse")
+    if "decode_head.linear_fuse.bn" in k:
+        return k.replace("decode_head.linear_fuse.bn", "decode_head.batch_norm")
+    if "decode_head.linear_pred" in k:
+        return k.replace("decode_head.linear_pred", "decode_head.classifier")
+    return k
+
+
+def remap_linear_fuse(k):
+    for num in range(4):
+        if f"decode_head.linear_c{num+1}" in k:
+            return k.replace(f"decode_head.linear_c{num+1}", f"decode_head.linear_c.{num}")
+    return k
+
+
+remap_fn = compose(
+    remap_segmentation_linear,
+    remap_linear_fuse,
+    remap_blocks,
+    remap_encoder,
+    remap_gamma,
+    remap_head,
+    remap_embeddings,
+)
 
 
 def remap_state(state_dict):
