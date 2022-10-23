@@ -13,10 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 
 from transformers import XLMConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import (
+    is_accelerate_available,
+    require_accelerate,
+    require_torch,
+    require_torch_gpu,
+    require_torch_multi_gpu,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -36,6 +45,9 @@ if is_torch_available():
         XLMWithLMHeadModel,
     )
     from transformers.models.xlm.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_LIST
+
+if is_accelerate_available():
+    from accelerate.utils import compute_module_sizes
 
 
 class XLMModelTester:
@@ -452,6 +464,172 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         for model_name in XLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = XLMModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @require_accelerate
+    @require_torch_multi_gpu
+    def test_model_parallelism(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict_model_class = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+
+            ignore_lm_head = (
+                hasattr(model, "lm_head")
+                and hasattr(model, "_keys_to_ignore_on_load_missing")
+                and hasattr(model, "_keys_to_ignore_on_save")
+            )
+            if ignore_lm_head:
+                ignore_lm_head = (
+                    ignore_lm_head
+                    if any("lm_head" in keys for keys in model._keys_to_ignore_on_load_missing)
+                    else not ignore_lm_head
+                )
+                inputs_dict_model_class["output_attentions"] = True
+
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_model_class)
+
+            model_size = compute_module_sizes(model)[""]
+            # We test several splits of sizes to make sure it works.
+            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents]
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+
+                for max_size in max_gpu_sizes:
+                    max_memory = {0: max_size, 1: model_size * 2, "cpu": model_size * 2}
+
+                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
+
+                    # Making sure part of the model will actually end up offloaded
+                    self.assertSetEqual(set(new_model.hf_device_map.values()), {0, 1})
+
+                    self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+
+                    torch.manual_seed(0)
+                    new_output = new_model(**inputs_dict_model_class)
+
+                    # Since the `lm_head.decoder.weight` is in `_keys_to_ignore_on_save` we don't check
+                    # the final logits but only the intermediate attentions for all layers
+                    if ignore_lm_head:
+                        for i in range(len(base_output["attentions"])):
+                            self.assertTrue(torch.allclose(base_output["attentions"][i], new_output["attentions"][i]))
+                    else:
+                        self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+
+    @require_accelerate
+    @require_torch_gpu
+    def test_disk_offload(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict_model_class = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+            torch.manual_seed(0)
+
+            ignore_lm_head = (
+                hasattr(model, "lm_head")
+                and hasattr(model, "_keys_to_ignore_on_load_missing")
+                and hasattr(model, "_keys_to_ignore_on_save")
+            )
+            if ignore_lm_head:
+                ignore_lm_head = (
+                    ignore_lm_head
+                    if any("lm_head" in keys for keys in model._keys_to_ignore_on_load_missing)
+                    else not ignore_lm_head
+                )
+                inputs_dict_model_class["output_attentions"] = True
+
+            base_output = model(**inputs_dict_model_class)
+
+            model_size = compute_module_sizes(model)[""]
+            max_size = int(self.model_split_percents[0] * model_size)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+
+                max_memory = {0: max_size, "cpu": max_size}
+                with self.assertRaises(ValueError):
+                    # This errors out cause it's missing an offload folder
+                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
+
+                new_model = model_class.from_pretrained(
+                    tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir
+                )
+
+                self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+                torch.manual_seed(0)
+                new_output = new_model(**inputs_dict_model_class)
+
+                # Since the `lm_head.decoder.weight` is in `_keys_to_ignore_on_save` we don't check
+                # the final logits but only the intermediate attentions for all layers
+                if ignore_lm_head:
+                    for i in range(len(base_output["attentions"])):
+                        self.assertTrue(torch.allclose(base_output["attentions"][i], new_output["attentions"][i]))
+                else:
+                    self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+
+    @require_accelerate
+    @require_torch_gpu
+    def test_cpu_offload(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict_model_class = self._prepare_for_class(inputs_dict, model_class)
+
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+
+            ignore_lm_head = (
+                hasattr(model, "lm_head")
+                and hasattr(model, "_keys_to_ignore_on_load_missing")
+                and hasattr(model, "_keys_to_ignore_on_save")
+            )
+            if ignore_lm_head:
+                ignore_lm_head = (
+                    ignore_lm_head
+                    if any("lm_head" in keys for keys in model._keys_to_ignore_on_load_missing)
+                    else not ignore_lm_head
+                )
+                inputs_dict_model_class["output_attentions"] = True
+
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_model_class)
+
+            model_size = compute_module_sizes(model)[""]
+            # We test several splits of sizes to make sure it works.
+            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents]
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+
+                for max_size in max_gpu_sizes:
+                    max_memory = {0: max_size, "cpu": model_size * 2}
+                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
+                    # Making sure part of the model will actually end up offloaded
+                    self.assertSetEqual(set(new_model.hf_device_map.values()), {0, "cpu"})
+
+                    self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+
+                    torch.manual_seed(0)
+                    new_output = new_model(**inputs_dict_model_class)
+
+                    # Since the `lm_head.decoder.weight` is in `_keys_to_ignore_on_save` we don't check
+                    # the final logits but only the intermediate attentions for all layers
+                    if ignore_lm_head:
+                        for i in range(len(base_output["attentions"])):
+                            self.assertTrue(torch.allclose(base_output["attentions"][i], new_output["attentions"][i]))
+                    else:
+                        self.assertTrue(torch.allclose(base_output[0], new_output[0]))
 
 
 @require_torch

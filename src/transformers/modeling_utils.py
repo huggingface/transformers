@@ -532,6 +532,38 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
             setattr(submodule, param_name, new_val)
 
 
+def _load_unloaded_params(
+    model,
+    dtype,
+    load_in_8bit=False,
+):
+    r"""
+    This function loads un-loaded params that can occur in some corner cases. For some models, certain keys (such as
+    `lm_head.xx.weight` are in the `_keys_to_ignore_on_load_missing` and `_keys_to_ignore_on_save`. This leads to a bug
+    when loading a saved model with `device_map=auto` since these weights will not be in the `state_dict`- so not
+    loaded at all by `set_module_tensor_to_device`. Therefore this function aims to load these missing params, by
+    randomly initializing them and put them on `CPU`.
+
+    Args:
+        `model`, (`torch.nn.Module`):
+            Input model.
+        `dtype`, (`torch.dtype`):
+            Torch dtype of the input model.
+        `load_in_8bit`, (`bool`, *optional*):
+            Whether the model has to be loaded in 8-bit or not.
+    """
+    if load_in_8bit:
+        from .utils.bitsandbytes import set_module_8bit_tensor_to_device
+
+    for param_name, param in model.named_parameters():
+        if param.device.type == "meta":
+            if not load_in_8bit:
+                set_module_tensor_to_device(model, param_name, "cpu", torch.empty(*param.size(), dtype=dtype))
+            else:
+                set_module_8bit_tensor_to_device(model, param_name, "cpu", torch.empty(*param.size(), dtype=dtype))
+    return model
+
+
 def _load_state_dict_into_meta_model(
     model,
     state_dict,
@@ -2560,6 +2592,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         load_in_8bit=load_in_8bit,
                     )
                     error_msgs += new_error_msgs
+
+                    # At this point all the modules should have a device set, except for the modules that are
+                    # in `_keys_to_ignore_on_load_missing` and `_keys_to_ignore_on_save` - let's randomly initialize them!
+                    if hasattr(model, "_keys_to_ignore_on_load_missing") and hasattr(model, "_keys_to_ignore_on_save"):
+                        model = _load_unloaded_params(model, dtype, load_in_8bit)
                 else:
                     error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
 
