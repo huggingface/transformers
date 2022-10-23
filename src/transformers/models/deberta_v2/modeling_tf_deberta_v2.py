@@ -94,6 +94,7 @@ class TFDebertaV2XSoftmax(tf.keras.layers.Layer):
         self.axis = axis
 
     def call(self, inputs: tf.Tensor, mask: tf.Tensor):
+
         rmask = tf.logical_not(tf.cast(mask, tf.bool))
         output = tf.where(rmask, float("-inf"), inputs)
         output = stable_softmax(output, self.axis)
@@ -1037,6 +1038,7 @@ class TFDebertaV2MainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:

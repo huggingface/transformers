@@ -365,6 +365,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         plan_num_rand_blocks,
         output_attentions,
     ):
+
         # BigBirdPegasus block-sparse attention as suggested in paper
 
         # ITC:

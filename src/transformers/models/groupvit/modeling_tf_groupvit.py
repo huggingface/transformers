@@ -541,6 +541,7 @@ class TFGroupViTTextEmbeddings(tf.keras.layers.Layer):
         self.config = config
 
     def build(self, input_shape: tf.TensorShape):
+
         with tf.name_scope("token_embedding"):
             self.weight = self.add_weight(
                 shape=(self.vocab_size, self.embed_dim),
@@ -1202,6 +1203,7 @@ class TFGroupViTVisionMainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
