@@ -229,7 +229,7 @@ def is_copy_consistent(filename, overwrite=False):
         # Test for a diff and act accordingly.
         if observed_code != theoretical_code:
             diff_index = start_index + 1
-            for observed_line, theoretical_line in zip(observed_code.split('\n'), theoretical_code.split('\n')):
+            for observed_line, theoretical_line in zip(observed_code.split("\n"), theoretical_code.split("\n")):
                 if observed_line != theoretical_line:
                     break
                 diff_index += 1
