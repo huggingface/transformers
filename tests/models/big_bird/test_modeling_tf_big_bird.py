@@ -15,7 +15,8 @@
 
 import unittest
 
-from transformers import BigBirdConfig, is_tf_available
+from transformers import BigBirdConfig, is_tf_available, MODEL_FOR_PRETRAINING_MAPPING
+from transformers.models.auto import get_values
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -27,7 +28,12 @@ if is_tf_available():
     import numpy as np
     import tensorflow as tf
 
-    from transformers.models.big_bird.modeling_tf_big_bird import (  # TF_BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST,; TFBigBirdForPreTraining,; TFBigBirdForQuestionAnswering,; TFBigBirdForSequenceClassification,; TFBigBirdForTokenClassification,
+    from transformers.models.big_bird.modeling_tf_big_bird import (
+        TF_BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFBigBirdForPreTraining,
+        TFBigBirdForQuestionAnswering,
+        TFBigBirdForSequenceClassification,
+        TFBigBirdForTokenClassification,
         TFBigBirdForCausalLM,
         TFBigBirdForMaskedLM,
         TFBigBirdModel,
@@ -153,6 +159,7 @@ class TFBigBirdModelTester:
         ) = self.prepare_config_and_inputs()
 
         config.is_decoder = True
+        config.attention_type = "original_full"  # decoder must be original full
         encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
         encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
 
@@ -221,13 +228,8 @@ class TFBigBirdModelTester:
         model = TFBigBirdForCausalLM(config=config)
 
         # first forward pass
-        outputs = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            use_cache=True,
-        )
+        inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids, "encoder_hidden_states": encoder_hidden_states, "encoder_attention_mask": encoder_attention_mask}
+        outputs = model(inputs)
         past_key_values = outputs.past_key_values
 
         # create hypothetical multiple next token and extent to next_input_ids
@@ -264,6 +266,22 @@ class TFBigBirdModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(np.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    def create_and_check_for_sequence_classification(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_labels = self.num_labels
+        model = TFBigBirdForSequenceClassification(config)
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
+    def create_and_check_for_token_classification(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_labels = self.num_labels
+        model = TFBigBirdForTokenClassification(config=config)
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+
 
 class TFBigBirdModelTest(TFModelTesterMixin, unittest.TestCase):
 
@@ -271,10 +289,10 @@ class TFBigBirdModelTest(TFModelTesterMixin, unittest.TestCase):
         (
             TFBigBirdModel,
             TFBigBirdForCausalLM,
-            # TFBigBirdForMaskedLM,
-            # TFBigBirdForSequenceClassification,
-            # TFBigBirdForTokenClassification,
-            # TFBigBirdForQuestionAnswering,
+            TFBigBirdForMaskedLM,
+            TFBigBirdForSequenceClassification,
+            TFBigBirdForTokenClassification,
+            TFBigBirdForQuestionAnswering,
         )
         if is_tf_available()
         else ()
@@ -282,6 +300,19 @@ class TFBigBirdModelTest(TFModelTesterMixin, unittest.TestCase):
 
     test_head_masking = False
     test_onnx = False
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class in get_values(MODEL_FOR_PRETRAINING_MAPPING):
+                inputs_dict["labels"] = tf.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32,
+                )
+                inputs_dict["next_sentence_label"] = tf.zeros(
+                    self.model_tester.batch_size, dtype=tf.int32
+                )
+        return inputs_dict
 
     def setUp(self) -> None:
         self.model_tester = TFBigBirdModelTester(self)
@@ -298,6 +329,10 @@ class TFBigBirdModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
+    # def test_model_as_decoder(self):
+    #     config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+    #     self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
+
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
@@ -307,3 +342,11 @@ class TFBigBirdModelTest(TFModelTesterMixin, unittest.TestCase):
         for type in ["original_full", "block_sparse"]:
             config_and_inputs[0].attention_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+
+    def test_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)

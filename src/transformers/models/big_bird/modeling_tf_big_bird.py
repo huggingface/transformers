@@ -1365,7 +1365,7 @@ class TFBigBirdEncoder(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.attention_type = config.attention_type
         self.config = config
-        self.layer = [TFBigBirdLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
+        self.layer = [TFBigBirdLayer(config, name=f"layer_._{i}", seed=i) for i in range(config.num_hidden_layers)]
 
     def set_attention_type(self, value: str):
         if value not in ["original_full", "block_sparse"]:
@@ -1918,7 +1918,7 @@ class TFBigBirdPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = BigBirdConfig
-    base_model_prefix = "bert"
+    base_model_prefix = "bigbird"
 
     @property
     def dummy_inputs(self):
@@ -2511,6 +2511,20 @@ class TFBigBirdForCausalLM(TFBigBirdPreTrainedModel, TFCausalLanguageModelingLos
 
         return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
 
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        return config, inputs_dict
+
     @unpack_inputs
     @add_start_docstrings_to_model_forward(TF_BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -2627,89 +2641,89 @@ class TFBigBirdForCausalLM(TFBigBirdPreTrainedModel, TFCausalLanguageModelingLos
     """BigBird Model with a `next sentence prediction (classification)` head on top.""",
     TF_BIG_BIRD_START_DOCSTRING,
 )
-class TFBigBirdForNextSentencePrediction(TFBigBirdPreTrainedModel, TFNextSentencePredictionLoss):
-    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    _keys_to_ignore_on_load_unexpected = [r"mlm___cls", r"cls.predictions"]
-
-    def __init__(self, config: BigBirdConfig, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-
-        self.bert = TFBigBirdMainLayer(config, name="bert")
-        self.nsp = TFBigBirdNSPHead(config, name="nsp___cls")
-
-    @unpack_inputs
-    @add_start_docstrings_to_model_forward(TF_BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=TFNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
-    def call(
-        self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        next_sentence_label: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        training: Optional[bool] = False,
-    ) -> Union[TFNextSentencePredictorOutput, Tuple[tf.Tensor]]:
-        r"""
-        Return:
-
-        Examples:
-
-        ```python
-        >>> import tensorflow as tf
-        >>> from transformers import BigBirdTokenizer, TFBigBirdForNextSentencePrediction
-
-        >>> tokenizer = BigBirdTokenizer.from_pretrained("bert-base-uncased")
-        >>> model = TFBigBirdForNextSentencePrediction.from_pretrained("bert-base-uncased")
-
-        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        >>> encoding = tokenizer(prompt, next_sentence, return_tensors="tf")
-
-        >>> logits = model(encoding["input_ids"], token_type_ids=encoding["token_type_ids"])[0]
-        >>> assert logits[0][0] < logits[0][1]  # the next sentence was random
-        ```"""
-        outputs = self.bert(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-        )
-        pooled_output = outputs[1]
-        seq_relationship_scores = self.nsp(pooled_output=pooled_output)
-        next_sentence_loss = (
-            None
-            if next_sentence_label is None
-            else self.hf_compute_loss(labels=next_sentence_label, logits=seq_relationship_scores)
-        )
-
-        if not return_dict:
-            output = (seq_relationship_scores,) + outputs[2:]
-            return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
-
-        return TFNextSentencePredictorOutput(
-            loss=next_sentence_loss,
-            logits=seq_relationship_scores,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-    def serving_output(self, output: TFNextSentencePredictorOutput) -> TFNextSentencePredictorOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFNextSentencePredictorOutput(logits=output.logits, hidden_states=hs, attentions=attns)
-
+# class TFBigBirdForNextSentencePrediction(TFBigBirdPreTrainedModel, TFNextSentencePredictionLoss):
+#     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+#     _keys_to_ignore_on_load_unexpected = [r"mlm___cls", r"cls.predictions"]
+#
+#     def __init__(self, config: BigBirdConfig, *inputs, **kwargs):
+#         super().__init__(config, *inputs, **kwargs)
+#
+#         self.bert = TFBigBirdMainLayer(config, name="bert")
+#         self.nsp = TFBigBirdNSPHead(config, name="nsp___cls")
+#
+#     @unpack_inputs
+#     @add_start_docstrings_to_model_forward(TF_BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+#     @replace_return_docstrings(output_type=TFNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
+#     def call(
+#         self,
+#         input_ids: Optional[TFModelInputType] = None,
+#         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+#         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+#         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+#         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+#         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+#         output_attentions: Optional[bool] = None,
+#         output_hidden_states: Optional[bool] = None,
+#         return_dict: Optional[bool] = None,
+#         next_sentence_label: Optional[Union[np.ndarray, tf.Tensor]] = None,
+#         training: Optional[bool] = False,
+#     ) -> Union[TFNextSentencePredictorOutput, Tuple[tf.Tensor]]:
+#         r"""
+#         Return:
+#
+#         Examples:
+#
+#         ```python
+#         >>> import tensorflow as tf
+#         >>> from transformers import BigBirdTokenizer, TFBigBirdForNextSentencePrediction
+#
+#         >>> tokenizer = BigBirdTokenizer.from_pretrained("bert-base-uncased")
+#         >>> model = TFBigBirdForNextSentencePrediction.from_pretrained("bert-base-uncased")
+#
+#         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+#         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+#         >>> encoding = tokenizer(prompt, next_sentence, return_tensors="tf")
+#
+#         >>> logits = model(encoding["input_ids"], token_type_ids=encoding["token_type_ids"])[0]
+#         >>> assert logits[0][0] < logits[0][1]  # the next sentence was random
+#         ```"""
+#         outputs = self.bert(
+#             input_ids=input_ids,
+#             attention_mask=attention_mask,
+#             token_type_ids=token_type_ids,
+#             position_ids=position_ids,
+#             head_mask=head_mask,
+#             inputs_embeds=inputs_embeds,
+#             output_attentions=output_attentions,
+#             output_hidden_states=output_hidden_states,
+#             return_dict=return_dict,
+#             training=training,
+#         )
+#         pooled_output = outputs[1]
+#         seq_relationship_scores = self.nsp(pooled_output=pooled_output)
+#         next_sentence_loss = (
+#             None
+#             if next_sentence_label is None
+#             else self.hf_compute_loss(labels=next_sentence_label, logits=seq_relationship_scores)
+#         )
+#
+#         if not return_dict:
+#             output = (seq_relationship_scores,) + outputs[2:]
+#             return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
+#
+#         return TFNextSentencePredictorOutput(
+#             loss=next_sentence_loss,
+#             logits=seq_relationship_scores,
+#             hidden_states=outputs.hidden_states,
+#             attentions=outputs.attentions,
+#         )
+#
+#     def serving_output(self, output: TFNextSentencePredictorOutput) -> TFNextSentencePredictorOutput:
+#         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+#         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+#
+#         return TFNextSentencePredictorOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+#
 
 @add_start_docstrings(
     """

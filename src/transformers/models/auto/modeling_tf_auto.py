@@ -32,6 +32,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("albert", "TFAlbertModel"),
         ("bart", "TFBartModel"),
         ("bert", "TFBertModel"),
+        ("big_bird", "TFBigBirdModel"),
         ("blenderbot", "TFBlenderbotModel"),
         ("blenderbot-small", "TFBlenderbotSmallModel"),
         ("camembert", "TFCamembertModel"),
@@ -93,6 +94,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("albert", "TFAlbertForPreTraining"),
         ("bart", "TFBartForConditionalGeneration"),
         ("bert", "TFBertForPreTraining"),
+        ("big_bird", "TFBigBirdForPreTraining"),
         ("camembert", "TFCamembertForMaskedLM"),
         ("ctrl", "TFCTRLLMHeadModel"),
         ("distilbert", "TFDistilBertForMaskedLM"),
@@ -122,6 +124,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("albert", "TFAlbertForMaskedLM"),
         ("bart", "TFBartForConditionalGeneration"),
         ("bert", "TFBertForMaskedLM"),
+        ("big_bird", "TFBigBirdForMaskedLM"),
         ("camembert", "TFCamembertForMaskedLM"),
         ("convbert", "TFConvBertForMaskedLM"),
         ("ctrl", "TFCTRLLMHeadModel"),
@@ -155,6 +158,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
         ("bert", "TFBertLMHeadModel"),
+        ("big_bird", "TFBigBirdForCausalLM"),
         ("camembert", "TFCamembertForCausalLM"),
         ("ctrl", "TFCTRLLMHeadModel"),
         ("gpt2", "TFGPT2LMHeadModel"),
@@ -213,6 +217,7 @@ TF_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         # Model for Masked LM mapping
         ("albert", "TFAlbertForMaskedLM"),
         ("bert", "TFBertForMaskedLM"),
+        ("big_bird", "TFBigBirdForMaskedLM"),
         ("camembert", "TFCamembertForMaskedLM"),
         ("convbert", "TFConvBertForMaskedLM"),
         ("deberta", "TFDebertaForMaskedLM"),
@@ -261,6 +266,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Sequence Classification mapping
         ("albert", "TFAlbertForSequenceClassification"),
         ("bert", "TFBertForSequenceClassification"),
+        ("big_bird", "TFBigBirdForSequenceClassification"),
         ("camembert", "TFCamembertForSequenceClassification"),
         ("convbert", "TFConvBertForSequenceClassification"),
         ("ctrl", "TFCTRLForSequenceClassification"),
@@ -294,6 +300,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         # Model for Question Answering mapping
         ("albert", "TFAlbertForQuestionAnswering"),
         ("bert", "TFBertForQuestionAnswering"),
+        ("big_bird", "TFBigBirdForQuestionAnswering"),
         ("camembert", "TFCamembertForQuestionAnswering"),
         ("convbert", "TFConvBertForQuestionAnswering"),
         ("deberta", "TFDebertaForQuestionAnswering"),
@@ -335,6 +342,7 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Token Classification mapping
         ("albert", "TFAlbertForTokenClassification"),
         ("bert", "TFBertForTokenClassification"),
+        ("big_bird", "TFBigBirdForTokenClassification"),
         ("camembert", "TFCamembertForTokenClassification"),
         ("convbert", "TFConvBertForTokenClassification"),
         ("deberta", "TFDebertaForTokenClassification"),
@@ -362,6 +370,7 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         # Model for Multiple Choice mapping
         ("albert", "TFAlbertForMultipleChoice"),
         ("bert", "TFBertForMultipleChoice"),
+        ("big_bird", "TFBigBirdForMultipleChoice"),
         ("camembert", "TFCamembertForMultipleChoice"),
         ("convbert", "TFConvBertForMultipleChoice"),
         ("distilbert", "TFDistilBertForMultipleChoice"),
