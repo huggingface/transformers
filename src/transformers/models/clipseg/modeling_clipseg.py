@@ -45,7 +45,6 @@ CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 # Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
@@ -90,7 +89,8 @@ class CLIPSegOutput(ModelOutput):
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`CLIPSegTextModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`CLIPSegVisionModel`].
+            The image embeddings obtained by applying the projection layer to the pooled output of
+            [`CLIPSegVisionModel`].
         text_model_output(`BaseModelOutputWithPooling`):
             The output of the [`CLIPSegTextModel`].
         vision_model_output(`BaseModelOutputWithPooling`):
@@ -1084,3 +1084,21 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )
+
+
+class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
+    config_class = CLIPSegConfig
+
+    def __init__(self, config: CLIPSegConfig):
+        super().__init__(config)
+
+        # TODO perhaps use clip here?
+        self.clipseg = CLIPSegModel(config)
+
+        # TODO: decoder
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward():
+        raise NotImplementedError("To do")

@@ -49,7 +49,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import CLIPSegModel, CLIPSegTextModel, CLIPSegVisionModel
+    from transformers import CLIPSegForImageSegmentation, CLIPSegModel, CLIPSegTextModel, CLIPSegVisionModel
     from transformers.models.clipseg.modeling_clipseg import CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -159,7 +159,9 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = CLIPSegVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CLIPSegVisionConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=CLIPSegVisionConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -388,7 +390,14 @@ class CLIPSegModelTester:
 
 @require_torch
 class CLIPSegModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (CLIPSegModel,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            CLIPSegModel,
+            CLIPSegForImageSegmentation,
+        )
+        if is_torch_available()
+        else ()
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False

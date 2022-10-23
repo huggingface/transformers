@@ -36,12 +36,11 @@ CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class CLIPSegTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to instantiate an CLIPSeg
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the CLIPSeg
+    This is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to instantiate an
+    CLIPSeg model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the CLIPSeg
     [organization/clipseg-rd64-uni](https://huggingface.co/organization/clipseg-rd64-uni) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -50,8 +49,8 @@ class CLIPSegTextConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
-            Vocabulary size of the CLIPSeg text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`CLIPSegModel`].
+            Vocabulary size of the CLIPSeg text model. Defines the number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`CLIPSegModel`].
         hidden_size (`int`, *optional*, defaults to 512):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 2048):
@@ -147,9 +146,9 @@ class CLIPSegTextConfig(PretrainedConfig):
 
 class CLIPSegVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to instantiate an CLIPSeg
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the CLIPSeg
+    This is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to instantiate an
+    CLIPSeg model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the CLIPSeg
     [organization/clipseg-rd64-uni](https://huggingface.co/organization/clipseg-rd64-uni) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -253,8 +252,8 @@ class CLIPSegVisionConfig(PretrainedConfig):
 
 class CLIPSegConfig(PretrainedConfig):
     r"""
-    [`CLIPSegConfig`] is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to instantiate
-    CLIPSeg model according to the specified arguments, defining the text model and vision model configs.
+    [`CLIPSegConfig`] is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to
+    instantiate CLIPSeg model according to the specified arguments, defining the text model and vision model configs.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -325,8 +324,8 @@ class CLIPSegConfig(PretrainedConfig):
     @classmethod
     def from_text_vision_configs(cls, text_config: CLIPSegTextConfig, vision_config: CLIPSegVisionConfig, **kwargs):
         r"""
-        Instantiate a [`CLIPSegConfig`] (or a derived class) from clipseg text model configuration and clipseg vision model
-        configuration.
+        Instantiate a [`CLIPSegConfig`] (or a derived class) from clipseg text model configuration and clipseg vision
+        model configuration.
 
         Returns:
             [`CLIPSegConfig`]: An instance of a configuration object

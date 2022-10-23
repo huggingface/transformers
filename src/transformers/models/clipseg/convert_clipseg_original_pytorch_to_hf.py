@@ -1,148 +1,106 @@
-# coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import argparse
 
 import torch
 
-from clipseg import load
-from transformers import CLIPSegConfig, CLIPSegModel
+from transformers import CLIPSegConfig, CLIPSegForImageSegmentation
 
 
-def copy_attn_layer(hf_attn_layer, pt_attn_layer):
-    q_proj, k_proj, v_proj = pt_attn_layer.in_proj_weight.chunk(3, dim=0)
-    q_proj_bias, k_proj_bias, v_proj_bias = pt_attn_layer.in_proj_bias.chunk(3, dim=0)
-
-    out_proj_weights = pt_attn_layer.out_proj.weight
-    out_proj_bias = pt_attn_layer.out_proj.bias
-
-    hf_attn_layer.q_proj.weight.data = q_proj
-    hf_attn_layer.q_proj.bias.data = q_proj_bias
-
-    hf_attn_layer.k_proj.weight.data = k_proj
-    hf_attn_layer.k_proj.bias.data = k_proj_bias
-
-    hf_attn_layer.v_proj.weight.data = v_proj
-    hf_attn_layer.v_proj.bias.data = v_proj_bias
-
-    hf_attn_layer.out_proj.weight = out_proj_weights
-    hf_attn_layer.out_proj.bias = out_proj_bias
+def get_clipseg_config():
+    config = CLIPSegConfig()
+    return config
 
 
-def copy_mlp(hf_mlp, pt_mlp):
-    copy_linear(hf_mlp.fc1, pt_mlp.c_fc)
-    copy_linear(hf_mlp.fc2, pt_mlp.c_proj)
+def rename_key(name):
+    # update prefixes
+    if "clip_model" in name:
+        name = name.replace("clip_model", "clipseg")
+    if "transformer" in name:
+        if "visual" in name:
+            name = name.replace("visual.transformer", "vision_model")
+        else:
+            name = name.replace("transformer", "text_model")
+    if "resblocks" in name:
+        name = name.replace("resblocks", "encoder.layers")
+    if "ln_1" in name:
+        name = name.replace("ln_1", "layer_norm1")
+    if "ln_2" in name:
+        name = name.replace("ln_2", "layer_norm2")
+    if "mlp.fc1" in name:
+        name = name.replace("mlp.fc1", "intermediate.dense")
+    if "mlp.fc2" in name:
+        name = name.replace("mlp.fc2", "output.dense")
+    if "ln_final" in name:
+        name = name.replace("ln_final", "final_layer_norm")
+    # text encoder
+    if "token_embedding" in name:
+        name = name.replace("token_embedding", "text_model.embeddings.token_embedding")
+    if "positional_embedding" in name:
+        name = name.replace("positional_embedding", "text_model.embeddings.token_embedding.weight")
+    # vision encoder
+    if "visual.class_embedding" in name:
+        name = name.replace("visual.class_embedding", "vision_model.embeddings.class_embedding")
+    if "visual.positional_embedding" in name:
+        name = name.replace("visual.positional_embedding", "vision_model.embeddings.position_embedding")
+    if "ln_pre" in name:
+        name = name.replace("ln_pre", "pre_layrnorm")
+
+    return name
 
 
-def copy_linear(hf_linear, pt_linear):
-    hf_linear.weight = pt_linear.weight
-    hf_linear.bias = pt_linear.bias
+def convert_state_dict(orig_state_dict, config):
+    for key in orig_state_dict.copy().keys():
+        val = orig_state_dict.pop(key)
+
+        if "attn" in key:
+            # TODO
+            pass
+        else:
+            orig_state_dict[rename_key(key)] = val
+
+    return orig_state_dict
 
 
-def copy_layer(hf_layer, pt_layer):
-    # copy layer norms
-    copy_linear(hf_layer.layer_norm1, pt_layer.ln_1)
-    copy_linear(hf_layer.layer_norm2, pt_layer.ln_2)
+def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path):
+    config = get_clipseg_config()
+    model = CLIPSegForImageSegmentation(config)
+    model.eval()
 
-    # copy MLP
-    copy_mlp(hf_layer.mlp, pt_layer.mlp)
+    state_dict = torch.load(checkpoint_path, map_location="cpu")
+    state_dict = convert_state_dict(state_dict, config)
+    model.load_state_dict(state_dict)
 
-    # copy attn
-    copy_attn_layer(hf_layer.self_attn, pt_layer.attn)
+    # TODO assert values
+    # url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
+    # feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/{}".format(model_name.replace("_", "-")))
+    # image = Image.open(requests.get(url, stream=True).raw)
+    # inputs = feature_extractor(images=image, return_tensors="pt")
 
-def copy_layers(hf_layers, pt_layers):
-    for hf_layer, pt_layer in zip(hf_layers, pt_layers):
-        copy_layer(hf_layer, pt_layer)
+    # timm_outs = timm_model(inputs["pixel_values"])
+    # hf_outs = model(**inputs).logits
 
+    # assert torch.allclose(timm_outs, hf_outs, atol=1e-3)
 
-def copy_encoder(hf_encoder, pt_model):
-    # copy  embeds
-    hf_encoder.embeddings.token_embedding.weight = pt_model.token_embedding.weight
-    hf_encoder.embeddings.position_embedding.weight.data = pt_model.positional_embedding
+    if pytorch_dump_folder_path is not None:
+        print(f"Saving model to {pytorch_dump_folder_path}")
+        model.save_pretrained(pytorch_dump_folder_path)
 
-    # copy layer norm
-    copy_linear(hf_encoder.final_layer_norm, pt_model.ln_final)
-
-    # copy hidden layers
-    copy_layers(hf_encoder.encoder.layers, pt_model.transformer.resblocks)
-
-
-def copy_text_model_and_projection(hf_model, pt_model):
-    # copy projection
-    hf_model.text_projection.weight.data = pt_model.text_projection.data.T
-
-    # copy text encoder
-    copy_encoder(hf_model.text_model, pt_model)
-
-
-def copy_vison_model_and_projection(hf_model, pt_model):
-    # copy projection
-    hf_model.visual_projection.weight.data = pt_model.visual.proj.data.T
-
-    # copy layer norms
-    copy_linear(hf_model.vision_model.pre_layrnorm, pt_model.visual.ln_pre)
-    copy_linear(hf_model.vision_model.post_layernorm, pt_model.visual.ln_post)
-
-    # copy embeds
-    hf_model.vision_model.embeddings.patch_embedding.weight.data = pt_model.visual.conv1.weight.data
-    hf_model.vision_model.embeddings.class_embedding = pt_model.visual.class_embedding
-    hf_model.vision_model.embeddings.position_embedding.weight.data = pt_model.visual.positional_embedding.data
-
-    # copy encoder
-    copy_layers(hf_model.vision_model.encoder.layers, pt_model.visual.transformer.resblocks)
-
-
-@torch.no_grad()
-def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None):
-    """
-    Copy/paste/tweak model's weights to transformers design.
-    """
-    if config_path is not None:
-        config = CLIPSegConfig.from_pretrained(config_path)
-    else:
-        config = CLIPSegConfig(projection_dim=512, text_config={}, vision_config={})
-
-    hf_model = CLIPSegModel(config).eval()
-
-    pt_model, _ = load(checkpoint_path, device="cpu", jit=False)
-    pt_model = pt_model.eval()
-
-    copy_text_model_and_projection(hf_model, pt_model)
-    copy_vison_model_and_projection(hf_model, pt_model)
-    hf_model.logit_scale = pt_model.logit_scale
-
-    input_ids = torch.arange(0, 77).unsqueeze(0)
-    pixel_values = torch.randn(1, 3, 224, 224)
-
-    hf_logits_per_image, hf_logits_per_text = hf_model(
-        input_ids=input_ids, pixel_values=pixel_values, return_dict=True
-    )[1:3]
-    pt_logits_per_image, pt_logits_per_text = pt_model(pixel_values, input_ids)
-
-    assert torch.allclose(hf_logits_per_image, pt_logits_per_image, atol=1e-3)
-    assert torch.allclose(hf_logits_per_text, pt_logits_per_text, atol=1e-3)
-
-    hf_model.save_pretrained(pytorch_dump_folder_path)
+        # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+        # feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
-    args = parser.parse_args()
+    # Required parameters
+    parser.add_argument(
+        "--checkpoint_path",
+        default="/Users/nielsrogge/Downloads/clipseg_weights/rd64-uni.pth",
+        type=str,
+        help="Path to the original checkpoint.",
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+    )
 
-    convert_clipseg_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path)
+    args = parser.parse_args()
+    convert_clipseg_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path)
