@@ -21,13 +21,11 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 FAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "nvidia/fan": "https://huggingface.co/nvidia/fan/resolve/main/config.json",
     "ksmcg/fan_tiny_12_p16_224": "https://huggingface.co/ksmcg/fan_tiny_12_p16_224/resolve/main/config.json",
     "ksmcg/fan_small_12_p16_224_se_attn": "https://huggingface.co/ksmcg/fan_small_12_p16_224_se_attn/resolve/main/config.json",
     "ksmcg/fan_small_12_p16_224": "https://huggingface.co/ksmcg/fan_small_12_p16_224/resolve/main/config.json",
     "ksmcg/fan_base_18_p16_224": "https://huggingface.co/ksmcg/fan_base_18_p16_224/resolve/main/config.json",
     "ksmcg/fan_large_24_p16_224": "https://huggingface.co/ksmcg/fan_large_24_p16_224/resolve/main/config.json",
-    # See all FAN models at https://huggingface.co/models?filter=fan
 }
 
 

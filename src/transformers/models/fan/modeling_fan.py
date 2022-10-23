@@ -66,7 +66,11 @@ _CONFIG_FOR_DOC = "FANConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "FANFeatureExtractor"
 
 FAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nvidia/fan",
+    "ksmcg/fan_tiny_12_p16_224",
+    "ksmcg/fan_small_12_p16_224",
+    "ksmcg/fan_base_18_p16_224",
+    "ksmcg/fan_large_24_p16_224"
+    # "nvidia/fan",
     # See all FAN models at https://huggingface.co/models?filter=fan
 ]
 
