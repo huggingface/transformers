@@ -1092,6 +1092,29 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         )
 
 
+class CLIPSegDecoder(CLIPSegPreTrainedModel):
+    def __init__(self, config: CLIPSegConfig):
+        super().__init__(config)
+
+        self.film_mul = nn.Linear(config.projection_dim, config.reduce_dim)
+        self.film_add = nn.Linear(config.projection_dim, config.reduce_dim)
+
+        self.reduce = nn.Linear(config.vision_config.hidden_size, config.reduce_dim)
+
+        self.transposed_convolution = nn.ConvTranspose2d(
+            config.reduce_dim, 1, config.vision_config.patch_size, stride=config.vision_config.patch_size
+        )
+
+        depth = len(config.extract_layers)
+        self.reduces = nn.ModuleList([nn.Linear(768, config.reduce_dim) for _ in range(depth)])
+        # self.blocks = nn.ModuleList(
+        #     [nn.TransformerEncoderLayer(d_model=reduce_dim, nhead=n_heads) for _ in range(len(self.extract_layers))]
+        # )
+
+    def forward(self, hidden_states):
+        return -1
+
+
 class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
     config_class = CLIPSegConfig
 
@@ -1100,9 +1123,10 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
 
         # TODO perhaps use clip here?
         self.clipseg = CLIPSegModel(config)
-        self.extract_layers = [3, 6, 9]
+        self.extract_layers = config.extract_layers
 
         # TODO: decoder
+        self.decoder = CLIPSegDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1167,7 +1191,6 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         )
 
         print("Shape of cond:", conditional_embeddings.shape)
-        print("First values of cond:", conditional_embeddings[0,:3])
-
+        print("First values of cond:", conditional_embeddings[0, :3])
 
         return vision_outputs

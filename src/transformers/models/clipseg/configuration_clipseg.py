@@ -17,6 +17,7 @@
 import copy
 import os
 from collections import OrderedDict
+from functools import reduce
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 
 
@@ -264,9 +265,13 @@ class CLIPSegConfig(PretrainedConfig):
         vision_config_dict (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`CLIPSegVisionConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
-            Dimentionality of text and vision projection layers.
+            Dimensionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The inital value of the *logit_scale* paramter. Default is used as per the original CLIPSeg implementation.
+        extract_layers (`List[int]`, *optional*, defaults to [3, 6, 9]):
+            Layers to extract when forwarding the query image through the frozen visual backbone of CLIP.
+        reduce_dim (`int`, *optional*, defaults to 128):
+            Dimensionality to reduce the CLIP vision embedding.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -302,6 +307,8 @@ class CLIPSegConfig(PretrainedConfig):
         vision_config_dict=None,
         projection_dim=512,
         logit_scale_init_value=2.6592,
+        extract_layers=[3, 6, 9],
+        reduce_dim=128,
         **kwargs
     ):
         super().__init__(text_config_dict=text_config_dict, vision_config_dict=vision_config_dict, **kwargs)
@@ -319,6 +326,8 @@ class CLIPSegConfig(PretrainedConfig):
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
+        self.reduce_dim = reduce_dim
+        self.extract_layers = extract_layers
         self.initializer_factor = 1.0
 
     @classmethod
