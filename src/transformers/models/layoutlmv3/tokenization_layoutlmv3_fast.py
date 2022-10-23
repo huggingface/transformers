@@ -534,7 +534,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         return_length: bool = False,
         verbose: bool = True,
     ) -> BatchEncoding:
-
         if not isinstance(batch_text_or_text_pairs, list):
             raise TypeError(f"batch_text_or_text_pairs has to be a list (got {type(batch_text_or_text_pairs)})")
 
