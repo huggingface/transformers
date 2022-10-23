@@ -475,4 +475,34 @@ def prepare_img():
 
 @require_tf
 @require_vision
+class TFBeitModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_feature_extractor(self):
+        return (
+            BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
+            if is_vision_available()
+            else None
+        )
+         
+    @slow
+    def test_inference_image_classification_head_imagenet_1k(self):
+        model = TFBeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
 
+        feature_extractor = self.default_feature_extractor
+        image = prepare_img()
+        inputs = feature_extractor(images=image, return_tensors="tf")
+
+        # forward pass
+        outputs = model(**inputs)
+        logits = outputs.logits
+
+        # verify the logits
+        expected_shape = tf.convert_to_tensor([1, 1000])
+        self.assertEqual(logits.shape, expected_shape)
+
+        expected_slice = tf.convert_to_tensor([0.3277, -0.1395, 0.0911])
+
+        tf.debugging.assert_near(logits[0, :3], expected_slice, atol=1e-4)
+
+        expected_top2 = [model.config.label2id[i] for i in ["remote control, remote", "tabby, tabby cat"]]
+        self.assertEqual(tf.nn.top_k(outputs.logits[0], 2).indices.numpy().tolist(), expected_top2)
