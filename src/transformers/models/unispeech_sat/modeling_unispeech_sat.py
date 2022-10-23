@@ -1433,7 +1433,6 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
 
         loss = None
         if labels is not None:
-
             if labels.max() >= self.config.vocab_size:
                 raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
@@ -1610,7 +1609,8 @@ class UniSpeechSatForAudioFrameClassification(UniSpeechSatPreTrainedModel):
 
         if hasattr(config, "add_adapter") and config.add_adapter:
             raise ValueError(
-                "Audio frame classification does not support the use of UniSpeechSat adapters (config.add_adapter=True)"
+                "Audio frame classification does not support the use of UniSpeechSat adapters"
+                " (config.add_adapter=True)"
             )
         self.unispeech_sat = UniSpeechSatModel(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings

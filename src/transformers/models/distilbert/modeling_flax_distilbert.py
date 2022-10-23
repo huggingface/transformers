@@ -201,7 +201,6 @@ class FlaxMultiHeadSelfAttention(nn.Module):
         deterministic: bool = True,
         output_attentions: bool = False,
     ):
-
         bs, q_len, dim = query.shape
         k_len = key.shape[1]
         # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'

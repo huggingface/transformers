@@ -205,7 +205,6 @@ class OwlViTTextEmbeddings(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
-
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
 
         if position_ids is None:
@@ -1141,7 +1140,6 @@ class OwlViTClassPredictionHead(nn.Module):
         query_embeds: torch.FloatTensor,
         query_mask: torch.Tensor,
     ) -> Tuple[torch.FloatTensor]:
-
         image_class_embeds = self.dense0(image_embeds)
 
         # Normalize image and text features
@@ -1268,7 +1266,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Tuple[torch.FloatTensor]:
-
         # Encode text and image
         outputs = self.owlvit(
             pixel_values=pixel_values,

@@ -127,7 +127,8 @@ def _make_3block_relative_position_ids(block_len: int) -> torch.Tensor:
 
 
 def _mask_local_attention_mask(local_attention_mask: torch.Tensor, block_len: int) -> torch.Tensor:
-    """Mask local attention mask to enforce that tokens are not allowed to attend tokens farther than ``local_radius."""
+    """Mask local attention mask to enforce that tokens are not allowed to attend tokens farther than ``local_radius.
+    """
     relative_position_ids = _make_3block_relative_position_ids(block_len)
     locality_mask = torch.abs(relative_position_ids) < block_len
     locality_mask = locality_mask[None, None, :, :]
@@ -232,7 +233,6 @@ class LongT5LayerNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-
         # LongT5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
         # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
@@ -1169,7 +1169,6 @@ class LongT5Block(nn.Module):
         output_attentions=False,
         return_dict=True,
     ):
-
         if past_key_value is not None:
             if not self.is_decoder:
                 logger.warning("`past_key_values` is passed to the encoder. Please make sure this is intended.")
@@ -1335,8 +1334,8 @@ class LongT5PreTrainedModel(PreTrainedModel):
         pad_token_id = self.config.pad_token_id
 
         assert decoder_start_token_id is not None, (
-            "self.model.config.decoder_start_token_id has to be defined. In LongT5 it is usually set to the pad_token_id."
-            " See LongT5 docs for more information"
+            "self.model.config.decoder_start_token_id has to be defined. In LongT5 it is usually set to the"
+            " pad_token_id. See LongT5 docs for more information"
         )
 
         # shift inputs to the right
@@ -2088,7 +2087,6 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
         encoder_outputs=None,
         **kwargs
     ):
-
         # cut decoder_input_ids if past is used
         if past is not None:
             input_ids = input_ids[:, -1:]

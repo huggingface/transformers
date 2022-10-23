@@ -66,7 +66,6 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
         self.config = config
 
     def build(self, input_shape: tf.TensorShape):
-
         num_patches = self.patch_embeddings.num_patches
         self.cls_token = self.add_weight(
             shape=(1, 1, self.config.hidden_size),
@@ -497,7 +496,6 @@ class TFViTMainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -687,7 +685,6 @@ class TFViTModel(TFViTPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-
         outputs = self.vit(
             pixel_values=pixel_values,
             head_mask=head_mask,

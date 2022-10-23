@@ -142,7 +142,6 @@ class DecisionTransformerConfig(PretrainedConfig):
         reorder_and_upcast_attn=False,
         **kwargs,
     ):
-
         self.state_dim = state_dim
         self.act_dim = act_dim
         self.hidden_size = hidden_size
