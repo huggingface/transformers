@@ -1335,8 +1335,8 @@ class LongT5PreTrainedModel(PreTrainedModel):
         pad_token_id = self.config.pad_token_id
 
         assert decoder_start_token_id is not None, (
-            "self.model.config.decoder_start_token_id has to be defined. In LongT5 it is usually set to the"
-            " pad_token_id. See LongT5 docs for more information"
+            "self.model.config.decoder_start_token_id has to be defined. In LongT5 it is usually set to the pad_token_id."
+            " See LongT5 docs for more information"
         )
 
         # shift inputs to the right
