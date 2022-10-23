@@ -786,6 +786,9 @@ class CLIPSegVisionTransformer(nn.Module):
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layrnorm(hidden_states)
 
+        print("Shape of hidden states before Transformer encoder:", hidden_states.shape)
+        print("First values of hidden states before Transformer encoder:", hidden_states[0, :3, :3])
+
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
@@ -796,6 +799,9 @@ class CLIPSegVisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
+
+        print("Shape of pooled output:", pooled_output.shape)
+        print("First values of pooled output:", pooled_output[0, :3])
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -1094,11 +1100,74 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
 
         # TODO perhaps use clip here?
         self.clipseg = CLIPSegModel(config)
+        self.extract_layers = [3, 6, 9]
 
         # TODO: decoder
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def forward():
-        raise NotImplementedError("To do")
+    def get_conditional_embeddings(self, input_ids, conditional_pixel_values, batch_size):
+        # conditional can be either in the form of text, an image or an existing embedding tensor
+        # so either input_ids, pixel_values or existing embeddings
+
+        # # compute conditional from a single string
+        # if conditional is not None and type(conditional) == str:
+        #     cond = self.compute_conditional(conditional)
+        #     cond = cond.repeat(batch_size, 1)
+
+        # compute conditional from text
+        if input_ids is not None:
+            if len(input_ids) != batch_size:
+                raise ValueError("Make sure to pass as many texts as there are query images")
+            conditional_embeddings = self.clipseg.get_text_features(input_ids)
+        # compute conditional from image
+        elif conditional_pixel_values is not None:
+            with torch.no_grad():
+                conditional_embeddings = self.clipseg.get_image_features(conditional_pixel_values)
+        # TODO support the use conditional directly
+        # elif conditional is not None and type(conditional) == torch.Tensor and conditional.ndim == 2:
+        #     cond = conditional
+        else:
+            raise ValueError("invalid conditional")
+
+        return conditional_embeddings
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        conditional_pixel_values: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        return_loss: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, CLIPSegOutput]:
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # step 1: forward the query images through the frozen CLIP vision encoder
+        with torch.no_grad():
+            vision_outputs = self.clipseg.vision_model(
+                pixel_values=pixel_values,
+                output_attentions=output_attentions,
+                output_hidden_states=True,  # we need the intermediate hidden states
+                return_dict=return_dict,
+            )
+            pooled_output = self.clipseg.visual_projection(vision_outputs[1])
+
+            # we add +1 here as the hidden states also include the initial embeddings
+            activations = [vision_outputs.hidden_states[i + 1] for i in [0] + self.extract_layers]
+
+        # step 2: compute conditional vector, either from text or images
+        conditional_embeddings = self.get_conditional_embeddings(
+            input_ids, conditional_pixel_values, batch_size=pixel_values.shape[0]
+        )
+
+        print("Shape of cond:", conditional_embeddings.shape)
+        print("First values of cond:", conditional_embeddings[0,:3])
+
+
+        return vision_outputs

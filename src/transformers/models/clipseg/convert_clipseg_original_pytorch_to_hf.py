@@ -1,6 +1,8 @@
 import argparse
 
 import torch
+from PIL import Image
+from torchvision.transforms import Compose, Resize, ToTensor
 
 from transformers import CLIPSegConfig, CLIPSegForImageSegmentation
 
@@ -95,6 +97,14 @@ def convert_state_dict(orig_state_dict, config):
     return orig_state_dict
 
 
+image_transforms = Compose(
+    [
+        ToTensor(),
+        Resize((224, 224)),
+    ]
+)
+
+
 def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     config = get_clipseg_config()
     model = CLIPSegForImageSegmentation(config)
@@ -111,19 +121,28 @@ def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path):
         print(name, param.shape)
 
     state_dict = convert_state_dict(state_dict, config)
-    model.load_state_dict(state_dict)
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
 
-    # TODO assert values
-    # url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    print("Missing keys:", missing_keys)
+    print("Unexpected keys:", unexpected_keys)
 
+    # TODO create feature extractor
     # feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/{}".format(model_name.replace("_", "-")))
-    # image = Image.open(requests.get(url, stream=True).raw)
-    # inputs = feature_extractor(images=image, return_tensors="pt")
+    image = Image.open("/Users/nielsrogge/Documents/cats.jpg").convert("RGB")
+    pixel_values = image_transforms(image).unsqueeze(0).repeat(4, 1, 1, 1)
 
-    # timm_outs = timm_model(inputs["pixel_values"])
-    # hf_outs = model(**inputs).logits
+    # prompts = ["a glass", "something to fill", "wood", "a jar"]
+    # tokenizer = CLIPTokenizer.from_pretrained("openai/")
+    # input_ids = CLIPTokenizer(prompts, padding="max_length", return_tensors="pt")
+    input_ids = torch.tensor([[1, 2] + [9] * 75]).repeat(4, 1)
 
-    # assert torch.allclose(timm_outs, hf_outs, atol=1e-3)
+    print("Shape of pixel values:", pixel_values.shape)
+    print("Shape of input ids:", input_ids.shape)
+
+    outputs = model(input_ids, pixel_values)
+    print(outputs.keys())
+
+    # assert torch.allclose(outputs, expected_slice, atol=1e-3)
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model to {pytorch_dump_folder_path}")
