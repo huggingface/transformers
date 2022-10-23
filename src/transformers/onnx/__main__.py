@@ -23,6 +23,7 @@ from ..utils import logging
 from .convert import export, validate_model_outputs
 from .features import FeaturesManager
 
+
 if is_torch_available():
     from torch.nn import Module as TorchModule
 if is_tf_available():
@@ -129,8 +130,9 @@ def main():
                 inputs = torch.zeros(encoder_output_shape)
                 onnx_export(enc_to_dec_proj, inputs, f=output.as_posix(), opset_version=args.opset)
             if is_tf_available and isinstance(enc_to_dec_proj, TFModule):
-                import onnx
                 import tensorflow as tf
+
+                import onnx
                 import tf2onnx
 
                 inputs = tf.zeros(encoder_output_shape)
