@@ -10,20 +10,20 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Contestación de preguntas
+# Respuesta a preguntas
 
 <Youtube id="ajPx5LwJD-I"/>
 
-La contestación de preguntas devuelve una respuesta a partir de una pregunta dada. Existen dos formas comunes de contestación de preguntas:
+La respuesta a preguntas devuelve una respuesta a partir de una pregunta dada. Existen dos formas comunes de responder preguntas:
 
 - Extractiva: extraer la respuesta a partir del contexto dado.
 - Abstractiva: generar una respuesta que responda correctamente la pregunta a partir del contexto dado.
 
-Esta guía te mostrará como hacer fine-tuning de [DistilBERT](https://huggingface.co/distilbert-base-uncased) en el dataset [SQuAD](https://huggingface.co/datasets/squad) para contestar preguntas de forma extractiva.
+Esta guía te mostrará como hacer fine-tuning de [DistilBERT](https://huggingface.co/distilbert-base-uncased) en el dataset [SQuAD](https://huggingface.co/datasets/squad) para responder preguntas de forma extractiva.
 
 <Tip>
 
-Revisa la [página de la tarea](https://huggingface.co/tasks/question-answering) de contestación de preguntas para tener más información sobre otras formas de contestación de preguntas y los modelos, datasets y métricas asociadas.
+Revisa la [página de la tarea](https://huggingface.co/tasks/question-answering) de responder preguntas para tener más información sobre otras formas de responder preguntas y los modelos, datasets y métricas asociadas.
 
 </Tip>
 
@@ -63,7 +63,7 @@ Carga el tokenizer de DistilBERT para procesar los campos `question` (pregunta) 
 >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 ```
 
-Hay algunos pasos de preprocesamiento específicos de la contestación de preguntas que debes tener en cuenta:
+Hay algunos pasos de preprocesamiento específicos para la tarea de respuesta a preguntas que debes tener en cuenta:
 
 1. Algunos ejemplos en un dataset pueden tener un contexto que supera la longitud máxima de entrada de un modelo. Trunca solamente el contexto asignándole el valor `"only_second"` al parámetro `truncation`.
 2. A continuación, mapea las posiciones de inicio y fin de la respuesta al contexto original asignándole el valor `True` al parámetro `return_offsets_mapping`.
@@ -223,7 +223,7 @@ Para familiarizarte con el fine-tuning con Keras, ¡mira el tutorial básico [aq
 
 </Tip>
 
-Prepara una función optimizadora, un programa para la tasa de aprendizaje y algunos hiperparámetros de entrenamiento:
+Prepara una función de optimización, un programa para la tasa de aprendizaje y algunos hiperparámetros de entrenamiento:
 
 ```py
 >>> from transformers import create_optimizer
@@ -264,7 +264,7 @@ Invoca el método [`fit`](https://keras.io/api/models/model_training_apis/#fit-m
 
 <Tip>
 
-Para un ejemplo con mayor profundidad de cómo hacer fine-tuning a un modelo para contestar preguntas, échale un vistazo al
+Para un ejemplo con mayor profundidad de cómo hacer fine-tuning a un modelo para responder preguntas, échale un vistazo al
 [cuaderno de PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb) o al
 [cuaderno de TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb) correspondiente.
 
