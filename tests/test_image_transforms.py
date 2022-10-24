@@ -36,9 +36,13 @@ if is_vision_available():
 
     from transformers.image_transforms import (
         center_crop,
+        center_to_corners_format,
+        corners_to_center_format,
         get_resize_output_image_size,
+        id_to_rgb,
         normalize,
         resize,
+        rgb_to_id,
         to_channel_dimension_format,
         to_pil_image,
     )
@@ -178,6 +182,11 @@ class ImageTransformsTester(unittest.TestCase):
     def test_normalize(self):
         image = np.random.randint(0, 256, (224, 224, 3)) / 255
 
+        # Test that exception is raised if inputs are incorrect
+        # Not a numpy array image
+        with self.assertRaises(ValueError):
+            normalize(5, 5, 5)
+
         # Number of mean values != number of channels
         with self.assertRaises(ValueError):
             normalize(image, mean=(0.5, 0.6), std=1)
@@ -219,3 +228,64 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertIsInstance(cropped_image, np.ndarray)
         self.assertEqual(cropped_image.shape, (300, 260, 3))
         self.assertTrue(np.allclose(cropped_image, expected_image))
+
+    def test_center_to_corners_format(self):
+        bbox_center = np.array([[10, 20, 4, 8], [15, 16, 3, 4]])
+        expected = np.array([[8, 16, 12, 24], [13.5, 14, 16.5, 18]])
+        self.assertTrue(np.allclose(center_to_corners_format(bbox_center), expected))
+
+        # Check that the function and inverse function are inverse of each other
+        self.assertTrue(np.allclose(corners_to_center_format(center_to_corners_format(bbox_center)), bbox_center))
+
+    def test_corners_to_center_format(self):
+        bbox_corners = np.array([[8, 16, 12, 24], [13.5, 14, 16.5, 18]])
+        expected = np.array([[10, 20, 4, 8], [15, 16, 3, 4]])
+        self.assertTrue(np.allclose(corners_to_center_format(bbox_corners), expected))
+
+        # Check that the function and inverse function are inverse of each other
+        self.assertTrue(np.allclose(center_to_corners_format(corners_to_center_format(bbox_corners)), bbox_corners))
+
+    def test_rgb_to_id(self):
+        # test list input
+        rgb = [125, 4, 255]
+        self.assertEqual(rgb_to_id(rgb), 16712829)
+
+        # test numpy array input
+        color = np.array(
+            [
+                [
+                    [213, 54, 165],
+                    [88, 207, 39],
+                    [156, 108, 128],
+                ],
+                [
+                    [183, 194, 46],
+                    [137, 58, 88],
+                    [114, 131, 233],
+                ],
+            ]
+        )
+        expected = np.array([[10827477, 2608984, 8416412], [3064503, 5782153, 15303538]])
+        self.assertTrue(np.allclose(rgb_to_id(color), expected))
+
+    def test_id_to_rgb(self):
+        # test int input
+        self.assertEqual(id_to_rgb(16712829), [125, 4, 255])
+
+        # test array input
+        id_array = np.array([[10827477, 2608984, 8416412], [3064503, 5782153, 15303538]])
+        color = np.array(
+            [
+                [
+                    [213, 54, 165],
+                    [88, 207, 39],
+                    [156, 108, 128],
+                ],
+                [
+                    [183, 194, 46],
+                    [137, 58, 88],
+                    [114, 131, 233],
+                ],
+            ]
+        )
+        self.assertTrue(np.allclose(id_to_rgb(id_array), color))
