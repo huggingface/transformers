@@ -541,10 +541,10 @@ class LEDModelIntegrationTests(unittest.TestCase):
 
         EXPECTED_MAGNET = (
             " the recent experiment in the surface states of the topological insulator bi@xmath0se @xmath1, however,"
-            " reported that a large positive magnetoresistance becomes very linear in perpendicular magnetic field even"
-            " in an opposite situation where the carrier sheet density is high that all electrons occupy more than one"
-            " landau levels. \n it is striking that this observation is in conflict with abrikosov s model and also"
-            " with the classical parish - littlewood model. "
+            " reported that a large positive magnetoresistance becomes very linear in perpendicular magnetic field"
+            " even in an opposite situation where the carrier sheet density is high that all electrons occupy more"
+            " than one landau levels. \n it is striking that this observation is in conflict with abrikosov s model"
+            " and also with the classical parish - littlewood model. "
         )
 
         generated = tok.batch_decode(
