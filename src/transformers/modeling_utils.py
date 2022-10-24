@@ -552,11 +552,14 @@ def _load_unloaded_params(
         `load_in_8bit`, (`bool`, *optional*):
             Whether the model has to be loaded in 8-bit or not.
     """
+    if model._keys_to_ignore_on_save is None:
+        return model
+
     if load_in_8bit:
         from .utils.bitsandbytes import set_module_8bit_tensor_to_device
 
     for param_name, param in model.named_parameters():
-        if param.device.type == "meta":
+        if param.device.type == "meta" and param_name in model._keys_to_ignore_on_save:
             if not load_in_8bit:
                 set_module_tensor_to_device(model, param_name, "cpu", torch.empty(*param.size(), dtype=dtype))
             else:
@@ -2593,16 +2596,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
                     error_msgs += new_error_msgs
 
-                    # At this point all the modules should have a device set, except for the modules that are
-                    # in `_keys_to_ignore_on_load_missing` and `_keys_to_ignore_on_save` - let's randomly initialize them!
-                    if hasattr(model, "_keys_to_ignore_on_load_missing") and hasattr(model, "_keys_to_ignore_on_save"):
-                        model = _load_unloaded_params(model, dtype, load_in_8bit)
                 else:
                     error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
 
                 # force memory release
                 del state_dict
                 gc.collect()
+
+            if low_cpu_mem_usage:
+                # At this point all the modules should have a device set, except for the modules that are
+                # in `_keys_to_ignore_on_load_missing` and `_keys_to_ignore_on_save` - let's randomly initialize them!
+                if hasattr(model_to_load, "_keys_to_ignore_on_load_missing") and hasattr(
+                    model_to_load, "_keys_to_ignore_on_save"
+                ):
+                    model_to_load = _load_unloaded_params(model_to_load, dtype, load_in_8bit)
 
             if offload_index is not None and len(offload_index) > 0:
                 if model != model_to_load:
