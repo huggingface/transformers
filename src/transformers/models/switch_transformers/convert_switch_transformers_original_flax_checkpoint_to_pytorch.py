@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The SwitchTransformers authors and HuggingFace Inc. team.
+# Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,15 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert SwitchTransformers checkpoint."""
 
+"""Convert SwitchTransformersX checkpoints from the original repository to JAX/FLAX model."""
 
 import argparse
-import os
+import re
 
-import regex as re
-from flax.serialization import msgpack_restore
-from transformers import SwitchTransformersConfig, SwitchTransformersForConditionalGeneration
+from t5x import checkpoints
+from transformers import SwitchTransformersForConditionalGeneration, SwitchTransformersConfig
 from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
 from transformers.utils import logging
 from transformers.utils.hub import get_file_from_repo
@@ -63,8 +62,6 @@ MOE_LAYER_NAME_MAPPING = {
     "relpos_bias/rel_embedding": "block/0/layer/0/SelfAttention/relative_attention_bias/weight",
     "router/router_weights/w/": "router/classifier/",
     "roer/roer_weights/w/": "router/classifier/",
-
-
 }
 
 def rename_keys(s_dict):
@@ -99,6 +96,8 @@ def rename_keys(s_dict):
         print(f"{key} -> {new_key}")
         s_dict[new_key] = s_dict.pop(key)
 
+    s_dict["encoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"] = s_dict["encoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"].T
+    s_dict["decoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"] = s_dict["decoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"].T
 
     # 3. Take extra care of the EXPERTS layer
     for key in list(s_dict.keys()):
@@ -149,7 +148,7 @@ def convert_flax_checkpoint_to_pytorch(flax_checkpoint_path, config_file, gin_fi
     # Initialise PyTorch model
 
     print(f"Loading flax weights from : {flax_checkpoint_path}")
-    t5x_model = checkpoints.load_t5x_checkpoint(flax_checkpoint_path)
+    flax_params = checkpoints.load_t5x_checkpoint(flax_checkpoint_path)
 
     if gin_file is not None:
         config = convert_gin_to_config(gin_file)
@@ -162,21 +161,19 @@ def convert_flax_checkpoint_to_pytorch(flax_checkpoint_path, config_file, gin_fi
     params = rename_keys(params)
     params = unflatten_dict(params, sep="/")
 
-    load_flax_weights_in_pytorch_model(pt_model, params)
+    # Load the flax params in the PT model
+    load_flax_weights_in_pytorch_model(pt_model, params['target'])
 
-    # Save pytorch-model
     print(f"Save PyTorch model to {pytorch_dump_path}")
     pt_model.save_pretrained(pytorch_dump_path)
+
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--flax_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
-    )
-    parser.add_argument(
-        "--config_file",
+        "--switch_t5x_checkpoint_path",
         default=None,
         type=str,
         required=True,
@@ -189,7 +186,12 @@ if __name__ == "__main__":
         "--gin_file", default=None, type=str, required=True, help="Path to the gin config file. If not provided, a `config_file` has to be passed   "
     )
     parser.add_argument(
-        "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--config_name", default=None, type=str, required=True, help="Config name of SwitchTransformers model."
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output pytorch model."
     )
     args = parser.parse_args()
-    convert_flax_checkpoint_to_pytorch(args.flax_checkpoint_path, args.config_file, args.pytorch_dump_path)
+    convert_flax_checkpoint_to_pytorch(
+        args.switch_t5x_checkpoint_path, args.config_name, args.gin_file,args.pytorch_dump_folder_path
+    )
