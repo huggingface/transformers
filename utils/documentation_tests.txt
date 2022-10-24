@@ -107,6 +107,7 @@ src/transformers/models/pegasus_x/configuration_pegasus_x.py
 src/transformers/models/perceiver/modeling_perceiver.py
 src/transformers/models/plbart/configuration_plbart.py
 src/transformers/models/plbart/modeling_plbart.py
+src/transformers/models/poolformer/configuration_poolformer.py
 src/transformers/models/poolformer/modeling_poolformer.py
 src/transformers/models/realm/configuration_realm.py
 src/transformers/models/reformer/configuration_reformer.py
