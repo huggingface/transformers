@@ -2799,7 +2799,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             sample_length (`int`, *optional*, defaults to None):
                 Desired lenght of the generation in samples.
 
-        Returns:
+        Returns: torch.Tensor
 
         Example:
 
