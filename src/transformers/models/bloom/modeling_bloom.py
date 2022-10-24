@@ -387,6 +387,7 @@ class BloomAttention(nn.Module):
 
         # change view [batch_size, num_heads, q_length, head_dim]
         context_layer = _merge_heads(context_layer, num_heads=num_heads, head_dim=head_dim)
+        attention_probs = attention_probs.view((batch_size, -1, *attention_probs.shape[1:]))
 
         return context_layer, present, attention_probs
 
