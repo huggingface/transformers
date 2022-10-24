@@ -25,11 +25,25 @@ from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorc
 from transformers.utils import logging
 from transformers.utils.hub import get_file_from_repo
 
+from t5x import checkpoints
 
 logging.set_verbosity_info()
 
 from flax.traverse_util import flatten_dict, unflatten_dict
 
+
+MODEL_MAPPING = {
+    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
+    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
+    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
+    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
+    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
+    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
+    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
+    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
+    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
+    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
+}
 
 # should not include what is already done by the `from_pt` argument
 MOE_LAYER_NAME_MAPPING = {
@@ -49,23 +63,9 @@ MOE_LAYER_NAME_MAPPING = {
     "relpos_bias/rel_embedding": "block/0/layer/0/SelfAttention/relative_attention_bias/weight",
     "router/router_weights/w/": "router/classifier/",
     "roer/roer_weights/w/": "router/classifier/",
-    
-    
+
 
 }
-
-FLAX_MODELS = {
-    "base-8": "https://huggingface.co/ybelkada/switch-c-base-8",
-    "base-16": "https://huggingface.co/ybelkada/switch-c-base-16",
-    "base-32": "https://huggingface.co/ybelkada/switch-c-base-32",
-    "base-64": "https://huggingface.co/ybelkada/switch-c-base-64",
-    "base-128": "https://huggingface.co/ybelkada/switch-c-base-128",
-    "base-256": "https://huggingface.co/ybelkada/switch-c-base-256",
-    "large-128": "https://huggingface.co/ybelkada/switch-c-large-128",
-    "xxl-128": "https://huggingface.co/ybelkada/switch-c-xxl-128",
-    "beast-2048": "https://huggingface.co/ybelkada/switch-c-2048",
-}
-
 
 def rename_keys(s_dict):
     # 1. in HF T5, we have block.{x}.layer.{y}. which corresponds to layer.{x} in
@@ -94,36 +94,68 @@ def rename_keys(s_dict):
         for old_key, temp_key in MOE_LAYER_NAME_MAPPING.items():
             if old_key in new_key:
                 new_key = new_key.replace(old_key, temp_key)
-                
+
 
         print(f"{key} -> {new_key}")
-        s_dict[new_key] = s_dict.pop(key) 
+        s_dict[new_key] = s_dict.pop(key)
 
-        
+
     # 3. Take extra care of the EXPERTS layer
     for key in list(s_dict.keys()):
-        if "expert" in key: 
-            
+        if "expert" in key:
+
             num_experts = s_dict[key].shape[0]
             expert_weihts = s_dict[key]
             for idx in range(num_experts):
                 s_dict[key.replace("expert/", f"experts/expert_{idx}/")] = expert_weihts[idx]
             s_dict.pop(key)
-    
+
     return s_dict
 
+GIN_TO_CONFIG_MAPPING = {
+    "NUM_ENCODER_LAYERS":"num_layers",
+    "NUM_DECODER_LAYERS":"num_decoder_layers",
+    "NUM_HEADS":"num_heads",
+    "HEAD_DIM":"d_kv",
+    "EMBED_DIM":"d_model",
+    "MLP_DIM":"d_ff",
+    "NUM_EXPERTS":"num_experts",
+    "NUM_SELECTED_EXPERTS":"num_selected_experts",
+    "NUM_ENCODER_SPARSE_LAYERS":"num_sparse_encoder_layers",
+    "NUM_DECODER_SPARSE_LAYERS":"num_sparse_decoder_layers",
+    "EVAL_EXPERT_CAPACITY_FACTOR":"expert_capacity",
+    "dense.MlpBlock.activations":"feed_forward_proj",
 
-def convert_flax_checkpoint_to_pytorch(flax_checkpoint_path, config_file, pytorch_dump_path):
+}
+
+def convert_gin_to_config(gin_file):
+    # Convert a google style config to the hugging face fromat
+    import regex as re
+    with open(gin_file, "r") as f:
+        raw_gin = f.read()
+
+    regex_match = re.findall(r"(.*) = ([0-9.]*)", raw_gin)
+    args = {}
+    for param, value in regex_match:
+        if param in GIN_TO_CONFIG_MAPPING and value != "":
+            args[GIN_TO_CONFIG_MAPPING[param]] = float(value)
+
+    activation = re.findall(r"activations = \(\'(.*)\',\)", raw_gin)
+    args[GIN_TO_CONFIG_MAPPING[activation]] = str(activation)
+    config = SwitchTransformersConfig(**args)
+    return config
+
+def convert_flax_checkpoint_to_pytorch(flax_checkpoint_path, config_file, gin_file = None, pytorch_dump_path = "./"):
     # Initialise PyTorch model
 
     print(f"Loading flax weights from : {flax_checkpoint_path}")
-    path = get_file_from_repo(flax_checkpoint_path, "flax_params.flax", use_auth_token = "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") # get_file_from_repo(config_file, "flax_params.flax") # get_file_from_repo(config_file, "flax_params.flax", use_auth_token = "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")
-    
-    config_file = get_file_from_repo(flax_checkpoint_path, "config.json", use_auth_token = "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") 
-    with open(os.path.join(path), "rb") as f:
-        params = msgpack_restore(f.read())
+    t5x_model = checkpoints.load_t5x_checkpoint(flax_checkpoint_path)
 
-    config = SwitchTransformersConfig.from_pretrained(config_file, relative_attention_num_buckets=12)
+    if gin_file is not None:
+        config = convert_gin_to_config(gin_file)
+    else :
+        config = SwitchTransformersConfig.from_pretrained(config_file, relative_attention_num_buckets=12)
+
     pt_model = SwitchTransformersForConditionalGeneration(config)
 
     params = flatten_dict(params, sep="/")
@@ -131,8 +163,6 @@ def convert_flax_checkpoint_to_pytorch(flax_checkpoint_path, config_file, pytorc
     params = unflatten_dict(params, sep="/")
 
     load_flax_weights_in_pytorch_model(pt_model, params)
-
-    # Post process the experts
 
     # Save pytorch-model
     print(f"Save PyTorch model to {pytorch_dump_path}")
@@ -152,8 +182,11 @@ if __name__ == "__main__":
         required=True,
         help=(
             "The config json file corresponding to the pre-trained SwitchTransformers model. \nThis specifies the"
-            " model architecture."
+            " model architecture. If not provided, a `gin_file` has to be provided."
         ),
+    )
+    parser.add_argument(
+        "--gin_file", default=None, type=str, required=True, help="Path to the gin config file. If not provided, a `config_file` has to be passed   "
     )
     parser.add_argument(
         "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
