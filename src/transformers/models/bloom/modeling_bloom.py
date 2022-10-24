@@ -151,7 +151,6 @@ def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int) -> torch.Te
     return alibi
 
 
-# @torch.jit.script
 def dropout_add(x: torch.Tensor, residual: torch.Tensor, prob: float, training: bool) -> torch.Tensor:
     """
     Dropout add function
@@ -234,7 +233,6 @@ class BloomGelu(nn.Module):
             return bloom_gelu_forward(x)
 
 
-# @torch.jit.script # this is shit for unknow reasons.
 def _split_heads(
     fused_qkv: torch.Tensor, num_heads: int, head_dim: int
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -260,7 +258,6 @@ def _split_heads(
     return query_layer, key_layer, value_layer
 
 
-# @torch.jit.script
 def _merge_heads(x: torch.Tensor, num_heads: int, head_dim: int) -> torch.Tensor:
     """
     Merge heads together over the last dimenstion
@@ -339,7 +336,6 @@ class BloomAttention(nn.Module):
         head_dim = three_times_hidden_size // (3 * num_heads)
         # batch_size_times_num_heads = batch_size * num_heads
 
-        # TODO @thomasw21: this takes quite a bit of time, how do I accelerate that?
         # 3 x [batch_size, seq_length, num_heads, head_dim]
         (query_layer, key_layer, value_layer) = _split_heads(fused_qkv, num_heads=num_heads, head_dim=head_dim)
 
@@ -383,7 +379,7 @@ class BloomAttention(nn.Module):
             attention_probs = attention_probs * head_mask
 
         # matmul: [batch_size * num_heads, q_length, head_dim]
-        context_layer = torch.bmm(attention_probs, value_layer)
+        context_layer = torch.matmul(attention_probs, value_layer)
 
         # change view [batch_size, num_heads, q_length, head_dim]
         context_layer = _merge_heads(context_layer, num_heads=num_heads, head_dim=head_dim)
@@ -916,7 +912,6 @@ class BloomForCausalLM(BloomPreTrainedModel):
         if process_group is None:
             self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         else:
-            # TODO @thomasw21: TensorParallelColumnLinear doesn't inherit nn.Linear anymore as we switch the underlying storage
             self.lm_head = nn.Linear(config.hidden_size, config.vocab_size // process_group.size(), bias=False)
             # self.lm_head = TensorParallelColumnLinear(config.hidden_size, config.vocab_size, process_group=process_group, bias=False)
 

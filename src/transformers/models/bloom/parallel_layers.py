@@ -48,12 +48,6 @@ class TensorParallelColumnLinear(nn.Module):
     @staticmethod
     @torch.jit.script
     def linear(input: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor):
-        # # Note the the unsharded equivalent requires us to sum over bias instead of averaging.
-        # in_features, out_features = weight.shape
-        # size_out = input.size()[:-1] + (out_features,)
-        # # TODO @thomasw21: when using torch.jit.script, `addmm` is decomposed to `add + mm`
-        # return torch.addmm(bias, input.view(-1, in_features), weight).view(size_out)
-
         in_features, out_features = weight.shape
         size_out = input.size()[:-1] + (out_features,)
         # TODO @thomasw21: when using torch.jit.script, `addmm` is decomposed to `add + mm`
@@ -114,15 +108,6 @@ class TensorParallelRowLinear(nn.Module):
     @staticmethod
     @torch.jit.script
     def linear(input: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor):
-        # # Note the the unsharded equivalent requires us to sum over bias instead of averaging.
-        # in_features, out_features = weight.shape
-        # size_out = input.size()[:-1] + (out_features,)
-        # # TODO @thomasw21: when using torch.jit.script, `addmm` is decomposed to `add + mm`
-        # input = input.view(-1, in_features)
-        # # with torch.jit.strict_fusion():
-        # out =  torch.addmm(bias, input, weight)
-        # return out.view(size_out)
-
         in_features, out_features = weight.shape
         size_out = input.size()[:-1] + (out_features,)
         # TODO @thomasw21: when using torch.jit.script, `addmm` is decomposed to `add + mm`
