@@ -78,8 +78,8 @@ class MobileViTImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
             dimensions to the specified `size`.
-        size (`Dict[str, int]` *optional*, defaults to {"shortest_edge": 224}):
-            Set the class default for the `size` parameter. Size of the image after applying resize.
+        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
+            Set the class default for the `size` parameter. Size of the image after applying `resize`.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -90,7 +90,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to crop the input at the center. If the input size is smaller than `crop_size` along any edge, the
             image is padded with 0's and then center cropped.
-        crop_size (`Dict[str, int]`, *optional*, defaults to {"height": 256, "width": 256}):
+        crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 256, "width": 256}`):
             Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to `True`.
         do_flip_channel_order (`bool`, *optional*, defaults to `True`):
             Whether to flip the color channels from RGB to BGR.
@@ -141,7 +141,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Controls the size of the output image. The shortest edge of the image will be resized to
-                size["shortest_edge"] while maintaining the aspect ratio.
+                `size["shortest_edge"]` while maintaining the aspect ratio.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
@@ -159,8 +159,8 @@ class MobileViTImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Center crop an image to size (size["height], size["width"]). If the input size is smaller than `size` along any
-        edge, the image is padded with 0's and then center cropped.
+        Center crop an image to size `(size["height], size["width"])`. If the input size is smaller than `size` along
+        any edge, the image is padded with 0's and then center cropped.
 
         Args:
             image (`np.ndarray`):
