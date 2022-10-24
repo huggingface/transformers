@@ -440,12 +440,12 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
 
         array = apply_transpose(transpose, array, pt_weight.shape, pt_to_tf=False)
 
+        if numpy.isscalar(array):
+            array = numpy.array(array)
         if not is_torch_tensor(array) and not is_numpy_array(array):
             array = array.numpy()
         if is_numpy_array(array):
-            # Make sure we have a proper numpy array
-            if numpy.isscalar(array):
-                array = numpy.array(array)
+            # Convert to torch tensor
             array = torch.from_numpy(array)
 
         new_pt_params_dict[pt_weight_name] = array
