@@ -364,10 +364,14 @@ class BloomAttention(nn.Module):
             alpha=inv_norm_factor,
         )
 
+        attention_scores = attention_scores.view((batch_size, num_heads, q_length, kv_length))
+        attention_mask = attention_mask.view((batch_size, num_heads, q_length, kv_length))
+
         # cast attention scores to fp32, compute scaled softmax and cast back to initial dtype - [batch_size, num_heads, q_length, kv_length]
         input_dtype = attention_scores.dtype
         # `float16` has a minimum value of -65504.0, whereas `bfloat16` and `float32` have a minimum value of `-3.4e+38`
-        attention_scores = attention_scores.to(torch.float)
+        if input_dtype == torch.float16:
+            attention_scores = attention_scores.to(torch.float)
         # torch.finfo not supported by torch.jit, we temporarily remplace with `-1e34`
         attn_weights = attention_scores.masked_fill(attention_mask, torch.finfo(attention_scores.dtype).min)
         attention_probs = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
@@ -378,8 +382,10 @@ class BloomAttention(nn.Module):
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
+        attention_probs_reshaped = attention_probs.view((batch_size * num_heads, q_length, kv_length))
+
         # matmul: [batch_size * num_heads, q_length, head_dim]
-        context_layer = torch.matmul(attention_probs, value_layer)
+        context_layer = torch.bmm(attention_probs_reshaped, value_layer)
 
         # change view [batch_size, num_heads, q_length, head_dim]
         context_layer = _merge_heads(context_layer, num_heads=num_heads, head_dim=head_dim)
