@@ -18,9 +18,11 @@
 import copy
 import math
 import warnings
-from typing import Optional, Tuple, Union
+from dataclasses import dataclass, replace
+from typing import Any, Optional, Tuple, Union
 
 import torch
+import torch.nn as nn
 from torch import nn
 from torch.nn import CrossEntropyLoss
 from torch.utils.checkpoint import checkpoint
@@ -45,11 +47,6 @@ from ...utils import (
 )
 from .configuration_switch_transformers import SwitchTransformersConfig
 
-from dataclasses import dataclass, replace
-from typing import Any, Optional, Tuple
-
-import torch
-import torch.nn as nn
 
 logger = logging.get_logger(__name__)
 
@@ -68,6 +65,7 @@ SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 RouterOutput = Any
+
 
 def _jax_one_hot(tensor, num_classes, axis=-1, dtype=torch.bool):
     r"""
@@ -289,7 +287,7 @@ class Router(nn.Module):
             distrib_upper_bound = 1.0 + self.jitter_noise
 
             uniform_distrib = (
-                torch.rand(token_inputs.shape, device=token_inputs.device)
+                torch.rand(token_inputs.shape, device=token_inputs.device, dtype = self.dtype)
                 * (distrib_lower_bound - distrib_upper_bound)
             ) + distrib_upper_bound
 
@@ -297,10 +295,11 @@ class Router(nn.Module):
             token_inputs *= uniform_distrib
 
         # Shape: [num_groups, tokens_per_group, num_experts]
-        router_logits = self.classifier(token_inputs.to(self.classifier.weight.dtype))
+        self.classifier.to(self.dtype)
+        router_logits = self.classifier(token_inputs)
 
         # computations in the router have to be done in float16
-        router_probabilities = torch.nn.Softmax(dim=-1)(router_logits.to(self.dtype))
+        router_probabilities = torch.nn.Softmax(dim=-1)(router_logits).to(self.input_tokens_dtype)
 
         return router_probabilities, router_logits
 
@@ -564,7 +563,6 @@ class TokensChooseMaskedRouter(Router):
         return RouterMask(dispatch_mask, combine_array, auxiliary_loss)
 
 
-
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->SwitchTransformers
 class SwitchTransformersLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -696,10 +694,12 @@ class SwitchTransformersSparseMLP(nn.Module):
         expert_indices = self.router(hidden_states, expert_capacity=self.expert_capacity)
         masked_indices = expert_indices.dispatch_mask
 
+        dispatched_tokens = int(torch.sum(masked_indices))
         for idx, expert in enumerate(self.experts.values()):
             # 1. Get the index of the tokens that are routed to the current expert
-            expert_indices = torch.eq(masked_indices[:, :, idx, :], 1).squeeze(-1)
+            expert_indices = torch.argmax(masked_indices[:, :, idx, :], -1).bool()
             # 2. Update hidden states
+            print(f"{(masked_indices[:, :, idx, :]).sum()}/{dispatched_tokens} tokens will be dispatched to expert {idx}")
             hidden_states[expert_indices] = expert(hidden_states[expert_indices])
         return hidden_states
 
@@ -1232,7 +1232,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         config.num_layers = config.num_decoder_layers if self.is_decoder else config.num_layers
         self.block = nn.ModuleList()
         for i in range(config.num_layers):
-
 
             is_sparse = (i % sparse_step == 1) if sparse_step > 0 else False
 

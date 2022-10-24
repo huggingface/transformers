@@ -19,12 +19,11 @@ import argparse
 import re
 
 from t5x import checkpoints
-from transformers import SwitchTransformersForConditionalGeneration, SwitchTransformersConfig
+from transformers import SwitchTransformersConfig, SwitchTransformersForConditionalGeneration
 from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
 from transformers.utils import logging
 from transformers.utils.hub import get_file_from_repo
 
-from t5x import checkpoints
 
 logging.set_verbosity_info()
 
@@ -32,16 +31,36 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 
 
 MODEL_MAPPING = {
-    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
-    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
-    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
-    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
-    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
-    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
-    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
-    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
-    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
-    "switch_base_8":["https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"],
+    "switch_base_8": [
+        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
+    ],
+    "switch_base_16": [
+        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
+    ],
+    "switch_base_32": [
+        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
+    ],
+    "switch_base_64": [
+        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
+    ],
+    "switch_base_128": [
+        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
+    ],
+    "switch_base_256": [
+        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
+    ],
+    "switch_base_512": [
+        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
+    ],
+    "switch_base_1024": [
+        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
+    ],
+    "switch_base_2048": [
+        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
+    ],
+    "switch_base_8": [
+        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
+    ],
 }
 
 # should not include what is already done by the `from_pt` argument
@@ -55,7 +74,7 @@ MOE_LAYER_NAME_MAPPING = {
     "out": "o",
     "pre_self_attention_layer_norm": "0/layer_norm",
     "pre_cross_attention_layer_norm": "1/layer_norm",
-    "pre_attention_layer_norm": "0/layer_norm", # previously 1, but seems wrong
+    "pre_attention_layer_norm": "0/layer_norm",  # previously 1, but seems wrong
     "token_embedder": "shared",
     "encoder_norm": "final_layer_norm",
     "decoder_norm": "final_layer_norm",
@@ -63,6 +82,7 @@ MOE_LAYER_NAME_MAPPING = {
     "router/router_weights/w/": "router/classifier/",
     "roer/roer_weights/w/": "router/classifier/",
 }
+
 
 def rename_keys(s_dict):
     # 1. in HF T5, we have block.{x}.layer.{y}. which corresponds to layer.{x} in
@@ -73,7 +93,6 @@ def rename_keys(s_dict):
         new_key = key
         if re.match(layer_to_block_of_layer, key):
             new_key = re.sub(r"layers_(\d+)", r"block/\1/layer", new_key)
-
 
         layer_to_block_of_layer = r"(encoder|decoder)\/"
 
@@ -92,12 +111,15 @@ def rename_keys(s_dict):
             if old_key in new_key:
                 new_key = new_key.replace(old_key, temp_key)
 
-
         print(f"{key} -> {new_key}")
         s_dict[new_key] = s_dict.pop(key)
 
-    s_dict["encoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"] = s_dict["encoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"].T
-    s_dict["decoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"] = s_dict["decoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"].T
+    s_dict["encoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"] = s_dict[
+        "encoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"
+    ].T
+    s_dict["decoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"] = s_dict[
+        "decoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"
+    ].T
 
     # 3. Take extra care of the EXPERTS layer
     for key in list(s_dict.keys()):
@@ -113,23 +135,25 @@ def rename_keys(s_dict):
 
     return s_dict
 
-GIN_TO_CONFIG_MAPPING = {
-    "NUM_ENCODER_LAYERS":"num_layers",
-    "NUM_DECODER_LAYERS":"num_decoder_layers",
-    "NUM_HEADS":"num_heads",
-    "HEAD_DIM":"d_kv",
-    "EMBED_DIM":"d_model",
-    "MLP_DIM":"d_ff",
-    "NUM_SELECTED_EXPERTS":"num_selected_experts",
-    "NUM_ENCODER_SPARSE_LAYERS":"num_sparse_encoder_layers",
-    "NUM_DECODER_SPARSE_LAYERS":"num_sparse_decoder_layers",
-    "dense.MlpBlock.activations":"feed_forward_proj",
 
+GIN_TO_CONFIG_MAPPING = {
+    "NUM_ENCODER_LAYERS": "num_layers",
+    "NUM_DECODER_LAYERS": "num_decoder_layers",
+    "NUM_HEADS": "num_heads",
+    "HEAD_DIM": "d_kv",
+    "EMBED_DIM": "d_model",
+    "MLP_DIM": "d_ff",
+    "NUM_SELECTED_EXPERTS": "num_selected_experts",
+    "NUM_ENCODER_SPARSE_LAYERS": "num_sparse_encoder_layers",
+    "NUM_DECODER_SPARSE_LAYERS": "num_sparse_decoder_layers",
+    "dense.MlpBlock.activations": "feed_forward_proj",
 }
+
 
 def convert_gin_to_config(gin_file, num_experts):
     # Convert a google style config to the hugging face fromat
     import regex as re
+
     with open(gin_file, "r") as f:
         raw_gin = f.read()
 
@@ -137,7 +161,7 @@ def convert_gin_to_config(gin_file, num_experts):
     args = {}
     for param, value in regex_match:
         if param in GIN_TO_CONFIG_MAPPING and value != "":
-            args[GIN_TO_CONFIG_MAPPING[param]] = float(value) if '.' in value else int(value)
+            args[GIN_TO_CONFIG_MAPPING[param]] = float(value) if "." in value else int(value)
 
     activation = re.findall(r"(.*activations) = \(\'(.*)\',\)", raw_gin)[0]
     args[GIN_TO_CONFIG_MAPPING[activation[0]]] = str(activation[1])
@@ -146,7 +170,10 @@ def convert_gin_to_config(gin_file, num_experts):
     config = SwitchTransformersConfig(**args)
     return config
 
-def convert_flax_checkpoint_to_pytorch(flax_checkpoint_path, config_file, gin_file = None, pytorch_dump_path = "./", num_experts = 8):
+
+def convert_flax_checkpoint_to_pytorch(
+    flax_checkpoint_path, config_file, gin_file=None, pytorch_dump_path="./", num_experts=8
+):
     # Initialise PyTorch model
 
     print(f"Loading flax weights from : {flax_checkpoint_path}")
@@ -154,12 +181,12 @@ def convert_flax_checkpoint_to_pytorch(flax_checkpoint_path, config_file, gin_fi
 
     if gin_file is not None:
         config = convert_gin_to_config(gin_file, num_experts)
-    else :
+    else:
         config = SwitchTransformersConfig.from_pretrained(config_file)
 
     pt_model = SwitchTransformersForConditionalGeneration(config)
 
-    flax_params = flax_params['target']
+    flax_params = flax_params["target"]
     flax_params = flatten_dict(flax_params, sep="/")
     flax_params = rename_keys(flax_params)
     flax_params = unflatten_dict(flax_params, sep="/")
@@ -169,7 +196,6 @@ def convert_flax_checkpoint_to_pytorch(flax_checkpoint_path, config_file, gin_fi
 
     print(f"Save PyTorch model to {pytorch_dump_path}")
     pt_model.save_pretrained(pytorch_dump_path)
-
 
 
 if __name__ == "__main__":
@@ -186,7 +212,11 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--gin_file", default=None, type=str, required=False, help="Path to the gin config file. If not provided, a `config_file` has to be passed   "
+        "--gin_file",
+        default=None,
+        type=str,
+        required=False,
+        help="Path to the gin config file. If not provided, a `config_file` has to be passed   ",
     )
     parser.add_argument(
         "--config_name", default=None, type=str, required=False, help="Config name of SwitchTransformers model."
@@ -194,10 +224,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output pytorch model."
     )
-    parser.add_argument(
-        "--num_experts", default=8, type=str, required=False, help="Number of experts"
-    )
+    parser.add_argument("--num_experts", default=8, type=str, required=False, help="Number of experts")
     args = parser.parse_args()
     convert_flax_checkpoint_to_pytorch(
-        args.switch_t5x_checkpoint_path, args.config_name, args.gin_file,args.pytorch_dump_folder_path, args.num_experts
+        args.switch_t5x_checkpoint_path,
+        args.config_name,
+        args.gin_file,
+        args.pytorch_dump_folder_path,
+        args.num_experts,
     )
