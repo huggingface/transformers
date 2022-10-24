@@ -21,7 +21,6 @@ from packaging import version
 
 from transformers import ViltConfig, is_torch_available, is_vision_available
 from transformers.models.auto import get_values
-from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
@@ -42,6 +41,7 @@ if is_torch_available():
         ViltModel,
     )
     from transformers.models.vilt.modeling_vilt import VILT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10
 
 if is_vision_available():
     import PIL
