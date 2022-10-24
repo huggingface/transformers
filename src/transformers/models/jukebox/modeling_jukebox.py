@@ -863,7 +863,6 @@ class JukeboxVQVAE(PreTrainedModel):
         >>> zs = [torch.randint(100, (4, 1))]
         >>> model.decode(zs).shape
         torch.Size([4, 8, 1])
-
         ```"""
 
         # Encode/Decode
@@ -2821,7 +2820,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
               353, 1306, 1379, 1053,  519,  653, 1631, 1467, 1229, 1229,   10, 1647,
              1254, 1229, 1306, 1528, 1789,  216, 1631, 1434,  653,  475, 1150, 1528,
              1804,  541, 1804, 1434]])
-
         ```"""
 
         top_prior = self.priors[-1]
