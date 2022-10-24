@@ -36,8 +36,6 @@ if is_torch_available():
     )
     from transformers.models.switch_transformers.modeling_switch_transformers import (
         SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
-    from transformers.models.switch_transformers.router import (
         ExpertsChooseMaskedRouter,
         TokensChooseMaskedRouter,
         load_balancing_loss_func,
@@ -962,7 +960,7 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         )
         model = TokensChooseMaskedRouter(config)
 
-        model.router_weights.weight = torch.nn.Parameter(
+        model.classifier.weight = torch.nn.Parameter(
             torch.Tensor(
                 [
                     [0.02008116, 0.00620062],
@@ -1032,7 +1030,7 @@ class SwitchTransformerRouterTest(unittest.TestCase):
 
         model = ExpertsChooseMaskedRouter(config)
 
-        model.router_weights.weight = torch.nn.Parameter(
+        model.classifier.weight = torch.nn.Parameter(
             torch.Tensor([[-0.00107201, 0.01544739], [-0.0087319, 0.01314363], [0.03530733, 0.03709853]]).t()
         )
 
