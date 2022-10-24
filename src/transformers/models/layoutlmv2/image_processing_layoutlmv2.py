@@ -110,7 +110,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
             dimensions to the specified `size`.
-        size (`Dict[str, int]` *optional*, defaults to {"height": 224, "width": 224}):
+        size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
             Set the class default for the `size` parameter. Size of the image after resizing.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
@@ -130,7 +130,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
-        resample=PILImageResampling.BILINEAR,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         apply_ocr: bool = True,
         ocr_lang: Optional[str] = None,
         tesseract_config: Optional[str] = "",
@@ -156,7 +156,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Resize an image to (size["height"], size["width"]).
+        Resize an image to `(size["height"], size["width"])`.
 
         Args:
             image (`np.ndarray`):
@@ -177,7 +177,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
-        resample=None,
+        resample: PILImageResampling = None,
         apply_ocr: bool = None,
         ocr_lang: Optional[str] = None,
         tesseract_config: Optional[str] = None,
@@ -194,7 +194,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
                 Desired size of the output image after resizing.
-            resample (`int`, *optional*, defaults to `self.resample`):
+            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PIL.Image` resampling
                 filter. Only has an effect if `do_resize` is set to `True`.
             apply_ocr (`bool`, *optional*, defaults to `self.apply_ocr`):

@@ -111,7 +111,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
             dimensions to the specified `size`.
-        size (`Dict[str, int]` *optional*, defaults to {"height": 224, "width": 224}):
+        size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
             Set the class default for the `size` parameter. Controls the size of the image after resizing.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
