@@ -183,8 +183,8 @@ class TopPLogitsWarper(LogitsWarper):
 
     def __init__(self, top_p: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         top_p = float(top_p)
-        if top_p < 0 or top_p > 1.0:
-            raise ValueError(f"`top_p` has to be a float > 0 and < 1, but is {top_p}")
+        if top_p <= 0.0 or top_p >= 1.0:
+            raise ValueError(f"`top_p` has to be a float > 0.0 and < 1.0, but is {top_p}")
 
         self.top_p = top_p
         self.filter_value = filter_value
