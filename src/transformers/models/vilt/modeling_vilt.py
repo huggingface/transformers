@@ -19,7 +19,6 @@ import math
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -42,6 +41,12 @@ from .configuration_vilt import ViltConfig
 
 logger = logging.get_logger(__name__)
 
+if not is_torch_greater_or_equal_than_1_10:
+    logger.warning(
+        f"You are using torch=={torch.__version__}, but torch>=1.10.0 is required to use "
+        "ViltModel. Please upgrade torch."
+    )
+
 _CONFIG_FOR_DOC = "ViltConfig"
 _CHECKPOINT_FOR_DOC = "dandelin/vilt-b32-mlm"
 
@@ -49,17 +54,6 @@ VILT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "dandelin/vilt-b32-mlm",
     # See all ViLT models at https://huggingface.co/models?filter=vilt
 ]
-
-def meshgrid(*args, **kwargs):
-    """
-    Will use either torch.meshgrid (available in PyTorch 1.11+) or np.meshgrid according to what is available.
-    The latter is, of course, less efficient.
-    """
-
-    if is_torch_greater_or_equal_than_1_10:
-        return torch.meshgrid(*args, **kwargs)
-    else:
-        return tuple(torch.tensor(a) for a in np.meshgrid(*args, **kwargs))
 
 
 @dataclass
@@ -144,7 +138,7 @@ class ViltEmbeddings(nn.Module):
         x = x.flatten(2).transpose(1, 2)
         # Set `device` here, otherwise `patch_index` will always be on `CPU` and will fail near the end for torch>=1.13
         patch_index = torch.stack(
-            meshgrid(torch.arange(x_mask.shape[-2]), torch.arange(x_mask.shape[-1]), indexing="ij"), dim=-1
+            torch.meshgrid(torch.arange(x_mask.shape[-2]), torch.arange(x_mask.shape[-1]), indexing="ij"), dim=-1
         ).to(device=x_mask.device)
         patch_index = patch_index[None, None, :, :, :]
         patch_index = patch_index.expand(x_mask.shape[0], x_mask.shape[1], -1, -1, -1)
