@@ -29,7 +29,7 @@
     title: Compartir modelos personalizados
   - sections:
     - local: tasks/question_answering
-      title: Contestación de preguntas
+      title: Respuesta a preguntas
     - local: tasks/language_modeling
       title: Modelado de lenguaje
     - local: tasks/summarization
