@@ -133,13 +133,13 @@ class FlavaImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
             dimensions to the specified `size`.
-        size (`Dict[str, int]` *optional*, defaults to {"height": 224, "width": 224}):
+        size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
             Set the class default for the `size` parameter. Controls the size of the image after resizing.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
             Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_center_crop` parameter. Controls whether to center crop the images
-        crop_size (`Dict[str, int]` *optional*, defaults to {"height": 224, "width": 224}):
+        crop_size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
             Set the class default for the `crop_size` parameter. Size of image after the center crop.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
@@ -170,7 +170,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         codebook_do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for `codebook_do_resize`. Whether to resize the input for codebook to a certain
             `codebook_size`.
-        codebook_size (`Dict[str, int]`, *optional*, defaults to {"height": 224, "width": 224}):
+        codebook_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Set the class default for `codebook_size`. Resize the input for codebook to the given size.
         codebook_resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
             Set the class default for `codebook_resample`. Defines the resampling filter to use if resizing the
@@ -179,7 +179,7 @@ class FlavaImageProcessor(BaseImageProcessor):
             Set the class default for `codebook_do_center_crop`. Whether to crop the input for codebook at the center.
             If the input size is smaller than `codebook_crop_size` along any edge, the image is padded with 0's and
             then center cropped.
-        codebook_crop_size (`Dict[str, int]`, *optional*, defaults to {"height": 224, "width": 224}):
+        codebook_crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Set the class default for `codebook_crop_size`. Desired output size for codebook input when applying
             center-cropping.
         codebook_do_rescale (`bool`, *optional*, defaults to `True`):
@@ -207,10 +207,10 @@ class FlavaImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = 224,
+        size: Dict[str, int] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_center_crop: bool = True,
-        crop_size: Dict[str, int] = 224,
+        crop_size: Dict[str, int] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -227,16 +227,16 @@ class FlavaImageProcessor(BaseImageProcessor):
         # Codebook related params
         return_codebook_pixels: bool = False,
         codebook_do_resize: bool = True,
-        codebook_size: bool = 112,
+        codebook_size: bool = None,
         codebook_resample: int = PILImageResampling.LANCZOS,
         codebook_do_center_crop: bool = True,
-        codebook_crop_size: int = 112,
+        codebook_crop_size: int = None,
         codebook_do_rescale: bool = True,
         codebook_rescale_factor: Union[int, float] = 1 / 255,
         codebook_do_map_pixels: bool = True,
         codebook_do_normalize: bool = True,
-        codebook_image_mean: Optional[Union[float, Iterable[float]]] = FLAVA_CODEBOOK_MEAN,
-        codebook_image_std: Optional[Union[float, Iterable[float]]] = FLAVA_CODEBOOK_STD,
+        codebook_image_mean: Optional[Union[float, Iterable[float]]] = None,
+        codebook_image_std: Optional[Union[float, Iterable[float]]] = None,
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
@@ -280,7 +280,8 @@ class FlavaImageProcessor(BaseImageProcessor):
         self.codebook_do_map_pixels = codebook_do_map_pixels
         self.codebook_do_normalize = codebook_do_normalize
         self.codebook_image_mean = codebook_image_mean
-        self.codebook_image_std = codebook_image_std
+        self.codebook_image_mean = codebook_image_mean if codebook_image_mean is not None else FLAVA_CODEBOOK_MEAN
+        self.codebook_image_std = codebook_image_std if codebook_image_std is not None else FLAVA_CODEBOOK_STD
 
     @lru_cache()
     def masking_generator(
@@ -310,7 +311,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Resize an image to (size["height"], size["width"]).
+        Resize an image to `(size["height"], size["width"])`.
 
         Args:
             image (`np.ndarray`):
@@ -335,10 +336,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Center crop an image.
-
-        If crop_size is an int, then the image is cropped to (crop_size, crop_size). If crop_size is an iterable of
-        length 2, then the image is cropped to (crop_size[0], crop_size[1]). If the input size is smaller than
+        Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than
         `crop_size` along any edge, the image is padded with 0's and then center cropped.
 
         Args:
