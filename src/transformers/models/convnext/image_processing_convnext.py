@@ -60,9 +60,9 @@ class ConvNextImageProcessor(BaseImageProcessor):
             dimensions to the specified `size`.
         size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 384}`):
             Set the class default for the `size` parameter. Controls the resolution of the output image after `resize`
-            is applied. If `size["shortest_edge"]` >= 384, the image is resized to (`size["shortest_edge"]`,
-            `size["shortest_edge"]`). Otherwise, the smaller edge of the image will be matched to
-            int(`size["shortest_edge"]`/`crop_pct`), after which the image is cropped to `(size["shortest_edge"],
+            is applied. If `size["shortest_edge"]` >= 384, the image is resized to `(size["shortest_edge"],
+            size["shortest_edge"])`. Otherwise, the smaller edge of the image will be matched to
+            `int(size["shortest_edge"]/crop_pct)`, after which the image is cropped to `(size["shortest_edge"],
             size["shortest_edge"])`. Only has an effect if `do_resize` is set to `True`.
         crop_pct (`float` *optional*, defaults to 244 / 256):
             Set the class default for the `crop_pct` parameter. The percentage of the image to crop. Only has an effect
@@ -129,14 +129,14 @@ class ConvNextImageProcessor(BaseImageProcessor):
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
-                Dictionary of the form {"shortest_edge": int}, specifying the size of the output image. If
-                size["shortest_edge" >= 384 image is resized to (`size["shortest_edge"], `size["shortest_edge"]`).
-                Otherwise, the smaller edge of the image will be matched to int(`size["shortest_edge"]`/`crop_pct`),
-                after which the image is cropped to (`size["shortest_edge"], `size["shortest_edge"]`).
+                Dictionary of the form `{"shortest_edge": int}`, specifying the size of the output image. If
+                `size["shortest_edge"]` >= 384 image is resized to `(size["shortest_edge"], size["shortest_edge"])`.
+                Otherwise, the smaller edge of the image will be matched to `int(size["shortest_edge"] / crop_pct)`,
+                after which the image is cropped to `(size["shortest_edge"], size["shortest_edge"])`.
             crop_pct (`float`):
                 Percentage of the image to crop. Only has an effect if size < 384.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                Resampling filter to use when resiizing the image.
+                Resampling filter to use when resizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
@@ -224,8 +224,8 @@ class ConvNextImageProcessor(BaseImageProcessor):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the output image after `resize` has been applied. If `size["shortest_edge"]` >= 384, the image
-                is resized to (`size["shortest_edge"]`, `size["shortest_edge"]`). Otherwise, the smaller edge of the
-                image will be matched to int(`size["shortest_edge"]`/`crop_pct`), after which the image is cropped to
+                is resized to `(size["shortest_edge"], size["shortest_edge"])`. Otherwise, the smaller edge of the
+                image will be matched to `int(size["shortest_edge"]/ crop_pct)`, after which the image is cropped to
                 `(size["shortest_edge"], size["shortest_edge"])`. Only has an effect if `do_resize` is set to `True`.
             crop_pct (`float`, *optional*, defaults to `self.crop_pct`):
                 Percentage of the image to crop if size < 384.
