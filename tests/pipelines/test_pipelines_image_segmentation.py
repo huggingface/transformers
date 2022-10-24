@@ -165,14 +165,14 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             pipe("http://images.cocodataset.org/val2017/000000039769.jpg", subtask="panoptic")
         self.assertEqual(
             str(e.exception),
-            "subtask panoptic is not supported for model <class"
+            "Subtask panoptic is not supported for model <class"
             " 'transformers.models.mobilevit.modeling_mobilevit.MobileViTForSemanticSegmentation'>",
         )
         with self.assertRaises(ValueError) as e:
             pipe("http://images.cocodataset.org/val2017/000000039769.jpg", subtask="instance")
         self.assertEqual(
             str(e.exception),
-            "subtask instance is not supported for model <class"
+            "Subtask instance is not supported for model <class"
             " 'transformers.models.mobilevit.modeling_mobilevit.MobileViTForSemanticSegmentation'>",
         )
 
@@ -183,7 +183,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         model = AutoModelForImageSegmentation.from_pretrained(model_id)
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
         image_segmenter = ImageSegmentationPipeline(
-            model=model, feature_extractor=feature_extractor, subtask="panoptic",
+            model=model,
+            feature_extractor=feature_extractor,
+            subtask="panoptic",
             threshold=0.0,
             mask_threshold=0.0,
             overlap_mask_area_threshold=0.0,
@@ -206,12 +208,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                     "label": "LABEL_215",
                     "mask": {"hash": "a01498ca7c", "shape": (480, 640), "white_pixels": 307200},
                 },
-                {
-                    "label": "LABEL_215",
-                    "mask": {"hash": "b431e0946c", "shape": (480, 640), "white_pixels": 298249},
-                    "score": None,
-                },
-            ]
+            ],
         )
 
         outputs = image_segmenter(
@@ -232,10 +229,6 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                         "score": 0.004,
                         "label": "LABEL_215",
                         "mask": {"hash": "a01498ca7c", "shape": (480, 640), "white_pixels": 307200},
-                    {
-                        "label": "LABEL_215",
-                        "mask": {"hash": "b431e0946c", "shape": (480, 640), "white_pixels": 298249},
-                        "score": None,
                     },
                 ],
                 [
@@ -244,12 +237,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                         "label": "LABEL_215",
                         "mask": {"hash": "a01498ca7c", "shape": (480, 640), "white_pixels": 307200},
                     },
-                    {
-                        "label": "LABEL_215",
-                        "mask": {"hash": "b431e0946c", "shape": (480, 640), "white_pixels": 298249},
-                        "score": None,
-                    },
-                ]
+                ],
             ],
         )
 
@@ -282,10 +270,12 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
     @slow
     def test_integration_torch_image_segmentation(self):
         model_id = "facebook/detr-resnet-50-panoptic"
-        image_segmenter = pipeline("image-segmentation", model=model_id,
+        image_segmenter = pipeline(
+            "image-segmentation",
+            model=model_id,
             threshold=0.0,
             overlap_mask_area_threshold=0.0,
-                                   )
+        )
 
         outputs = image_segmenter(
             "http://images.cocodataset.org/val2017/000000039769.jpg",
@@ -416,6 +406,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
     @require_torch
     @slow
     def test_threshold(self):
+        self.maxDiff = None
         model_id = "facebook/detr-resnet-50-panoptic"
         image_segmenter = pipeline("image-segmentation", model=model_id)
 
@@ -440,9 +431,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             ],
         )
 
-        outputs = image_segmenter(
-            "http://images.cocodataset.org/val2017/000000039769.jpg", threshold=0.5
-        )
+        outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", threshold=0.5)
 
         for o in outputs:
             o["mask"] = mask_to_test_readable(o["mask"])
