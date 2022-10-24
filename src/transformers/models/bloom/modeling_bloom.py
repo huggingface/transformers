@@ -239,15 +239,15 @@ def _split_heads(
     fused_qkv: torch.Tensor, num_heads: int, head_dim: int
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Split the last dimension into (num_heads, head_dim) without making any copies, results share same memory
-    storage as `fused_qkv`
+    Split the last dimension into (num_heads, head_dim) without making any copies, results share same memory storage as
+    `fused_qkv`
 
     Args:
         fused_qkv (`torch.tensor`, *required*): [batch_size, seq_length, num_heads * 3 * head_dim]
 
     Returns:
-        query: [batch_size, seq_length, num_heads, head_dim] key: [batch_size, seq_length, num_heads, head_dim]
-        value: [batch_size, seq_length, num_heads, head_dim]
+        query: [batch_size, seq_length, num_heads, head_dim] key: [batch_size, seq_length, num_heads, head_dim] value:
+        [batch_size, seq_length, num_heads, head_dim]
     """
     batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
     fused_qkv = fused_qkv.view(batch_size, seq_length, num_heads, 3 * head_dim)
@@ -383,7 +383,7 @@ class BloomAttention(nn.Module):
             attention_probs = attention_probs * head_mask
 
         # matmul: [batch_size * num_heads, q_length, head_dim]
-        context_layer = torch.bmm(attention_probs, value_layer, out=query_layer)
+        context_layer = torch.bmm(attention_probs, value_layer)
 
         # change view [batch_size, num_heads, q_length, head_dim]
         context_layer = _merge_heads(context_layer, num_heads=num_heads, head_dim=head_dim)
@@ -609,6 +609,18 @@ BLOOM_START_DOCSTRING = r"""
         config ([`BloomConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+        process_group ([`torch.distributed.ProcessGroup`], *optional*):
+            If present, the model will load using Tensor Parallelism so Linear layers will load ParallelLinearXXX
+            equivalent instead:
+                - `nn.Embedding` will become `TensorParallelEmbedding`.
+                - `query_key_value` and `dense_h_to_4h` become `TensorParallelColumnLinear`.
+                - `dense` and `dense_4h_to_h` become `TensorParallelRowLinear`. This includes a `process_group` gather
+                  op.
+            When using this mode, be really careful about the weights loading, for instance, only the first device of
+            `TensorParallelColumnLinear` should use the bias. Please refer to
+            [this](https://github.com/huggingface/transformers_bloom_parallel/blob/main/generate.py#L226) for
+            instructions
+
 """
 
 BLOOM_INPUTS_DOCSTRING = r"""
