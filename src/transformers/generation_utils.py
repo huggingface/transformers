@@ -1775,10 +1775,7 @@ class GenerationMixin:
             )
 
         # keep track of which sequences are already finished
-        # unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
-        # XXX: rebase artefact trying to gauge if needed or not.
         unfinished_sequences = input_ids.new_full((input_ids.shape[0],), fill_value=True, dtype=torch.bool)
-        # cur_len = input_ids.shape[-1]
 
         this_peer_finished = False  # used by synced_gpus only
         while True:
