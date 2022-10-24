@@ -400,7 +400,9 @@ class ModelTesterMixin:
                 for key in model_fast_init.state_dict().keys():
                     if random_key_to_del.endswith(key):
                         continue
-                    max_diff = torch.max(torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key])).item()
+                    max_diff = torch.max(
+                        torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key])
+                    ).item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_initialization(self):
