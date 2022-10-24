@@ -117,7 +117,7 @@ class DeiTImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Resize an image to (size["height"], size["width"]) using the specified resampling filter.
+        Resize an image to `(size["height"], size["width"])` using the specified resampling filter.
 
         Args:
             image (`np.ndarray`):
@@ -142,7 +142,7 @@ class DeiTImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Center crop an image to (crop_size["height"], crop_size["width"]). If the input size is smaller than
+        Center crop an image to `(crop_size["height"], crop_size["width"])`. If the input size is smaller than
         `crop_size` along any edge, the image is padded with 0's and then center cropped.
 
         Args:
