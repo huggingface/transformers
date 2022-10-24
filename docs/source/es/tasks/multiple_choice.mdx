@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 
 # Selección múltiple
 
-La tarea de selección múltiple es parecida a la de contestar preguntas, con la excepción de que se dan varias opciones de respuesta junto con el contexto. El modelo se entrena para escoger la respuesta correcta
+La tarea de selección múltiple es parecida a la de responder preguntas, con la excepción de que se dan varias opciones de respuesta junto con el contexto. El modelo se entrena para escoger la respuesta correcta
 entre varias opciones a partir del contexto dado.
 
 Esta guía te mostrará como hacerle fine-tuning a [BERT](https://huggingface.co/bert-base-uncased) en la configuración `regular` del dataset [SWAG](https://huggingface.co/datasets/swag), de forma
@@ -254,7 +254,7 @@ Para familiarizarte con el fine-tuning con Keras, ¡mira el tutorial básico [aq
 
 </Tip>
 
-Prepara una función optimizadora, un programa para la tasa de aprendizaje y algunos hiperparámetros de entrenamiento:
+Prepara una función de optimización, un programa para la tasa de aprendizaje y algunos hiperparámetros de entrenamiento:
 
 ```py
 >>> from transformers import create_optimizer
