@@ -42,6 +42,8 @@ if is_torch_available():
     )
     from transformers.models.vilt.modeling_vilt import VILT_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10
+else:
+    is_torch_greater_or_equal_than_1_10 = False
 
 if is_vision_available():
     import PIL
