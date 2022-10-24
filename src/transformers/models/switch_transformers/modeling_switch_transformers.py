@@ -142,12 +142,10 @@ class SwitchTransformersLayerFF(nn.Module):
             self.mlp = SwitchTransformersDenseActDense(config)
         else:
             self.mlp = SwitchTransformersSparseMLP(config)
-        self.layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
-        forwarded_states = self.layer_norm(hidden_states)
-        forwarded_states = self.mlp(forwarded_states)
+        forwarded_states = self.mlp(hidden_states)
         hidden_states = hidden_states + self.dropout(forwarded_states)
         return hidden_states
 
@@ -221,7 +219,7 @@ class SwitchTransformersAttention(nn.Module):
         self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
 
         if self.has_relative_attention_bias:
-            self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, 32 ) #self.n_heads)
+            self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
         self.pruned_heads = set()
         self.gradient_checkpointing = False
 
