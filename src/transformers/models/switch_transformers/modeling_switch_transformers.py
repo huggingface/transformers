@@ -142,10 +142,13 @@ class SwitchTransformersLayerFF(nn.Module):
             self.mlp = SwitchTransformersDenseActDense(config)
         else:
             self.mlp = SwitchTransformersSparseMLP(config)
+
+        self.layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
-        forwarded_states = self.mlp(hidden_states)
+        forwarded_states = self.layer_norm(hidden_states)
+        forwarded_states = self.mlp(forwarded_states)
         hidden_states = hidden_states + self.dropout(forwarded_states)
         return hidden_states
 
@@ -187,6 +190,7 @@ class SwitchTransformersSparseMLP(nn.Module):
             )
 
     def forward(self, hidden_states):
+        # TODO the expert capacity is poorly computed
         expert_indices = self.router(hidden_states, expert_capacity=self.expert_capacity)
         masked_indices = expert_indices.dispatch_mask
 

@@ -55,7 +55,7 @@ MOE_LAYER_NAME_MAPPING = {
     "out": "o",
     "pre_self_attention_layer_norm": "0/layer_norm",
     "pre_cross_attention_layer_norm": "1/layer_norm",
-    "pre_attention_layer_norm": "1/layer_norm",
+    "pre_attention_layer_norm": "0/layer_norm", # previously 1, but seems wrong
     "token_embedder": "shared",
     "encoder_norm": "final_layer_norm",
     "decoder_norm": "final_layer_norm",
@@ -73,7 +73,7 @@ def rename_keys(s_dict):
         new_key = key
         if re.match(layer_to_block_of_layer, key):
             new_key = re.sub(r"layers_(\d+)", r"block/\1/layer", new_key)
-            # s_dict[new_key] = s_dict.pop(key)
+
 
         layer_to_block_of_layer = r"(encoder|decoder)\/"
 
@@ -81,11 +81,11 @@ def rename_keys(s_dict):
             groups = re.match(layer_to_block_of_layer, new_key).groups()
             if groups[0] == "encoder":
                 new_key = re.sub(r"/mlp/", r"/1/mlp/", new_key)
-                new_key = re.sub(r"/pre_mlp_layer_norm/", r"/0/layer_norm/", new_key)
+                new_key = re.sub(r"/pre_mlp_layer_norm/", r"/1/layer_norm/", new_key)
 
             elif groups[0] == "decoder":
                 new_key = re.sub(r"/mlp/", r"/2/mlp/", new_key)
-                new_key = re.sub(r"/pre_mlp_layer_norm/", r"/1/layer_norm/", new_key)
+                new_key = re.sub(r"/pre_mlp_layer_norm/", r"/2/layer_norm/", new_key)
 
         # 2. Convert other classic mappings
         for old_key, temp_key in MOE_LAYER_NAME_MAPPING.items():
@@ -107,6 +107,8 @@ def rename_keys(s_dict):
             expert_weihts = s_dict[key]
             for idx in range(num_experts):
                 s_dict[key.replace("expert/", f"experts/expert_{idx}/")] = expert_weihts[idx]
+                print(f"{key} -> {key.replace('expert/', f'experts/expert_{idx}/')}")
+
             s_dict.pop(key)
 
     return s_dict
@@ -118,16 +120,14 @@ GIN_TO_CONFIG_MAPPING = {
     "HEAD_DIM":"d_kv",
     "EMBED_DIM":"d_model",
     "MLP_DIM":"d_ff",
-    "NUM_EXPERTS":"num_experts",
     "NUM_SELECTED_EXPERTS":"num_selected_experts",
     "NUM_ENCODER_SPARSE_LAYERS":"num_sparse_encoder_layers",
     "NUM_DECODER_SPARSE_LAYERS":"num_sparse_decoder_layers",
-    "EVAL_EXPERT_CAPACITY_FACTOR":"expert_capacity",
     "dense.MlpBlock.activations":"feed_forward_proj",
 
 }
 
-def convert_gin_to_config(gin_file):
+def convert_gin_to_config(gin_file, num_experts):
     # Convert a google style config to the hugging face fromat
     import regex as re
     with open(gin_file, "r") as f:
@@ -137,32 +137,35 @@ def convert_gin_to_config(gin_file):
     args = {}
     for param, value in regex_match:
         if param in GIN_TO_CONFIG_MAPPING and value != "":
-            args[GIN_TO_CONFIG_MAPPING[param]] = float(value)
+            args[GIN_TO_CONFIG_MAPPING[param]] = float(value) if '.' in value else int(value)
 
-    activation = re.findall(r"activations = \(\'(.*)\',\)", raw_gin)
-    args[GIN_TO_CONFIG_MAPPING[activation]] = str(activation)
+    activation = re.findall(r"(.*activations) = \(\'(.*)\',\)", raw_gin)[0]
+    args[GIN_TO_CONFIG_MAPPING[activation[0]]] = str(activation[1])
+
+    args["num_experts"] = num_experts
     config = SwitchTransformersConfig(**args)
     return config
 
-def convert_flax_checkpoint_to_pytorch(flax_checkpoint_path, config_file, gin_file = None, pytorch_dump_path = "./"):
+def convert_flax_checkpoint_to_pytorch(flax_checkpoint_path, config_file, gin_file = None, pytorch_dump_path = "./", num_experts = 8):
     # Initialise PyTorch model
 
     print(f"Loading flax weights from : {flax_checkpoint_path}")
     flax_params = checkpoints.load_t5x_checkpoint(flax_checkpoint_path)
 
     if gin_file is not None:
-        config = convert_gin_to_config(gin_file)
+        config = convert_gin_to_config(gin_file, num_experts)
     else :
-        config = SwitchTransformersConfig.from_pretrained(config_file, relative_attention_num_buckets=12)
+        config = SwitchTransformersConfig.from_pretrained(config_file)
 
     pt_model = SwitchTransformersForConditionalGeneration(config)
 
-    params = flatten_dict(params, sep="/")
-    params = rename_keys(params)
-    params = unflatten_dict(params, sep="/")
+    flax_params = flax_params['target']
+    flax_params = flatten_dict(flax_params, sep="/")
+    flax_params = rename_keys(flax_params)
+    flax_params = unflatten_dict(flax_params, sep="/")
 
     # Load the flax params in the PT model
-    load_flax_weights_in_pytorch_model(pt_model, params['target'])
+    load_flax_weights_in_pytorch_model(pt_model, flax_params)
 
     print(f"Save PyTorch model to {pytorch_dump_path}")
     pt_model.save_pretrained(pytorch_dump_path)
@@ -183,15 +186,18 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--gin_file", default=None, type=str, required=True, help="Path to the gin config file. If not provided, a `config_file` has to be passed   "
+        "--gin_file", default=None, type=str, required=False, help="Path to the gin config file. If not provided, a `config_file` has to be passed   "
     )
     parser.add_argument(
-        "--config_name", default=None, type=str, required=True, help="Config name of SwitchTransformers model."
+        "--config_name", default=None, type=str, required=False, help="Config name of SwitchTransformers model."
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output pytorch model."
     )
+    parser.add_argument(
+        "--num_experts", default=8, type=str, required=False, help="Number of experts"
+    )
     args = parser.parse_args()
     convert_flax_checkpoint_to_pytorch(
-        args.switch_t5x_checkpoint_path, args.config_name, args.gin_file,args.pytorch_dump_folder_path
+        args.switch_t5x_checkpoint_path, args.config_name, args.gin_file,args.pytorch_dump_folder_path, args.num_experts
     )
