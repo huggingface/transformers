@@ -29,6 +29,13 @@ import numpy as np
 from .import_utils import is_flax_available, is_tf_available, is_torch_available, is_torch_fx_proxy
 
 
+if is_tf_available():
+    import tensorflow as tf
+
+if is_flax_available():
+    import jax.numpy as jnp
+
+
 class cached_property(property):
     """
     Descriptor that mimics @property but caches output in member variable.
@@ -370,3 +377,71 @@ def working_or_temp_dir(working_dir, use_temp_dir: bool = False):
             yield tmp_dir
     else:
         yield working_dir
+
+
+def transpose(array, axes=None):
+    """
+    Framework-agnostic version of `numpy.transpose` that will work on torch/TensorFlow/Jax tensors as well as NumPy
+    arrays.
+    """
+    if is_numpy_array(array):
+        return np.transpose(array, axes=axes)
+    elif is_torch_tensor(array):
+        return array.T if axes is None else array.permute(*axes)
+    elif is_tf_tensor(array):
+        return tf.transpose(array, perm=axes)
+    elif is_jax_tensor(array):
+        return jnp.transpose(array, axes=axes)
+    else:
+        raise ValueError(f"Type not supported for transpose: {type(array)}.")
+
+
+def reshape(array, newshape):
+    """
+    Framework-agnostic version of `numpy.reshape` that will work on torch/TensorFlow/Jax tensors as well as NumPy
+    arrays.
+    """
+    if is_numpy_array(array):
+        return np.reshape(array, newshape)
+    elif is_torch_tensor(array):
+        return array.reshape(*newshape)
+    elif is_tf_tensor(array):
+        return tf.reshape(array, newshape)
+    elif is_jax_tensor(array):
+        return jnp.reshape(array, newshape)
+    else:
+        raise ValueError(f"Type not supported for reshape: {type(array)}.")
+
+
+def squeeze(array, axis=None):
+    """
+    Framework-agnostic version of `numpy.squeeze` that will work on torch/TensorFlow/Jax tensors as well as NumPy
+    arrays.
+    """
+    if is_numpy_array(array):
+        return np.squeeze(array, axis=axis)
+    elif is_torch_tensor(array):
+        return array.squeeze() if axis is None else array.squeeze(dim=axis)
+    elif is_tf_tensor(array):
+        return tf.squeeze(array, axis=axis)
+    elif is_jax_tensor(array):
+        return jnp.squeeze(array, axis=axis)
+    else:
+        raise ValueError(f"Type not supported for squeeze: {type(array)}.")
+
+
+def expand_dims(array, axis):
+    """
+    Framework-agnostic version of `numpy.expand_dims` that will work on torch/TensorFlow/Jax tensors as well as NumPy
+    arrays.
+    """
+    if is_numpy_array(array):
+        return np.expand_dims(array, axis)
+    elif is_torch_tensor(array):
+        return array.unsqueeze(dim=axis)
+    elif is_tf_tensor(array):
+        return tf.expand_dims(array, axis=axis)
+    elif is_jax_tensor(array):
+        return jnp.expand_dims(array, axis=axis)
+    else:
+        raise ValueError(f"Type not supported for expand_dims: {type(array)}.")
