@@ -81,11 +81,13 @@ jobs:
             - run: pip install .
             - run: |
                   mkdir test_preparation
-                  echo "tests" > test_preparation/test_list.txt
-                  echo "tests" > test_preparation/examples_test_list.txt
-            - run: python utils/tests_fetcher.py --filter_tests
-            - run: mv test_list.txt test_preparation/filtered_test_list.txt
-            - run: mv test_repo_utils.txt test_preparation/test_repo_utils.txt
+                  echo -n "tests" > test_preparation/test_list.txt
+                  echo -n "tests" > test_preparation/examples_test_list.txt
+                  echo -n "tests/repo_utils" > test_preparation/test_repo_utils.txt
+            - run: |
+                  echo -n "tests" > test_list.txt
+                  python utils/tests_fetcher.py --filter_tests
+                  mv test_list.txt test_preparation/filtered_test_list.txt
             - run: python .circleci/create_circleci_config.py --fetcher_folder test_preparation
             - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
             - store_artifacts:
