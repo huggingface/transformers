@@ -1833,7 +1833,7 @@ class GenerationMixin:
         ...     **input_ids, penalty_alpha=0.6, top_k=4, stopping_criteria=stopping_criteria
         ... )
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ["DeepMind Company is a company that focuses on the development and commercialization of artificial intelligence (AI). DeepMind’s mission is to help people understand and solve problems that are difficult to solve in the world today.\n\nIn this post, we talk about the benefits of deep learning in business and how it"]
+        ['DeepMind Company is a company that focuses on the development and commercialization of artificial intelligence (AI). DeepMind’s mission is to help people understand and solve problems that are difficult to solve in the world today.\n\nIn this post, we talk about the benefits of deep learning in business and how it']
         ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
