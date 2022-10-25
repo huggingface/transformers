@@ -59,8 +59,8 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
             dimensions to the specified `size`.
-        size (`Dict[str, int]` *optional*, defaults to 256):
-            Set the class default for the `size` parameter. Size of the image.
+        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 256}`):
+            Set the class default for the `size` parameter. Controls the size of the image after resizing.
         crop_pct (`float`, *optional*, defaults to `0.9`):
             Set the class default for the `crop_pct` parameter. The percentage of the image to crop from the center.
             Only has an effect if `do_resize` is set to `True`.
@@ -69,7 +69,7 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Set the class default for `do_center_crop`. Controls whether to center crop the image. If the input size is
             smaller than `crop_size` along any edge, the image is padded with 0's and then center cropped.
-        crop_size (`Dict[str, int]`, *optional*):
+        crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 256, "width": 256}`):
             Set the class default for `crop_size`. Size of the image after applying center crop.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
@@ -133,17 +133,16 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         Resize an image.
 
         If crop_pct is unset:
-            - size is {"height": h, "width": w}: the image is resized to (h, w).
-            - size is {"shortest_edge": s}: the shortest edge of the image is resized to s whilst maintaining the
+            - size is `{"height": h, "width": w}`: the image is resized to `(h, w)`.
+            - size is `{"shortest_edge": s}`: the shortest edge of the image is resized to s whilst maintaining the
               aspect ratio.
 
         if crop_pct is set:
-            - size is {"height": h, "width": w}: the image is resized to (int(floor(h/crop_pct)),
-              int(floor(w/crop_pct)))
-            - size is {"height": c, "width": c}: the shortest edge of the image is resized to (int(floor(c/crop_pct))
-              whilst maintaining the aspect ratio.}
-            - size is {"shortest_edge": c}: the shortest edge of the image is resized to (int(floor(c/crop_pct)) whilst
-              maintaining the aspect ratio.}
+            - size is `{"height": h, "width": w}`: the image is resized to `(int(floor(h/crop_pct)), int(floor(w/crop_pct)))`
+            - size is `{"height": c, "width": c}`: the shortest edge of the image is resized to `int(floor(c/crop_pct)`
+              whilst maintaining the aspect ratio.
+            - size is `{"shortest_edge": c}`: the shortest edge of the image is resized to `int(floor(c/crop_pct)` whilst
+              maintaining the aspect ratio.
 
         Args:
             image (`np.ndarray`):
@@ -199,7 +198,7 @@ class PoolFormerImageProcessor(BaseImageProcessor):
                 Image to center crop.
             size (`Dict[str, int]`):
                 Size of the output image.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         size = get_size_dict(size)
@@ -220,7 +219,7 @@ class PoolFormerImageProcessor(BaseImageProcessor):
                 Image to rescale.
             scale (`int` or `float`):
                 Scale to apply to the image.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
@@ -243,7 +242,7 @@ class PoolFormerImageProcessor(BaseImageProcessor):
                 Image mean.
             image_std (`float` or `List[float]`):
                 Image standard deviation.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
