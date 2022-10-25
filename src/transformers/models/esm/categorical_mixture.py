@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import torch
 
+# TODO Matt: This module does not receive any config objects and does not need to be changed
 
 class CategoricalMixture:
     def __init__(self, param, bins=50, start=0, end=1):

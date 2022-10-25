@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import typing as T
+from typing import List, Union
 
 import numpy as np
 import torch
@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from einops import rearrange, repeat
 from torch import nn
 
+# TODO Matt: This module can be left unchanged except for einops removal and does not receive any config objects
 
 class Attention(nn.Module):
     def __init__(self, embed_dim, num_heads, head_width, gated=False):
@@ -79,7 +80,7 @@ class Dropout(nn.Module):
     along a particular dimension.
     """
 
-    def __init__(self, r: float, batch_dim: T.Union[int, T.List[int]]):
+    def __init__(self, r: float, batch_dim: Union[int, List[int]]):
         super(Dropout, self).__init__()
 
         self.r = r

@@ -219,12 +219,16 @@ def convert_esm_checkpoint_to_pytorch(
 
     with torch.no_grad():
         our_output = model(**hf_tokens, output_hidden_states=True)
+        our_hidden_states = our_output['hidden_states']
         our_output = our_output["logits"]
         if classification_head:
             their_output = esm.model.classification_heads["mnli"](esm.extract_features(batch_tokens))
         else:
             their_output = esm(batch_tokens, repr_layers=list(range(999)))
+            their_hidden_states = their_output['representations']
             their_output = their_output["logits"]
+
+
     print(our_output.shape, their_output.shape)
     max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
     print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-5

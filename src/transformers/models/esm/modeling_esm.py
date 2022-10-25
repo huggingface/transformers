@@ -163,7 +163,7 @@ class EsmEmbeddings(nn.Module):
             mask_ratio_train = 0.15 * 0.8  # Hardcoded as the ratio used in all ESM model training runs
             src_lengths = attention_mask.sum(-1)
             mask_ratio_observed = (input_ids == self.mask_token_id).sum(-1).float() / src_lengths
-            embeddings = embeddings * (1 - mask_ratio_train) / (1 - mask_ratio_observed)[:, None, None]
+            embeddings = (embeddings * (1 - mask_ratio_train) / (1 - mask_ratio_observed)[:, None, None]).to(embeddings.dtype)
 
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
@@ -172,7 +172,7 @@ class EsmEmbeddings(nn.Module):
         if self.layer_norm is not None:
             embeddings = self.layer_norm(embeddings)
         if attention_mask is not None:
-            embeddings = embeddings * attention_mask.unsqueeze(-1)
+            embeddings = (embeddings * attention_mask.unsqueeze(-1)).to(embeddings.dtype)
         # Matt: I think this line was copied incorrectly from BERT, disabling it for now.
         # embeddings = self.dropout(embeddings)
         return embeddings

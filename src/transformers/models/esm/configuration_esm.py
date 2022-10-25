@@ -16,10 +16,13 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from dataclasses import dataclass
+from typing import Optional
 
 
 logger = logging.get_logger(__name__)
 
+# TODO Update this
 ESM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/esm-1b": "https://huggingface.co/facebook/esm-1b/resolve/main/config.json",
     # See all ESM models at https://huggingface.co/models?filter=esm
@@ -118,6 +121,10 @@ class EsmConfig(PretrainedConfig):
         classifier_dropout=None,
         emb_layer_norm_before=None,
         token_dropout=False,
+        is_folding_model=False,
+        esmfold_config=None,
+        structure_config=None,
+        vocab_list=None,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -140,3 +147,82 @@ class EsmConfig(PretrainedConfig):
         self.token_dropout = token_dropout
         self.mask_token_id = mask_token_id
         self.pad_token_id = pad_token_id
+        self.is_folding_model = is_folding_model
+        if is_folding_model:
+            if esmfold_config is None:
+                logger.info("No esmfold_config supplied for folding model, using default values.")
+                esmfold_config = EsmFoldConfig()
+            elif isinstance(esmfold_config, dict):
+                esmfold_config = EsmFoldConfig(**esmfold_config)
+            self.esmfold_config = esmfold_config
+
+            if structure_config is None:
+                logger.info("No structure_config supplied for folding model, using default values.")
+                structure_config = StructureConfig()
+            elif isinstance(structure_config, dict):
+                structure_config = StructureConfig(**structure_config)
+            self.structure_config = structure_config
+
+            if vocab_list is None:
+                logger.warning("No vocab_list supplied for folding model, assuming the ESM-2 vocabulary!")
+                self.vocab_list = ('<cls>', '<pad>', '<eos>', '<unk>', 'L', 'A', 'G', 'V', 'S', 'E', 'R', 'T', 'I', 'D',
+                                   'P', 'K', 'Q', 'N', 'F', 'Y', 'M', 'H', 'W', 'C', 'X', 'B', 'U', 'Z', 'O', '.', '-',
+                                   '<null_1>', '<mask>')
+            else:
+                self.vocab_list = vocab_list
+        else:
+            self.esmfold_config = None
+            self.structure_config = None
+            self.vocab_list = None
+        if self.esmfold_config is not None and self.esmfold_config.use_esm_attn_map:
+            raise ValueError("The HuggingFace port of ESMFold does not support use_esm_attn_map at this time!")
+
+
+@dataclass
+class EsmFoldConfig:
+    _name: str = "ESMFoldConfig"
+    esm_type: str = None
+    fp16_esm: bool = True
+    use_esm_attn_map: bool = False
+    esm_ablate_pairwise: bool = False
+    esm_ablate_sequence: bool = False
+    esm_input_dropout: float = 0
+
+    embed_aa: bool = True
+    bypass_lm: bool = False
+
+    lddt_head_hid_dim: int = 128
+
+    trunk_num_blocks: int = 48
+    trunk_sequence_state_dim: int = 1024
+    trunk_pairwise_state_dim: int = 128
+    trunk_sequence_head_width: int = 32
+    trunk_pairwise_head_width: int = 32
+    trunk_position_bins: int = 32
+    trunk_dropout: float = 0
+    trunk_layer_drop: float = 0
+    trunk_cpu_grad_checkpoint: bool = False
+    trunk_max_recycles: int = 4
+    trunk_chunk_size: Optional[int] = 128
+
+@dataclass
+class StructureConfig:
+    # This is passed to OpenFold, so we can't really fold this into one of our config objects
+    c_s: int = 384
+    c_z: int = 128
+    c_ipa: int = 16
+    c_resnet: int = 128
+    no_heads_ipa: int = 12
+    no_qk_points: int = 4
+    no_v_points: int = 8
+    dropout_rate: float = 0.1
+    no_blocks: int = 8
+    no_transition_layers: int = 1
+    no_resnet_blocks: int = 2
+    no_angles: int = 7
+    trans_scale_factor: int = 10
+    epsilon: float = 1e-8
+    inf: float = 1e5
+
+
+

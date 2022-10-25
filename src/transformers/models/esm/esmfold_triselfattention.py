@@ -3,11 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import torch
-from openfold.model.triangular_attention import (
+from .openfold_triangular_attention import (
     TriangleAttentionEndingNode,
     TriangleAttentionStartingNode,
 )
-from openfold.model.triangular_multiplicative_update import (
+from .openfold_triangular_multiplicative_update import (
     TriangleMultiplicationIncoming,
     TriangleMultiplicationOutgoing,
 )
@@ -21,6 +21,7 @@ from .misc import (
     SequenceToPair,
 )
 
+# TODO Matt: This module can be left unchanged and does not receive any config objects
 
 class TriangularSelfAttentionBlock(nn.Module):
     def __init__(
