@@ -32,7 +32,7 @@ class ImageSegmentationPipeline(Pipeline):
     Image segmentation pipeline using any `AutoModelForXXXSegmentation`. This pipeline predicts masks of objects and
     their classes.
 
-    This image segmentation pipeline can currently be loaded from [`pipeline`] using the following subtask identifier:
+    This image segmentation pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"image-segmentation"`.
 
     See the list of available models on
