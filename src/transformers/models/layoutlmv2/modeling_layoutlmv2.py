@@ -18,6 +18,23 @@ import math
 from typing import Optional, Tuple, Union
 import tensorflow as tf
 
+from ...activations_tf import get_tf_activation
+from ...modeling_tf_outputs import (
+    TFBaseModelOutput,
+    TFQuestionAnsweringModelOutput,
+    TFSequenceClassifierOutput,
+    TFTokenClassifierOutput,
+)
+from ...modeling_tf_utils import (
+    TFPreTrainedModel,
+    TFQuestionAnsweringLoss,
+    TFSequenceClassificationLoss,
+    TFTokenClassificationLoss,
+    get_initializer,
+    keras_serializable,
+    unpack_inputs,
+)
+
 import torch
 import torch.utils.checkpoint
 from torch import nn
