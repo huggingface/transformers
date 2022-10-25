@@ -119,12 +119,12 @@ class ElectraConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import ElectraModel, ElectraConfig
+    >>> from transformers import ElectraConfig, ElectraModel
 
     >>> # Initializing a ELECTRA electra-base-uncased style configuration
     >>> configuration = ElectraConfig()
 
-    >>> # Initializing a model from the electra-base-uncased style configuration
+    >>> # Initializing a model (with random weights) from the electra-base-uncased style configuration
     >>> model = ElectraModel(configuration)
 
     >>> # Accessing the model configuration

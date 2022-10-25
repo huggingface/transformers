@@ -78,10 +78,10 @@ class GPTNeoXConfig(PretrainedConfig):
     >>> configuration = GPTNeoXConfig()
 
     >>> # Initializing a model (with random weights) from the gpt-neox-20b style configuration
-    >>> model = GPTNeoXModel(configuration)
+    >>> model = GPTNeoXModel(configuration)  # doctest: +SKIP
 
     >>> # Accessing the model configuration
-    >>> configuration = model.config
+    >>> configuration = model.config  # doctest: +SKIP
     ```"""
     model_type = "gpt_neox"
 
