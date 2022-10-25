@@ -459,7 +459,7 @@ class TokensChooseMaskedRouter(Router):
         self.batch_prioritized_routing = config.batch_prioritized_routing
 
     def _compute_routing_instructions(
-        self, router_probs: torch.Tensor, padding_mask: Optional[torch.Tensor], expert_capacity: int
+        self, router_probs: torch.Tensor, padding_mask: Optional[torch.Tensor], expert_capacity: int = None
     ) -> RouterMask:
         """
         Computes masks for the top-k experts per token.
@@ -546,14 +546,14 @@ class TokensChooseMaskedRouter(Router):
         # Shape: [num_groups, tokens_per_group, num_experts, expert_capacity].
         # token_priority = token_priority * (token_priority > 0)
 
-        # TODO can we improve the function name or use torch's?
+        # TODO remove this
         # dispatch_mask = torch.nn.functional.one_hot(token_priority.long(), expert_capacity + 1)[..., 1:]
         dispatch_mask = _jax_one_hot(token_priority.long(), expert_capacity, axis=-1)
 
         # The combine array will be used for combining expert outputs, scaled by the
         # router probabilities. Shape: [num_groups, tokens_per_group, num_experts,
         # expert_capacity].
-        # TODO can we use more understandable code here?
+        # TODO remove this
         combine_array = torch.einsum("...te,...tec->...tec", router_probs, dispatch_mask)
         # combine_array = torch.einsum("...te,...te->...te", router_probs, dispatch_mask)
 
@@ -690,17 +690,23 @@ class SwitchTransformersSparseMLP(nn.Module):
             )
 
     def forward(self, hidden_states):
-        # TODO the expert capacity is poorly computed
-        expert_indices = self.router(hidden_states, expert_capacity=self.expert_capacity)
-        masked_indices = expert_indices.dispatch_mask
+        router_mask = self.router(hidden_states, expert_capacity = 64)
+        masked_indices = router_mask.dispatch_mask
+
+        probs, _ = self.router._compute_router_probabilities(hidden_states,num_experts=8,apply_jitter=False)
+
+        # computations in the router have to be done in float16
+
 
         dispatched_tokens = int(torch.sum(masked_indices))
         for idx, expert in enumerate(self.experts.values()):
             # 1. Get the index of the tokens that are routed to the current expert
-            expert_indices = masked_indices[:, :, idx, :].sum(dim = -1).bool()
+            token_indices = masked_indices[:, :, idx].sum(-1).bool()
             # 2. Update hidden states
-            print(f"{expert_indices.sum()}/{dispatched_tokens} tokens will be dispatched to expert {idx}")
-            hidden_states[expert_indices] = expert(hidden_states[expert_indices])
+            print(f"{token_indices.sum()}/{dispatched_tokens} tokens will be dispatched to expert {idx}")
+            hidden_states[token_indices] = expert(hidden_states[token_indices])
+
+        hidden_states = torch.max(probs,dim=-1).values.unsqueeze(-1) * hidden_states
         return hidden_states
 
 
