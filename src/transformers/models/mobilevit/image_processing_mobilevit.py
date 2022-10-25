@@ -308,3 +308,46 @@ class MobileViTImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
+        """
+        Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps. Only supports
+        PyTorch.
+        Args:
+            outputs ([`MobileViTForSemanticSegmentation`]):
+                Raw outputs of the model.
+            target_sizes (`List[Tuple]`, *optional*):
+                A list of length `batch_size`, where each item is a `Tuple[int, int]` corresponding to the requested
+                final size (height, width) of each prediction. If left to None, predictions will not be resized.
+        Returns:
+            `List[torch.Tensor]`:
+                A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
+                corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
+                `torch.Tensor` correspond to a semantic class id.
+        """
+        # TODO: add support for other frameworks
+        logits = outputs.logits
+
+        # Resize logits and compute semantic segmentation maps
+        if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+            if is_torch_tensor(target_sizes):
+                target_sizes = target_sizes.numpy()
+
+            semantic_segmentation = []
+
+            for idx in range(len(logits)):
+                resized_logits = torch.nn.functional.interpolate(
+                    logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                )
+                semantic_map = resized_logits[0].argmax(dim=0)
+                semantic_segmentation.append(semantic_map)
+        else:
+            semantic_segmentation = logits.argmax(dim=1)
+            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+
+        return semantic_segmentation
