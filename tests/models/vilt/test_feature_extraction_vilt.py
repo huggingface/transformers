@@ -43,12 +43,13 @@ class ViltFeatureExtractionTester(unittest.TestCase):
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        size={"shortest_edge": 30},
+        size=None,
         size_divisor=2,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
+        size = size if size is not None else {"shortest_edge": 30}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels

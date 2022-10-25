@@ -159,10 +159,10 @@ class ViltImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
             dimensions to the specified `size`.
-        size (`Dict[str, int]` *optional*, defaults to {"shortest_edge": 384}):
+        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 384}`):
             Set the class default for the `size` parameter. Resize the shorter side of the input to
-            `size["shortest_edge"]`. The longer side will be limited to under int((1333 / 800) *
-            `size["shortest_edge"]`) while preserving the aspect ratio. Only has an effect if `do_resize` is set to
+            `size["shortest_edge"]`. The longer side will be limited to under `int((1333 / 800) *
+            size["shortest_edge"])` while preserving the aspect ratio. Only has an effect if `do_resize` is set to
             `True`.
         size_divisor (`int`, *optional*, defaults to 32):
             Set the class default for `size_divisor`. The size by which to make sure both the height and width can be
@@ -182,8 +182,8 @@ class ViltImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Set the class default for `image_std`. Image standard deviation.
         do_pad (`bool`, *optional*, defaults to `True`):
-            Set the class default for `do_pad`. Controls whether to pad the image to the (max_height, max_width) of the
-            images.
+            Set the class default for `do_pad`. Controls whether to pad the image to the `(max_height, max_width)` of
+            the images.
     """
 
     model_input_names = ["pixel_values"]
@@ -233,15 +233,15 @@ class ViltImageProcessor(BaseImageProcessor):
         Resize an image.
 
         Resizes the shorter side of the image to `size["shortest_edge"]` while preserving the aspect ratio. If the
-        longer side is larger than the max size (int(`size["shortest_edge"]` * 1333 / 800)), the longer side is then
+        longer side is larger than the max size `(int(`size["shortest_edge"]` * 1333 / 800))`, the longer side is then
         resized to the max size while preserving the aspect ratio.
 
         Args:
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
-                Controls the size of the output image. Should be of the form {"shortest_edge": int}.
-            size_divisor (`int`):
+                Controls the size of the output image. Should be of the form `{"shortest_edge": int}`.
+            size_divisor (`int`, defaults to 32):
                 The image is resized to a size that is a multiple of this value.
             resample (`PILImageResampling` filter, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Resampling filter to use when resiizing the image.
@@ -288,9 +288,9 @@ class ViltImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to normalize.
-            image_mean (`float` or `List[float]`):
+            mean (`float` or `List[float]`):
                 Image mean.
-            image_std (`float` or `List[float]`):
+            std (`float` or `List[float]`):
                 Image standard deviation.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
@@ -394,7 +394,8 @@ class ViltImageProcessor(BaseImageProcessor):
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
                 Controls the size of the image after `resize`. The shortest edge of the image is resized to
                 `size["shortest_edge"]` whilst preserving the aspect ratio. If the longest edge of this resized image
-                is > `int(size["shortest_edge"] * (1333 / )
+                is > `int(size["shortest_edge"] * (1333 / 800))`, then the image is resized again to make the longest
+                edge equal to `int(size["shortest_edge"] * (1333 / 800))`.
             size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
                 The image is resized to a size that is a multiple of this value.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
@@ -410,7 +411,7 @@ class ViltImageProcessor(BaseImageProcessor):
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to normalize the image by if `do_normalize` is set to `True`.
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
-                Whether to pad the image to the (max_height, max_width) in the batch. If True, a pixel mask is also
+                Whether to pad the image to the (max_height, max_width) in the batch. If `True`, a pixel mask is also
                 created and returned.
             return_tensors (`str`, *optional*):
                 The type of tensors to return. Can be one of:
