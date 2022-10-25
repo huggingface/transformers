@@ -241,6 +241,48 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             ],
         )
 
+        output = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", subtask="instance")
+        for o in output:
+            o["mask"] = mask_to_test_readable(o["mask"])
+        self.assertEqual(
+            nested_simplify(output, decimals=4),
+            [
+                {
+                    "score": 0.004,
+                    "label": "LABEL_215",
+                    "mask": {"hash": "a01498ca7c", "shape": (480, 640), "white_pixels": 307200},
+                },
+            ],
+        )
+
+        # This must be surprising to the reader.
+        # The `panoptic` returns only LABEL_215, and this returns 3 labels.
+        #
+        output = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", subtask="semantic")
+        for o in output:
+            o["mask"] = mask_to_test_readable(o["mask"])
+        self.maxDiff = None
+        self.assertEqual(
+            nested_simplify(output, decimals=4),
+            [
+                {
+                    "label": "LABEL_88",
+                    "mask": {"hash": "7f0bf661a4", "shape": (480, 640), "white_pixels": 3},
+                    "score": None,
+                },
+                {
+                    "label": "LABEL_101",
+                    "mask": {"hash": "10ab738dc9", "shape": (480, 640), "white_pixels": 8948},
+                    "score": None,
+                },
+                {
+                    "label": "LABEL_215",
+                    "mask": {"hash": "b431e0946c", "shape": (480, 640), "white_pixels": 298249},
+                    "score": None,
+                },
+            ],
+        )
+
     @require_torch
     def test_small_model_pt_semantic(self):
         model_id = "hf-internal-testing/tiny-random-beit-pipeline"
@@ -406,7 +448,6 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
     @require_torch
     @slow
     def test_threshold(self):
-        self.maxDiff = None
         model_id = "facebook/detr-resnet-50-panoptic"
         image_segmenter = pipeline("image-segmentation", model=model_id)
 

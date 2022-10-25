@@ -64,6 +64,7 @@ class ImageSegmentationPipeline(Pipeline):
             postprocess_kwargs["mask_threshold"] = kwargs["mask_threshold"]
         if "overlap_mask_area_threshold" in kwargs:
             postprocess_kwargs["overlap_mask_area_threshold"] = kwargs["overlap_mask_area_threshold"]
+
         return {}, {}, postprocess_kwargs
 
     def __call__(self, images, **kwargs) -> Union[Predictions, List[Prediction]]:
@@ -80,9 +81,10 @@ class ImageSegmentationPipeline(Pipeline):
 
                 The pipeline accepts either a single image or a batch of images. Images in a batch must all be in the
                 same format: all as HTTP(S) links, all as local paths, or all as PIL images.
-            subtask (`str`, defaults to `panoptic`):
+            subtask (`str`, *optional*):
                 Segmentation task to be performed, choose [`semantic`, `instance` and `panoptic`] depending on model
-                capabilities.
+                capabilities. If not set, the pipeline will attempt tp resolve in the following order:
+                  `panoptic`, `instance`, `semantic`.
             threshold (`float`, *optional*, defaults to 0.9):
                 Probability threshold to filter out predicted masks.
             mask_threshold (`float`, *optional*, defaults to 0.5):
@@ -104,7 +106,6 @@ class ImageSegmentationPipeline(Pipeline):
             - **score** (*optional* `float`) -- Optionally, when the model is capable of estimating a confidence of the
               "object" described by the label and the mask.
         """
-
         return super().__call__(images, **kwargs)
 
     def preprocess(self, image):
@@ -123,6 +124,7 @@ class ImageSegmentationPipeline(Pipeline):
     def postprocess(
         self, model_outputs, subtask=None, threshold=0.9, mask_threshold=0.5, overlap_mask_area_threshold=0.5
     ):
+
         fn = None
         if subtask in {"panoptic", None} and hasattr(self.feature_extractor, "post_process_panoptic_segmentation"):
             fn = self.feature_extractor.post_process_panoptic_segmentation
