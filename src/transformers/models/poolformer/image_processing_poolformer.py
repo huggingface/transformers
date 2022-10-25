@@ -138,11 +138,12 @@ class PoolFormerImageProcessor(BaseImageProcessor):
               aspect ratio.
 
         if crop_pct is set:
-            - size is `{"height": h, "width": w}`: the image is resized to `(int(floor(h/crop_pct)), int(floor(w/crop_pct)))`
+            - size is `{"height": h, "width": w}`: the image is resized to `(int(floor(h/crop_pct)),
+              int(floor(w/crop_pct)))`
             - size is `{"height": c, "width": c}`: the shortest edge of the image is resized to `int(floor(c/crop_pct)`
               whilst maintaining the aspect ratio.
-            - size is `{"shortest_edge": c}`: the shortest edge of the image is resized to `int(floor(c/crop_pct)` whilst
-              maintaining the aspect ratio.
+            - size is `{"shortest_edge": c}`: the shortest edge of the image is resized to `int(floor(c/crop_pct)`
+              whilst maintaining the aspect ratio.
 
         Args:
             image (`np.ndarray`):
