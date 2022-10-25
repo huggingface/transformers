@@ -16,6 +16,7 @@
 
 import math
 from typing import Optional, Tuple, Union
+import tensorflow as tf
 
 import torch
 import torch.utils.checkpoint
@@ -207,13 +208,13 @@ class LayoutLMv2Attention(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
-        rel_pos=None,
-        rel_2d_pos=None,
-    ):
+        hidden_states: tf.Tensor,
+        attention_mask: Optional[tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        output_attentions: bool = False,
+        rel_pos: Optional[tf.Tensor] = None,
+        rel_2d_pos: Optional[tf.Tensor] = None
+    ) -> Union[Tuple[tf.Tensor], Tuple[tf.Tensor, tf.Tensor]]:
         self_outputs = self.self(
             hidden_states,
             attention_mask,
@@ -283,13 +284,13 @@ class LayoutLMv2Layer(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
-        rel_pos=None,
-        rel_2d_pos=None,
-    ):
+        hidden_states: tf.Tensor,
+        attention_mask: Optional[tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        output_attentions: bool = False,
+        rel_pos: Optional[tf.Tensor] = None,
+        rel_2d_pos: Optional[tf.Tensor] = None,
+    ) -> Union[Tuple[tf.Tensor], Tuple[tf.Tensor, tf.Tensor]]:
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
