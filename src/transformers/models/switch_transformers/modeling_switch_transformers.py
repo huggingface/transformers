@@ -697,9 +697,9 @@ class SwitchTransformersSparseMLP(nn.Module):
         dispatched_tokens = int(torch.sum(masked_indices))
         for idx, expert in enumerate(self.experts.values()):
             # 1. Get the index of the tokens that are routed to the current expert
-            expert_indices = torch.argmax(masked_indices[:, :, idx, :], -1).bool()
+            expert_indices = masked_indices[:, :, idx, :].sum(dim = -1).bool()
             # 2. Update hidden states
-            print(f"{(masked_indices[:, :, idx, :]).sum()}/{dispatched_tokens} tokens will be dispatched to expert {idx}")
+            print(f"{expert_indices.sum()}/{dispatched_tokens} tokens will be dispatched to expert {idx}")
             hidden_states[expert_indices] = expert(hidden_states[expert_indices])
         return hidden_states
 
