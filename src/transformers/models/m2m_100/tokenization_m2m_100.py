@@ -280,7 +280,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
     def get_vocab(self) -> Dict:
-        vocab = self.encoder.copy()
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
