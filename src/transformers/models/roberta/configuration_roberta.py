@@ -17,10 +17,9 @@
 from collections import OrderedDict
 from typing import Mapping
 
+from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
-
-from ...configuration_utils import PretrainedConfig
 
 
 logger = logging.get_logger(__name__)
@@ -40,51 +39,44 @@ class RobertaConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`RobertaModel`] or a [`TFRobertaModel`]. It is
     used to instantiate a RoBERTa model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the RoBERTa
-    [roberta-base](https://huggingface.co/roberta-base) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    The [`RobertaConfig`] class directly inherits [`BertConfig`]. It reuses the same defaults. Please check the parent
-    class for more information.
-
-    Examples:
-
+    [roberta-base](https://huggingface.co/roberta-base) architecture. Configuration objects inherit from
+    [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from [`PretrainedConfig`]
+    for more information. The [`RobertaConfig`] class directly inherits [`BertConfig`]. It reuses the same defaults.
+    Please check the parent class for more information. Examples:
     ```python
     >>> from transformers import RobertaConfig, RobertaModel
 
     >>> # Initializing a RoBERTa configuration
     >>> configuration = RobertaConfig()
-
     >>> # Initializing a model (with random weights) from the configuration
     >>> model = RobertaModel(configuration)
-
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
     model_type = "roberta"
 
     def __init__(
-                self,
-                vocab_size=30522,
-                hidden_size=768,
-                num_hidden_layers=12,
-                num_attention_heads=12,
-                intermediate_size=3072,
-                hidden_act="gelu",
-                hidden_dropout_prob=0.1,
-                attention_probs_dropout_prob=0.1,
-                max_position_embeddings=512,
-                type_vocab_size=2,
-                initializer_range=0.02,
-                layer_norm_eps=1e-12,
-                pad_token_id=1,
-                position_embedding_type="absolute",
-                use_cache=True,
-                classifier_dropout=None,
-                bos_token_id=0,
-                eos_token_id=2,
-                **kwargs):
+        self,
+        vocab_size=30522,
+        hidden_size=768,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        intermediate_size=3072,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=2,
+        initializer_range=0.02,
+        layer_norm_eps=1e-12,
+        pad_token_id=1,
+        position_embedding_type="absolute",
+        use_cache=True,
+        classifier_dropout=None,
+        bos_token_id=0,
+        eos_token_id=2,
+        **kwargs
+    ):
         """Constructs RobertaConfig."""
         super().__init__(pad_token_id=pad_token_id, **kwargs)
         self.vocab_size = vocab_size
@@ -102,8 +94,8 @@ class RobertaConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
-        self.bos_token_id=bos_token_id
-        self.eos_token_id=eos_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
 
 class RobertaOnnxConfig(OnnxConfig):
