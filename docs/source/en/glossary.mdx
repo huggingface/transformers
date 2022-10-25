@@ -12,288 +12,180 @@ specific language governing permissions and limitations under the License.
 
 # Glossary
 
-## General terms
+This glossary defines general machine learning and 🤗 Hugging Face terms to help you better understand the documentation.
 
-- autoencoding models: see MLM
-- autoregressive models: see CLM
-- CLM: causal language modeling, a pretraining task where the model reads the texts in order and has to predict the
-  next word. It's usually done by reading the whole sentence but using a mask inside the model to hide the future
-  tokens at a certain timestep.
-- deep learning: machine learning algorithms which uses neural networks with several layers.
-- MLM: masked language modeling, a pretraining task where the model sees a corrupted version of the texts, usually done
-  by masking some tokens randomly, and has to predict the original text.
-- multimodal: a task that combines texts with another kind of inputs (for instance images).
-- NLG: natural language generation, all tasks related to generating text (for instance talk with transformers,
-  translation).
-- NLP: natural language processing, a generic way to say "deal with texts".
-- NLU: natural language understanding, all tasks related to understanding what is in a text (for instance classifying
-  the whole text, individual words).
-- pretrained model: a model that has been pretrained on some data (for instance all of Wikipedia). Pretraining methods
-  involve a self-supervised objective, which can be reading the text and trying to predict the next word (see CLM) or
-  masking some words and trying to predict them (see MLM).
-- RNN: recurrent neural network, a type of model that uses a loop over a layer to process texts.
-- self-attention: each element of the input finds out which other elements of the input they should attend to.
-- seq2seq or sequence-to-sequence: models that generate a new sequence from an input, like translation models, or
-  summarization models (such as [Bart](model_doc/bart) or [T5](model_doc/t5)).
-- token: a part of a sentence, usually a word, but can also be a subword (non-common words are often split in subwords)
-  or a punctuation symbol.
-- transformer: self-attention based deep learning model architecture.
+## A
 
-## Model inputs
+### attention mask
+ 
+A tensor filled with 0's and 1's that is identical in shape to the input id tensor. The attention mask determines which tokens should be attended to (indicated by 1's) and which tokens should be ignored (indicated by 0's) by the model's attention layers. When you pass text to a [`PreTrainedTokenizer`], it'll automatically create and return the attention mask depending on the specific tokenizer used.
 
-Every model is different yet bears similarities with the others. Therefore most models use the same inputs, which are
-detailed here alongside usage examples.
+Used when batching sequences of different lengths together to create a rectangular tensor. Padded values are represented by 0's, meaning they shouldn't be attended to because they don't contain any meaningful information. For example:
 
+```py
+>>> from transformers import AutoTokenizer
 
+>>> text = [
+...   "But what about second breakfast?",
+...   "Don't think he knows about second breakfast, Pip.",
+...   "What about elevensies?",
+... ]
+>>> encoded_inputs = tokenizer(text, padding=True)
+>>> print(encoded_inputs)
+{'input_ids': [[101, 1252, 1184, 1164, 1248, 6462, 136, 102, 0, 0, 0, 0, 0, 0, 0], [101, 1790, 112, 189, 1341, 1119, 3520, 1164, 1248, 6462, 117, 21902, 1643, 119, 102], [101, 1327, 1164, 5450, 23434, 136, 102, 0, 0, 0, 0, 0, 0, 0, 0]], 
+'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 
+'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]]}
+```
 
-### Input IDs
+## C
 
-The input ids are often the only required parameters to be passed to the model as input. *They are token indices,
-numerical representations of tokens building the sequences that will be used as input by the model*.
+### causal language modeling
 
-<Youtube id="VFp38yj8h3A"/>
+A pretraining objective where a model is trained to predict the next token giving the tokens it has already attended to at a certain timestep. A mask is used to prevent the attention heads from attending to future tokens. Models pretrained on causal language modeling - also known as *autoregressive models* - are great for generative tasks; [GPT-2](model_doc/gpt2) is an example of a famous causal language model.
 
-Each tokenizer works differently but the underlying mechanism remains the same. Here's an example using the BERT
-tokenizer, which is a [WordPiece](https://arxiv.org/pdf/1609.08144.pdf) tokenizer:
+## D
+
+### deep learning
+
+A specific subset of machine learning algorithms that have multiple layers to learn increasingly complex representations of data (text, images, and video).
+
+### decoder input ids
+
+A tensor specific to encoder-decoder models (such as [BART](model_doc/bart) and [T5](model_doc/t5)) containing the input ids to be passed to the decoder. These inputs are used for sequence-to-sequence tasks such as translation or summarization. Most encoder-decoder models typically create the `decoder_input_ids` on their own from the `labels`, and it's the preferred way for training the model.
+
+```py
+>>> from transformers import T5Tokenizer, T5ForConditionalGeneration
+
+>>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+>>> model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
+
+>>> inputs = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="tf").input_ids
+>>> labels = tokenizer("<extra_id_0> cute dog <extra_id_1> the <extra_id_2>", return_tensors="tf").input_ids
+# the forward function automatically creates the decoder_input_ids from the labels
+>>> outputs = model(inputs, labels=labels)
+```
+
+## F
+
+### feed-forward chunking
+
+A method developed by the authors of [Reformer](https://arxiv.org/abs/2001.04451) that reduces memory use at the cost of increased computation time. In each residual attention block, the self-attention layer is usually followed by 2 feed-forward layers. The intermediate embedding size of these feed-forward layers is often quite large, and the memory required to calculate it consumes a large amount of memory. By calculating the output embeddings of the 2 feed-forward layers in parallel and then concatenating them afterward, you end up using less memory but the results are the same.
+
+In 🤗 Transformers, you can use the [`~transformers.apply_chunking_to_forward`] function to apply feed-forward chunking. The `chunk_size` parameter defines the number of output embeddings to be computed in parallel.
+
+## I
+
+### input ids
+
+A tensor of the numerical representations of tokens that are passed to the model as the input. Tokens are generated from a tokenizer which splits a sequence of text into words or subwords depending on the [tokenizer type](tokenizer_summary).  
 
 ```python
 >>> from transformers import BertTokenizer
 
 >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
-
 >>> sequence = "A Titan RTX has 24GB of VRAM"
-```
-
-The tokenizer takes care of splitting the sequence into tokens available in the tokenizer vocabulary.
-
-```python
->>> tokenized_sequence = tokenizer.tokenize(sequence)
-```
-
-The tokens are either words or subwords. Here for instance, "VRAM" wasn't in the model vocabulary, so it's been split
-in "V", "RA" and "M". To indicate those tokens are not separate words but parts of the same word, a double-hash prefix
-is added for "RA" and "M":
-
-```python
->>> print(tokenized_sequence)
-['A', 'Titan', 'R', '##T', '##X', 'has', '24', '##GB', 'of', 'V', '##RA', '##M']
-```
-
-These tokens can then be converted into IDs which are understandable by the model. This can be done by directly feeding
-the sentence to the tokenizer, which leverages the Rust implementation of [🤗 Tokenizers](https://github.com/huggingface/tokenizers) for peak performance.
-
-```python
->>> inputs = tokenizer(sequence)
-```
-
-The tokenizer returns a dictionary with all the arguments necessary for its corresponding model to work properly. The
-token indices are under the key "input_ids":
-
-```python
->>> encoded_sequence = inputs["input_ids"]
->>> print(encoded_sequence)
+>>> tokenizer(sequence).input_ids
 [101, 138, 18696, 155, 1942, 3190, 1144, 1572, 13745, 1104, 159, 9664, 2107, 102]
 ```
 
-Note that the tokenizer automatically adds "special tokens" (if the associated model relies on them) which are special
-IDs the model sometimes uses.
+## L
 
-If we decode the previous sequence of ids,
+### labels
 
-```python
->>> decoded_sequence = tokenizer.decode(encoded_sequence)
-```
+An optional tensor passed to the model to compute the loss itself. The labels should be the expected prediction of
+the model; the model uses the standard loss to compute the loss between its predictions and the expected value (the
+label). Base models in 🤗 Transformers don't accept labels because they only output features.
 
-we will see
+Models with different modeling heads have different labels formats:
 
-```python
->>> print(decoded_sequence)
-[CLS] A Titan RTX has 24GB of VRAM [SEP]
-```
+- For sequence classification models ([`BertForSequenceClassification`]), the model expects a tensor of dimension
+  `(batch_size)` with each value of the batch corresponding to the expected label of the entire sequence.
+- For token classification models ([`BertForTokenClassification`]), the model expects a tensor of dimension
+  `(batch_size, seq_length)` with each value corresponding to the expected label of each individual token.
+- For masked language modeling ([`BertForMaskedLM`]), the model expects a tensor of dimension `(batch_size,
+  seq_length)` with each value corresponding to the expected label of each individual token. The labels are the token
+  ids for the masked token, and the values to be ignored (usually set to `-100`).
+- For sequence-to-sequence tasks ([`BartForConditionalGeneration`] or [`MBartForConditionalGeneration`]), the model
+  expects a tensor of dimension `(batch_size, tgt_seq_length)` with each value corresponding to the target sequences
+  associated with each input sequence. During training, BART and T5 creates the appropriate `decoder_input_ids` and
+  decoder attention masks (you don't need to provide these). However, this does not apply to models using the
+  Encoder-Decoder framework. See the documentation of each model for more information on each specific model's labels.
 
-because this is the way a [`BertModel`] is going to expect its inputs.
+## M
 
+### masked language modeling
 
+A pretraining objective where a model is trained to predict a randomly masked token in a sequence. Unlike [causal language modeling](#causal-language-modeling), the model is allowed to attend to tokens bidirectionally. Models pretrained on masked language modeling - also known as *autoencoding models* - are great for comprehension tasks; [BERT](model_doc/bert) is an example of a famous masked language model.
 
-### Attention mask
+### multimodal
 
-The attention mask is an optional argument used when batching sequences together.
+An input combining text with other types of inputs like image and audio.
 
-<Youtube id="M6adb1j2jPI"/>
+## N
 
-This argument indicates to the model which tokens should be attended to, and which should not.
+### natural language generation (NLG)
 
-For example, consider these two sequences:
+A subset of NLP focused on generating text such as translation and abstractive text summarization.
 
-```python
->>> from transformers import BertTokenizer
+### natural language processing (NLP)
 
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+An overarching field encompassing NLG and NLU, and can be used to refer to any text related tasks.
 
->>> sequence_a = "This is a short sequence."
->>> sequence_b = "This is a rather long sequence. It is at least longer than the sequence A."
+### natural language understanding (NLU)
 
->>> encoded_sequence_a = tokenizer(sequence_a)["input_ids"]
->>> encoded_sequence_b = tokenizer(sequence_b)["input_ids"]
-```
+A subset of NLP focused on reading comprehension such as sentiment analysis and question answering.
 
-The encoded versions have different lengths:
+## P
 
-```python
->>> len(encoded_sequence_a), len(encoded_sequence_b)
-(8, 19)
-```
+### position ids
 
-Therefore, we can't put them together in the same tensor as-is. The first sequence needs to be padded up to the length
-of the second one, or the second one needs to be truncated down to the length of the first one.
+An optional tensor passed to the model to indicate the position of each token in a sequence because a Transformer model is unaware. The position ids are automatically created as absolute positional embeddings, which are selected between `[0, config.max_position_embeddings - 1]`.
 
-In the first case, the list of IDs will be extended by the padding indices. We can pass a list to the tokenizer and ask
-it to pad like this:
+  Other types fo positional embeddings include sinusoidal position embeddings and relative position embeddings.
 
-```python
->>> padded_sequences = tokenizer([sequence_a, sequence_b], padding=True)
-```
+### pretrained model
 
-We can see that 0s have been added on the right of the first sentence to make it the same length as the second one:
+A model that has been pretrained on some data, for instance all of Wikipedia. Pretraining tasks involve a self-supervised objective such as reading the text and trying to predict the next word (see [causal language modeling](#causal-language-modeling)) or masking some words and trying to predict them (see [MLM](#masked-language-modeling)).
 
-```python
->>> padded_sequences["input_ids"]
-[[101, 1188, 1110, 170, 1603, 4954, 119, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [101, 1188, 1110, 170, 1897, 1263, 4954, 119, 1135, 1110, 1120, 1655, 2039, 1190, 1103, 4954, 138, 119, 102]]
-```
+## R
 
-This can then be converted into a tensor in PyTorch or TensorFlow. The attention mask is a binary tensor indicating the
-position of the padded indices so that the model does not attend to them. For the [`BertTokenizer`],
-`1` indicates a value that should be attended to, while `0` indicates a padded value. This attention mask is
-in the dictionary returned by the tokenizer under the key "attention_mask":
+### recurrent neural network (RNN)
 
-```python
->>> padded_sequences["attention_mask"]
-[[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]
-```
+A type deep learning model that uses a for-loop to iterate over a layer.
 
+## S
 
+### self-attention
 
-### Token Type IDs
+An attention mechanism where each element of the input finds out which other elements of the input they should attend to, helping the model gain a beter "understanding" of the context and word.
 
-Some models' purpose is to do classification on pairs of sentences or question answering.
+### sequence-to-sequence (seq2seq)
 
-<Youtube id="0u3ioSwev3s"/>
+An encoder-decoder model (such as [BART](model_doc/bart) or [T5](model_doc/t5)) accepts an input sequence and outputs another sequence. These types of models are great for summarization and translation.
 
-These require two different sequences to be joined in a single "input_ids" entry, which usually is performed with the
-help of special tokens, such as the classifier (`[CLS]`) and separator (`[SEP]`) tokens. For example, the BERT
-model builds its two sequence input as such:
+## T
 
-```python
->>> # [CLS] SEQUENCE_A [SEP] SEQUENCE_B [SEP]
-```
+### token
 
-We can use our tokenizer to automatically generate such a sentence by passing the two sequences to `tokenizer` as two
-arguments (and not a list, like before) like this:
+A part of a sentence, usually a word but it can also be a subword (non-common words are often split in subwords) or a punctuation symbol. Tokens are generated by tokenizers according to specific rules, and the token is converted to [input ids](#input-ids).
 
-```python
+### token type ids
+
+A tensor for identifying which tokens belong to which input sequence when there is more than one sequence. This helps a model understand where a sequence ends and another begins. The token type ids are automatically generated by the tokenizer if the model requires them. 
+
+For example, in [`BERT`], `0` corresponds to `sequence_a` and `1` corresponds to `sequence_b`.
+
+```py
 >>> from transformers import BertTokenizer
 
 >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
 >>> sequence_a = "HuggingFace is based in NYC"
 >>> sequence_b = "Where is HuggingFace based?"
 
->>> encoded_dict = tokenizer(sequence_a, sequence_b)
->>> decoded = tokenizer.decode(encoded_dict["input_ids"])
-```
-
-which will return:
-
-```python
->>> print(decoded)
-[CLS] HuggingFace is based in NYC [SEP] Where is HuggingFace based? [SEP]
-```
-
-This is enough for some models to understand where one sequence ends and where another begins. However, other models,
-such as BERT, also deploy token type IDs (also called segment IDs). They are represented as a binary mask identifying
-the two types of sequence in the model.
-
-The tokenizer returns this mask as the "token_type_ids" entry:
-
-```python
->>> encoded_dict["token_type_ids"]
+>>> tokenizer(sequence_a, sequence_b).token_type_ids
 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 ```
 
-The first sequence, the "context" used for the question, has all its tokens represented by a `0`, whereas the
-second sequence, corresponding to the "question", has all its tokens represented by a `1`.
+### Transformer
 
-Some models, like [`XLNetModel`] use an additional token represented by a `2`.
-
-
-
-### Position IDs
-
-Contrary to RNNs that have the position of each token embedded within them, transformers are unaware of the position of
-each token. Therefore, the position IDs (`position_ids`) are used by the model to identify each token's position in
-the list of tokens.
-
-They are an optional parameter. If no `position_ids` are passed to the model, the IDs are automatically created as
-absolute positional embeddings.
-
-Absolute positional embeddings are selected in the range `[0, config.max_position_embeddings - 1]`. Some models use
-other types of positional embeddings, such as sinusoidal position embeddings or relative position embeddings.
-
-
-
-### Labels
-
-The labels are an optional argument which can be passed in order for the model to compute the loss itself. These labels
-should be the expected prediction of the model: it will use the standard loss in order to compute the loss between its
-predictions and the expected value (the label).
-
-These labels are different according to the model head, for example:
-
-- For sequence classification models (e.g., [`BertForSequenceClassification`]), the model expects a
-  tensor of dimension `(batch_size)` with each value of the batch corresponding to the expected label of the
-  entire sequence.
-- For token classification models (e.g., [`BertForTokenClassification`]), the model expects a tensor
-  of dimension `(batch_size, seq_length)` with each value corresponding to the expected label of each individual
-  token.
-- For masked language modeling (e.g., [`BertForMaskedLM`]), the model expects a tensor of dimension
-  `(batch_size, seq_length)` with each value corresponding to the expected label of each individual token: the
-  labels being the token ID for the masked token, and values to be ignored for the rest (usually -100).
-- For sequence to sequence tasks,(e.g., [`BartForConditionalGeneration`],
-  [`MBartForConditionalGeneration`]), the model expects a tensor of dimension `(batch_size, tgt_seq_length)` with each value corresponding to the target sequences associated with each input sequence. During
-  training, both *BART* and *T5* will make the appropriate *decoder_input_ids* and decoder attention masks internally.
-  They usually do not need to be supplied. This does not apply to models leveraging the Encoder-Decoder framework. See
-  the documentation of each model for more information on each specific model's labels.
-
-The base models (e.g., [`BertModel`]) do not accept labels, as these are the base transformer
-models, simply outputting features.
-
-
-
-### Decoder input IDs
-
-This input is specific to encoder-decoder models, and contains the input IDs that will be fed to the decoder. These
-inputs should be used for sequence to sequence tasks, such as translation or summarization, and are usually built in a
-way specific to each model.
-
-Most encoder-decoder models (BART, T5) create their `decoder_input_ids` on their own from the `labels`. In
-such models, passing the `labels` is the preferred way to handle training.
-
-Please check each model's docs to see how they handle these input IDs for sequence to sequence training.
-
-
-### Feed Forward Chunking
-
-In each residual attention block in transformers the self-attention layer is usually followed by 2 feed forward layers.
-The intermediate embedding size of the feed forward layers is often bigger than the hidden size of the model (e.g., for
-`bert-base-uncased`).
-
-For an input of size `[batch_size, sequence_length]`, the memory required to store the intermediate feed forward
-embeddings `[batch_size, sequence_length, config.intermediate_size]` can account for a large fraction of the memory
-use. The authors of [Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451) noticed that since the
-computation is independent of the `sequence_length` dimension, it is mathematically equivalent to compute the output
-embeddings of both feed forward layers `[batch_size, config.hidden_size]_0, ..., [batch_size, config.hidden_size]_n`
-individually and concat them afterward to `[batch_size, sequence_length, config.hidden_size]` with `n = sequence_length`, which trades increased computation time against reduced memory use, but yields a mathematically
-**equivalent** result.
-
-For models employing the function [`apply_chunking_to_forward`], the `chunk_size` defines the
-number of output embeddings that are computed in parallel and thus defines the trade-off between memory and time
-complexity. If `chunk_size` is set to 0, no feed forward chunking is done.
+A self-attention based deep learning model architecture introduced in the [Attention Is All You Need](https://arxiv.org/abs/1706.03762) paper. We built a super cool [library](https://huggingface.co/docs/transformers/index) on it. 🤗
