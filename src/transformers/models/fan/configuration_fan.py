@@ -28,7 +28,11 @@ FAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "ksmcg/fan_large_24_p16_224": "https://huggingface.co/ksmcg/fan_large_24_p16_224/resolve/main/config.json",
 }
 
+original_feature_mapping = {"num_heads": "num_attention_heads"}
 
+# TODO: FANConfig Attributes rewrite
+# TODO: FANConfig features rename
+# ISSUE: Move configuration to nvidia/fan
 class FANConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`~FANModel`].
@@ -42,15 +46,11 @@ class FANConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the FAN model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~FANModel`] or
-            [`~TFFANModel`].
-        hidden_size (`int`, *optional*, defaults to 768):
+        embed_dim (`int`, *optional*, defaults to 384):
             Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
@@ -96,7 +96,7 @@ class FANConfig(PretrainedConfig):
         embed_dim=384,
         depth=12,
         depths=None,
-        num_heads=8,
+        num_attention_heads=8,
         eta=1.0,
         tokens_norm=True,
         sharpen_attn=False,
@@ -140,7 +140,7 @@ class FANConfig(PretrainedConfig):
         head_init_scale = head_init_scale
         self.depth = depth
         self.depths = depths
-        self.num_heads = num_heads
+        self.num_attention_heads = num_attention_heads
         self.eta = eta
         self.tokens_norm = tokens_norm
         self.sharpen_attn = sharpen_attn

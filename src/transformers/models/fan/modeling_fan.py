@@ -425,10 +425,10 @@ class MlpOri(nn.Module):
 class ClassAttn(nn.Module):
     # taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
     # with slight modifications to do CA
-    def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0.0, proj_drop=0.0):
+    def __init__(self, dim, num_attention_heads=8, qkv_bias=False, attn_drop=0.0, proj_drop=0.0):
         super().__init__()
-        self.num_heads = num_heads
-        head_dim = dim // num_heads
+        self.num_attention_heads = num_attention_heads
+        head_dim = dim // num_attention_heads
         self.scale = head_dim**-0.5
 
         self.q = nn.Linear(dim, dim, bias=qkv_bias)
@@ -440,11 +440,16 @@ class ClassAttn(nn.Module):
 
     def forward(self, x, return_attention=False):
         B, N, C = x.shape
-        q = self.q(x[:, 0]).unsqueeze(1).reshape(B, 1, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
-        k = self.k(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        q = (
+            self.q(x[:, 0])
+            .unsqueeze(1)
+            .reshape(B, 1, self.num_attention_heads, C // self.num_attention_heads)
+            .permute(0, 2, 1, 3)
+        )
+        k = self.k(x).reshape(B, N, self.num_attention_heads, C // self.num_attention_heads).permute(0, 2, 1, 3)
 
         q = q * self.scale
-        v = self.v(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        v = self.v(x).reshape(B, N, self.num_attention_heads, C // self.num_attention_heads).permute(0, 2, 1, 3)
 
         attn = q @ k.transpose(-2, -1)
         attn = attn.softmax(dim=-1)
@@ -465,7 +470,7 @@ class ClassAttentionBlock(nn.Module):
     def __init__(
         self,
         dim,
-        num_heads,
+        num_attention_heads,
         mlp_ratio=4.0,
         qkv_bias=False,
         drop=0.0,
@@ -481,7 +486,7 @@ class ClassAttentionBlock(nn.Module):
 
         self.attn = ClassAttn(
             dim,
-            num_heads=num_heads,
+            num_attention_heads=num_attention_heads,
             qkv_bias=qkv_bias,
             attn_drop=attn_drop,
             proj_drop=drop,
@@ -529,7 +534,7 @@ class TokenMixing(nn.Module):
     def __init__(
         self,
         dim,
-        num_heads=8,
+        num_attention_heads=8,
         qkv_bias=False,
         qk_scale=None,
         attn_drop=0.0,
@@ -546,11 +551,13 @@ class TokenMixing(nn.Module):
         norm_layer=nn.LayerNorm,
     ):
         super().__init__()
-        assert dim % num_heads == 0, f"dim {dim} should be divided by num_heads {num_heads}."
+        assert (
+            dim % num_attention_heads == 0
+        ), f"dim {dim} should be divided by num_attention_heads {num_attention_heads}."
 
         self.dim = dim
-        self.num_heads = num_heads
-        head_dim = dim // num_heads
+        self.num_attention_heads = num_attention_heads
+        head_dim = dim // num_attention_heads
         self.scale = qk_scale or head_dim**-0.5
 
         self.share_atten = share_atten
@@ -583,10 +590,14 @@ class TokenMixing(nn.Module):
 
     def forward(self, x, H, W, atten=None, return_attention=False):
         B, N, C = x.shape
-        q = self.q(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        q = self.q(x).reshape(B, N, self.num_attention_heads, C // self.num_attention_heads).permute(0, 2, 1, 3)
 
         # import pdb;pdb.set_trace()
-        kv = self.kv(x).reshape(B, -1, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        kv = (
+            self.kv(x)
+            .reshape(B, -1, 2, self.num_attention_heads, C // self.num_attention_heads)
+            .permute(2, 0, 3, 1, 4)
+        )
 
         k, v = kv[0], kv[1]
         attn = q * self.scale @ k.transpose(-2, -1)  # * self.scale
@@ -661,7 +672,7 @@ class ChannelProcessing(nn.Module):
     def __init__(
         self,
         dim,
-        num_heads=8,
+        num_attention_heads=8,
         qkv_bias=False,
         attn_drop=0.0,
         linear=False,
@@ -674,14 +685,16 @@ class ChannelProcessing(nn.Module):
         c_head_num=None,
     ):
         super().__init__()
-        assert dim % num_heads == 0, f"dim {dim} should be divided by num_heads {num_heads}."
+        assert (
+            dim % num_attention_heads == 0
+        ), f"dim {dim} should be divided by num_attention_heads {num_attention_heads}."
 
         self.dim = dim
-        num_heads = c_head_num or num_heads
-        self.num_heads = num_heads
-        self.temperature = nn.Parameter(torch.ones(num_heads, 1, 1))
+        num_attention_heads = c_head_num or num_attention_heads
+        self.num_attention_heads = num_attention_heads
+        self.temperature = nn.Parameter(torch.ones(num_attention_heads, 1, 1))
 
-        self.cha_sr_ratio = cha_sr_ratio if num_heads > 1 else 1
+        self.cha_sr_ratio = cha_sr_ratio if num_attention_heads > 1 else 1
 
         # config of mlp for v processing
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
@@ -725,10 +738,10 @@ class ChannelProcessing(nn.Module):
 
     def forward(self, x, H, W, atten=None):
         B, N, C = x.shape
-        v = x.reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        v = x.reshape(B, N, self.num_attention_heads, C // self.num_attention_heads).permute(0, 2, 1, 3)
 
-        q = self.q(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
-        k = x.reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        q = self.q(x).reshape(B, N, self.num_attention_heads, C // self.num_attention_heads).permute(0, 2, 1, 3)
+        k = x.reshape(B, N, self.num_attention_heads, C // self.num_attention_heads).permute(0, 2, 1, 3)
 
         attn = self._gen_attn(q, k)
         attn = self.attn_drop(attn)
@@ -754,7 +767,7 @@ class FANBlock_SE(nn.Module):
     def __init__(
         self,
         dim,
-        num_heads,
+        num_attention_heads,
         mlp_ratio=4.0,
         qkv_bias=False,
         drop=0.0,
@@ -775,7 +788,7 @@ class FANBlock_SE(nn.Module):
         self.norm1 = norm_layer(dim)
         self.attn = TokenMixing(
             dim,
-            num_heads=num_heads,
+            num_attention_heads=num_attention_heads,
             qkv_bias=qkv_bias,
             mlp_hidden_dim=int(dim * mlp_ratio),
             sharpen_attn=sharpen_attn,
@@ -812,7 +825,7 @@ class FANBlock(nn.Module):
     def __init__(
         self,
         dim,
-        num_heads,
+        num_attention_heads,
         mlp_ratio=4.0,
         qkv_bias=False,
         drop=0.0,
@@ -830,7 +843,7 @@ class FANBlock(nn.Module):
         self.norm1 = norm_layer(dim)
         self.attn = TokenMixing(
             dim,
-            num_heads=num_heads,
+            num_attention_heads=num_attention_heads,
             qkv_bias=qkv_bias,
             mlp_hidden_dim=int(dim * mlp_ratio),
             sharpen_attn=sharpen_attn,
@@ -845,7 +858,7 @@ class FANBlock(nn.Module):
         self.norm2 = norm_layer(dim)
         self.mlp = ChannelProcessing(
             dim,
-            num_heads=num_heads,
+            num_attention_heads=num_attention_heads,
             qkv_bias=qkv_bias,
             attn_drop=attn_drop,
             drop_path=drop_path,
@@ -1266,7 +1279,7 @@ FAN_INPUTS_DOCSTRING = r"""
             Selected in the range `[0, config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`torch.FloatTensor` of shape `(num_attention_heads,)` or `(num_layers, num_attention_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
@@ -1369,7 +1382,11 @@ class FANEncoderLayer(FANPreTrainedModel):
             img_size[0] % config.patch_size == 0
         ), "`patch_size` should divide image dimensions evenly"
 
-        num_heads = [config.num_heads] * config.depth if not isinstance(config.num_heads, list) else config.num_heads
+        num_attention_heads = (
+            [config.num_attention_heads] * config.depth
+            if not isinstance(config.num_attention_heads, list)
+            else config.num_attention_heads
+        )
         channel_dims = [config.embed_dim] * config.depth if config.channel_dims is None else config.channel_dims
         norm_layer = config.norm_layer or partial(nn.LayerNorm, eps=1e-6)
         act_layer = config.act_layer or nn.GELU
@@ -1390,7 +1407,7 @@ class FANEncoderLayer(FANPreTrainedModel):
             downsample = None
         self.block = build_block(
             dim=channel_dims[index],
-            num_heads=num_heads[index],
+            num_attention_heads=num_attention_heads[index],
             mlp_ratio=config.mlp_ratio,
             qkv_bias=config.qkv_bias,
             drop=config.drop_rate,
@@ -1434,7 +1451,11 @@ class FANEncoder(FANPreTrainedModel):
             img_size[0] % config.patch_size == 0
         ), "`patch_size` should divide image dimensions evenly"
 
-        num_heads = [config.num_heads] * config.depth if not isinstance(config.num_heads, list) else config.num_heads
+        num_attention_heads = (
+            [config.num_attention_heads] * config.depth
+            if not isinstance(config.num_attention_heads, list)
+            else config.num_attention_heads
+        )
         channel_dims = [config.embed_dim] * config.depth if config.channel_dims is None else config.channel_dims
         norm_layer = config.norm_layer or partial(nn.LayerNorm, eps=1e-6)
         act_layer = config.act_layer or nn.GELU
@@ -1445,7 +1466,7 @@ class FANEncoder(FANPreTrainedModel):
             [
                 ClassAttentionBlock(
                     dim=channel_dims[-1],
-                    num_heads=num_heads[-1],
+                    num_attention_heads=num_attention_heads[-1],
                     mlp_ratio=config.mlp_ratio,
                     qkv_bias=config.qkv_bias,
                     drop=config.drop_rate,
@@ -1610,7 +1631,7 @@ class FANModel(FANPreTrainedModel):
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_attention_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
