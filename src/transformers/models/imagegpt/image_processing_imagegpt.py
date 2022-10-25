@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for ImageGPT."""
 
-from typing import Dict, Iterable, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
@@ -59,7 +59,8 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         clusters (`np.ndarray`, *optional*):
             The color clusters to use, as a `np.ndarray` of shape `(n_clusters, 3)`.
         do_resize (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_resize` parameter. Controls whether to resize the image's dimensions to `(size["height"], size["width"])`.
+            Set the class default for the `do_resize` parameter. Controls whether to resize the image's dimensions to
+            `(size["height"], size["width"])`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 256, "width": 256}`):
             Set the class default for the `size` parameter. Size of the image after resizing.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
