@@ -25,6 +25,8 @@
     title: Treinamento a partir de um script
   - local: converting_tensorflow_models
     title: Convertendo checkpoints do TensorFlow para Pytorch
+  - local: serialization
+    title: Exportando modelos para ONNX
   - sections:
     - local: tasks/sequence_classification
       title: Classificação de texto
