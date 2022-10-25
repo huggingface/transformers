@@ -18,7 +18,6 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-import tree
 from transformers.utils import is_vision_available
 from transformers.utils.generic import TensorType
 
@@ -349,23 +348,26 @@ class VideoMAEImageProcessor(BaseImageProcessor):
 
         videos = make_batched(videos)
 
-        videos = tree.map_structure(
-            lambda img: self._preprocess_image(
-                image=img,
-                do_resize=do_resize,
-                size=size,
-                resample=resample,
-                do_center_crop=do_center_crop,
-                crop_size=crop_size,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_normalize=do_normalize,
-                image_mean=image_mean,
-                image_std=image_std,
-                data_format=data_format,
-            ),
-            videos,
-        )
+        videos = [
+            [
+                self._preprocess_image(
+                    image=img,
+                    do_resize=do_resize,
+                    size=size,
+                    resample=resample,
+                    do_center_crop=do_center_crop,
+                    crop_size=crop_size,
+                    do_rescale=do_rescale,
+                    rescale_factor=rescale_factor,
+                    do_normalize=do_normalize,
+                    image_mean=image_mean,
+                    image_std=image_std,
+                    data_format=data_format,
+                )
+                for img in video
+            ]
+            for video in videos
+        ]
 
         data = {"pixel_values": videos}
         return BatchFeature(data=data, tensor_type=return_tensors)

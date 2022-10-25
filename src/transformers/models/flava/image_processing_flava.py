@@ -21,7 +21,6 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-import tree
 from transformers.utils import is_vision_available
 from transformers.utils.generic import TensorType
 
@@ -628,8 +627,8 @@ class FlavaImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        processed_images = tree.map_structure(
-            lambda img: self._preprocess_image(
+        processed_images = [
+            self._preprocess_image(
                 image=img,
                 do_resize=do_resize,
                 size=size,
@@ -643,15 +642,14 @@ class FlavaImageProcessor(BaseImageProcessor):
                 image_std=image_std,
                 do_map_pixels=False,
                 data_format=data_format,
-            ),
-            images,
-        )
-
+            )
+            for img in images
+        ]
         data = {"pixel_values": processed_images}
 
         if return_codebook_pixels:
-            codebook_images = tree.map_structure(
-                lambda img: self._preprocess_image(
+            codebook_images = [
+                self._preprocess_image(
                     image=img,
                     do_resize=codebook_do_resize,
                     size=codebook_size,
@@ -665,9 +663,9 @@ class FlavaImageProcessor(BaseImageProcessor):
                     image_std=codebook_image_std,
                     do_map_pixels=codebook_do_map_pixels,
                     data_format=data_format,
-                ),
-                images,
-            )
+                )
+                for img in images
+            ]
             data["codebook_pixel_values"] = codebook_images
 
         if return_image_mask:
