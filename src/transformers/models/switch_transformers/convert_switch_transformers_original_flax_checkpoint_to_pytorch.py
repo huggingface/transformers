@@ -81,8 +81,8 @@ MOE_LAYER_NAME_MAPPING = {
     "relpos_bias/rel_embedding": "block/0/layer/0/SelfAttention/relative_attention_bias/weight",
     "router/router_weights/w/": "router/classifier/",
     "roer/roer_weights/w/": "router/classifier/",
+    "logits_dense":"lm_head"
 }
-
 
 def rename_keys(s_dict):
     # 1. in HF T5, we have block.{x}.layer.{y}. which corresponds to layer.{x} in
@@ -224,7 +224,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output pytorch model."
     )
-    parser.add_argument("--num_experts", default=8, type=str, required=False, help="Number of experts")
+    parser.add_argument("--num_experts", default=8, type=int, required=False, help="Number of experts")
     args = parser.parse_args()
     convert_flax_checkpoint_to_pytorch(
         args.switch_t5x_checkpoint_path,

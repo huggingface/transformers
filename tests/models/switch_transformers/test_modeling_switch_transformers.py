@@ -36,7 +36,6 @@ if is_torch_available():
     )
     from transformers.models.switch_transformers.modeling_switch_transformers import (
         SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
-        ExpertsChooseMaskedRouter,
         TokensChooseMaskedRouter,
         load_balancing_loss_func,
         router_z_loss_func,
@@ -993,86 +992,53 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         self.assertTrue(torch.allclose(output.dispatch_mask, expected_dispatch_mask))
         self.assertTrue(torch.allclose(output.combine_array, expected_combine_array, atol=1e-4))
 
-    def test_equivalency_experts_chose_masked_router(self):
-        r"""
-        This test tests the equivalency between the `ExpertsChooseMaskedRouter`
-        originally implemented from here: TODO: provide link
-        """
-        hidden_dim = 3
-        num_experts = 2
-        expert_capacity = 2  # Total capacity = 2*2*1 = 4 < num_tokens
-        jitter_noise = 0.0
-
-        input_tokens = torch.Tensor(
-            [
-                [
-                    [0.6433916, 0.18188512, 0.02240455],
-                    [0.563781, 0.5526401, 0.0958724],
-                    [0.34253013, 0.03644359, 0.08744538],
-                    [0.7909105, 0.35205448, 0.53364205],
-                ],
-                [
-                    [0.02900076, 0.4168595, 0.5802449],
-                    [0.91486526, 0.27414513, 0.14991808],
-                    [0.9383501, 0.5209162, 0.51207185],
-                    [0.90618336, 0.7309413, 0.95533276],
-                ],
-            ]
-        )
-
-        config = SwitchTransformersConfig(
-            num_experts=num_experts,
-            hidden_size=hidden_dim,
-            router_jitter_noise=jitter_noise,
-            expert_capacity=expert_capacity,
-            batch_prioritized_routing=False,
-        )
-
-        model = ExpertsChooseMaskedRouter(config)
-
-        model.classifier.weight = torch.nn.Parameter(
-            torch.Tensor([[-0.00107201, 0.01544739], [-0.0087319, 0.01314363], [0.03530733, 0.03709853]]).t()
-        )
-
-        output = model(input_tokens, expert_capacity=expert_capacity)
-
-        self.assertEqual(output.auxiliary_loss, 0.0)
-        self.assertAlmostEqual(output.router_z_loss.item(), 0.507016, places=5)
-
-        expected_dispatch_mask = torch.Tensor(
-            [
-                [[[0, 1], [0, 0]], [[0, 0], [0, 1]], [[1, 0], [0, 0]], [[0, 0], [1, 0]]],
-                [[[1, 0], [0, 0]], [[0, 1], [0, 0]], [[0, 0], [0, 1]], [[0, 0], [1, 0]]],
-            ]
-        )
-
-        self.assertTrue(torch.allclose(output.dispatch_mask, expected_dispatch_mask))
-
-        expected_combined_array = torch.Tensor(
-            [
-                [
-                    [[0.0000, 0.4963], [0.0000, 0.0000]],
-                    [[0.0000, 0.0000], [0.0000, 0.5054]],
-                    [[0.4983, 0.0000], [0.0000, 0.0000]],
-                    [[0.0000, 0.0000], [0.5054, 0.0000]],
-                ],
-                [
-                    [[0.4973, 0.0000], [0.0000, 0.0000]],
-                    [[0.0000, 0.4947], [0.0000, 0.0000]],
-                    [[0.0000, 0.0000], [0.0000, 0.5070]],
-                    [[0.0000, 0.0000], [0.5082, 0.0000]],
-                ],
-            ]
-        )
-
-        self.assertTrue(torch.allclose(output.combine_array, expected_combined_array, atol=1e-4))
-
-
 @require_torch
 @require_tokenizers
 class SwitchTransformerModelIntegrationTests(unittest.TestCase):
     def test_small_logits(self):
-        pass
+        r"""
+            Logits testing to check implementation consistency between `t5x` implementation 
+            and `transformers` implementation of Switch-C transformers. We only check the logits
+            of the first batch.
+        """
+        model = SwitchTransformersForConditionalGeneration.from_pretrained("HFLAY/switch_base_8", torch_dtype=torch.bfloat16).eval()
+        input_ids = torch.ones((32,64), dtype = torch.long)
+        decoder_input_ids = torch.ones((32,64), dtype = torch.long)
+
+        EXPECTED_MEAN_LOGITS = torch.Tensor(
+            [-29.330458, -29.332455, -29.333147, -29.341417, -29.472025,
+             -29.335613, -29.47691 , -29.328053, -29.328312, -29.329872,
+             -29.336075, -29.331112, -29.30393 , -29.328972, -29.33514 ,
+             -29.335201, -29.317245, -29.48052 , -29.328382, -29.4837  ,
+             -29.489216, -29.338572, -29.331537, -29.337881, -29.497675,
+             -29.483559, -29.497217, -29.343832, -29.483425, -29.333313,
+             -29.49259 , -29.318579, -29.478128, -29.328222, -29.339464,
+             -29.329647, -29.339725, -29.648586, -29.312738, -29.314232,
+             -29.330048, -29.314402, -29.329876, -29.33895 , -29.337482,
+             -29.477829, -29.482548, -29.337194, -29.487375, -29.33446 ,
+             -29.340445, -29.479067, -29.333689, -29.338657, -29.339827,
+             -29.33101 , -29.482433, -29.498121, -29.477905, -29.33606 ,
+             -29.333132, -29.335573, -29.482475, -29.330212],)
+            
+        hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).logits
+        hf_logits = hf_logits.mean(dim=-1)[0]
+
+        self.assertTrue(torch.testing.assert_allclose(hf_logits, EXPECTED_MEAN_LOGITS, rtol=1e-3, atol=1e-3))
+    
+    def test_small_generate(self):
+        r"""
+            Generate test using the smalled switch-C model.
+        """
+        model = SwitchTransformersForConditionalGeneration.from_pretrained("HFLAY/switch_base_8", torch_dtype=torch.bfloat16).eval()
+        tokenizer = SwitchTransformersForConditionalGeneration.from_pretrained("t5-small")
+
+        input_ids = tokenizer("summarize: Hello world", return_tensors="pt").input_ids.to(torch_device)
+        sequences = model.generate(input_ids)
+        output_str = tokenizer.batch_decode(sequences, skip_special_tokens=True)[0]
+
+        EXPECTED_OUTPUT = " . The best way to do it is to use a smartphone. Hello there"
+        self.assertisEqual(output_str, EXPECTED_OUTPUT)
+
 
     def test_large_logits(self):
         pass

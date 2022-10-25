@@ -51,7 +51,7 @@ from .configuration_switch_transformers import SwitchTransformersConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "SwitchTransformersConfig"
-_TOKENIZER_FOR_DOC = "SwitchTransformersTokenizer"
+_TOKENIZER_FOR_DOC = "T5Tokenizer"
 _CHECKPOINT_FOR_DOC = "ybelkada/switch_transformers-base"
 
 ####################################################
@@ -63,11 +63,7 @@ SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all SwitchTransformers models at https://huggingface.co/models?filter=switch_transformers
 ]
 
-
-RouterOutput = Any
-
-
-def _jax_one_hot(tensor, num_classes, axis=-1, dtype=torch.bool):
+def _one_hot(tensor, num_classes, axis=-1, dtype=torch.bool):
     r"""
     This function mimics the behavior of jax.nn.functional.one_hot in PyTorch. It takes a tensor of indices, the number
     of desired classes and the axis to apply the one-hot encoding. If any value is outside the range [0, num_classes),
@@ -109,61 +105,6 @@ def _jax_one_hot(tensor, num_classes, axis=-1, dtype=torch.bool):
     out[mask, tensor[mask]] = 1
 
     return out.to(tensor.device)
-
-
-@dataclass
-class RouterIndices:
-    r"""
-    A dataclass wrapper to store the dispatch indices and combine weights for scatter/gather-based routing.
-
-    Attributes:
-        dispatch_indices (`torch.Tensor`):
-            A tensor of size [`num_groups`, `tokens_per_group`, `num_selected_experts`, 2] dispatch indices indicating,
-            for each token, its preferred expert and its priority in that expert's buffer.
-        combine_weights (`torch.Tensor`):
-            A tensor of size [`num_groups`, `tokens_per_group`, `num_selected_experts`] combine weights used for
-            scaling expert outputs with the router's dispatch probability/confidence.
-        auxiliary_loss (`float`):
-            Load balancing loss for router.
-        router_z_loss (`float`):
-            Router z-loss. Encourages router logits to remain small in an effort to improve stability.
-    """
-    dispatch_indices: torch.Tensor
-    combine_weights: torch.Tensor
-    auxiliary_loss: float
-    router_z_loss: float = 0.0
-
-    def to(self, device):
-        return replace(
-            self, dispatch_mask=self.dispatch_indices.to(device), combine_array=self.combine_weights.to(device)
-        )
-
-
-@dataclass
-class RouterMask:
-    r"""
-    Dispatch and combine torch.Tensors for expert routing with masked matmuls.
-
-    Attributes:
-        dispatch_mask (`torch.Tensor`):
-            A mask tensor of shape [num_groups, tokens_per_group, num_experts, expert_capacity] that is 1 if the token
-            gets routed to the corresponding expert, and 0 otherwise.
-        combine_array (`torch.Tensor`):
-            A tensor of shape [num_groups, tokens_per_group, num_experts, expert_capacity] combine torch.Tensor used
-            for combining expert outputs and scaling with router probability.
-        auxiliary_loss (`float`):
-            Load balancing loss for router.
-        router_z_loss (`float`):
-            Router z-loss. Encourages router logits to remain small in an effort to improve stability.
-    """
-    dispatch_mask: torch.Tensor
-    combine_array: torch.Tensor
-    auxiliary_loss: float
-    router_z_loss: float = 0.0
-
-    def to(self, device):
-        return replace(self, dispatch_mask=self.dispatch_mask.to(device), combine_array=self.combine_array.to(device))
-
 
 # Router loss
 
@@ -225,26 +166,31 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
 
 
-class Router(nn.Module):
+
+class TokensChooseMaskedRouter(nn.Module):
     """
-    Abstract base router class, defining router API and inner workings.
+    Masked matmul router using tokens choose top-k experts assignment.
+
+    This router uses the same mechanism as in Switch Transformer (https://arxiv.org/abs/2101.03961) and V-MoE
+    (https://arxiv.org/abs/2106.05974): tokens choose their top experts. Items are sorted by router_probs and then
+    routed to their choice of expert until the expert's expert_capacity is reached. There is no guarantee that each
+    token is processed by an expert, or that each expert receives at least one token.
 
     Attributes:
-        router_weights (`torch.nn.Module`):
-            Configurable module used to compute router logits from token inputs.
-        jitter_noise (`float`):
-            Amplitude of jitter noise applied to router logits.
-        dtype (`torch.dtype`):
-            Numeric float type for returned combine torch.Tensor. All actual computations are performed in float32 of
-            the input for stability.
-        ignore_padding_tokens (`bool`):
-            Whether to ignore padding tokens during routing. Note that some routers (e.g. `TokensChooseMaskedRouter`)
-            will completely ignore padding tokens, while others (e.g. `TokensChooseScatterRouter` and
-            `ExpertsChooseMaskedRouter`) will simply down-weight the probability of selecting padding tokens.
+    num_selected_experts (`int`):
+        Maximum number of experts to which each token is routed. Tokens may be routed to fewer experts if particular
+        experts are oversubscribed / reach capacity.
+    batch_prioritized_routing (`bool`):
+        Whether or not to use Batch Prioritized Routing (BPR), originally introduced in V-MoE
+        (https://arxiv.org/abs/2106.05974). With BPR, we prioritize routing those top-k tokens with the highest router
+        probability, rather than simply using each tokens left-to-right ordering in the batch. This prioritization is
+        important because the experts have limited capacity.
     """
 
     def __init__(self, config, **kwargs):
         super().__init__()
+        self.num_experts = config.num_experts
+        self.batch_prioritized_routing = config.batch_prioritized_routing
         self.num_experts = config.num_experts
         self.classifier = nn.Linear(config.hidden_size, self.num_experts, bias=config.router_bias)
         self.jitter_noise = config.router_jitter_noise
@@ -298,14 +244,13 @@ class Router(nn.Module):
         self.classifier.to(self.dtype)
         router_logits = self.classifier(token_inputs)
 
-        # computations in the router have to be done in float16
+        # Apply Softmax and cast back to the original `dtype`
         router_probabilities = torch.nn.Softmax(dim=-1)(router_logits).to(self.input_tokens_dtype)
-
         return router_probabilities, router_logits
 
     def forward(
-        self, token_inputs: torch.Tensor, expert_capacity: int, apply_jitter: bool = True, **kwargs
-    ) -> RouterOutput:
+        self, token_inputs: torch.Tensor, apply_jitter: bool = True, **kwargs
+    ) -> Tuple:
         r"""
         Generic forward function for every Router class. Each Router expects to have the same input hidden states
         (`token_inputs`) corresponding to the hidden states for each token, the `expert_capacity` corresponding to the
@@ -338,129 +283,17 @@ class Router(nn.Module):
         else:
             padding_mask = None
 
-        instructions = self._compute_routing_instructions(router_probs, padding_mask, expert_capacity, **kwargs)
+        expert_index, auxiliary_loss = self._compute_routing_instructions(router_probs, padding_mask, **kwargs)
         # We cast back the output to the previous dtype
-        instructions = instructions.to(self.input_tokens_dtype)
+        expert_index = expert_index.to(self.input_tokens_dtype)
+        router_probs = torch.max(router_probs,dim=-1).values.unsqueeze(-1)
+        router_z_loss = router_z_loss_func(router_logits)
+        return expert_index, auxiliary_loss, router_z_loss, router_probs
 
-        return replace(instructions, router_z_loss=router_z_loss_func(router_logits))
-
-    def _compute_routing_instructions(self, router_probs, padding_mask, expert_capacity):
-        raise NotImplementedError(
-            """
-                Computes masks for the top-k experts per token. This has to be implemented for each subclass of
-                MaskedRouter routers.
-
-                Args:
-                    router_probs (`torch.Tensor`):
-                        Input router probabilities of shape [num_groups, tokens_per_group, num_experts] this
-                        corresponds to the probabilities used to determine the routing of tokens to the experts.
-                    padding_mask (`torch.Tensor`):
-                        Padding mask tensor of shape [num_groups, tokens_per_group] a mask used to identify padding
-                        tokens that should be ignored by the router.
-                    expert_capacity (`int`):
-                        Each group will send this many tokens to each expert.
-
-                Returns:
-                    Router mask arrays.
-            """
-        )
-
-
-class ExpertsChooseMaskedRouter(Router):
-    """
-    Masked matmul router using experts choose tokens assignment.
-
-    This router uses the same mechanism as in Mixture-of-Experts with Expert Choice (https://arxiv.org/abs/2202.09368):
-    each expert selects its top expert_capacity tokens. An individual token may be processed by multiple experts or
-    none at all.
-
-    Note: "experts choose routing" should not be used in decoder blocks because it breaks the autoregressive behavior
-    -- the model will learn to cheat by using future token information to improve current token predictions.
-    """
 
     def _compute_routing_instructions(
-        self, router_probs: torch.Tensor, padding_mask: Optional[torch.Tensor], expert_capacity: int
-    ) -> RouterMask:
-        """Computes masks for the highest probability token per expert.
-
-        Args:
-            router_probs (`torch.Tensor`):
-                Raw router probabilities of shape [num_groups, tokens_per_group, num_experts] used to determine the
-                routing of tokens to the experts.
-            padding_mask (`torch.Tensor`):
-                padding mask tensor of shape [num_groups, tokens_per_group] used to identify padding tokens that should
-                be down-weighted by the router.
-            expert_capacity (`int`):
-                Each group will send this many tokens to each expert.
-
-        Returns:
-            Dispatch and combine arrays for routing with masked matmuls.
-        """
-        tokens_per_group = router_probs.shape[1]
-
-        if padding_mask is not None:
-            # Because experts choose tokens, we mask probabilities corresponding to
-            # tokens before the top-k operation. Note that, unlike for masked-based
-            # tokens-choose routing, the experts here may still choose to select the
-            # (down-weighted) padding tokens.
-            router_probs *= padding_mask.unsqueeze(-1)
-
-        # vmap over group dimension.
-        # router_probs_t = router_probs.t()
-        router_probs_t = router_probs.permute(0, 2, 1)
-
-        # Top expert_capacity router probability and corresponding token indices for
-        # each expert. Shapes: [num_groups, num_experts, expert_capacity].
-        expert_gate, expert_index = torch.topk(router_probs_t, k=expert_capacity)
-
-        # Convert to one-hot mask of expert indices for each token in each group.
-        # Shape: [num_groups, num_experts, expert_capacity, tokens_per_group].
-        dispatch_mask = _jax_one_hot(expert_index, tokens_per_group, dtype=torch.int32)
-
-        # Move axes to conform with shape expected by MoeLayer API.
-        # Shape: [num_groups, tokens_per_group, num_experts, expert_capacity]
-        dispatch_mask = torch.moveaxis(dispatch_mask, 3, 1)
-
-        # The combine array will be used for combining expert outputs, scaled by the
-        # router probabilities. Shape: [num_groups, num_experts, tokens_per_group,
-        # expert_capacity].
-        combine_array = torch.einsum("...ec,...tec->...tec", expert_gate, dispatch_mask)
-
-        # Each expert is choosing tokens until it reaches full capacity, so we don't
-        # need an auxiliary loading balancing loss for expert choice routing.
-        auxiliary_loss = 0.0
-
-        return RouterMask(dispatch_mask, combine_array, auxiliary_loss)
-
-
-class TokensChooseMaskedRouter(Router):
-    """
-    Masked matmul router using tokens choose top-k experts assignment.
-
-    This router uses the same mechanism as in Switch Transformer (https://arxiv.org/abs/2101.03961) and V-MoE
-    (https://arxiv.org/abs/2106.05974): tokens choose their top experts. Items are sorted by router_probs and then
-    routed to their choice of expert until the expert's expert_capacity is reached. There is no guarantee that each
-    token is processed by an expert, or that each expert receives at least one token.
-
-    Attributes:
-    num_selected_experts (`int`):
-        Maximum number of experts to which each token is routed. Tokens may be routed to fewer experts if particular
-        experts are oversubscribed / reach capacity.
-    batch_prioritized_routing (`bool`):
-        Whether or not to use Batch Prioritized Routing (BPR), originally introduced in V-MoE
-        (https://arxiv.org/abs/2106.05974). With BPR, we prioritize routing those top-k tokens with the highest router
-        probability, rather than simply using each tokens left-to-right ordering in the batch. This prioritization is
-        important because the experts have limited capacity.
-    """
-
-    def __init__(self, config, **kwargs):
-        super().__init__(config, **kwargs)
-        self.num_selected_experts = config.num_selected_experts
-        self.batch_prioritized_routing = config.batch_prioritized_routing
-
-    def _compute_routing_instructions(
-        self, router_probs: torch.Tensor, padding_mask: Optional[torch.Tensor], expert_capacity: int = None
-    ) -> RouterMask:
+        self, router_probs: torch.Tensor, padding_mask: Optional[torch.Tensor],
+    ) -> Tuple[torch.Tensor,torch.Tensor]:
         """
         Computes masks for the top-k experts per token.
 
@@ -477,13 +310,12 @@ class TokensChooseMaskedRouter(Router):
         Returns:
             Dispatch and combine arrays for routing with masked matmuls.
         """
-        num_groups, _, num_experts = router_probs.shape
 
         # Top-k router probability and corresponding expert indices for each token.
         # Shape: [num_groups, tokens_per_group, num_selected_experts].
-        expert_gate, expert_index = torch.topk(router_probs, k=self.num_selected_experts)
+        expert_index = torch.argmax(router_probs, dim = -1)
 
-        if padding_mask is not None:
+        if padding_mask is not None: # TODO test or delete
             # Mask applied to gate. Exclude choices corresponding to padding tokens.
             gate_mask = padding_mask.unsqueeze(-1).to(expert_index.dtype)
             expert_gate *= gate_mask
@@ -500,67 +332,8 @@ class TokensChooseMaskedRouter(Router):
             router_probs *= gate_mask
 
         auxiliary_loss = load_balancing_loss_func(router_probs, expert_index)
-
-        if self.batch_prioritized_routing:
-            # Sort tokens according to their routing probability per group, so that
-            # the highest probability tokens are routed first.
-            permutation = torch.argsort(-expert_gate[..., 0], dim=-1)
-            # Shape: [num_groups, tokens_per_group, num_selected_experts]
-            expert_index = torch.take_along_dim(expert_index, permutation.unsqueeze(-1), dim=-2)
-
-        # Make num_selected_experts the leading axis to ensure that top-1 choices
-        # have priority over top-2 choices, which have priority over top-3 choices,
-        # etc.
-        expert_index = expert_index.permute((0, 2, 1))
-        # Shape: [num_groups, num_selected_experts * tokens_per_group]
-        expert_index = expert_index.reshape(num_groups, -1)
-
-        # Create mask out of indices.
-        # Shape: [num_groups, tokens_per_group * num_selected_experts, num_experts].
-        expert_mask = torch.nn.functional.one_hot(expert_index, num_experts)
-
-        # Experts have a fixed capacity that we cannot exceed. A token's priority
-        # within the expert's buffer is given by the masked, cumulative capacity of
-        # its target expert.
-        # Shape: [num_groups, tokens_per_group * num_selected_experts, num_experts].
-        token_priority = torch.cumsum(expert_mask, axis=1) * expert_mask - 1.0
-        # Shape: [num_groups, num_selected_experts, tokens_per_group, num_experts].
-        token_priority = token_priority.reshape((num_groups, self.num_selected_experts, -1, num_experts))
-        # Shape: [num_groups, tokens_per_group, num_selected_experts, num_experts].
-        token_priority = token_priority.permute((0, 2, 1, 3))
-        # For each token, across all selected experts, select the only non-negative
-        # (unmasked) priority. Now, for group G routing to expert E, token T has
-        # non-negative priority (i.e. token_priority[G,T,E] >= 0) if and only if E
-        # is its targeted expert.
-        # Shape: [num_groups, tokens_per_group, num_experts].
-        token_priority = torch.max(token_priority, axis=2).values
-
-        if self.batch_prioritized_routing:
-            # Place token priorities in original ordering of tokens.
-            inv_permutation = torch.argsort(permutation, dim=-1)
-            token_priority = torch.take_along_dim(token_priority, inv_permutation.unsqueeze(-1), dim=-2)
-
-        # Token T can only be routed to expert E if its priority is positive and
-        # less than the expert capacity. One-hot matrix will ignore indices outside
-        # the range [0, expert_capacity).
-        # Shape: [num_groups, tokens_per_group, num_experts, expert_capacity].
-        # token_priority = token_priority * (token_priority > 0)
-
-        # TODO remove this
-        # dispatch_mask = torch.nn.functional.one_hot(token_priority.long(), expert_capacity + 1)[..., 1:]
-        dispatch_mask = _jax_one_hot(token_priority.long(), expert_capacity, axis=-1)
-
-        # The combine array will be used for combining expert outputs, scaled by the
-        # router probabilities. Shape: [num_groups, tokens_per_group, num_experts,
-        # expert_capacity].
-        # TODO remove this
-        combine_array = torch.einsum("...te,...tec->...tec", router_probs, dispatch_mask)
-        # combine_array = torch.einsum("...te,...te->...te", router_probs, dispatch_mask)
-
-        # Return to default dtype now that router computation is complete.
-        combine_array = combine_array.to(torch.float32)
-
-        return RouterMask(dispatch_mask, combine_array, auxiliary_loss)
+        expert_index = torch.nn.functional.one_hot(expert_index, self.num_experts)
+        return expert_index, auxiliary_loss
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->SwitchTransformers
@@ -590,6 +363,7 @@ class SwitchTransformersLayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
+# TODO: do we need this????
 ALL_LAYERNORM_LAYERS.append(SwitchTransformersLayerNorm)
 
 
@@ -634,9 +408,22 @@ class SwitchTransformersDenseGatedActDense(nn.Module):
 # This class should also contain a router class
 # check flaxformer/architecture/moe/router.py : https://github.com/google/flaxformer/blob/main/flaxformer/architectures/moe/routing.py
 class SwitchTransformersLayerFF(nn.Module):
+    r"""
+        Switch Transformers Feed Forward layer module. This is a wrapper around the Mixture of Experts
+        module.
+
+        Attributes:
+            is_sparse (`bool`): 
+                Whether the MLP layer is a `Sparse` layer (contains a Mixture of Experts) or not
+            mlp (`torch.nn.Module`):
+                The MLP layer of the Feed Forward layer
+            layer_norm (`torch.nn.Module`):
+                The pre-MLP layer norm. This module is equivalent to the `pre_mlp_layer_norm` in `t5x`
+            dropout (`torch.nn.Module`):
+                Post-MLP dropout layer.
+    """
     def __init__(self, config: SwitchTransformersConfig, is_sparse=False):
         super().__init__()
-        # TODO: check the comments above
         self.is_sparse = is_sparse
         if not self.is_sparse:
             self.mlp = SwitchTransformersDenseActDense(config)
@@ -655,12 +442,13 @@ class SwitchTransformersLayerFF(nn.Module):
 
 class SwitchTransformersSparseMLP(nn.Module):
     r"""
-    Implementation of the Switch Transformers Sparse MLP module. TODO: Add a LOT of details here
+    Implementation of the Switch Transformers Sparse MLP module. 
+    TODO: Add a LOT of details here
     """
 
     def __init__(self, config: SwitchTransformersConfig, expert_class: nn.Module = SwitchTransformersDenseActDense):
         super().__init__()
-        # Step 1: Get the correct router
+        # Step 1: Get the correct router according to its class
         self.router = self._get_router(config)
 
         # Step 2: Get the experts
@@ -681,8 +469,6 @@ class SwitchTransformersSparseMLP(nn.Module):
         # TODO, use a ALL_ROUTER_TYPE map instead of havind all the ifs? then just if None raise error.
         if config.router_type.lower() == "tokens_masked":
             return TokensChooseMaskedRouter(config)
-        elif config.router_type.lower() == "experts_masked":
-            return ExpertsChooseMaskedRouter(config)
         else:
             raise NotImplementedError(
                 f"{config.router_type.lower()} not implemented ! Please chose a router in "
@@ -690,23 +476,32 @@ class SwitchTransformersSparseMLP(nn.Module):
             )
 
     def forward(self, hidden_states):
-        router_mask = self.router(hidden_states, expert_capacity = 64)
-        masked_indices = router_mask.dispatch_mask
+        r"""
+            Hold on, this will be slightly tricky to understand
+            In the correct order, a MoE layer does the following:
 
-        probs, _ = self.router._compute_router_probabilities(hidden_states,num_experts=8,apply_jitter=False)
+            1- Gets the `router_mask` from the router. This mask will contain the indices of the
+            routed tokens. Also retrieve the probabilities (max prob) for each token. The probabilities are
+            needed in the computation of the hidden states since the probabilities will be broadcasted
+            to the hidden states values (they can be interpreted as a scaling factor).
 
-        # computations in the router have to be done in float16
+            2- TODO: explain @ArthurZucker
 
 
-        dispatched_tokens = int(torch.sum(masked_indices))
+        """
+        # Step 1: Get the router_mask from the router as wel as the probabilities
+        router_mask, auxiliary_loss, router_z_loss, router_probs  = self.router(hidden_states)
+
         for idx, expert in enumerate(self.experts.values()):
+
             # 1. Get the index of the tokens that are routed to the current expert
-            token_indices = masked_indices[:, :, idx].sum(-1).bool()
-            # 2. Update hidden states
-            print(f"{token_indices.sum()}/{dispatched_tokens} tokens will be dispatched to expert {idx}")
+            # masked_indices has a shape of `batch_size`, `seq_len`, `num_experts`
+            token_indices = router_mask[:, :, idx].bool()
+
+            # 2. Update only the hidden states affected by the routing
             hidden_states[token_indices] = expert(hidden_states[token_indices])
 
-        hidden_states = torch.max(probs,dim=-1).values.unsqueeze(-1) * hidden_states
+        hidden_states = router_probs * hidden_states
         return hidden_states
 
 
