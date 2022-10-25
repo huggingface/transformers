@@ -52,12 +52,12 @@ class PerceiverImageProcessor(BaseImageProcessor):
         do_center_crop (`bool`, `optional`, defaults to `True`):
             Whether or not to center crop the image. If the input size if smaller than `crop_size` along any edge, the
             image will be padded with zeros and then center cropped.
-        crop_size (`Dict[str, int]`, *optional*, defaults to {"height": 256, "width": 256}):
+        crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 256, "width": 256}`):
             Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to `True`.
         do_resize (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
-            dimensions to the specified `size`.
-        size (`Dict[str, int]` *optional*, defaults to {"height": 224, "width": 224}):
+            Set the class default for the `do_resize` parameter. Controls whether to resize the image to
+            `(size["height"], size["width"])`.
+        size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
             Set the class default for the `size` parameter. Size of the image after resizing.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
@@ -111,13 +111,14 @@ class PerceiverImageProcessor(BaseImageProcessor):
     def center_crop(
         self,
         image: np.ndarray,
-        crop_size: int,
+        crop_size: Dict[str, int],
         size: Optional[int] = None,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
     ) -> np.ndarray:
         """
-        Center crop an image to `crop_size`.
+        Center crop an image to `(size["height"] / crop_size["height"] * min_dim, size["width"] / crop_size["width"] *
+        min_dim)`. Where `min_dim = min(size["height"], size["width"])`.
 
         If the input size if smaller than `crop_size` along any edge, the image will be padded with zeros and then
         center cropped.
@@ -151,7 +152,7 @@ class PerceiverImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Resize an image to (size["height"], size["width"]).
+        Resize an image to `(size["height"], size["width"])`.
 
         Args:
             image (`np.ndarray`):
@@ -159,7 +160,7 @@ class PerceiverImageProcessor(BaseImageProcessor):
             size (`Dict[str, int]`):
                 Size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PIL.Image.BILINEAR`):
-                Resampling filter to use when resiizing the image.
+                Resampling filter to use when resizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
@@ -202,9 +203,9 @@ class PerceiverImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to normalize.
-            image_mean (`float` or `List[float]`):
+            mean (`float` or `List[float]`):
                 Image mean.
-            image_std (`float` or `List[float]`):
+            std (`float` or `List[float]`):
                 Image standard deviation.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
@@ -235,12 +236,12 @@ class PerceiverImageProcessor(BaseImageProcessor):
                 Image to preprocess.
             do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
                 Whether to center crop the image to `crop_size`.
-            crop_size (`int`, *optional*, defaults to `self.crop_size`):
+            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
                 Desired output size after applying the center crop.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`int`, *optional*, defaults to `self.size`):
-                Size of the image.
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+                Size of the image after resizing.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
                 has an effect if `do_resize` is set to `True`.
