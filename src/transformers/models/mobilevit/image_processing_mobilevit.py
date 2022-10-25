@@ -14,11 +14,11 @@
 # limitations under the License.
 """Image processor class for MobileViT."""
 
-from typing import Dict, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.utils import is_vision_available
+from transformers.utils import is_torch_available, is_torch_tensor, is_vision_available
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -37,6 +37,9 @@ from ...utils import logging
 
 if is_vision_available():
     import PIL
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -311,9 +314,9 @@ class MobileViTImageProcessor(BaseImageProcessor):
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
         """
+        Args:
         Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps. Only supports
         PyTorch.
-        Args:
             outputs ([`MobileViTForSemanticSegmentation`]):
                 Raw outputs of the model.
             target_sizes (`List[Tuple]`, *optional*):
