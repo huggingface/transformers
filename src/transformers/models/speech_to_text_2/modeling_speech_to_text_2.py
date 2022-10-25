@@ -787,10 +787,10 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        use_cache = None,
+        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], CausalLMOutputWithCrossAttentions]:
         r"""
         Args:
