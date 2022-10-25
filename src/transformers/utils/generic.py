@@ -449,8 +449,7 @@ def expand_dims(array, axis):
 
 def tensor_size(array):
     """
-    Framework-agnostic version of `numpy.size` that will work on torch/TensorFlow/Jax tensors as well as NumPy
-    arrays.
+    Framework-agnostic version of `numpy.size` that will work on torch/TensorFlow/Jax tensors as well as NumPy arrays.
     """
     if is_numpy_array(array):
         return np.size(array)
