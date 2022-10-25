@@ -1776,7 +1776,7 @@ append_call_sample_docstring(
     _CONFIG_FOR_DOC,
 )
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxMBartDecoderPreTrainedModel with Bart->MBart
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderPreTrainedModel with Bart->MBart
 class FlaxMBartDecoderPreTrainedModel(FlaxPreTrainedModel):
     config_class = MBartConfig
     base_model_prefix: str = "model"
@@ -1878,7 +1878,7 @@ class FlaxMBartDecoderPreTrainedModel(FlaxPreTrainedModel):
 
         # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed
         # down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be
-        # changed by FlaxBartAttention module
+        # changed by FlaxMBartAttention module
         if past_key_values:
             inputs["cache"] = past_key_values
             mutable = ["cache"]
@@ -1912,7 +1912,7 @@ class FlaxMBartDecoderPreTrainedModel(FlaxPreTrainedModel):
         return outputs
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxMBartDecoderWrapper with Bart->MBart
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderWrapper with Bart->MBart
 class FlaxMBartDecoderWrapper(nn.Module):
     """
     This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
@@ -1935,7 +1935,7 @@ class FlaxMBartDecoderWrapper(nn.Module):
         return self.decoder(*args, **kwargs)
 
 
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxMBartForCausalLMModule with Bart->MBart
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForCausalLMModule with Bart->MBart
 class FlaxMBartForCausalLMModule(nn.Module):
     config: MBartConfig
     dtype: jnp.dtype = jnp.float32
@@ -2002,7 +2002,7 @@ class FlaxMBartForCausalLMModule(nn.Module):
     """,
     MBART_START_DOCSTRING,
 )
-# Copied from transformers.models.bart.modeling_flax_bart.FlaxMBartForCausalLM with Bart->MBart
+# Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForCausalLM with Bart->MBart
 class FlaxMBartForCausalLM(FlaxMBartDecoderPreTrainedModel):
     module_class = FlaxMBartForCausalLMModule
 
