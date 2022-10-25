@@ -1372,6 +1372,10 @@ class Trainer:
         if not training:
             return model
 
+        # add torchrun support for XLA, but currently DDP doesn't support XLA yet
+        if is_torch_tpu_available():
+            return model
+
         # Distributed training (should be after apex fp16 initialization)
         if self.sharded_ddp is not None:
             # Sharded DDP!

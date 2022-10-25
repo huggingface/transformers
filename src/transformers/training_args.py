@@ -53,14 +53,16 @@ from .utils import (
     torch_required,
 )
 
-
 if is_torch_available():
     import torch
     import torch.distributed as dist
 
 if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
-
+    # torchrun support
+    import torch_xla.distributed.xla_backend
+    if os.environ.get("WORLD_SIZE"):
+        torch.distributed.init_process_group(backend="xla")
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
