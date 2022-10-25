@@ -345,10 +345,60 @@ class TFBeamSampleEncoderDecoderOutput(ModelOutput):
     decoder_hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
 
 
+@dataclass
+class TFContrastiveSearchEncoderDecoderOutput(ModelOutput):
+    """
+    Base class for outputs of decoder-only generation models using contrastive search.
+
+    Args:
+        sequences (`tf.Tensor` of shape `(batch_size*num_beams, sequence_length)`):
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
+        scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
+            softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this
+            beam. Tuple of `tf.Tensor` with up to `max_new_tokens` elements (one element for each generated token),
+            with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
+        decoder_hidden_states (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            `tf.Tensor` of shape `(batch_size*num_beams, generated_length, hidden_size)`.
+    """
+
+    sequences: tf.Tensor = None
+    scores: Optional[Tuple[tf.Tensor]] = None
+    decoder_hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+
+
+@dataclass
+class TFContrastiveSearchDecoderOnlyOutput(ModelOutput):
+    """
+    Base class for outputs of decoder-only generation models using contrastive search.
+
+    Args:
+        sequences (`tf.Tensor` of shape `(batch_size*num_beams, sequence_length)`):
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
+        scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
+            softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this
+            beam. Tuple of `tf.Tensor` with up to `max_new_tokens` elements (one element for each generated token),
+            with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
+        hidden_states (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            `tf.Tensor` of shape `(batch_size*num_beams, generated_length, hidden_size)`.
+    """
+
+    sequences: tf.Tensor = None
+    scores: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+
+
 TFGreedySearchOutput = Union[TFGreedySearchEncoderDecoderOutput, TFGreedySearchDecoderOnlyOutput]
 TFSampleOutput = Union[TFSampleEncoderDecoderOutput, TFSampleDecoderOnlyOutput]
 TFBeamSearchOutput = Union[TFBeamSearchEncoderDecoderOutput, TFBeamSearchDecoderOnlyOutput]
 TFBeamSampleOutput = Union[TFBeamSampleEncoderDecoderOutput, TFBeamSampleDecoderOnlyOutput]
+TFContrastiveSearchOutput = Union[TFContrastiveSearchEncoderDecoderOutput, TFContrastiveSearchDecoderOnlyOutput]
+TFGenerateOutput = Union[TFGreedySearchOutput, TFSampleOutput, TFBeamSearchOutput, TFBeamSampleOutput, TFContrastiveSearchOutput]
 
 
 class TFGenerationMixin:
@@ -386,6 +436,7 @@ class TFGenerationMixin:
         early_stopping=None,
         num_beams=None,
         temperature=None,
+        penalty_alpha=None,
         top_k=None,
         top_p=None,
         repetition_penalty=None,
@@ -409,7 +460,7 @@ class TFGenerationMixin:
         begin_suppress_tokens: Optional[List[int]] = None,
         forced_decoder_ids: Optional[List[List[int]]] = None,
         **model_kwargs,
-    ) -> Union[TFGreedySearchOutput, TFSampleOutput, TFBeamSearchOutput, TFBeamSampleOutput, tf.Tensor]:
+    ) -> Union[TFGenerateOutput, tf.Tensor]:
         r"""
         Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
         beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
@@ -425,8 +476,7 @@ class TFGenerationMixin:
         post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
-            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, `(batch_size, sequence_length,
-            feature_dim)` or `(batch_size, num_channels, height, width)`, *optional*):
+            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, `(batch_size, sequence_length, feature_dim)` or `(batch_size, num_channels, height, width)`, *optional*):
                 The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
                 method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs`
                 should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
@@ -447,6 +497,8 @@ class TFGenerationMixin:
                 Number of beams for beam search. 1 means no beam search.
             temperature (`float`, *optional*, defaults to 1.0):
                 The value used to module the next token probabilities.
+            penalty_alpha (`float`, *optional*):
+                The values balance the model confidence and the degeneration penalty in contrastive search decoding.
             top_k (`int`, *optional*, defaults to 50):
                 The number of highest probability vocabulary tokens to keep for top-k-filtering.
             top_p (`float`, *optional*, defaults to 1.0):
@@ -525,6 +577,7 @@ class TFGenerationMixin:
                     - [`~generation_tf_utils.TFSampleDecoderOnlyOutput`],
                     - [`~generation_tf_utils.TFBeamSearchDecoderOnlyOutput`],
                     - [`~generation_tf_utils.TFBeamSampleDecoderOnlyOutput`]
+                    - [`~generation_tf_utils.TFContrastiveSearchDecoderOnlyOutput`]
 
                 If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
                 [`~utils.ModelOutput`] types are:
@@ -533,6 +586,7 @@ class TFGenerationMixin:
                     - [`~generation_tf_utils.TFSampleEncoderDecoderOutput`],
                     - [`~generation_tf_utils.TFBeamSearchEncoderDecoderOutput`],
                     - [`~generation_tf_utils.TFBeamSampleEncoderDecoderOutput`]
+                    - [`~generation_tf_utils.TFContrastiveSearchEncoderDecoderOutput`]
 
         Examples:
 
@@ -606,6 +660,7 @@ class TFGenerationMixin:
                 early_stopping=early_stopping,
                 num_beams=num_beams,
                 temperature=temperature,
+                penalty_alpha=penalty_alpha,
                 top_k=top_k,
                 top_p=top_p,
                 repetition_penalty=repetition_penalty,
@@ -1374,6 +1429,7 @@ class TFGenerationMixin:
         early_stopping=None,
         num_beams=None,
         temperature=None,
+        penalty_alpha=None,
         top_k=None,
         top_p=None,
         repetition_penalty=None,
@@ -1398,7 +1454,7 @@ class TFGenerationMixin:
         begin_suppress_tokens=None,
         forced_decoder_ids=None,
         **model_kwargs,
-    ) -> Union[TFGreedySearchOutput, TFSampleOutput, TFBeamSearchOutput, TFBeamSampleOutput, tf.Tensor]:
+    ) -> Union[TFGenerateOutput, tf.Tensor]:
         r"""
         Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
         beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
@@ -1433,6 +1489,8 @@ class TFGenerationMixin:
                 Number of beams for beam search. 1 means no beam search.
             temperature (`float`, *optional*, defaults to 1.0):
                 The value used to module the next token probabilities.
+            penalty_alpha (`float`, *optional*):
+                The values balance the model confidence and the degeneration penalty in contrastive search decoding.
             top_k (`int`, *optional*, defaults to 50):
                 The number of highest probability vocabulary tokens to keep for top-k-filtering.
             top_p (`float`, *optional*, defaults to 1.0):
@@ -1514,6 +1572,7 @@ class TFGenerationMixin:
                     - [`~generation_tf_utils.TFSampleDecoderOnlyOutput`],
                     - [`~generation_tf_utils.TFBeamSearchDecoderOnlyOutput`],
                     - [`~generation_tf_utils.TFBeamSampleDecoderOnlyOutput`]
+                    - [`~generation_tf_utils.TFContrastiveSearchDecoderOnlyOutput`]
 
                 If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
                 [`~utils.ModelOutput`] types are:
@@ -1522,6 +1581,7 @@ class TFGenerationMixin:
                     - [`~generation_tf_utils.TFSampleEncoderDecoderOutput`],
                     - [`~generation_tf_utils.TFBeamSearchEncoderDecoderOutput`],
                     - [`~generation_tf_utils.TFBeamSampleEncoderDecoderOutput`]
+                    - [`~generation_tf_utils.TFContrastiveSearchEncoderDecoderOutput`]
 
         Examples:
 
@@ -1726,9 +1786,12 @@ class TFGenerationMixin:
 
         # 7. determine generation mode
         # TODO(Matt, Joao, Patrick) - add more use cases here
-        is_greedy_gen_mode = (num_beams == 1) and do_sample is False
+        is_contrastive_search_gen_mode = (
+            top_k is not None and top_k > 1 and do_sample is False and penalty_alpha is not None and penalty_alpha > 0
+        )
+        is_greedy_gen_mode = (num_beams == 1) and do_sample is False and not is_contrastive_search_gen_mode
         is_sample_gen_mode = (num_beams == 1) and do_sample is True
-        is_beam_gen_mode = (num_beams > 1) and do_sample is False
+        is_beam_gen_mode = (num_beams > 1) and do_sample is False and not is_contrastive_search_gen_mode
 
         # 8. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
@@ -1752,7 +1815,7 @@ class TFGenerationMixin:
                 raise ValueError(
                     f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
                 )
-            # 9. run greedy search
+            # 10. run greedy search
             return self.greedy_search(
                 input_ids,
                 max_length=max_length,
@@ -1820,6 +1883,25 @@ class TFGenerationMixin:
                 logits_processor=logits_processor,
                 return_dict_in_generate=return_dict_in_generate,
                 num_return_sequences=num_return_sequences,
+                **model_kwargs,
+            )
+
+        elif is_contrastive_search_gen_mode:
+            if num_return_sequences > 1:
+                raise ValueError(
+                    f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
+                )
+            # 10. run contrastive search
+            return self.contrastive_search(
+                input_ids,
+                top_k=top_k,
+                max_length=max_length,
+                penalty_alpha=penalty_alpha,
+                logits_processor=logits_processor,
+                pad_token_id=pad_token_id,
+                eos_token_id=eos_token_id,
+                output_scores=output_scores,
+                return_dict_in_generate=return_dict_in_generate,
                 **model_kwargs,
             )
 
@@ -3191,6 +3273,264 @@ class TFGenerationMixin:
                 )
         else:
             return sequences
+
+    def contrastive_search(
+        self,
+        input_ids: tf.Tensor,
+        max_length: Optional[int] = None,
+        top_k: Optional[int] = 1,
+        penalty_alpha: Optional[float] = 0,
+        logits_processor: Optional[TFLogitsProcessorList] = None,
+        logits_warper: Optional[TFLogitsProcessorList] = None,
+        pad_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_scores: Optional[bool] = None,
+        return_dict_in_generate: Optional[bool] = None,
+        **model_kwargs,
+    ) -> Union[TFContrastiveSearchOutput, tf.Tensor]:
+        r"""
+        Generates sequences of token ids for models with a language modeling head using **contrastive search** and can
+        be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+
+        Parameters:
+            input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
+                The sequence used as a prompt for the generation.
+            max_length (`int`, *optional*, defaults to 20):
+                The maximum length of the sequence to be generated.
+            top_k (`int`, *optional*, defaults to 1):
+                The size of the candidate set that is used to re-rank for contrastive search
+            penalty_alpha (`float`, *optional*, defaults to 0):
+                The degeneration penalty for contrastive search; activate when it is larger than 0
+            logits_processor (`TFLogitsProcessorList`, *optional*):
+                An instance of [`TFLogitsProcessorList`]. List of instances of class derived from [`TFLogitsProcessor`]
+                used to modify the prediction scores of the language modeling head applied at each generation step.
+            logits_warper (`TFLogitsProcessorList`, *optional*):
+                An instance of [`TFLogitsProcessorList`]. List of instances of class derived from [`TFLogitsWarper`]
+                used to warp the prediction score distribution of the language modeling head applied before multinomial
+                sampling at each generation step.
+            pad_token_id (`int`, *optional*):
+                The id of the *padding* token.
+            eos_token_id (`int`, *optional*):
+                The id of the *end-of-sequence* token.
+            output_attentions (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more details.
+            output_hidden_states (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more details.
+            output_scores (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
+            return_dict_in_generate (`bool`, *optional*, defaults to `False`):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            model_kwargs:
+                Additional model specific keyword arguments will be forwarded to the `forward` function of the model.
+                If model is an encoder-decoder model the kwargs should include `encoder_outputs`.
+
+        Return:
+            [`~generation_utils.TFContrastiveSearchDecoderOnlyOutput`],
+            [`~generation_utils.TFContrastiveSearchEncoderDecoderOutput`] or `tf.Tensor`: A `tf.Tensor`
+            containing the generated tokens (default behaviour) or a
+            [`~generation_utils.TFContrastiveSearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
+            `return_dict_in_generate=True` or a [`~generation_utils.TFContrastiveSearchEncoderDecoderOutput`] if
+            `model.config.is_encoder_decoder=True`.
+
+        Examples:
+        ```python
+        >>> from transformers import (
+        ...     AutoTokenizer,
+        ...     TFAutoModelForCausalLM,
+        ... )
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
+        >>> model = TFAutoModelForCausalLM.from_pretrained("facebook/opt-125m")
+        >>> # set pad_token_id to eos_token_id because GPT2 does not have a PAD token
+        >>> model.config.pad_token_id = model.config.eos_token_id
+        >>> input_prompt = "DeepMind Company is"
+        >>> input_ids = tokenizer(input_prompt, return_tensors="tf")
+        >>> outputs = model.contrastive_search(
+        ...     **input_ids, penalty_alpha=0.6, top_k=4, max_length=64
+        ... )
+        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        ['DeepMind Company is a company that focuses on the development and commercialization of artificial intelligence (AI). DeepMind’s mission is to help people understand and solve problems that are difficult to solve in the world today.\n\nIn this post, we talk about the benefits of deep learning in business and how it']
+        ```"""
+        # 1. init greedy_search values
+        logits_processor = logits_processor if logits_processor is not None else TFLogitsProcessorList()
+        logits_warper = logits_warper if logits_warper is not None else TFLogitsProcessorList()
+
+        max_length = max_length if max_length is not None else self.config.max_length
+        pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
+        eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        output_scores = output_scores if output_scores is not None else self.config.output_scores
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict_in_generate = (
+            return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
+        )
+        use_xla = not tf.executing_eagerly()
+        # TODO (Joao): fix cache format or find programatic way to detect cache index
+        # GPT2 and other models has a slightly different cache structure, with a different batch axis
+        model_name = str(self.decoder) if "EncoderDecoder" in str(self) else str(self)
+        cache_batch_axis = 1 if any([model_prefix in model_name for model_prefix in ("TFGPT2", "TFCTRL")]) else 0
+        # some models, like XLNet, need more than the last token in the presence of past
+        needs_full_input = "use_mems" in set(inspect.signature(self.prepare_inputs_for_generation).parameters.keys())
+
+        # 2. init `attentions`, `hidden_states`, and `scores` tuples
+        scores = [] if (return_dict_in_generate and output_scores) else None
+        decoder_attentions = [] if (return_dict_in_generate and output_attentions) else None
+        cross_attentions = [] if (return_dict_in_generate and output_attentions) else None
+        decoder_hidden_states = [] if (return_dict_in_generate and output_hidden_states) else None
+
+        # 3. init tensors to use for "xla-compileable" generate function
+        batch_size, cur_len = shape_list(input_ids)
+
+        # initialize `generated` (`input_ids` padded with `pad_token_id`), `finished_sequences`
+        input_ids_padding = tf.ones((batch_size, max_length - cur_len), dtype=tf.int32) * (pad_token_id or 0)
+        generated = tf.concat([input_ids, input_ids_padding], axis=-1)
+        finished_sequences = tf.zeros((batch_size,), dtype=tf.bool)
+
+        # 4. define "xla-compile-able" stop-condition and auto-regressive function
+        # define condition fn
+        def contrastive_search_cond_fn(generated, finished_sequences, cur_len, model_kwargs):
+            """state termination condition fn."""
+            return ~tf.reduce_all(finished_sequences)
+
+        # define condition fn
+        def contrastive_search_body_fn(generated, finished_sequences, cur_len, model_kwargs):
+            """state update fn."""
+            if needs_full_input:
+                input_ids = generated[:, :cur_len]
+            else:
+                input_ids = tf.expand_dims(generated[:, cur_len - 1], -1)
+
+            # if the first step in the loop, encode all the prefix and obtain three parameters: (1) past_key_values;
+            # (2) last_hidden_states; (3) logit_for_next_step
+            if model_kwargs.get("past") is None:
+                model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+                # forward pass to get next token logits
+                output = self(
+                    **model_inputs,
+                    return_dict=True,
+                    output_attentions=True,
+                    output_hidden_states=True,
+                )
+                # past_key_values is required for fast decoding
+                if "past_key_values" not in output:
+                    raise ValueError(
+                        f"{self.__class__.__name__} cannot return `past_key_values` and can therefore **not** be used "
+                        "for contrastive search."
+                    )
+                past_key_values = output.past_key_values
+
+                # last decoder hidden states will be used to compute the degeneration penalty (cosine similarity
+                # with previous tokens)
+                if self.config.is_encoder_decoder:
+                    last_hidden_states = output.decoder_hidden_states[-1]
+                else:
+                    last_hidden_states = output.hidden_states[-1]
+                # next logit for contrastive search to select top-k candidate tokens
+                logit_for_next_step = output.logits[:, -1, :]
+
+                next_token_logits = model_outputs.logits[:, -1]
+
+            # Store scores, attentions and hidden_states when required
+            if not use_xla and return_dict_in_generate:
+                if output_scores:
+                    scores.append(next_token_logits)
+                if output_attentions and self.config.is_encoder_decoder:
+                    decoder_attentions.append(model_outputs.decoder_attentions)
+                elif output_attentions and not self.config.is_encoder_decoder:
+                    decoder_attentions.append(model_outputs.attentions)
+                    if self.config.is_encoder_decoder:
+                        cross_attentions.append(model_outputs.cross_attentions)
+
+                if output_hidden_states and self.config.is_encoder_decoder:
+                    decoder_hidden_states.append(model_outputs.decoder_hidden_states)
+                elif output_hidden_states and self.config.is_encoder_decoder:
+                    decoder_hidden_states.append(model_outputs.hidden_states)
+
+            # pre-process distribution
+            next_tokens_scores = logits_processor(generated, next_token_logits, cur_len)
+
+            # argmax
+            next_tokens = tf.argmax(next_tokens_scores, axis=-1, output_type=tf.int32)
+
+            if eos_token_id is not None:
+                if pad_token_id is None:
+                    raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
+                unfinished_seq = 1 - tf.cast(finished_sequences, tf.int32)
+                next_tokens = next_tokens * unfinished_seq + pad_token_id * (1 - unfinished_seq)
+            finished_sequences = finished_sequences | (next_tokens == eos_token_id)
+
+            # update `generated` and `cur_len`
+            update_indices = tf.stack([tf.range(batch_size), tf.broadcast_to(cur_len, [batch_size])], axis=-1)
+            generated = tf.tensor_scatter_nd_update(tensor=generated, indices=update_indices, updates=next_tokens)
+            cur_len += 1
+
+            # update model_kwargs
+            if use_xla:
+                model_kwargs = self._update_model_kwargs_for_xla_generation(
+                    model_outputs=model_outputs,
+                    model_kwargs=model_kwargs,
+                    cur_len=cur_len,
+                    max_length=max_length,
+                    batch_size=batch_size,
+                    is_encoder_decoder=self.config.is_encoder_decoder,
+                    batch_axis=cache_batch_axis,
+                )
+            else:
+                model_kwargs = self._update_model_kwargs_for_generation(
+                    model_outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                )
+                # if we don't cache past key values we need the whole input
+                if model_kwargs.get("past", None) is None:
+                    # let's throw out `past` since we don't want `None` tensors
+                    model_kwargs.pop("past", None)
+
+            return generated, finished_sequences, cur_len, model_kwargs
+
+        # 5. run generation
+        # 1st generation step has to be run before to initialize `past`
+        generated, finished_sequences, cur_len, model_kwargs = contrastive_search_body_fn(
+            generated, finished_sequences, cur_len, model_kwargs
+        )
+
+        # 2-to-n generation steps can then be run in autoregressive fashion
+        # only in case 1st generation step does NOT yield EOS token though
+        if contrastive_search_cond_fn(generated, finished_sequences, cur_len, model_kwargs):
+            maximum_iterations = max_length - cur_len
+            generated, _, cur_len, _ = tf.while_loop(
+                contrastive_search_cond_fn,
+                contrastive_search_body_fn,
+                (generated, finished_sequences, cur_len, model_kwargs),
+                maximum_iterations=maximum_iterations,
+            )
+
+        # 6. prepare outputs
+        if not use_xla:
+            # cut for backward compatibility
+            generated = generated[:, :cur_len]
+
+        if return_dict_in_generate:
+            if self.config.is_encoder_decoder:
+                scores = tuple(scores) if scores is not None else None
+                decoder_hidden_states = tuple(decoder_hidden_states) if decoder_hidden_states is not None else None
+
+                return TFContrastiveSearchEncoderDecoderOutput(
+                    sequences=generated,
+                    scores=scores,
+                    decoder_hidden_states=decoder_hidden_states,
+                )
+            else:
+                return TFContrastiveSearchDecoderOnlyOutput(
+                    sequences=generated,
+                    scores=scores,
+                    hidden_states=decoder_hidden_states,
+                )
+        else:
+            return generated
 
 
 def _create_next_token_logits_penalties(input_ids, logits, repetition_penalty):
