@@ -60,6 +60,7 @@ src/transformers/models/detr/configuration_detr.py
 src/transformers/models/detr/modeling_detr.py
 src/transformers/models/distilbert/configuration_distilbert.py
 src/transformers/models/dpt/modeling_dpt.py
+src/transformers/models/electra/configuration_electra.py
 src/transformers/models/electra/modeling_electra.py
 src/transformers/models/electra/modeling_tf_electra.py
 src/transformers/models/ernie/configuration_ernie.py
@@ -88,6 +89,7 @@ src/transformers/models/longformer/modeling_tf_longformer.py
 src/transformers/models/longt5/modeling_longt5.py
 src/transformers/models/marian/modeling_marian.py
 src/transformers/models/markuplm/modeling_markuplm.py
+src/transformers/models/maskformer/configuration_maskformer.py
 src/transformers/models/mbart/modeling_mbart.py
 src/transformers/models/megatron_bert/configuration_megatron_bert.py
 src/transformers/models/mobilebert/configuration_mobilebert.py
@@ -95,6 +97,7 @@ src/transformers/models/mobilebert/modeling_mobilebert.py
 src/transformers/models/mobilebert/modeling_tf_mobilebert.py
 src/transformers/models/mobilevit/modeling_mobilevit.py
 src/transformers/models/mobilevit/modeling_tf_mobilevit.py
+src/transformers/models/nezha/configuration_nezha.py
 src/transformers/models/openai/configuration_openai.py 
 src/transformers/models/opt/configuration_opt.py
 src/transformers/models/opt/modeling_opt.py
@@ -104,7 +107,9 @@ src/transformers/models/pegasus/configuration_pegasus.py
 src/transformers/models/pegasus/modeling_pegasus.py
 src/transformers/models/pegasus_x/configuration_pegasus_x.py
 src/transformers/models/perceiver/modeling_perceiver.py
+src/transformers/models/plbart/configuration_plbart.py
 src/transformers/models/plbart/modeling_plbart.py
+src/transformers/models/poolformer/configuration_poolformer.py
 src/transformers/models/poolformer/modeling_poolformer.py
 src/transformers/models/realm/configuration_realm.py
 src/transformers/models/reformer/configuration_reformer.py

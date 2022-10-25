@@ -120,9 +120,12 @@ def merge_model_tokenizer_mappings(
             tokenizer = tokenizer_mapping[configuration][0]
             tokenizer_fast = tokenizer_mapping[configuration][1]
 
-            model_tokenizer_mapping.update({tokenizer: (configuration, model)})
+            if tokenizer is not None:
+                if configuration.__name__.startswith(tokenizer.__name__.replace("Tokenizer", "")):
+                    model_tokenizer_mapping.update({tokenizer: (configuration, model)})
             if tokenizer_fast is not None:
-                model_tokenizer_mapping.update({tokenizer_fast: (configuration, model)})
+                if configuration.__name__.startswith(tokenizer_fast.__name__.replace("TokenizerFast", "")):
+                    model_tokenizer_mapping.update({tokenizer_fast: (configuration, model)})
 
     return model_tokenizer_mapping
 
