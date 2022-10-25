@@ -47,6 +47,8 @@ from .generation_tf_utils import TFGenerationMixin
 from .tf_utils import shape_list
 from .utils import (
     DUMMY_INPUTS,
+    SAFE_WEIGHTS_NAME,
+    SAFE_WEIGHTS_INDEX_NAME,
     TF2_WEIGHTS_INDEX_NAME,
     TF2_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
@@ -59,11 +61,17 @@ from .utils import (
     has_file,
     is_offline_mode,
     is_remote_url,
+    is_safetensors_available,
     logging,
     requires_backends,
     working_or_temp_dir,
 )
 
+
+if is_safetensors_available():
+    from safetensors import safe_open
+    from safetensors.tensorflow import load_file as safe_load_file
+    from safetensors.tensorflow import save_file as safe_save_file
 
 if TYPE_CHECKING:
     from . import PreTrainedTokenizerBase
@@ -2456,7 +2464,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 resolved_archive_file = download_url(pretrained_model_name_or_path)
             else:
                 # set correct filename
-                filename = WEIGHTS_NAME if from_pt else TF2_WEIGHTS_NAME
+                if from_pt:
+                    filename = WEIGHTS_NAME
+                elif is_safetensors_available():
+                    filename = SAFE_WEIGHTS_NAME
+                else:
+                    filename = TF2_WEIGHTS_NAME
 
                 try:
                     # Load from URL or cache if already cached
@@ -2475,8 +2488,21 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     )
                     resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
 
-                    # Since we set _raise_exceptions_for_missing_entries=False, we don't get an expection but a None
+                    # Since we set _raise_exceptions_for_missing_entries=False, we don't get an expception but a None
                     # result when internet is up, the repo and revision exist, but the file does not.
+                    if resolved_archive_file is None and filename == SAFE_WEIGHTS_NAME:
+                        # Maybe the checkpoint is sharded, we try to grab the index name in this case.
+                        resolved_archive_file = cached_file(
+                            pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME, **cached_file_kwargs
+                        )
+                        if resolved_archive_file is not None:
+                            is_sharded = True
+                        else:
+                            # This repo has no safetensors file of any kind, we switch to TensorFlow.
+                            filename = TF2_WEIGHTS_NAME
+                            resolved_archive_file = cached_file(
+                                pretrained_model_name_or_path, TF2_WEIGHTS_NAME, **cached_file_kwargs
+                            )
                     if resolved_archive_file is None and filename == TF2_WEIGHTS_NAME:
                         # Maybe the checkpoint is sharded, we try to grab the index name in this case.
                         resolved_archive_file = cached_file(
@@ -2542,6 +2568,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 _commit_hash=commit_hash,
             )
 
+        safetensors_from_pt = False
+        if filename == SAFE_WEIGHTS_NAME:
+            with safe_open(resolved_archive_file, framework="tf") as f:
+                safetensors_metadata = f.metadata()
+            if safetensors_metadata.get("format") not in ["pt", "tf", "flax"]:
+                raise OSError(
+                    f"The safetensors archive passed at {resolved_archive_file} does not contain the valid metadata. Make "
+                    "sure you save your model with the `save_pretrained` method."
+                )
+            safetensors_from_pt = safetensors_metadata.get("format") == "pt"
+
         config.name_or_path = pretrained_model_name_or_path
 
         # composed models, *e.g.* TFRag, require special treatment when it comes to loading
@@ -2558,6 +2595,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             # Load from a PyTorch checkpoint
             return load_pytorch_checkpoint_in_tf2_model(
                 model, resolved_archive_file, allow_missing_keys=True, output_loading_info=output_loading_info
+            )
+        elif safetensors_from_pt:
+            from .modeling_tf_pytorch_utils import load_pytorch_state_dict_in_tf2_model
+
+            state_dict = safe_load_file(resolved_archive_file)
+            # Load from a PyTorch checkpoint
+            return load_pytorch_state_dict_in_tf2_model(
+                model, state_dict, allow_missing_keys=True, output_loading_info=output_loading_info
             )
 
         # we might need to extend the variable scope for composite models
