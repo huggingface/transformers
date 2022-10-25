@@ -1165,7 +1165,7 @@ class RealmEmbedder(RealmPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = True,
+        return_dict=None,
     ) -> Union[Tuple, RealmEmbedderOutput]:
         r"""
         Returns:
