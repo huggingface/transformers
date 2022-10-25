@@ -479,7 +479,7 @@ class PretrainedConfig(PushToHubMixin):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             use_auth_token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use the token generated
                 when running `huggingface-cli login` (stored in `~/.huggingface`). Will also use this token if it
                 exists and `use_auth_token` is unset.
             revision (`str`, *optional*, defaults to `"main"`):
