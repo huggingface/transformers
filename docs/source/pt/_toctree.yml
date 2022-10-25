@@ -23,6 +23,8 @@
     title: Compartilhando modelos customizados 
   - local: run_scripts
     title: Treinamento a partir de um script
+  - local: converting_tensorflow_models
+    title: Convertendo checkpoints do TensorFlow para Pytorch
   - sections:
     - local: tasks/sequence_classification
       title: Classificação de texto

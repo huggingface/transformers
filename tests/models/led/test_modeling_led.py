@@ -532,14 +532,11 @@ class LEDModelIntegrationTests(unittest.TestCase):
         EXPECTED_LEP = (
             " the physics of @xmath0-boson will again play the central role in the frontier of particle physics if the"
             " gigaz option of the international linear collider ( ilc ) can be realized in its first phase. \n the"
-            " expected sensitivity to the branching ratio of the rare decays, especially its exotic or rare processes,"
+            " expected sensitivity to the branching ratio of rare decays, especially its exotic or rare processes,"
             " should be investigated comprehensively to evaluate their potential in probing new physics. in this work"
-            " \n, we extend the previous studies of these decays to some new models and investigate the decays"
-            " altogether. we are motivated by some recent studies on the singlet extension of the mssm, such as the"
-            " next - to - minimal supersymmetric standard model ( nmssm ) @xcite and the nearly - minimal -"
-            " supersymmetry - standard - model(nmssm)@xcite, where a light cp - odd higgs boson with singlet -"
-            " dominant component may naturally arise from the spontaneous breaking of some approximate global"
-            " symmetry.    # 1#2#3#4#5#6#7#8#9#10#11#12 "
+            " \n, we study the rare decay into light higgs boson(s ) in the framework of the minimal supersymmetric"
+            " standard model ( mssm ), where a light cp - odd higgs - boson with singlet - dominant component may"
+            " naturally arise from the spontaneous breaking of some approximate global symmetry. "
         )
 
         EXPECTED_MAGNET = (
