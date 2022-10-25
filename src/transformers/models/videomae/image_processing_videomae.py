@@ -72,14 +72,14 @@ class VideoMAEImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
             dimensions to the specified `size`.
-        size (`Dict[str, int]` *optional*, defaults to {"shortest_edge": 224}):
+        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
             Set the class default for the `size` parameter. Size of the image.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_center_crop` parameter. Controls whether to center crop the image to the
             specified `crop_size`.
-        crop_size (`Dict[str, int]`, *optional*, defaults to 224):
+        crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Set the class default for the `crop_size` parameter. Size of the image after applying the center crop.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
@@ -168,7 +168,7 @@ class VideoMAEImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Center crop an image to (size["height"], size["width"]). If the input size is smaller than `size` along any
+        Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `size` along any
         edge, the image is padded with 0's and then center cropped.
 
         Args:
