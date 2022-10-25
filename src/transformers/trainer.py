@@ -1651,7 +1651,7 @@ class Trainer:
         self.callback_handler.optimizer = self.optimizer
         self.callback_handler.lr_scheduler = self.lr_scheduler
         self.callback_handler.train_dataloader = train_dataloader
-        self.state.trial_name = self.hp_name(trial) if self.hp_name is not None else None
+        self.state.trial_name = self.hp_name(trial) if self.hp_name is not None and trial is not None else None
         if trial is not None:
             assignments = trial.assignments if self.hp_search_backend == HPSearchBackend.SIGOPT else trial
             self.state.trial_params = hp_params(assignments)
