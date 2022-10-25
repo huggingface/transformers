@@ -67,12 +67,11 @@ def get_size_dict(
     backwards compatibility with the old feature extractor configs and removes ambiguity over whether the tuple is in
     (height, width) or (width, height) format.
 
-    - If `size` is tuple, it is converted to {"height": size[0], "width": size[1]} or {"height": size[1], "width":
-    size[0]} if `height_width_order` is False.
-    - If `size` is an int, and `default_to_square` is True, it is converted to
-    {"height": size, "width": size}.
-    - If `size` is an int and `default_to_square` is False, it is converted to
-    {"shortest_edge": size}. If `max_size` is not None, it is added to the dict as {"longest_edge": max_size}.
+    - If `size` is tuple, it is converted to `{"height": size[0], "width": size[1]}` or `{"height": size[1], "width":
+    size[0]}` if `height_width_order` is `False`.
+    - If `size` is an int, and `default_to_square` is `True`, it is converted to `{"height": size, "width": size}`.
+    - If `size` is an int and `default_to_square` is False, it is converted to `{"shortest_edge": size}`. If `max_size`
+      is set, it is added to the dict as `{"longest_edge": max_size}`.
 
     Args:
         size (`Union[int, Iterable[int], Dict[str, int]]`, *optional*):
