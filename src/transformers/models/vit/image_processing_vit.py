@@ -46,7 +46,7 @@ class ViTImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
             dimensions to the specified `size`.
-        size (`dict`, *optional*, defaults to {"height": 224, "width": 224}):
+        size (`dict`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Set the class default for the `size` parameter. Controls the size of the output image.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
@@ -100,16 +100,13 @@ class ViTImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Resize an image.
-
-        If size is an int, then the image is resized to (size, size). If size is an iterable of length 2, then the
-        image is resized to (size[0], size[1]).
+        Resize an image to `(size["height"], size["width"])`.
 
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`dict`):
-                Dictionary in the format {"height": int, "width": int} specifying the size of the output image.
+            size (`Dict[str, int]`):
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample:
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
             data_format (`ChannelDimension`, *optional*):
@@ -199,10 +196,12 @@ class ViTImageProcessor(BaseImageProcessor):
                 Image to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`dict`, *optional*, defaults to `self.size`):
-                Dictionary in the format {"height": int, "width": int} specifying the size of the output image.
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+                Dictionary in the format `{"height": h, "width": w}` specifying the size of the output image after
+                resizing.
             resample (`PILImageResampling` filter, *optional*, defaults to `self.resample`):
-                `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has an effect if `do_resize` is set to `True`.
+                `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
+                an effect if `do_resize` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
