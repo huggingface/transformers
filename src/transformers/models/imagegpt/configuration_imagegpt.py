@@ -14,7 +14,11 @@
 # limitations under the License.
 """ OpenAI ImageGPT configuration"""
 
+from collections import OrderedDict
+from typing import Mapping
+
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -140,3 +144,13 @@ class ImageGPTConfig(PretrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+
+
+class ImageGPTOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("input_ids", {0: "batch", 1: "sequence"}),
+            ]
+        )

@@ -341,6 +341,9 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.ibert.IBertOnnxConfig",
         ),
+        "imagegpt": supported_features_mapping(
+            "default", "image-classification", onnx_config_cls="models.imagegpt.ImageGPTOnnxConfig"
+        ),
         "layoutlm": supported_features_mapping(
             "default",
             "masked-lm",
