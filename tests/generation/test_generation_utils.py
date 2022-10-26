@@ -2318,32 +2318,29 @@ class GenerationIntegrationTests(unittest.TestCase):
                 decoder_input_ids=input_ids, max_new_tokens=10, max_length=20, penalty_alpha=0.6, top_k=4
             )
 
-    def test_max_new_tokens_decoder_only_contrastive_search_gptj(self):
-        article = """Justin Timberlake."""
-        gptj_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gptj")
-        gptj_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gptj").to(torch_device)
-        input_ids = gptj_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+    def test_contrastive_search_batched(self):
+        articles = ["Timberlake", "Jessica Biel, welcome to parenthood among other things"]
+        tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+        model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(torch_device)
 
-        self.assertEqual(list(input_ids.shape), [1, 9])
+        model.config.eos_token_id = None
+        input_ids = tokenizer(articles[1], return_tensors="pt").input_ids.to(torch_device)
+        input_ids_batched = tokenizer(articles, padding=True, return_tensors="pt").input_ids.to(torch_device)
 
-        max_new_tokens = 3
-        gptj_model.config.max_length = 20
+        output_sequences_batched = model.generate(
+            input_ids=input_ids_batched, penalty_alpha=0.6, top_k=4, return_dict_in_generate=True, output_scores=True
+        )
+        output_sequences = model.generate(
+            input_ids=input_ids, penalty_alpha=0.6, top_k=4, return_dict_in_generate=True, output_scores=True
+        )
 
-        # call < 20
-        outputs = gptj_model.generate(input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4)
+        batched_out = tokenizer.decode(output_sequences_batched.sequences[1], skip_special_tokens=True)
+        out = tokenizer.decode(output_sequences.sequences[0], skip_special_tokens=True)
+        self.assertEqual(batched_out, out)
 
-        # 9 input_ids + 3 new tokens
-        self.assertEqual(list(outputs.shape), [1, 12])
-
-        # call > 20
-        outputs = gptj_model.generate(max_new_tokens=max_new_tokens + 20, penalty_alpha=0.6, top_k=4)
-
-        # 1 BOS token + 23 new tokens
-        self.assertEqual(list(outputs.shape), [1, 24])
-
-        # max_new_tokens and max_length serve the same purpose and must not be used together.
-        with self.assertRaises(ValueError):
-            gptj_model.generate(input_ids=input_ids, max_new_tokens=10, max_length=20, penalty_alpha=0.6, top_k=4)
+        score_diff = (output_sequences_batched.scores[1].sum() - output_sequences.scores[0].sum()).abs()
+        breakpoint()
+        self.assertTrue(score_diff < 1e-4)
 
     def test_max_new_tokens_decoder_only_contrastive_search_gpt2(self):
         article = """Justin Timberlake."""
