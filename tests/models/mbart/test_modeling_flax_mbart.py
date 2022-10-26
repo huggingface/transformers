@@ -18,7 +18,6 @@ import numpy as np
 import timeout_decorator  # noqa
 
 from transformers import MBartConfig, is_flax_available
-from transformers.models.mbart.modeling_flax_mbart import FlaxMBartForCausalLM
 from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
 from transformers.utils import cached_property
 
@@ -43,6 +42,7 @@ if is_flax_available():
         FlaxMBartForQuestionAnswering,
         FlaxMBartForSequenceClassification,
         FlaxMBartModel,
+        FlaxMBartForCausalLM,
         shift_tokens_right,
     )
 
