@@ -28,7 +28,11 @@ FAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "ksmcg/fan_large_24_p16_224": "https://huggingface.co/ksmcg/fan_large_24_p16_224/resolve/main/config.json",
 }
 
-original_feature_mapping = {"num_heads": "num_attention_heads"}
+original_feature_mapping = {
+    "num_heads": "num_attention_heads",
+    "dropout_ratio": "decoder_dropout",
+    "depth": "num_hidden_layers",
+}
 
 # TODO: FANConfig Attributes rewrite
 # TODO: FANConfig features rename
@@ -46,12 +50,20 @@ class FANConfig(PretrainedConfig):
 
 
     Args:
+        patch_size (int, defaults to 16):
+            Size of each patch to generated the embedding tokens from the image
         embed_dim (`int`, *optional*, defaults to 384):
             Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
+        se_mlp (`bool`, defaults to False):
+            Wheter or not to use Squeeze-Excite in the FANEncoder layers MLP
+        depths (tuple(int)):
+             Number of blocks at each stage, when using hybrid backbone
         num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
+        tokens_norm (`bool`, defaults to True):
+            Whether or not to apply normalization in the Class Attention block
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
@@ -94,7 +106,7 @@ class FANConfig(PretrainedConfig):
         self,
         patch_size=16,
         embed_dim=384,
-        depth=12,
+        num_hidden_layers=12,
         depths=None,
         num_attention_heads=8,
         eta=1.0,
@@ -114,6 +126,7 @@ class FANConfig(PretrainedConfig):
         drop_rate=0.0,
         attn_drop_rate=0.0,
         drop_path_rate=0.0,
+        decoder_dropout=0.1,
         act_layer=None,
         norm_layer=None,
         cls_attn_layers=2,
@@ -128,7 +141,6 @@ class FANConfig(PretrainedConfig):
         in_index=[0, 1, 2, 3],
         feature_strides=[4, 8, 16, 32],
         channels=256,
-        dropout_ratio=0.1,
         decoder_hidden_size=768,
         reshape_last_stage=False,
         semantic_loss_ignore_index=-100,
@@ -138,14 +150,14 @@ class FANConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.embed_dim = embed_dim
         head_init_scale = head_init_scale
-        self.depth = depth
+        self.num_hidden_layers = num_hidden_layers
         self.depths = depths
         self.num_attention_heads = num_attention_heads
         self.eta = eta
         self.tokens_norm = tokens_norm
         self.sharpen_attn = sharpen_attn
         self.se_mlp = se_mlp
-        self.sr_ratio = sr_ratio if sr_ratio else [1] * (depth // 2) + [1] * (depth // 2)
+        self.sr_ratio = sr_ratio if sr_ratio else [1] * (num_hidden_layers // 2) + [1] * (num_hidden_layers // 2)
         self.initializer_range = initializer_range
         self.img_size = img_size
         self.in_chans = in_chans
@@ -159,7 +171,7 @@ class FANConfig(PretrainedConfig):
         self.drop_rate = drop_rate
         self.attn_drop_rate = attn_drop_rate
         self.drop_path_rate = drop_path_rate
-        self.dropout_ratio = dropout_ratio  # TODO: Decoder Dropout
+        self.decoder_dropout = decoder_dropout  # TODO: Decoder Dropout
         self.norm_layer = norm_layer
         self.act_layer = act_layer
         self.cls_attn_layers = cls_attn_layers

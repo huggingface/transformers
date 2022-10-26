@@ -1383,19 +1383,22 @@ class FANEncoderLayer(FANPreTrainedModel):
         ), "`patch_size` should divide image dimensions evenly"
 
         num_attention_heads = (
-            [config.num_attention_heads] * config.depth
+            [config.num_attention_heads] * config.num_hidden_layers
             if not isinstance(config.num_attention_heads, list)
             else config.num_attention_heads
         )
-        channel_dims = [config.embed_dim] * config.depth if config.channel_dims is None else config.channel_dims
+        channel_dims = (
+            [config.embed_dim] * config.num_hidden_layers if config.channel_dims is None else config.channel_dims
+        )
         norm_layer = config.norm_layer or partial(nn.LayerNorm, eps=1e-6)
         act_layer = config.act_layer or nn.GELU
+        downsample = None
 
         if config.se_mlp:
             build_block = FANBlock_SE
         else:
             build_block = FANBlock
-        if index < config.depth - 1 and channel_dims[index] != channel_dims[index + 1]:
+        if index < config.num_hidden_layers - 1 and channel_dims[index] != channel_dims[index + 1]:
             downsample = OverlapPatchEmbed(
                 img_size=img_size,
                 patch_size=3,
@@ -1403,8 +1406,7 @@ class FANEncoderLayer(FANPreTrainedModel):
                 in_chans=channel_dims[index],
                 embed_dim=channel_dims[index + 1],
             )
-        else:
-            downsample = None
+
         self.block = build_block(
             dim=channel_dims[index],
             num_attention_heads=num_attention_heads[index],
@@ -1439,7 +1441,7 @@ class FANEncoder(FANPreTrainedModel):
     - position_embeddings are added to the forward pass.
 
     Args:
-        config: DetrConfig
+        config: FANConfig
     """
 
     def __init__(self, config: FANConfig):
@@ -1452,14 +1454,16 @@ class FANEncoder(FANPreTrainedModel):
         ), "`patch_size` should divide image dimensions evenly"
 
         num_attention_heads = (
-            [config.num_attention_heads] * config.depth
+            [config.num_attention_heads] * config.num_hidden_layers
             if not isinstance(config.num_attention_heads, list)
             else config.num_attention_heads
         )
-        channel_dims = [config.embed_dim] * config.depth if config.channel_dims is None else config.channel_dims
+        channel_dims = (
+            [config.embed_dim] * config.num_hidden_layers if config.channel_dims is None else config.channel_dims
+        )
         norm_layer = config.norm_layer or partial(nn.LayerNorm, eps=1e-6)
         act_layer = config.act_layer or nn.GELU
-        self.blocks = nn.ModuleList([FANEncoderLayer(config, i) for i in range(config.depth)])
+        self.blocks = nn.ModuleList([FANEncoderLayer(config, i) for i in range(config.num_hidden_layers)])
         self.num_features = self.embed_dim = channel_dims[-1]
         self.cls_token = nn.Parameter(torch.zeros(1, 1, channel_dims[-1]))
         self.cls_attn_blocks = nn.ModuleList(
@@ -1799,7 +1803,7 @@ class SegformerMLP(nn.Module):
 
 
 class FANDecodeHead(FANPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FANConfig):
         super().__init__(config)
         # linear layers which will unify the channel dimension of each of the encoder blocks to the same config.decoder_hidden_size
         mlps = []
@@ -1820,7 +1824,7 @@ class FANDecodeHead(FANPreTrainedModel):
         self.batch_norm = nn.BatchNorm2d(config.decoder_hidden_size)
         self.activation = nn.ReLU()
 
-        self.dropout = nn.Dropout(config.dropout_ratio)
+        self.dropout = nn.Dropout(config.decoder_dropout)
         self.classifier = nn.Conv2d(config.decoder_hidden_size, config.num_classes, kernel_size=1)
 
         self.config = config
