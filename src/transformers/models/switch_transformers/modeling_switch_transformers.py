@@ -30,9 +30,9 @@ from torch.utils.checkpoint import checkpoint
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
-    BaseModelOutputWithPastAndCrossAttentions,
-    Seq2SeqLMOutput,
-    Seq2SeqModelOutput,
+    MoEModelOutputWithPastAndCrossAttentions,
+    Seq2SeqMoEOutput,
+    Seq2SeqMoEModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
@@ -108,8 +108,6 @@ def _one_hot(tensor, num_classes, axis=-1, dtype=torch.bool):
     return out.to(tensor.device)
 
 # Router loss
-
-
 def router_z_loss_func(router_logits: torch.Tensor) -> float:
     r"""
     Compute router z-loss implemented in PyTorch.
@@ -434,16 +432,26 @@ class SwitchTransformersLayerFF(nn.Module):
         self.layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, output_router_logits):
         forwarded_states = self.layer_norm(hidden_states)
         forwarded_states = self.mlp(forwarded_states)
-        hidden_states = hidden_states + self.dropout(forwarded_states)
-        return hidden_states
+
+        if isinstance(forwarded_states, tuple):
+            forwarded_states, router_logits = forwarded_states
+        else:
+            router_logits = None
+
+        output = hidden_states + self.dropout(forwarded_states)
+
+        if output_router_logits and router_logits is not None:
+            output =  (output, router_logits)
+
+        return output
 
 
 class SwitchTransformersSparseMLP(nn.Module):
     r"""
-    Implementation of the Switch Transformers Sparse MLP module. 
+    Implementation of the Switch Transformers Sparse MLP module.
     TODO: Add a LOT of details here
     """
 
@@ -503,7 +511,7 @@ class SwitchTransformersSparseMLP(nn.Module):
             hidden_states[token_indices] = expert(hidden_states[token_indices])
 
         hidden_states = router_probs * hidden_states
-        return hidden_states
+        return hidden_states, router_probs
 
 
 # Copied from transformers.models.t5.modeling_t5.T5Attention with T5->SwitchTransformers
@@ -834,6 +842,7 @@ class SwitchTransformersBlock(nn.Module):
         past_key_value=None,
         use_cache=False,
         output_attentions=False,
+        output_router_logits=False,
         return_dict=True,
     ):
 
@@ -906,7 +915,12 @@ class SwitchTransformersBlock(nn.Module):
             attention_outputs = attention_outputs + cross_attention_outputs[2:]
 
         # Apply Feed Forward layer
-        hidden_states = self.layer[-1](hidden_states)
+        hidden_states = self.layer[-1](hidden_states, output_router_logits)
+
+        if isinstance(hidden_states, tuple) :
+            hidden_states, router_probs = hidden_states
+        else:
+            router_probs = (None,)
 
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
@@ -919,6 +933,8 @@ class SwitchTransformersBlock(nn.Module):
             outputs = outputs + (present_key_value_state,) + attention_outputs
         else:
             outputs = outputs + attention_outputs
+
+        outputs = outputs + (router_probs,)
 
         return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
 
@@ -1070,6 +1086,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
+        output_router_logits=None,
         return_dict=None,
     ):
         # Model parallel
@@ -1142,6 +1159,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         present_key_value_states = () if use_cache else None
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
+        all_router_probs = () if output_router_logits else None
         all_cross_attentions = () if (output_attentions and self.is_decoder) else None
         position_bias = None
         encoder_decoder_position_bias = None
@@ -1210,6 +1228,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                     past_key_value=past_key_value,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
+                    output_router_logits=output_router_logits,
                 )
 
             # layer_outputs is a tuple with:
@@ -1233,6 +1252,9 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                 all_attentions = all_attentions + (layer_outputs[3],)
                 if self.is_decoder:
                     all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
+
+            if output_router_logits:
+                all_router_probs = all_router_probs + (layer_outputs[-1],)
 
             # Model Parallel: If it's the last layer for that device, put things on the next device
             if self.model_parallel:
@@ -1259,12 +1281,13 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                 ]
                 if v is not None
             )
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return MoEModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=present_key_value_states,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
             cross_attentions=all_cross_attentions,
+            router_probs=all_router_probs,
         )
 
 
@@ -1380,6 +1403,9 @@ SWITCH_TRANSFORMERS_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        output_router_logits (`bool`, *optional*):
+            Whether or not to return the logits of all the routers. They are useful for computing the router loss,
+            and should not be returned during inference.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -1489,7 +1515,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(SWITCH_TRANSFORMERS_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Seq2SeqMoEModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1506,8 +1532,9 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqMoEModelOutput]:
         r"""
         Returns:
 
@@ -1550,6 +1577,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
                 head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                output_router_logits=output_router_logits,
                 return_dict=return_dict,
             )
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
@@ -1585,13 +1613,14 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            output_router_logits=output_router_logits,
             return_dict=return_dict,
         )
 
         if not return_dict:
             return decoder_outputs + encoder_outputs
 
-        return Seq2SeqModelOutput(
+        return Seq2SeqMoEModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
@@ -1600,6 +1629,8 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
+            encoder_router_logits=encoder_outputs.router_probs,
+            decoder_router_logits=decoder_outputs.router_probs
         )
 
 
@@ -1664,7 +1695,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         return self.decoder
 
     @add_start_docstrings_to_model_forward(SWITCH_TRANSFORMERS_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Seq2SeqMoEOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1682,8 +1713,9 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
+    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqMoEOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
@@ -1734,6 +1766,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
                 head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                output_router_logits=output_router_logits,
                 return_dict=return_dict,
             )
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
@@ -1776,6 +1809,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            output_router_logits=output_router_logits,
             return_dict=return_dict,
         )
 
@@ -1797,6 +1831,11 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-100)
+            # todo check in the config if router loss enables
+            if output_router_logits :
+                router_z_loss = router_z_loss_func(encoder_outputs.router_probs)
+                decoder_outputs.router_probs
+
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
@@ -1804,7 +1843,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
             return ((loss,) + output) if loss is not None else output
 
-        return Seq2SeqLMOutput(
+        return Seq2SeqMoEOutput(
             loss=loss,
             logits=lm_logits,
             past_key_values=decoder_outputs.past_key_values,
@@ -1814,6 +1853,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
+            encoder_router_logits=encoder_outputs.router_probs,
+            decoder_router_logits=decoder_outputs.router_probs,
         )
 
     def prepare_inputs_for_generation(
@@ -1926,6 +1967,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
         r"""
@@ -1953,6 +1995,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            output_router_logits=output_router_logits,
             return_dict=return_dict,
         )
 

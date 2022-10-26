@@ -80,6 +80,8 @@ class SwitchTransformersConfig(PretrainedConfig):
             "selective precision" discussion in https://arxiv.org/abs/2101.03961.
         batch_prioritized_routing (`bool`, *optional*, defaults to `False`):
             Whether to use batch prioritized routing.
+        add_router_probs (`bool`, *optional*, defaults to `False`):
+            Whether to output router probabilities to compute router auxiliary loss.
         num_selected_experts (`int`, *optional*, defaults to 2):
             Number of experts to select for each token.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -130,6 +132,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         initializer_factor=1.0,
         feed_forward_proj="relu",
         is_encoder_decoder=True,
+        add_router_probs=False,
         use_cache=True,
         pad_token_id=0,
         eos_token_id=1,
@@ -183,6 +186,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
+        self.add_router_probs = add_router_probs
 
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
