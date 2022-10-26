@@ -115,6 +115,8 @@ if is_tf_available():
 if is_torch_available():
     import torch
 
+    from transformers import BertModel
+
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
@@ -2164,7 +2166,7 @@ class UtilsFunctionsTest(unittest.TestCase):
             )
 
     @slow
-    def test_special_layer_name_shardind(self):
+    def test_special_layer_name_sharding(self):
         retriever = RagRetriever.from_pretrained("facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True)
         model = TFRagModel.from_pretrained("facebook/rag-token-nq", retriever=retriever)
 
@@ -2279,11 +2281,34 @@ class UtilsFunctionsTest(unittest.TestCase):
             for p1, p2 in zip(model.weights, new_model.weights):
                 self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
 
+    @is_pt_tf_cross_test
+    def test_safetensors_save_and_load_pt_to_tf(self):
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        pt_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            pt_model.save_pretrained(tmp_dir, safe_serialization=True)
+            # Check we have a model.safetensors file
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+
+            new_model = TFBertModel.from_pretrained(tmp_dir)
+
+            # Check models are equal
+            for p1, p2 in zip(model.weights, new_model.weights):
+                self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
     @require_safetensors
     def test_safetensors_load_from_hub(self):
+        tf_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # Can load from the TF-formatted checkpoint
+        safetensors_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert-safetensors-tf")
+
+        # Check models are equal
+        for p1, p2 in zip(safetensors_model.weights, tf_model.weights):
+            self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
         # Can load from the PyTorch-formatted checkpoint
         safetensors_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert-safetensors")
-        tf_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Check models are equal
         for p1, p2 in zip(safetensors_model.weights, tf_model.weights):
