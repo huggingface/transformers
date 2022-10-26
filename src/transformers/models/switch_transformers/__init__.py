@@ -68,20 +68,6 @@ else:
     ]
 
 
-try:
-    if not is_flax_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_flax_switch_transformers"] = [
-        "FlaxSwitchTransformersEncoderModel",
-        "FlaxSwitchTransformersForConditionalGeneration",
-        "FlaxSwitchTransformersModel",
-        "FlaxSwitchTransformersPreTrainedModel",
-    ]
-
-
 if TYPE_CHECKING:
     from .configuration_switch_transformers import (
         SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -117,19 +103,6 @@ if TYPE_CHECKING:
             SwitchTransformersForConditionalGeneration,
             SwitchTransformersModel,
             SwitchTransformersPreTrainedModel,
-        )
-
-    try:
-        if not is_flax_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_flax_switch_transformers import (
-            FlaxSwitchTransformersEncoderModel,
-            FlaxSwitchTransformersForConditionalGeneration,
-            FlaxSwitchTransformersModel,
-            FlaxSwitchTransformersPreTrainedModel,
         )
 
 

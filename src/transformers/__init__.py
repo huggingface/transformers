@@ -3074,14 +3074,6 @@ else:
     _import_structure["models.t5"].extend(
         ["FlaxT5EncoderModel", "FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"]
     )
-    _import_structure["models.switch_transformers"].extend(
-        [
-            "FlaxSwitchTransformersEncoderModel",
-            "FlaxSwitchTransformersForConditionalGeneration",
-            "FlaxSwitchTransformersModel",
-            "FlaxSwitchTransformersPreTrainedModel",
-        ]
-    )
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
     _import_structure["models.vision_text_dual_encoder"].extend(["FlaxVisionTextDualEncoderModel"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
@@ -5605,12 +5597,6 @@ if TYPE_CHECKING:
             FlaxRoFormerPreTrainedModel,
         )
         from .models.speech_encoder_decoder import FlaxSpeechEncoderDecoderModel
-        from .models.switch_transformers import (
-            FlaxSwitchTransformersEncoderModel,
-            FlaxSwitchTransformersForConditionalGeneration,
-            FlaxSwitchTransformersModel,
-            FlaxSwitchTransformersPreTrainedModel,
-        )
         from .models.t5 import FlaxT5EncoderModel, FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import FlaxVisionTextDualEncoderModel

@@ -31,11 +31,11 @@ SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class SwitchTransformersConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SwitchTransformersModel`] or a
-    [`FlaxSwitchTransformersModel`]. It is used to instantiate a SwitchTransformers model according to the specified
-    arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
-    configuration to that of the SwitchTransformers
-    [ybelkada/switch_transformers-base](https://huggingface.co/ybelkada/switch_transformers-base) architecture.
+    This is the configuration class to store the configuration of a [`SwitchTransformersModel`]. It is used to
+    instantiate a SwitchTransformers model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    SwitchTransformers [ybelkada/switch_transformers-base](https://huggingface.co/ybelkada/switch_transformers-base)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
