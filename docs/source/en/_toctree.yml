@@ -44,7 +44,8 @@
       title: Use tokenizers from 🤗 Tokenizers
     - local: multilingual
       title: Inference for multilingual models
-    - sections:
+    - isExpanded: false
+      sections:
       - local: tasks/sequence_classification
         title: Text classification
       - local: tasks/token_classification
@@ -60,7 +61,6 @@
       - local: tasks/multiple_choice
         title: Multiple choice
       title: Task guides
-      isExpanded: false
     title: Natural Language Processing
   - sections:
     - local: tasks/audio_classification
@@ -247,6 +247,8 @@
         title: ERNIE
       - local: model_doc/esm
         title: ESM
+      - local: model_doc/flan-t5
+        title: FLAN-T5
       - local: model_doc/flaubert
         title: FlauBERT
       - local: model_doc/fnet
