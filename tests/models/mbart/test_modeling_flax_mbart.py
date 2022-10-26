@@ -18,7 +18,13 @@ import numpy as np
 import timeout_decorator  # noqa
 
 from transformers import MBartConfig, is_flax_available
-from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
+from transformers.testing_utils import (
+    is_pt_flax_cross_test,
+    require_flax,
+    require_sentencepiece,
+    require_tokenizers,
+    slow,
+)
 from transformers.utils import cached_property
 
 from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
@@ -592,10 +598,25 @@ class FlaxMBartStandaloneDecoderModelTest(FlaxModelTesterMixin, FlaxGenerationTe
         # decoder cannot keep gradients
         return
 
+    # skip test as base and causallm differ in structure
     def test_save_load_from_base(self):
-        # skip test as base and causallm differ in structure
         pass
 
+    # skip test as base and causallm differ in structure
     def test_save_load_to_base(self):
-        # skip test as base and causallm differ in structure
+        pass
+
+    # skip test as base and causallm differ in structure
+    @is_pt_flax_cross_test
+    def test_save_load_from_base_pt(self):
+        pass
+
+    # skip test as base and causallm differ in structure
+    @is_pt_flax_cross_test
+    def test_save_load_to_base_pt(self):
+        pass
+
+    # skip test as base and causallm differ in structure
+    @is_pt_flax_cross_test
+    def test_save_load_bf16_to_base_pt(self):
         pass
