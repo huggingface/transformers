@@ -18,12 +18,11 @@
 import copy
 import math
 import warnings
-from dataclasses import dataclass, replace
-from typing import Any, Optional, Tuple, Union
+from dataclasses import dataclass
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-from torch import nn
 from torch.nn import CrossEntropyLoss
 from torch.utils.checkpoint import checkpoint
 
@@ -167,6 +166,25 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
 
 
+@dataclass
+class RouterOutput:
+    """
+    Base class for MoE Routers outputs, with expert indices, together with router probabilities.
+
+    Args:
+        expert_indices (`torch.LongTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        router_probs (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_probs=True` and `config.add_router_probs=True` is passed or when `config.output_router_probs=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
+
+            Raw router probabilities that are computed by MoE routers, these terms are used to compute the auxiliary
+            loss for Mixture of Experts models.
+    """
+
+    expert_indices: torch.LongTensor = None
+    router_probs: torch.FloatTensor = None
+
+
 class TokensChooseMaskedRouter(nn.Module):
     """
     Masked matmul router using tokens choose top-k experts assignment.
@@ -281,17 +299,16 @@ class TokensChooseMaskedRouter(nn.Module):
         else:
             padding_mask = None
 
-        expert_index, auxiliary_loss = self._compute_routing_instructions(router_probs, padding_mask, **kwargs)
-        # We cast back the output to the previous dtype
-        expert_index = expert_index.to(self.input_tokens_dtype)
+        expert_index = self._compute_routing_instructions(router_probs, padding_mask, **kwargs)
+        expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
+
         router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
-        router_z_loss = router_z_loss_func(router_logits)
-        return expert_index, auxiliary_loss, router_z_loss, router_probs
+        # router_z_loss = router_z_loss_func(router_logits)
+        return expert_index, router_probs, router_logits
 
     def _compute_routing_instructions(
         self,
         router_probs: torch.Tensor,
-        padding_mask: Optional[torch.Tensor],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Computes masks for the top-k experts per token.
@@ -300,39 +317,13 @@ class TokensChooseMaskedRouter(nn.Module):
             router_probs (`torch.Tensor`):
                 Router raw probabilities tensor of shape [num_groups, tokens_per_group, num_experts] used to determine
                 the routing of tokens to the experts.
-            padding_mask (`torch.Tensor`):
-                Padding mask of shape [num_groups, tokens_per_group] used to identify padding tokens that should be
-                ignored by the router.
-            expert_capacity (`int`):
-                Each group will send this many tokens to each expert.
-
         Returns:
             Dispatch and combine arrays for routing with masked matmuls.
         """
-
         # Top-k router probability and corresponding expert indices for each token.
         # Shape: [num_groups, tokens_per_group, num_selected_experts].
         expert_index = torch.argmax(router_probs, dim=-1)
-
-        if padding_mask is not None:  # TODO test or delete
-            # Mask applied to gate. Exclude choices corresponding to padding tokens.
-            gate_mask = padding_mask.unsqueeze(-1).to(expert_index.dtype)
-            expert_gate *= gate_mask
-
-            # Set `expert_index` elements corresponding to padding to negative
-            # numbers. Negative `expert_index` elements will ultimately be dropped in
-            # the one_hot conversion to the `expert_mask`.
-            # First convert nonzero padding elements to negative values.
-            expert_index *= (2 * gate_mask) - 1
-            # Handle zero padding elements by negatively shifting all padding.
-            expert_index += (gate_mask - 1).repeat(1, 1, self.num_selected_experts)
-
-            # To correctly compute load balancing loss, we also mask out probs.
-            router_probs *= gate_mask
-
-        auxiliary_loss = load_balancing_loss_func(router_probs, expert_index)
-        expert_index = torch.nn.functional.one_hot(expert_index, self.num_experts)
-        return expert_index, auxiliary_loss
+        return expert_index
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->SwitchTransformers
@@ -404,8 +395,7 @@ class SwitchTransformersDenseGatedActDense(nn.Module):
 
 class SwitchTransformersLayerFF(nn.Module):
     r"""
-    Switch Transformers Feed Forward layer module. This is a wrapper around the Mixture of Experts
-    module.
+    Switch Transformers Feed Forward layer module. This is a wrapper around the Mixture of Experts module.
 
     Attributes:
         is_sparse (`bool`):
@@ -436,22 +426,21 @@ class SwitchTransformersLayerFF(nn.Module):
         forwarded_states = self.mlp(forwarded_states)
 
         if isinstance(forwarded_states, tuple):
-            forwarded_states, router_logits = forwarded_states
+            forwarded_states, router_tuple = forwarded_states
         else:
-            router_logits = None
+            router_tuple = None
 
         output = hidden_states + self.dropout(forwarded_states)
 
-        if output_router_logits and router_logits is not None:
-            output = (output, router_logits)
+        if output_router_logits and router_tuple is not None:
+            output = (output, router_tuple)
 
         return output
 
 
 class SwitchTransformersSparseMLP(nn.Module):
     r"""
-    Implementation of the Switch Transformers Sparse MLP module.
-    TODO: Add a LOT of details here
+    Implementation of the Switch Transformers Sparse MLP module. TODO: Add a LOT of details here
     """
 
     def __init__(self, config: SwitchTransformersConfig, expert_class: nn.Module = SwitchTransformersDenseActDense):
@@ -485,20 +474,20 @@ class SwitchTransformersSparseMLP(nn.Module):
 
     def forward(self, hidden_states):
         r"""
-        Hold on, this will be slightly tricky to understand
-        In the correct order, a MoE layer does the following:
+        Hold on, this will be slightly tricky to understand In the correct order, a MoE layer does the following:
 
-        1- Gets the `router_mask` from the router. This mask will contain the indices of the
-        routed tokens. Also retrieve the probabilities (max prob) for each token. The probabilities are
-        needed in the computation of the hidden states since the probabilities will be broadcasted
-        to the hidden states values (they can be interpreted as a scaling factor).
+        1- Gets the `router_mask` from the router. This mask will contain the indices of the routed tokens. Also
+        retrieve the probabilities (max prob) for each token. The probabilities are needed in the computation of the
+        hidden states since the probabilities will be broadcasted to the hidden states values (they can be interpreted
+        as a scaling factor).
 
         2- TODO: explain @ArthurZucker
 
 
         """
         # Step 1: Get the router_mask from the router as wel as the probabilities
-        router_mask, auxiliary_loss, router_z_loss, router_probs = self.router(hidden_states)
+        router_mask, router_probs, router_logits = self.router(hidden_states)
+        expert_index = torch.argmax(router_mask, dim=-1)
 
         for idx, expert in enumerate(self.experts.values()):
 
@@ -510,7 +499,7 @@ class SwitchTransformersSparseMLP(nn.Module):
             hidden_states[token_indices] = expert(hidden_states[token_indices])
 
         hidden_states = router_probs * hidden_states
-        return hidden_states, router_probs
+        return hidden_states, (router_logits, expert_index)
 
 
 # Copied from transformers.models.t5.modeling_t5.T5Attention with T5->SwitchTransformers
@@ -917,9 +906,9 @@ class SwitchTransformersBlock(nn.Module):
         hidden_states = self.layer[-1](hidden_states, output_router_logits)
 
         if isinstance(hidden_states, tuple):
-            hidden_states, router_probs = hidden_states
+            hidden_states, router_tuple = hidden_states
         else:
-            router_probs = (None,)
+            router_tuple = (None,)
 
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
@@ -933,7 +922,7 @@ class SwitchTransformersBlock(nn.Module):
         else:
             outputs = outputs + attention_outputs
 
-        outputs = outputs + (router_probs,)
+        outputs = outputs + (router_tuple,)
 
         return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
 
@@ -1404,8 +1393,8 @@ SWITCH_TRANSFORMERS_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         output_router_logits (`bool`, *optional*):
-            Whether or not to return the logits of all the routers. They are useful for computing the router loss,
-            and should not be returned during inference.
+            Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
+            should not be returned during inference.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -1774,6 +1763,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+                router_probs=encoder_outputs[3] if len(encoder_outputs) > 3 else None,
             )
 
         hidden_states = encoder_outputs[0]
@@ -1829,23 +1819,48 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         lm_logits = self.lm_head(sequence_output)
 
         loss = None
+        total_encoder_z_loss = None
+        total_encoder_aux_loss = None
+        total_decoder_z_loss = None
+        total_decoder_aux_loss = None
+
         if labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             # todo check in the config if router loss enables
             if output_router_logits:
-                router_z_loss = router_z_loss_func(encoder_outputs.router_probs)
-                decoder_outputs.router_probs
+                # Calculate the router loss (z_loss + auxiliary loss) for each router in the encoder
+                total_encoder_z_loss = 0
+                total_encoder_aux_loss = 0
+                for router_tuple in encoder_outputs.router_probs:
+                    if router_tuple[0] is not None:
+                        total_encoder_z_loss += router_z_loss_func(router_tuple[0])
+                        total_encoder_aux_loss += load_balancing_loss_func(router_tuple[0], router_tuple[1])
+
+                total_decoder_z_loss = 0
+                total_decoder_aux_loss = 0
+                for router_tuple in decoder_outputs.router_probs:
+                    if router_tuple[0] is not None:
+                        total_decoder_z_loss += router_z_loss_func(router_tuple[0])
+                        total_decoder_aux_loss += load_balancing_loss_func(router_tuple[0], router_tuple[1])
 
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
         if not return_dict:
-            output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
+            output = (
+                (lm_logits, total_encoder_z_loss, total_encoder_aux_loss, total_decoder_z_loss, total_decoder_aux_loss)
+                + decoder_outputs[1:]
+                + encoder_outputs
+            )
             return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqMoEOutput(
             loss=loss,
             logits=lm_logits,
+            encoder_total_z_loss=total_encoder_z_loss,
+            encoder_total_aux_loss=total_encoder_aux_loss,
+            decoder_total_z_loss=total_decoder_z_loss,
+            decoder_total_aux_loss=total_decoder_aux_loss,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,

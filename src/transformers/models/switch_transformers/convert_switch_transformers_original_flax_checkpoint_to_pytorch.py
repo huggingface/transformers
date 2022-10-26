@@ -18,16 +18,14 @@
 import argparse
 import re
 
+from flax.traverse_util import flatten_dict, unflatten_dict
 from t5x import checkpoints
 from transformers import SwitchTransformersConfig, SwitchTransformersForConditionalGeneration
 from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
 from transformers.utils import logging
-from transformers.utils.hub import get_file_from_repo
 
 
 logging.set_verbosity_info()
-
-from flax.traverse_util import flatten_dict, unflatten_dict
 
 
 MODEL_MAPPING = {
@@ -56,9 +54,6 @@ MODEL_MAPPING = {
         "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
     ],
     "switch_base_2048": [
-        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
-    ],
-    "switch_base_8": [
         "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
     ],
 }

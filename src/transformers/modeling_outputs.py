@@ -306,10 +306,10 @@ class MoEModelOutput(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         router_probs (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_probs=True` and `config.add_router_probs=True` is passed or when `config.output_router_probs=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length,
-            num_experts)`.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
-            Raw router probabilities that are computed by MoE routers, these terms are used to compute the auxiliary loss for Mixture of Experts models.
+            Raw router probabilities that are computed by MoE routers, these terms are used to compute the auxiliary
+            loss for Mixture of Experts models.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -357,10 +357,10 @@ class MoEModelOutputWithPastAndCrossAttentions(ModelOutput):
             Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
             weighted average in the cross-attention heads.
         router_probs (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_probs=True` and `config.add_router_probs=True` is passed or when `config.output_router_probs=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length,
-            num_experts)`.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
-            Raw router probabilities that are computed by MoE routers, these terms are used to compute the auxiliary loss for Mixture of Experts models.
+            Raw router probabilities that are computed by MoE routers, these terms are used to compute the auxiliary
+            loss for Mixture of Experts models.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -463,8 +463,7 @@ class Seq2SeqMoEModelOutput(ModelOutput):
             Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
         decoder_router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed or when `config.add_router_probs=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length,
-            num_experts)`.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
             Router logits of the decoder model, useful to compute the auxiliary loss for Mixture of Experts models.
         cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
@@ -487,8 +486,7 @@ class Seq2SeqMoEModelOutput(ModelOutput):
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
         encoder_router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed or when `config.add_router_probs=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length,
-            num_experts)`.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
             Router logits of the encoder model, useful to compute the auxiliary loss for Mixture of Experts models.
     """
@@ -768,8 +766,7 @@ class Seq2SeqMoEOutput(ModelOutput):
             Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
         decoder_router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed or when `config.add_router_probs=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length,
-            num_experts)`.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
             Router logits of the decoder model, useful to compute the auxiliary loss for Mixture of Experts models.
         cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
@@ -792,14 +789,17 @@ class Seq2SeqMoEOutput(ModelOutput):
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
         encoder_router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed or when `config.add_router_probs=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length,
-            num_experts)`.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
             Router logits of the encoder model, useful to compute the auxiliary loss for Mixture of Experts models.
     """
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
+    encoder_total_z_loss: torch.FloatTensor = None
+    decoder_total_z_loss: torch.FloatTensor = None
+    encoder_total_aux_loss: torch.FloatTensor = None
+    decoder_total_aux_loss: torch.FloatTensor = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
