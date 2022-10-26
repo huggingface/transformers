@@ -18,7 +18,7 @@ This glossary defines general machine learning and 🤗 Hugging Face terms to he
 
 ### attention mask
  
-A tensor filled with 0's and 1's that is identical in shape to the input id tensor. The attention mask determines which tokens should be attended to (indicated by 1's) and which tokens should be ignored (indicated by 0's) by the model's attention layers. When you pass text to a [`PreTrainedTokenizer`], it'll automatically create and return the attention mask depending on the specific tokenizer used.
+A tensor filled with 0's and 1's that is identical in shape to the input id tensor, and determines which tokens should be attended to (indicated by 1's) and which tokens should be ignored (indicated by 0's) by the model's attention layers. When you pass text to a [`PreTrainedTokenizer`], it'll automatically create and return the attention mask depending on the specific tokenizer used.
 
 Used when batching sequences of different lengths together to create a rectangular tensor. Padded values are represented by 0's, meaning they shouldn't be attended to because they don't contain any meaningful information. For example:
 
@@ -41,7 +41,15 @@ Used when batching sequences of different lengths together to create a rectangul
 
 ### causal language modeling
 
-A pretraining objective where a model is trained to predict the next token giving the tokens it has already attended to at a certain timestep. A mask is used to prevent the attention heads from attending to future tokens. Models pretrained on causal language modeling - also known as *autoregressive models* - are great for generative tasks; [GPT-2](model_doc/gpt2) is an example of a famous causal language model.
+A pretraining objective where a model is trained to predict the next token given the tokens it has already attended to at a certain timestep. A mask is used to prevent the model from attending to future tokens. Models pretrained on causal language modeling - also known as *autoregressive models* - are great for generative tasks; [GPT-2](model_doc/gpt2) is an example of a famous causal language model.
+
+### channel
+
+### connectionist temporal classification (CTC)
+
+An algorithm which allows a model to learn without knowing exactly how the input and output are aligned; CTC simply approximates the output by maximizing the probability. CTC is commonly used in speech recognition tasks because speech doesn't always cleanly align with the transcript due to speaker's different speech rates.
+
+### convolution
 
 ## D
 
@@ -75,6 +83,10 @@ In 🤗 Transformers, you can use the [`~transformers.apply_chunking_to_forward`
 
 ## I
 
+### image patches
+
+Vision based Transformers models split an image into patches which are linearly embedded, and then passed as a sequence to the model. You can find the `patch_size` - or resolution - of a vision model in it's configuration.
+
 ### input ids
 
 A tensor of the numerical representations of tokens that are passed to the model as the input. Tokens are generated from a tokenizer which splits a sequence of text into words or subwords depending on the [tokenizer type](tokenizer_summary).  
@@ -87,6 +99,10 @@ A tensor of the numerical representations of tokens that are passed to the model
 >>> tokenizer(sequence).input_ids
 [101, 138, 18696, 155, 1942, 3190, 1144, 1572, 13745, 1104, 159, 9664, 2107, 102]
 ```
+
+## K
+
+### kernel
 
 ## L
 
@@ -137,6 +153,12 @@ A subset of NLP focused on reading comprehension such as sentiment analysis and 
 
 ## P
 
+### pixel values
+
+A tensor of the numerical representations of an image that is passed to a model. The pixel values have a shape of [`batch_size`, `num_channels`, `height`, `width`], and are generated from a feature extractor.
+
+### pooling
+
 ### position ids
 
 An optional tensor passed to the model to indicate the position of each token in a sequence because a Transformer model is unaware. The position ids are automatically created as absolute positional embeddings, which are selected between `[0, config.max_position_embeddings - 1]`.
@@ -155,6 +177,10 @@ A type deep learning model that uses a for-loop to iterate over a layer.
 
 ## S
 
+### sampling rate
+
+A measurement in hertz of the number of samples (the audio signal) taken per second. The sampling rate is a result of discretizing a continuous signal.
+
 ### self-attention
 
 An attention mechanism where each element of the input finds out which other elements of the input they should attend to, helping the model gain a beter "understanding" of the context and word.
@@ -162,6 +188,8 @@ An attention mechanism where each element of the input finds out which other ele
 ### sequence-to-sequence (seq2seq)
 
 An encoder-decoder model (such as [BART](model_doc/bart) or [T5](model_doc/t5)) accepts an input sequence and outputs another sequence. These types of models are great for summarization and translation.
+
+### stride
 
 ## T
 
