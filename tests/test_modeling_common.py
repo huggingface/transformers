@@ -398,8 +398,6 @@ class ModelTesterMixin:
                 model_slow_init = base_class_copy.from_pretrained(tmpdirname, _fast_init=False)
 
                 for key in model_fast_init.state_dict().keys():
-                    if random_key_to_del.endswith(key):
-                        continue
                     max_diff = torch.max(
                         torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key])
                     ).item()
