@@ -113,7 +113,7 @@ class FANConfig(PretrainedConfig):
         tokens_norm=True,
         sharpen_attn=False,
         se_mlp=False,
-        sr_ratio=None,
+        # sr_ratio=None,
         initializer_range=1.0,
         img_size=(224, 224),
         in_chans=3,
@@ -157,7 +157,7 @@ class FANConfig(PretrainedConfig):
         self.tokens_norm = tokens_norm
         self.sharpen_attn = sharpen_attn
         self.se_mlp = se_mlp
-        self.sr_ratio = sr_ratio if sr_ratio else [1] * (num_hidden_layers // 2) + [1] * (num_hidden_layers // 2)
+        # self.sr_ratio = sr_ratio if sr_ratio else [1] * (num_hidden_layers // 2) + [1] * (num_hidden_layers // 2)
         self.initializer_range = initializer_range
         self.img_size = img_size
         self.in_chans = in_chans
@@ -171,11 +171,10 @@ class FANConfig(PretrainedConfig):
         self.drop_rate = drop_rate
         self.attn_drop_rate = attn_drop_rate
         self.drop_path_rate = drop_path_rate
-        self.decoder_dropout = decoder_dropout  # TODO: Decoder Dropout
+        self.decoder_dropout = decoder_dropout
         self.norm_layer = norm_layer
         self.act_layer = act_layer
         self.cls_attn_layers = cls_attn_layers
-        self.norm_layer = norm_layer
         self.c_head_num = c_head_num
         self.hybrid_patch_size = hybrid_patch_size
         self.channel_dims = channel_dims
