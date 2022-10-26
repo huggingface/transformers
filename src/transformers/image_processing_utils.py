@@ -114,7 +114,7 @@ def get_size_dict(
         size_dict = {"height": size[1], "width": size[0]}
 
     logger.warning(
-        "The parameter should be a dictionary with keys ('height', 'width'), ('shortest_edge', 'longest_edge')"
+        "The size parameter should be a dictionary with keys ('height', 'width'), ('shortest_edge', 'longest_edge')"
         f" or ('shortest_edge',) got {size}. Setting as {size_dict}.",
     )
     return size_dict

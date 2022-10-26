@@ -83,7 +83,12 @@ Apply several image transformations to the dataset to make the model more robust
 >>> from torchvision.transforms import RandomResizedCrop, Compose, Normalize, ToTensor
 
 >>> normalize = Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std)
->>> _transforms = Compose([RandomResizedCrop(feature_extractor.size), ToTensor(), normalize])
+>>> size = (
+...     feature_extractor.size["shortest_edge"]
+...     if "shortest_edge" in feature_extractor.size
+...     else (feature_extractor.size["height"], feature_extractor.size["width"])
+... )
+>>> _transforms = Compose([RandomResizedCrop(size), ToTensor(), normalize])
 ```
 
 Create a preprocessing function that will apply the transforms and return the `pixel_values` - the inputs to the model - of the image:
