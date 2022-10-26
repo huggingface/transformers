@@ -476,6 +476,13 @@ def build(config_class, models_to_create, output_dir):
 
     # Build processors
     processor_classes = models_to_create["processor"]
+
+    if len(processor_classes) == 0:
+        error = f"No processor class could be found in {config_class.__name__}."
+        fill_result_with_error(result, error, models_to_create)
+        logger.error(result["error"])
+        return result
+
     for processor_class in processor_classes:
         processor = build_processor(config_class, processor_class)
         if processor is not None:
@@ -686,9 +693,6 @@ if __name__ == "__main__":
     # TODO: Discuss with Lysandre about the reason behind this
     if args.black_list:
         config_classes = [c for c in config_classes if c.model_type not in args.black_list]
-
-    # Skip models that have no processor at all
-    config_classes = [c for c in config_classes if len(processor_type_map[c]) > 0]
 
     to_create = {
         c: {
