@@ -86,7 +86,6 @@ class DonutSwinEncoderOutput(ModelOutput):
 
 
 @flax.struct.dataclass
-# Copied from transformers.models.swin.modeling_swin.SwinModelOutput with Swin->DonutSwin
 class DonutSwinModelOutput(ModelOutput):
     """
     DonutSwin model's outputs that also contains a pooling of the last hidden states.
@@ -282,7 +281,6 @@ class FlaxDonutSwinEmbeddings(nn.Module):
         return embeddings, output_dimensions
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPatchMerging
 class FlaxDonutSwinPatchMerging(nn.Module):
     """
     Patch Merging Layer.
@@ -344,7 +342,7 @@ class FlaxDonutSwinPatchMerging(nn.Module):
         return input_feature
 
 
-# Copied from transformers.models.beit.modeling_flax_beit.FlaxBeitDropPath
+# Copied from transformers.models.beit.modeling_flax_beit.FlaxBeitDropPath with Beit->DonutSwin
 class FlaxDonutSwinDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
@@ -476,7 +474,6 @@ class FlaxDonutSwinSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinSelfOutput
 class FlaxDonutSwinSelfOutput(nn.Module):
     config: DonutSwinConfig
     dim: int
@@ -516,7 +513,6 @@ class FlaxDonutSwinAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinIntermediate
 class FlaxDonutSwinIntermediate(nn.Module):
     mlp_ratio: float
     dim: int
@@ -536,7 +532,6 @@ class FlaxDonutSwinIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinOutput
 class FlaxDonutSwinOutput(nn.Module):
     mlp_ratio: float
     dim: int
@@ -995,7 +990,6 @@ class FlaxDonutSwinModule(nn.Module):
         )
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->DonutSwin
 class FlaxDonutSwinPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained

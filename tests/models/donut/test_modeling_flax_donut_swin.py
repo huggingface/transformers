@@ -17,7 +17,6 @@ import inspect
 import unittest
 
 import numpy as np
-import jax.numpy as jnp
 
 from transformers import DonutSwinConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
@@ -29,8 +28,8 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, id
 if is_flax_available():
 
     import jax
+    import jax.numpy as jnp
 
-    # TODO: from transformers import FlaxDonutSwinModel
     from transformers import (
         DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
         FlaxDonutSwinModel,
