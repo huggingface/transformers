@@ -23,7 +23,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ybelkada/switch_transformers-base": (
+    "HFLAY/switch_base_8": (
         "https://huggingface.co/ybelkada/switch_transformers-base/resolve/main/config.json"
     ),
 }
@@ -116,7 +116,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         num_decoder_layers=12,
         num_sparse_decoder_layers=3,
         num_heads=12,
-        num_experts=64,
+        num_experts=8,
         expert_capacity=1,
         router_type="tokens_masked",
         router_bias=False,

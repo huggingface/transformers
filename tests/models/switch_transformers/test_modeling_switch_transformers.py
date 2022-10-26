@@ -30,6 +30,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoTokenizer,
         SwitchTransformersEncoderModel,
         SwitchTransformersForConditionalGeneration,
         SwitchTransformersModel,
@@ -94,7 +95,7 @@ class SwitchTransformersModelTester:
         self.sparse_step = sparse_step
 
     def get_large_model_config(self):
-        return SwitchTransformersConfig.from_pretrained("switch_transformers-base")
+        return SwitchTransformersConfig.from_pretrained("HFLAY/switch_base_8")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -528,7 +529,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
-    test_model_parallel = True
+    test_model_parallel = False
     is_encoder_decoder = True
     # The small SWITCH_TRANSFORMERS model needs higher percentages for CPU/MP tests
     model_split_percents = [0.8, 0.9]
@@ -970,7 +971,7 @@ class SwitchTransformerRouterTest(unittest.TestCase):
             ).t()
         )
 
-        output = model(input_tokens, expert_capacity=expert_capacity)
+        expert_index, _, router_logits = model(input_tokens)
 
         expected_dispatch_mask = torch.Tensor(
             [
@@ -978,19 +979,15 @@ class SwitchTransformerRouterTest(unittest.TestCase):
                 [[[True], [False]], [[False], [True]], [[False], [False]]],
             ]
         )
+        
 
-        expected_combine_array = torch.Tensor(
-            [
-                [[[0.5090], [0.0000]], [[0.0000], [0.5031]], [[0.0000], [0.0000]]],
-                [[[0.5024], [0.0000]], [[0.0000], [0.5071]], [[0.0000], [0.0000]]],
-            ]
-        )
+        router_z_loss = router_z_loss_func(router_logits)
+        auxiliary_loss = load_balancing_loss_func(router_logits, torch.argmax(expert_index, dim=-1))
 
-        self.assertAlmostEqual(output.auxiliary_loss.item(), 1.000308, places=5)
-        self.assertAlmostEqual(output.router_z_loss.item(), 0.4789799, places=5)
+        self.assertAlmostEqual(auxiliary_loss.item(), 1.000308, places=5)
+        self.assertAlmostEqual(router_z_loss.item(), 0.4789799, places=5)
 
-        self.assertTrue(torch.allclose(output.dispatch_mask, expected_dispatch_mask))
-        self.assertTrue(torch.allclose(output.combine_array, expected_combine_array, atol=1e-4))
+        self.assertTrue(torch.allclose(expert_index.bool().unsqueeze(-1), expected_dispatch_mask))
 
 
 @require_torch
@@ -1088,21 +1085,22 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         model = SwitchTransformersForConditionalGeneration.from_pretrained(
             "HFLAY/switch_base_8", torch_dtype=torch.bfloat16
         ).eval()
-        tokenizer = SwitchTransformersForConditionalGeneration.from_pretrained("t5-small")
+        tokenizer = AutoTokenizer.from_pretrained("t5-small")
+
 
         input_ids = tokenizer("summarize: Hello world", return_tensors="pt").input_ids.to(torch_device)
         sequences = model.generate(input_ids)
         output_str = tokenizer.batch_decode(sequences, skip_special_tokens=True)[0]
 
         EXPECTED_OUTPUT = " . The best way to do it is to use a smartphone. Hello there"
-        self.assertisEqual(output_str, EXPECTED_OUTPUT)
+        self.assertEqual(output_str, EXPECTED_OUTPUT)
 
         input_ids = tokenizer(
             "The human walks into a bar and orders a <extra_id_0>", return_tensors="pt"
         ).input_ids.to(torch_device)
         sequences = model.generate(input_ids)
         output_str = tokenizer.batch_decode(sequences, skip_special_tokens=True)[0]
-        self.assertisEqual(output_str, "drink.")
+        self.assertEqual(output_str, "drink.")
 
         input_ids = tokenizer(
             "A <extra_id_0> walks into a bar a orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>.",
@@ -1112,24 +1110,21 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         output_str = tokenizer.batch_decode(sequences, skip_special_tokens=False)[0]
 
         EXPECTED_OUTPUT = "<pad> <extra_id_0> man<extra_id_1> beer<extra_id_2> a<extra_id_3> salt<extra_id_4>.</s>"
-        self.assertisEqual(output_str, EXPECTED_OUTPUT)
-
-    def test_large_logits(self):
-        pass
-
-    def test_small_logits_bf16(self):
-        pass
+        self.assertEqual(output_str, EXPECTED_OUTPUT)
 
     def test_small_batch_generate(self):
-        pass
+        BATCH_SIZE = 4
+        model = SwitchTransformersForConditionalGeneration.from_pretrained(
+            "HFLAY/switch_base_8", torch_dtype=torch.bfloat16
+        ).eval()
+        tokenizer = AutoTokenizer.from_pretrained("t5-small")
 
-    def test_large_batch_generate(self):
-        pass
+        inputs = ["A <extra_id_0> walks into a bar a orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>." ] * BATCH_SIZE
+        encoded_input = tokenizer.batch_encode_plus(inputs, return_tensors="pt")
 
-    @slow
-    def test_summarization(self):
-        pass
+        sequences = model.generate(**encoded_input)
+        batch_output = tokenizer.batch_decode(sequences, skip_special_tokens=False)
 
-    @slow
-    def test_translation_en_to_de(self):
-        pass
+        for i in range(0, BATCH_SIZE, 2):
+            self.assertEqual(batch_output[i], batch_output[i+1])
+
