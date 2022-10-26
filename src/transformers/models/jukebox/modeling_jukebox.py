@@ -216,7 +216,7 @@ def get_mask(mask, query_length, key_value_length, blocks, spread, device, sampl
 
 class JukeboxConv1D(nn.Module):
     def __init__(self, n_in, n_out, zero_out=False):
-        super(JukeboxConv1D, self).__init__()
+        super().__init__()
         self.n_in = n_in
         self.n_out = n_out
         if zero_out:

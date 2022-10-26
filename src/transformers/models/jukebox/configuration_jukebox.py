@@ -43,7 +43,7 @@ class JukeboxConfig(PretrainedConfig):
     Args:
         sampling_rate (`int`, *optional*, defaults to 44100):
             Sampling rate of the raw audio.
-        metadata_dims (`list`, *optional*, defaults to [(604, 7898), (120, 4111), (120, 4111)]):
+        metadata_dims (`List[Tuple[int, int]]`, *optional*, defaults to `[(604, 7898), (120, 4111), (120, 4111)]`):
             List containing the number of genres and the number of artists that were used to train the embedding layers
             of each of the prior models.
         nb_priors (`int`, *optional*, defaults to 3):
@@ -54,10 +54,10 @@ class JukeboxConfig(PretrainedConfig):
             Dimensions of the JukeboxRangeEmbedding layer which is equivalent to traditional positional embedding
             layer. The timing embedding layer converts the absolute and relative position in the currently sampled
             audio to a tensor of lenght `timing_dims` that will be added to the music tokens.
-        single_enc_dec (`list`, *optional*, defaults to [True, False, False]):
+        single_enc_dec (`List[bool]`, *optional*, defaults to `[True, False, False]`):
             Whether or not to use a single encoder-decoder architecture or split both modules and have a seperate
             `lyric_encoder` for each of the priors.
-        metadata_conditioning (`bool`, *optional*, defaults to True):
+        metadata_conditioning (`bool`, *optional*, defaults to `True`):
             Whether or not to use metadata conditioning, corresponding to the artist, the genre and the min/maximum
             duration.
         merged_decoder (`list`, *optional*, defaults to [True, False, False]):
@@ -95,7 +95,7 @@ class JukeboxConfig(PretrainedConfig):
             Downsampling rates used in the audio conditioning network
         cond_strides_t (`tuple`, *optional*, defaults to (2, 2, 2)):
             Striding used in the audio conditioning network
-        lyric_enc_spread (`bool`, *optional*, defaults to False):
+        lyric_enc_spread (`bool`, *optional*, defaults to `False`):
             Spread used in the attention pattern
         lyric_enc_width (`list`, *optional*, defaults to [128, 128, 128]):
             Width of the lyric encoder
@@ -123,9 +123,9 @@ class JukeboxConfig(PretrainedConfig):
             Residual dropout used in the attention pattern of the lyric encoder.
         lyric_enc_emb_dropout (`float`, *optional*, defaults to 0.0):
             Embedding dropout used in the lyric encoder.
-        lyric_enc_zero_out (`bool`, *optional*, defaults to False):
+        lyric_enc_zero_out (`bool`, *optional*, defaults to `False`):
             Whether or not to set to zeros the weights the MLPs in the lyric encoder.
-        lyric_enc_res_scale (`bool`, *optional*, defaults to False):
+        lyric_enc_res_scale (`bool`, *optional*, defaults to `False`):
             Residual scaling factor used in the lyric encoder attention patterns.
         lyric_enc_n_vocab (`int`, *optional*, defaults to 79):
             Defines the number of different tokens that can be represented by the `inputs_ids` passed to the
