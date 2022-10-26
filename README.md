@@ -153,7 +153,7 @@ Many tasks have a pre-trained `pipeline` ready to go, in NLP but also in compute
   'box': {'xmin': 345, 'ymin': 23, 'xmax': 640, 'ymax': 368}}]
 ```
 
-Here we get a list of objects detected in the image, with a box surrounding the object and a confidence score. Here is the original image on the right, with the predictions displayed on the left:
+Here we get a list of objects detected in the image, with a box surrounding the object and a confidence score. Here is the original image on the left, with the predictions displayed on the right:
 
 <h3 align="center">
     <a><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png" width="400"></a>
