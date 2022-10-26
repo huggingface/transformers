@@ -532,6 +532,7 @@ class M2M100PreTrainedModel(PreTrainedModel):
     config_class = M2M100Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["M2M100Attention"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -693,10 +694,10 @@ class M2M100Encoder(M2M100PreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
+        self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+
         if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = M2M100SinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -778,6 +779,8 @@ class M2M100Encoder(M2M100PreTrainedModel):
 
         embed_pos = self.embed_positions(input_ids, inputs_embeds)
 
+        if embed_pos.device != inputs_embeds.device:
+            embed_pos = embed_pos.to(inputs_embeds.device)
         hidden_states = inputs_embeds + embed_pos
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -868,10 +871,10 @@ class M2M100Decoder(M2M100PreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+
         if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = M2M100SinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -1011,6 +1014,8 @@ class M2M100Decoder(M2M100PreTrainedModel):
         # embed positions
         positions = self.embed_positions(input_ids, inputs_embeds, past_key_values_length)
 
+        if positions.device != inputs_embeds.device:
+            positions = positions.to(inputs_embeds.device)
         hidden_states = inputs_embeds + positions
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
