@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import sys
+from pathlib import Path
 
 from datasets import load_dataset
 
@@ -665,19 +666,9 @@ if __name__ == "__main__":
         help="Comma-separated list of model type(s) to ignore.",
         default="convbert,blenderbot-small,rag,dpr,retribert,layoutlmv2",
     )
-
-    # --------------------------------------------------------------------------------
-    # TODO: Uncomment
-    # parser.add_argument("output_path", type=Path, help="Path indicating where to store generated model.")
-    # --------------------------------------------------------------------------------
+    parser.add_argument("output_path", type=Path, help="Path indicating where to store generated model.")
 
     args = parser.parse_args()
-
-    # --------------------------------------------------------------------------------
-    # TODO: (remove)
-    args.output_path = "./temp/dummy/"
-    args.all = True
-    # --------------------------------------------------------------------------------
 
     if not args.all and not args.model_types:
         raise ValueError("Please provide at least one model type or pass `--all` to export all architectures.")
