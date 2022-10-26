@@ -786,7 +786,6 @@ class GenerationMixin:
             if exponential_decay_length_penalty is not None
             else self.config.exponential_decay_length_penalty
         )
-        logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         suppress_tokens = suppress_tokens if suppress_tokens is not None else self.config.suppress_tokens
         begin_suppress_tokens = (
             begin_suppress_tokens if begin_suppress_tokens is not None else self.config.begin_suppress_tokens
@@ -854,7 +853,6 @@ class GenerationMixin:
             criteria.append(MaxLengthCriteria(max_length=max_length))
         if max_time is not None:
             criteria.append(MaxTimeCriteria(max_time=max_time))
-        stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         criteria = self._merge_criteria_processor_list(criteria, stopping_criteria)
         return criteria
 
@@ -1279,6 +1277,8 @@ class GenerationMixin:
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
         )
+        logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
+        stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
 
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
