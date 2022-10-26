@@ -539,7 +539,7 @@ class TokenMixing(nn.Module):
         qk_scale=None,
         attn_drop=0.0,
         proj_drop=0.0,
-        sr_ratio=1,
+        # sr_ratio=1,
         linear=False,
         share_atten=False,
         drop_path=0.0,
@@ -570,7 +570,7 @@ class TokenMixing(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
         self.linear = linear
-        self.sr_ratio = sr_ratio
+        # self.sr_ratio = sr_ratio
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
@@ -778,7 +778,7 @@ class FANBlock_SE(nn.Module):
         act_layer=nn.GELU,
         norm_layer=nn.LayerNorm,
         eta=1.0,
-        sr_ratio=1.0,
+        # sr_ratio=1.0,
         qk_scale=None,
         linear=False,
         downsample=None,
@@ -796,7 +796,7 @@ class FANBlock_SE(nn.Module):
             proj_drop=drop,
             drop=drop,
             drop_path=drop_path,
-            sr_ratio=sr_ratio,
+            # sr_ratio=sr_ratio,
             linear=linear,
             emlp=False,
         )
@@ -835,7 +835,7 @@ class FANBlock(nn.Module):
         act_layer=nn.GELU,
         norm_layer=nn.LayerNorm,
         eta=1.0,
-        sr_ratio=1.0,
+        # sr_ratio=1.0,
         downsample=None,
         c_head_num=None,
     ):
@@ -851,7 +851,7 @@ class FANBlock(nn.Module):
             proj_drop=drop,
             drop=drop,
             drop_path=drop_path,
-            sr_ratio=sr_ratio,
+            # sr_ratio=sr_ratio,
         )
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
@@ -1413,7 +1413,7 @@ class FANEncoderLayer(FANPreTrainedModel):
             mlp_ratio=config.mlp_ratio,
             qkv_bias=config.qkv_bias,
             drop=config.drop_rate,
-            sr_ratio=config.sr_ratio[index],
+            # sr_ratio=config.sr_ratio[index], # Unused
             attn_drop=config.attn_drop_rate,
             drop_path=config.drop_path_rate,
             act_layer=act_layer,
