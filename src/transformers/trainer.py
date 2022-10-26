@@ -1280,6 +1280,7 @@ class Trainer:
 
         if not training:
             model.eval()
+            # conv_bn_folding is disabled as it fails in symbolic tracing, resulting in ipex warnings
             model = ipex.optimize(model, dtype=dtype, level="O1", conv_bn_folding=False)
         else:
             if not model.training:
