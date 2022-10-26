@@ -127,7 +127,6 @@ torch_and_tf_job = CircleCIJob(
         "pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
         TORCH_SCATTER_INSTALL,
         "pip install tensorflow_probability",
-        "pip install https://github.com/kpu/kenlm/archive/master.zip",
         "pip install git+https://github.com/huggingface/accelerate",
     ],
     marker="is_pt_tf_cross_test",
@@ -143,7 +142,6 @@ torch_and_flax_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]",
         TORCH_SCATTER_INSTALL,
-        "pip install https://github.com/kpu/kenlm/archive/master.zip",
         "pip install git+https://github.com/huggingface/accelerate",
     ],
     marker="is_pt_flax_cross_test",
@@ -158,7 +156,6 @@ torch_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
         TORCH_SCATTER_INSTALL,
-        "pip install https://github.com/kpu/kenlm/archive/master.zip",
         "pip install git+https://github.com/huggingface/accelerate",
     ],
     pytest_num_workers=3,
@@ -172,7 +169,6 @@ tf_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
         "pip install tensorflow_probability",
-        "pip install https://github.com/kpu/kenlm/archive/master.zip",
     ],
     pytest_options={"rA": None},
 )
@@ -184,7 +180,6 @@ flax_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade pip",
         "pip install .[flax,testing,sentencepiece,flax-speech,vision]",
-        "pip install https://github.com/kpu/kenlm/archive/master.zip",
     ],
     pytest_options={"rA": None},
 )
@@ -197,7 +192,6 @@ pipelines_torch_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
         TORCH_SCATTER_INSTALL,
-        "pip install https://github.com/kpu/kenlm/archive/master.zip",
     ],
     pytest_options={"rA": None},
     tests_to_run="tests/pipelines/"
