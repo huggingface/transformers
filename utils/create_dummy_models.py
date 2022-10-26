@@ -169,7 +169,7 @@ def build_processor(config_class, processor_class):
     processor = None
     try:
         processor = processor_class.from_pretrained(checkpoint)
-    except Exception as e:
+    except Exception:
         pass
 
     # Try to get a new processor class from checkpoint. This is helpful for a checkpoint without necessary file to load
@@ -185,7 +185,7 @@ def build_processor(config_class, processor_class):
     ):
         try:
             config = AutoConfig.from_pretrained(checkpoint)
-        except Exception as e:
+        except Exception:
             config = None
         if config is not None:
             assert isinstance(config, config_class)
@@ -218,7 +218,7 @@ def build_processor(config_class, processor_class):
             if all(len(v) > 0 for v in attrs.values()):
                 try:
                     processor = processor_class(**{k: v[0] for k, v in attrs.items()})
-                except Exception as e:
+                except Exception:
                     pass
         else:
             # `checkpoint` might lack some file(s) to load a processor. For example, `facebook/hubert-base-ls960`
