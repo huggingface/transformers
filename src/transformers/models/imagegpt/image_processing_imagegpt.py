@@ -134,7 +134,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        image = rescale(image=image, rescale=1 / 127.5, data_format=data_format)
+        image = rescale(image=image, scale=1 / 127.5, data_format=data_format)
         image = image - 1
         return image
 
@@ -219,11 +219,15 @@ class ImageGPTImageProcessor(BaseImageProcessor):
             images = [to_channel_dimension_format(image, ChannelDimension.LAST) for image in images]
             # color quantize from (batch_size, height, width, 3) to (batch_size, height, width)
             images = np.array(images)
+            clusters = np.array(clusters)
             images = color_quantize(images, clusters).reshape(images.shape[:-1])
 
             # flatten to (batch_size, height*width)
             batch_size = images.shape[0]
             images = images.reshape(batch_size, -1)
+
+            # We need to convert back to a list of images to keep consistent behaviour across processors.
+            images = list(images)
         else:
             images = [to_channel_dimension_format(image, data_format) for image in images]
 

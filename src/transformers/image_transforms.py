@@ -380,6 +380,7 @@ def center_crop(
 
     orig_height, orig_width = get_image_size(image)
     crop_height, crop_width = size
+    crop_height, crop_width = int(crop_height), int(crop_width)
 
     # In case size is odd, (image_shape[0] + size[0]) // 2 won't give the proper result.
     top = (orig_height - crop_height) // 2

@@ -115,7 +115,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 224}
-        size = get_size_dict(size)
+        size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else {"height": 256, "width": 256}
         crop_size = get_size_dict(crop_size)
 
