@@ -109,12 +109,12 @@ class RandomResize:
 
 class RandomCrop:
     def __init__(self, size):
-        self.size = size
+        self.size = size if isinstance(size, tuple) else (size, size)
 
     def __call__(self, image, target):
         image = pad_if_smaller(image, self.size)
         target = pad_if_smaller(target, self.size, fill=255)
-        crop_params = transforms.RandomCrop.get_params(image, (self.size, self.size))
+        crop_params = transforms.RandomCrop.get_params(image, self.size)
         image = functional.crop(image, *crop_params)
         target = functional.crop(target, *crop_params)
         return image, target
@@ -358,7 +358,7 @@ def main():
             references=labels,
             num_labels=len(id2label),
             ignore_index=0,
-            reduce_labels=feature_extractor.reduce_labels,
+            reduce_labels=feature_extractor.do_reduce_labels,
         )
         # add per category metrics as individual key-value pairs
         per_category_accuracy = metrics.pop("per_category_accuracy").tolist()
