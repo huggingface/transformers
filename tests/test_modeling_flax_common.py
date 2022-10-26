@@ -1270,6 +1270,9 @@ class FlaxModelUtilsTest(unittest.TestCase):
         subfolder = "bert"
         model_id = "hf-internal-testing/tiny-random-bert-subfolder"
 
+        with self.assertRaises(OSError):
+            _ = FlaxBertModel.from_pretrained(model_id)
+
         model = FlaxBertModel.from_pretrained(model_id, subfolder=subfolder)
 
         self.assertIsNotNone(model)
