@@ -34,7 +34,6 @@ from transformers.testing_utils import (
     is_pt_flax_cross_test,
     is_staging_test,
     require_flax,
-    slow,
     torch_device,
 )
 from transformers.utils import logging
@@ -1226,15 +1225,16 @@ class FlaxModelPushToHubTester(unittest.TestCase):
 
 def check_models_equal(model1, model2):
     models_are_equal = True
-    for model1_p, model2_p in zip(model1.parameters(), model2.parameters()):
-        if model1_p.data.ne(model2_p.data).sum() > 0:
+    flat_params_1 = flatten_dict(model1.params)
+    flat_params_2 = flatten_dict(model2.params)
+    for key in flat_params_1.keys():
+        if np.sum(np.abs(flat_params_1[key] - flat_params_2[key])) > 1e-4:
             models_are_equal = False
 
     return models_are_equal
 
 
 @require_flax
-@slow
 class FlaxModelUtilsTest(unittest.TestCase):
     def test_model_from_pretrained_subfolder(self):
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
@@ -1269,8 +1269,6 @@ class FlaxModelUtilsTest(unittest.TestCase):
     def test_model_from_pretrained_hub_subfolder(self):
         subfolder = "bert"
         model_id = "hf-internal-testing/tiny-random-bert-subfolder"
-        with self.assertRaises(OSError):
-            _ = FlaxBertModel.from_pretrained(model_id)
 
         model = FlaxBertModel.from_pretrained(model_id, subfolder=subfolder)
 
