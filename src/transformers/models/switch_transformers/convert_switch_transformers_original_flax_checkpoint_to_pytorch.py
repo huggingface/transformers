@@ -81,8 +81,9 @@ MOE_LAYER_NAME_MAPPING = {
     "relpos_bias/rel_embedding": "block/0/layer/0/SelfAttention/relative_attention_bias/weight",
     "router/router_weights/w/": "router/classifier/",
     "roer/roer_weights/w/": "router/classifier/",
-    "logits_dense":"lm_head"
+    "logits_dense": "lm_head",
 }
+
 
 def rename_keys(s_dict):
     # 1. in HF T5, we have block.{x}.layer.{y}. which corresponds to layer.{x} in

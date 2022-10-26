@@ -29,10 +29,10 @@ from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
-    BaseModelOutput,
+    MoEModelOutput,
     MoEModelOutputWithPastAndCrossAttentions,
-    Seq2SeqMoEOutput,
     Seq2SeqMoEModelOutput,
+    Seq2SeqMoEOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
@@ -52,17 +52,18 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "SwitchTransformersConfig"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"
-_CHECKPOINT_FOR_DOC = "ybelkada/switch_transformers-base"
+_CHECKPOINT_FOR_DOC = "google/switch-base-8"
 
 ####################################################
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
 SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ybelkada/switch-base-8",
-    "ybelkada/switch-base-16",
+    "google/switch-base-8",
+    "google/switch-base-16",
     # See all SwitchTransformers models at https://huggingface.co/models?filter=switch_transformers
 ]
+
 
 def _one_hot(tensor, num_classes, axis=-1, dtype=torch.bool):
     r"""
@@ -106,6 +107,7 @@ def _one_hot(tensor, num_classes, axis=-1, dtype=torch.bool):
     out[mask, tensor[mask]] = 1
 
     return out.to(tensor.device)
+
 
 # Router loss
 def router_z_loss_func(router_logits: torch.Tensor) -> float:
@@ -163,7 +165,6 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
 
     router_prob_per_group_and_expert = torch.mean(router_probs, axis=-2)
     return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
-
 
 
 class TokensChooseMaskedRouter(nn.Module):
@@ -232,7 +233,7 @@ class TokensChooseMaskedRouter(nn.Module):
             distrib_upper_bound = 1.0 + self.jitter_noise
 
             uniform_distrib = (
-                torch.rand(token_inputs.shape, device=token_inputs.device, dtype = self.dtype)
+                torch.rand(token_inputs.shape, device=token_inputs.device, dtype=self.dtype)
                 * (distrib_lower_bound - distrib_upper_bound)
             ) + distrib_upper_bound
 
@@ -247,9 +248,7 @@ class TokensChooseMaskedRouter(nn.Module):
         router_probabilities = torch.nn.Softmax(dim=-1)(router_logits).to(self.input_tokens_dtype)
         return router_probabilities, router_logits
 
-    def forward(
-        self, token_inputs: torch.Tensor, apply_jitter: bool = True, **kwargs
-    ) -> Tuple:
+    def forward(self, token_inputs: torch.Tensor, apply_jitter: bool = True, **kwargs) -> Tuple:
         r"""
         Generic forward function for every Router class. Each Router expects to have the same input hidden states
         (`token_inputs`) corresponding to the hidden states for each token, the `expert_capacity` corresponding to the
@@ -285,14 +284,15 @@ class TokensChooseMaskedRouter(nn.Module):
         expert_index, auxiliary_loss = self._compute_routing_instructions(router_probs, padding_mask, **kwargs)
         # We cast back the output to the previous dtype
         expert_index = expert_index.to(self.input_tokens_dtype)
-        router_probs = torch.max(router_probs,dim=-1).values.unsqueeze(-1)
+        router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
         router_z_loss = router_z_loss_func(router_logits)
         return expert_index, auxiliary_loss, router_z_loss, router_probs
 
-
     def _compute_routing_instructions(
-        self, router_probs: torch.Tensor, padding_mask: Optional[torch.Tensor],
-    ) -> Tuple[torch.Tensor,torch.Tensor]:
+        self,
+        router_probs: torch.Tensor,
+        padding_mask: Optional[torch.Tensor],
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Computes masks for the top-k experts per token.
 
@@ -312,9 +312,9 @@ class TokensChooseMaskedRouter(nn.Module):
 
         # Top-k router probability and corresponding expert indices for each token.
         # Shape: [num_groups, tokens_per_group, num_selected_experts].
-        expert_index = torch.argmax(router_probs, dim = -1)
+        expert_index = torch.argmax(router_probs, dim=-1)
 
-        if padding_mask is not None: # TODO test or delete
+        if padding_mask is not None:  # TODO test or delete
             # Mask applied to gate. Exclude choices corresponding to padding tokens.
             gate_mask = padding_mask.unsqueeze(-1).to(expert_index.dtype)
             expert_gate *= gate_mask
@@ -362,7 +362,7 @@ class SwitchTransformersLayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-# TODO: do we need this? No let's just import ALL_LAYERNORM_LAYERS. 
+# TODO: do we need this? No let's just import ALL_LAYERNORM_LAYERS.
 ALL_LAYERNORM_LAYERS.append(SwitchTransformersLayerNorm)
 
 
@@ -402,28 +402,27 @@ class SwitchTransformersDenseGatedActDense(nn.Module):
         return hidden_states
 
 
-# TODO: Change it here to adapt it from the paper, the FF layer contains experts
-# an expert is a FF layer with multiple sub-FF layers inside.s
-# This class should also contain a router class
-# check flaxformer/architecture/moe/router.py : https://github.com/google/flaxformer/blob/main/flaxformer/architectures/moe/routing.py
 class SwitchTransformersLayerFF(nn.Module):
     r"""
-        Switch Transformers Feed Forward layer module. This is a wrapper around the Mixture of Experts
-        module.
+    Switch Transformers Feed Forward layer module. This is a wrapper around the Mixture of Experts
+    module.
 
-        Attributes:
-            is_sparse (`bool`): 
-                Whether the MLP layer is a `Sparse` layer (contains a Mixture of Experts) or not
-            mlp (`torch.nn.Module`):
-                The MLP layer of the Feed Forward layer
-            layer_norm (`torch.nn.Module`):
-                The pre-MLP layer norm. This module is equivalent to the `pre_mlp_layer_norm` in `t5x`
-            dropout (`torch.nn.Module`):
-                Post-MLP dropout layer.
+    Attributes:
+        is_sparse (`bool`):
+            Whether the MLP layer is a `Sparse` layer (contains a Mixture of Experts) or not
+        mlp (`torch.nn.Module`):
+            The MLP layer of the Feed Forward layer
+        layer_norm (`torch.nn.Module`):
+            The pre-MLP layer norm. This module is equivalent to the `pre_mlp_layer_norm` in `t5x`
+        dropout (`torch.nn.Module`):
+            Post-MLP dropout layer.
     """
+
     def __init__(self, config: SwitchTransformersConfig, is_sparse=False):
         super().__init__()
         self.is_sparse = is_sparse
+
+        # Check if it is a sparse layer, if not then it is a dense layer
         if not self.is_sparse:
             self.mlp = SwitchTransformersDenseActDense(config)
         else:
@@ -444,7 +443,7 @@ class SwitchTransformersLayerFF(nn.Module):
         output = hidden_states + self.dropout(forwarded_states)
 
         if output_router_logits and router_logits is not None:
-            output =  (output, router_logits)
+            output = (output, router_logits)
 
         return output
 
@@ -486,20 +485,20 @@ class SwitchTransformersSparseMLP(nn.Module):
 
     def forward(self, hidden_states):
         r"""
-            Hold on, this will be slightly tricky to understand
-            In the correct order, a MoE layer does the following:
+        Hold on, this will be slightly tricky to understand
+        In the correct order, a MoE layer does the following:
 
-            1- Gets the `router_mask` from the router. This mask will contain the indices of the
-            routed tokens. Also retrieve the probabilities (max prob) for each token. The probabilities are
-            needed in the computation of the hidden states since the probabilities will be broadcasted
-            to the hidden states values (they can be interpreted as a scaling factor).
+        1- Gets the `router_mask` from the router. This mask will contain the indices of the
+        routed tokens. Also retrieve the probabilities (max prob) for each token. The probabilities are
+        needed in the computation of the hidden states since the probabilities will be broadcasted
+        to the hidden states values (they can be interpreted as a scaling factor).
 
-            2- TODO: explain @ArthurZucker
+        2- TODO: explain @ArthurZucker
 
 
         """
         # Step 1: Get the router_mask from the router as wel as the probabilities
-        router_mask, auxiliary_loss, router_z_loss, router_probs  = self.router(hidden_states)
+        router_mask, auxiliary_loss, router_z_loss, router_probs = self.router(hidden_states)
 
         for idx, expert in enumerate(self.experts.values()):
 
@@ -917,7 +916,7 @@ class SwitchTransformersBlock(nn.Module):
         # Apply Feed Forward layer
         hidden_states = self.layer[-1](hidden_states, output_router_logits)
 
-        if isinstance(hidden_states, tuple) :
+        if isinstance(hidden_states, tuple):
             hidden_states, router_probs = hidden_states
         else:
             router_probs = (None,)
@@ -1278,6 +1277,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                     all_hidden_states,
                     all_attentions,
                     all_cross_attentions,
+                    all_router_probs,
                 ]
                 if v is not None
             )
@@ -1580,8 +1580,8 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
                 output_router_logits=output_router_logits,
                 return_dict=return_dict,
             )
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
+        elif return_dict and not isinstance(encoder_outputs, MoEModelOutput):
+            encoder_outputs = MoEModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
@@ -1630,7 +1630,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
             encoder_router_logits=encoder_outputs.router_probs,
-            decoder_router_logits=decoder_outputs.router_probs
+            decoder_router_logits=decoder_outputs.router_probs,
         )
 
 
@@ -1769,8 +1769,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
                 output_router_logits=output_router_logits,
                 return_dict=return_dict,
             )
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
+        elif return_dict and not isinstance(encoder_outputs, MoEModelOutput):
+            encoder_outputs = MoEModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
@@ -1832,7 +1832,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         if labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             # todo check in the config if router loss enables
-            if output_router_logits :
+            if output_router_logits:
                 router_z_loss = router_z_loss_func(encoder_outputs.router_probs)
                 decoder_outputs.router_probs
 
@@ -1958,7 +1958,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
             self.encoder.block[layer].layer[0].SelfAttention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(SWITCH_TRANSFORMERS_ENCODER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=MoEModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1969,7 +1969,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor], MoEModelOutput]:
         r"""
         Returns:
 

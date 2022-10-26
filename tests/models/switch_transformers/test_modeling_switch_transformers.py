@@ -992,33 +992,90 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         self.assertTrue(torch.allclose(output.dispatch_mask, expected_dispatch_mask))
         self.assertTrue(torch.allclose(output.combine_array, expected_combine_array, atol=1e-4))
 
+
 @require_torch
 @require_tokenizers
 class SwitchTransformerModelIntegrationTests(unittest.TestCase):
     def test_small_logits(self):
         r"""
-            Logits testing to check implementation consistency between `t5x` implementation 
-            and `transformers` implementation of Switch-C transformers. We only check the logits
-            of the first batch.
+        Logits testing to check implementation consistency between `t5x` implementation
+        and `transformers` implementation of Switch-C transformers. We only check the logits
+        of the first batch.
         """
-        model = SwitchTransformersForConditionalGeneration.from_pretrained("HFLAY/switch_base_8", torch_dtype=torch.bfloat16).eval()
-        input_ids = torch.ones((32,64), dtype = torch.long)
-        decoder_input_ids = torch.ones((32,64), dtype = torch.long)
+        model = SwitchTransformersForConditionalGeneration.from_pretrained(
+            "HFLAY/switch_base_8", torch_dtype=torch.bfloat16
+        ).eval()
+        input_ids = torch.ones((32, 64), dtype=torch.long)
+        decoder_input_ids = torch.ones((32, 64), dtype=torch.long)
 
         EXPECTED_MEAN_LOGITS = torch.Tensor(
-            [-29.330458, -29.332455, -29.333147, -29.341417, -29.472025,
-             -29.335613, -29.47691 , -29.328053, -29.328312, -29.329872,
-             -29.336075, -29.331112, -29.30393 , -29.328972, -29.33514 ,
-             -29.335201, -29.317245, -29.48052 , -29.328382, -29.4837  ,
-             -29.489216, -29.338572, -29.331537, -29.337881, -29.497675,
-             -29.483559, -29.497217, -29.343832, -29.483425, -29.333313,
-             -29.49259 , -29.318579, -29.478128, -29.328222, -29.339464,
-             -29.329647, -29.339725, -29.648586, -29.312738, -29.314232,
-             -29.330048, -29.314402, -29.329876, -29.33895 , -29.337482,
-             -29.477829, -29.482548, -29.337194, -29.487375, -29.33446 ,
-             -29.340445, -29.479067, -29.333689, -29.338657, -29.339827,
-             -29.33101 , -29.482433, -29.498121, -29.477905, -29.33606 ,
-             -29.333132, -29.335573, -29.482475, -29.330212],)
+            [
+                -29.330458,
+                -29.332455,
+                -29.333147,
+                -29.341417,
+                -29.472025,
+                -29.335613,
+                -29.47691,
+                -29.328053,
+                -29.328312,
+                -29.329872,
+                -29.336075,
+                -29.331112,
+                -29.30393,
+                -29.328972,
+                -29.33514,
+                -29.335201,
+                -29.317245,
+                -29.48052,
+                -29.328382,
+                -29.4837,
+                -29.489216,
+                -29.338572,
+                -29.331537,
+                -29.337881,
+                -29.497675,
+                -29.483559,
+                -29.497217,
+                -29.343832,
+                -29.483425,
+                -29.333313,
+                -29.49259,
+                -29.318579,
+                -29.478128,
+                -29.328222,
+                -29.339464,
+                -29.329647,
+                -29.339725,
+                -29.648586,
+                -29.312738,
+                -29.314232,
+                -29.330048,
+                -29.314402,
+                -29.329876,
+                -29.33895,
+                -29.337482,
+                -29.477829,
+                -29.482548,
+                -29.337194,
+                -29.487375,
+                -29.33446,
+                -29.340445,
+                -29.479067,
+                -29.333689,
+                -29.338657,
+                -29.339827,
+                -29.33101,
+                -29.482433,
+                -29.498121,
+                -29.477905,
+                -29.33606,
+                -29.333132,
+                -29.335573,
+                -29.482475,
+                -29.330212,
+            ],
+        )
 
         hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).logits
         hf_logits = hf_logits.mean(dim=-1)[0]
@@ -1026,9 +1083,11 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.testing.assert_allclose(hf_logits, EXPECTED_MEAN_LOGITS, rtol=1e-3, atol=1e-3))
 
     def test_small_generate(self):
-        #Generate test using the smalled switch-C model.
+        # Generate test using the smalled switch-C model.
 
-        model = SwitchTransformersForConditionalGeneration.from_pretrained("HFLAY/switch_base_8", torch_dtype=torch.bfloat16).eval()
+        model = SwitchTransformersForConditionalGeneration.from_pretrained(
+            "HFLAY/switch_base_8", torch_dtype=torch.bfloat16
+        ).eval()
         tokenizer = SwitchTransformersForConditionalGeneration.from_pretrained("t5-small")
 
         input_ids = tokenizer("summarize: Hello world", return_tensors="pt").input_ids.to(torch_device)
@@ -1038,12 +1097,17 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         EXPECTED_OUTPUT = " . The best way to do it is to use a smartphone. Hello there"
         self.assertisEqual(output_str, EXPECTED_OUTPUT)
 
-        input_ids = tokenizer("The human walks into a bar and orders a <extra_id_0>", return_tensors="pt").input_ids.to(torch_device)
+        input_ids = tokenizer(
+            "The human walks into a bar and orders a <extra_id_0>", return_tensors="pt"
+        ).input_ids.to(torch_device)
         sequences = model.generate(input_ids)
         output_str = tokenizer.batch_decode(sequences, skip_special_tokens=True)[0]
         self.assertisEqual(output_str, "drink.")
 
-        input_ids = tokenizer("A <extra_id_0> walks into a bar a orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>.", return_tensors="pt").input_ids.to(torch_device)
+        input_ids = tokenizer(
+            "A <extra_id_0> walks into a bar a orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>.",
+            return_tensors="pt",
+        ).input_ids.to(torch_device)
         sequences = model.generate(input_ids)
         output_str = tokenizer.batch_decode(sequences, skip_special_tokens=False)[0]
 
