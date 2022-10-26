@@ -86,12 +86,12 @@ max_new_tokens = 10
 
 input_ids = prompt_ids
 for _ in range(max_new_tokens):
-	with torch.no_grad():
-		logits = model(input_ids).logits
-	
-	next_token_id = torch.argmax(logits[:, -1:], dim=-1)
+    with torch.no_grad():
+        logits = model(input_ids).logits
 
-	input_ids = torch.concat([input_ids, next_token_id], dim=-1)
+    next_token_id = torch.argmax(logits[:, -1:], dim=-1)
+
+    input_ids = torch.concat([input_ids, next_token_id], dim=-1)
 ```
 
 After having generated 10 new tokens, let's take a look at the prediction.
@@ -134,7 +134,7 @@ Let's use the same prompt, but now pass it once to the encoder.
 input_ids = prompt_ids
 
 with torch.no_grad():
-	encoder_hidden_states = model.encoder(input_ids).hidden_states
+    encoder_hidden_states = model.encoder(input_ids).hidden_states
 ```
 
 The decoder of encoder-decoder models contains so-called *cross-attention* layers
@@ -153,10 +153,10 @@ input_ids = torch.tensor([[model.config.decoder_start_token_id]])
 
 max_new_tokens = 10
 for _ in range(max_new_tokens):
-	with torch.no_grad():
-		logits = model(input_ids, encoder_hidden_states=encoder_hidden_states).logits
-	
-	next_token_id = torch.argmax(logits[:, -1:], dim=-1)
+    with torch.no_grad():
+        logits = model(input_ids, encoder_hidden_states=encoder_hidden_states).logits
+
+    next_token_id = torch.argmax(logits[:, -1:], dim=-1)
 ```
 
 Transformers `generate` method automatically detects if the model is an encoder-decoder

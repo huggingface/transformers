@@ -28,13 +28,13 @@ from requests.exceptions import HTTPError
 from transformers import BertConfig, is_flax_available, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
-    slow,
     TOKEN,
     USER,
     CaptureLogger,
     is_pt_flax_cross_test,
     is_staging_test,
     require_flax,
+    slow,
     torch_device,
 )
 from transformers.utils import logging
@@ -1236,7 +1236,6 @@ def check_models_equal(model1, model2):
 @require_flax
 @slow
 class FlaxModelUtilsTest(unittest.TestCase):
-
     def test_model_from_pretrained_subfolder(self):
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
         model = FlaxBertModel(config)
