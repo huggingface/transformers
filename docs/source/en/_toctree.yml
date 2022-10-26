@@ -44,7 +44,7 @@
       title: Use tokenizers from 🤗 Tokenizers
     - local: multilingual
       title: Inference for multilingual models
-      sections:
+    - sections:
       - local: tasks/sequence_classification
         title: Text classification
       - local: tasks/token_classification
