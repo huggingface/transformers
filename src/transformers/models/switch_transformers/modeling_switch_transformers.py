@@ -59,7 +59,8 @@ _CHECKPOINT_FOR_DOC = "ybelkada/switch_transformers-base"
 # for the pretrained weights provided with the models
 ####################################################
 SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ybelkada/switch_transformers-base",
+    "ybelkada/switch-base-8",
+    "ybelkada/switch-base-16",
     # See all SwitchTransformers models at https://huggingface.co/models?filter=switch_transformers
 ]
 
@@ -363,7 +364,7 @@ class SwitchTransformersLayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-# TODO: do we need this????
+# TODO: do we need this? No let's just import ALL_LAYERNORM_LAYERS. 
 ALL_LAYERNORM_LAYERS.append(SwitchTransformersLayerNorm)
 
 

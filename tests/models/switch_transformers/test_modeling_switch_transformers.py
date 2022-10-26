@@ -1019,16 +1019,15 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
              -29.340445, -29.479067, -29.333689, -29.338657, -29.339827,
              -29.33101 , -29.482433, -29.498121, -29.477905, -29.33606 ,
              -29.333132, -29.335573, -29.482475, -29.330212],)
-            
+
         hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).logits
         hf_logits = hf_logits.mean(dim=-1)[0]
 
         self.assertTrue(torch.testing.assert_allclose(hf_logits, EXPECTED_MEAN_LOGITS, rtol=1e-3, atol=1e-3))
-    
+
     def test_small_generate(self):
-        r"""
-            Generate test using the smalled switch-C model.
-        """
+        #Generate test using the smalled switch-C model.
+
         model = SwitchTransformersForConditionalGeneration.from_pretrained("HFLAY/switch_base_8", torch_dtype=torch.bfloat16).eval()
         tokenizer = SwitchTransformersForConditionalGeneration.from_pretrained("t5-small")
 
@@ -1039,6 +1038,17 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         EXPECTED_OUTPUT = " . The best way to do it is to use a smartphone. Hello there"
         self.assertisEqual(output_str, EXPECTED_OUTPUT)
 
+        input_ids = tokenizer("The human walks into a bar and orders a <extra_id_0>", return_tensors="pt").input_ids.to(torch_device)
+        sequences = model.generate(input_ids)
+        output_str = tokenizer.batch_decode(sequences, skip_special_tokens=True)[0]
+        self.assertisEqual(output_str, "drink.")
+
+        input_ids = tokenizer("A <extra_id_0> walks into a bar a orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>.", return_tensors="pt").input_ids.to(torch_device)
+        sequences = model.generate(input_ids)
+        output_str = tokenizer.batch_decode(sequences, skip_special_tokens=False)[0]
+
+        EXPECTED_OUTPUT = "<pad> <extra_id_0> man<extra_id_1> beer<extra_id_2> a<extra_id_3> salt<extra_id_4>.</s>"
+        self.assertisEqual(output_str, EXPECTED_OUTPUT)
 
     def test_large_logits(self):
         pass
