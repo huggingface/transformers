@@ -1285,7 +1285,7 @@ class Trainer:
             if not model.training:
                 model.train()
             model, self.optimizer = ipex.optimize(
-                model, dtype=dtype, optimizer=self.optimizer, inplace=True, level="O1", conv_bn_folding=False
+                model, dtype=dtype, optimizer=self.optimizer, inplace=True, level="O1"
             )
 
         return model
