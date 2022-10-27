@@ -796,10 +796,10 @@ class Seq2SeqMoEOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    encoder_total_z_loss: torch.FloatTensor = None
-    decoder_total_z_loss: torch.FloatTensor = None
-    encoder_total_aux_loss: torch.FloatTensor = None
-    decoder_total_aux_loss: torch.FloatTensor = None
+    encoder_z_loss: torch.FloatTensor = None
+    decoder_z_loss: torch.FloatTensor = None
+    encoder_aux_loss: torch.FloatTensor = None
+    decoder_aux_loss: torch.FloatTensor = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None

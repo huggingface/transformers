@@ -999,85 +999,29 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of Switch-C transformers. We only check the logits
         of the first batch.
         """
-        model = SwitchTransformersForConditionalGeneration.from_pretrained(
+        model = SwitchTransformersModel.from_pretrained(
             "HFLAY/switch_base_8", torch_dtype=torch.bfloat16
         ).eval()
         input_ids = torch.ones((32, 64), dtype=torch.long)
         decoder_input_ids = torch.ones((32, 64), dtype=torch.long)
 
+        # fmt: off
         EXPECTED_MEAN_LOGITS = torch.Tensor(
             [
-                -29.330458,
-                -29.332455,
-                -29.333147,
-                -29.341417,
-                -29.472025,
-                -29.335613,
-                -29.47691,
-                -29.328053,
-                -29.328312,
-                -29.329872,
-                -29.336075,
-                -29.331112,
-                -29.30393,
-                -29.328972,
-                -29.33514,
-                -29.335201,
-                -29.317245,
-                -29.48052,
-                -29.328382,
-                -29.4837,
-                -29.489216,
-                -29.338572,
-                -29.331537,
-                -29.337881,
-                -29.497675,
-                -29.483559,
-                -29.497217,
-                -29.343832,
-                -29.483425,
-                -29.333313,
-                -29.49259,
-                -29.318579,
-                -29.478128,
-                -29.328222,
-                -29.339464,
-                -29.329647,
-                -29.339725,
-                -29.648586,
-                -29.312738,
-                -29.314232,
-                -29.330048,
-                -29.314402,
-                -29.329876,
-                -29.33895,
-                -29.337482,
-                -29.477829,
-                -29.482548,
-                -29.337194,
-                -29.487375,
-                -29.33446,
-                -29.340445,
-                -29.479067,
-                -29.333689,
-                -29.338657,
-                -29.339827,
-                -29.33101,
-                -29.482433,
-                -29.498121,
-                -29.477905,
-                -29.33606,
-                -29.333132,
-                -29.335573,
-                -29.482475,
-                -29.330212,
-            ],
-        )
+            -0.204102, -0.193359, 0.523438, -0.296875, 0.108887,
+             0.0211182, 0.605469, -0.100586, -0.0551758, 0.296875,
+             0.0090332, 0.174805, 0.139648, -0.170898, -0.0981445,
+             0.0245361, 0.0373535, 0.050293, -0.212891, 0.129883,
+             0.390625, -0.203125, -0.122559, -0.180664, 0.0437012,
+             -0.349609, -0.0250244, -0.104004, -0.15918, -0.133789
+            ]
+        ).to(torch.bfloat16)
+        # fmt: on
 
-        hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).logits
-        hf_logits = hf_logits.mean(dim=-1)[0]
+        hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state
+        hf_logits = hf_logits[0,0,:30]
 
-        self.assertTrue(torch.testing.assert_allclose(hf_logits, EXPECTED_MEAN_LOGITS, rtol=1e-3, atol=1e-3))
+        torch.testing.assert_allclose(hf_logits, EXPECTED_MEAN_LOGITS, rtol = 6e-3,atol=9e-3)
 
     def test_small_generate(self):
         # Generate test using the smalled switch-C model.
@@ -1086,14 +1030,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
             "HFLAY/switch_base_8", torch_dtype=torch.bfloat16
         ).eval()
         tokenizer = AutoTokenizer.from_pretrained("t5-small")
-
-
-        input_ids = tokenizer("summarize: Hello world", return_tensors="pt").input_ids.to(torch_device)
-        sequences = model.generate(input_ids)
-        output_str = tokenizer.batch_decode(sequences, skip_special_tokens=True)[0]
-
-        EXPECTED_OUTPUT = " . The best way to do it is to use a smartphone. Hello there"
-        self.assertEqual(output_str, EXPECTED_OUTPUT)
+        model = model.to(torch_device)
 
         input_ids = tokenizer(
             "The human walks into a bar and orders a <extra_id_0>", return_tensors="pt"
@@ -1109,7 +1046,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         sequences = model.generate(input_ids)
         output_str = tokenizer.batch_decode(sequences, skip_special_tokens=False)[0]
 
-        EXPECTED_OUTPUT = "<pad> <extra_id_0> man<extra_id_1> beer<extra_id_2> a<extra_id_3> salt<extra_id_4>.</s>"
+        EXPECTED_OUTPUT = "<pad><extra_id_0> man<extra_id_1> beer<extra_id_2> a<extra_id_3> salt<extra_id_4>.</s>"
         self.assertEqual(output_str, EXPECTED_OUTPUT)
 
     def test_small_batch_generate(self):
