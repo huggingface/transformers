@@ -2222,7 +2222,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     for layer in sorted(shard, key=lambda x: x.name):
                         if "model." in layer.name or len(layer.name.split("/")) == 1:
                             layer_name = layer.name
-                            print(layer_name)
                         else:
                             layer_name = "/".join(layer.name.split("/")[1:])
                         param_dset = shard_file.create_dataset(
