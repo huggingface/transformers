@@ -245,8 +245,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
             Whether to omit the `<|notimestamps|>` token at the start of the sequence.
         task (`str`, *optional*, defaults to `None`):
             Task identifier to append at the start of sequence (if any).
-        multilingual (`bool`, *optional*, defaults to `False`):
-            Whether to tokenize text for multilingual speech recognition or speech translation tasks.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -268,7 +266,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
         language=None,
         predict_timestamps=False,
         task=None,
-        multilingual=False,
         **kwargs
     ):
 
@@ -311,7 +308,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self.language = language
         self.predict_timestamps = predict_timestamps
         self.task = task
-        self.multilingual = multilingual
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
@@ -365,7 +361,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    def set_bos_sequence(self, language=None, task=None, predict_timestamps=False, multilingual=False):
+    def set_bos_sequence(self, language=None, task=None, predict_timestamps=False):
         all_special_ids = self.all_special_ids
         bos_token_id = all_special_ids[-106]
         translate_token_id = all_special_ids[-6]
@@ -398,7 +394,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return self.set_bos_sequence(
             language=self.language,
             task=self.task,
-            multilingual=self.multilingual,
             predict_timestamps=self.predict_timestamps,
         )
 
