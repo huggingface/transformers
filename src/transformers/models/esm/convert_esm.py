@@ -33,8 +33,10 @@ from transformers.models.esm.modeling_esm import (
     EsmSelfAttention,
     EsmSelfOutput,
 )
+from transformers.models.esm.modeling_esmfold import EsmForProteinFolding
 from transformers.models.esm.tokenization_esm import EsmTokenizer
 from transformers.utils import logging
+from esm.esmfold.v1.pretrained import esmfold_3B_v1
 
 
 logging.set_verbosity_info()
@@ -60,6 +62,7 @@ MODEL_MAPPING = {
     "esm2_t30_150M_UR50D": esm_module.pretrained.esm2_t30_150M_UR50D,
     "esm2_t12_35M_UR50D": esm_module.pretrained.esm2_t12_35M_UR50D,
     "esm2_t6_8M_UR50D": esm_module.pretrained.esm2_t6_8M_UR50D,
+    "esmfold_v1": esmfold_3B_v1,
 }
 
 
@@ -69,9 +72,14 @@ def convert_esm_checkpoint_to_pytorch(
     """
     Copy/paste/tweak esm's weights to our BERT structure.
     """
-    esm, alphabet = MODEL_MAPPING[model]()
+    if model.startswith("esmfold"):
+        esm = MODEL_MAPPING[model]()
+        alphabet = None
+    else:
+        esm, alphabet = MODEL_MAPPING[model]()
     esm.eval()  # disable dropout
-    esm_sent_encoder = esm
+    original_esm_model = esm
+    # TODO Copy model parameters out of ESMFold here including the mask_idx
     if hasattr(esm, "args"):
         # Indicates an ESM-1b or ESM-1v model
         embed_dim = esm.args.embed_dim
@@ -91,8 +99,13 @@ def convert_esm_checkpoint_to_pytorch(
         emb_layer_norm_before = False  # This code path does not exist in ESM-2
         position_embedding_type = "rotary"
 
+    if alphabet is not None:
+        mask_token_idx = alphabet.mask_idx
+    else:
+        breakpoint()
+        print()
     config = EsmConfig(
-        vocab_size=esm_sent_encoder.embed_tokens.num_embeddings,
+        vocab_size=original_esm_model.embed_tokens.num_embeddings,
         mask_token_id=alphabet.mask_idx,
         hidden_size=embed_dim,
         num_hidden_layers=num_layers,
@@ -110,28 +123,32 @@ def convert_esm_checkpoint_to_pytorch(
     if classification_head:
         config.num_labels = esm.classification_heads["mnli"].out_proj.weight.shape[0]
     print("Our BERT config:", config)
-
-    model = EsmForSequenceClassification(config) if classification_head else EsmForMaskedLM(config)
+    if model.startswith("esmfold"):
+        model = EsmForProteinFolding(config)
+    elif classification_head:
+        model = EsmForSequenceClassification(config)
+    else:
+        model = EsmForMaskedLM(config)
     model.eval()
 
     # Now let's copy all the weights.
     # Embeddings
-    model.esm.embeddings.word_embeddings.weight = esm_sent_encoder.embed_tokens.weight
+    model.esm.embeddings.word_embeddings.weight = original_esm_model.embed_tokens.weight
     if position_embedding_type == "absolute":
-        model.esm.embeddings.position_embeddings.weight = esm_sent_encoder.embed_positions.weight
+        model.esm.embeddings.position_embeddings.weight = original_esm_model.embed_positions.weight
 
     if config.emb_layer_norm_before:
-        model.esm.embeddings.layer_norm.weight = esm_sent_encoder.emb_layer_norm_before.weight
-        model.esm.embeddings.layer_norm.bias = esm_sent_encoder.emb_layer_norm_before.bias
+        model.esm.embeddings.layer_norm.weight = original_esm_model.emb_layer_norm_before.weight
+        model.esm.embeddings.layer_norm.bias = original_esm_model.emb_layer_norm_before.bias
 
-    model.esm.encoder.emb_layer_norm_after.weight = esm_sent_encoder.emb_layer_norm_after.weight
-    model.esm.encoder.emb_layer_norm_after.bias = esm_sent_encoder.emb_layer_norm_after.bias
+    model.esm.encoder.emb_layer_norm_after.weight = original_esm_model.emb_layer_norm_after.weight
+    model.esm.encoder.emb_layer_norm_after.bias = original_esm_model.emb_layer_norm_after.bias
 
     for i in range(config.num_hidden_layers):
         # Encoder: start of layer
         layer: EsmLayer = model.esm.encoder.layer[i]
-        # esm_layer: TransformerSentenceEncoderLayer = esm_sent_encoder.layers[i]
-        esm_layer = esm_sent_encoder.layers[i]
+        # esm_layer: TransformerSentenceEncoderLayer = original_esm_model.layers[i]
+        esm_layer = original_esm_model.layers[i]
 
         # self attention
         self_attn: EsmSelfAttention = layer.attention.self
