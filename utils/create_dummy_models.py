@@ -694,8 +694,6 @@ def build(config_class, models_to_create, output_dir):
         if error:
             result["pytorch"][pytorch_arch.__name__]["error"] = error
             logger.error(f"{pytorch_arch.__name__}: {error}")
-        else:
-            print(f"{pytorch_arch.__name__}: OK")
 
     for tensorflow_arch in models_to_create["tensorflow"]:
         # Make PT/TF weights compatible
@@ -730,8 +728,6 @@ def build(config_class, models_to_create, output_dir):
         if error:
             result["tensorflow"][tensorflow_arch.__name__]["error"] = error
             logger.error(f"{tensorflow_arch.__name__}: {error}")
-        else:
-            print(f"{tensorflow_arch.__name__}: OK")
 
     if not result["error"]:
         del result["error"]
