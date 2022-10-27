@@ -413,7 +413,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     ) -> BatchEncoding:
 
         if not isinstance(batch_text_or_text_pairs, (tuple, list)):
-            raise TypeError(f"batch_text_or_text_pairs has to be a list (got {type(batch_text_or_text_pairs)})")
+            raise TypeError(f"batch_text_or_text_pairs has to be a list or a tuple (got {type(batch_text_or_text_pairs)})")
 
         # Set the truncation and padding strategy and restore the initial configuration
         self.set_truncation_and_padding(
