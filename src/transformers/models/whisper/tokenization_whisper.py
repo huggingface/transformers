@@ -365,11 +365,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return word
 
     def set_bos_sequence(self, language=None, task=None, predict_timestamps=False, multilingual=False):
-        all_special_ids: List[int] = self.all_special_ids
-        bos_token_id: int = all_special_ids[1]
-        translate_token_id: int = all_special_ids[-6]
-        transcribe_token_id: int = all_special_ids[-5]
-        notimestamps_token_id: int = all_special_ids[-1]
+        all_special_ids = self.all_special_ids
+        bos_token_id = all_special_ids[-106]
+        translate_token_id = all_special_ids[-6]
+        transcribe_token_id = all_special_ids[-5]
+        notimestamps_token_id = all_special_ids[-1]
         langs = tuple(LANGUAGES.keys())
 
         if language is not None:
