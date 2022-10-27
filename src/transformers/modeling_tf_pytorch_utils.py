@@ -21,7 +21,7 @@ import re
 
 import numpy
 
-from .utils import ExplicitEnum, expand_dims, is_numpy_array, is_torch_tensor, logging, reshape, squeeze
+from .utils import ExplicitEnum, expand_dims, is_numpy_array, is_torch_tensor, logging, reshape, squeeze, tensor_size
 from .utils import transpose as transpose_func
 
 
@@ -273,7 +273,7 @@ def load_pytorch_state_dict_in_tf2_model(
 
         array = apply_transpose(transpose, pt_state_dict[name], symbolic_weight.shape)
 
-        tf_loaded_numel += array.size
+        tf_loaded_numel += tensor_size(array)
 
         weight_value_tuples.append((symbolic_weight, array))
         all_pytorch_weights.discard(name)

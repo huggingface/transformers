@@ -445,3 +445,19 @@ def expand_dims(array, axis):
         return jnp.expand_dims(array, axis=axis)
     else:
         raise ValueError(f"Type not supported for expand_dims: {type(array)}.")
+
+
+def tensor_size(array):
+    """
+    Framework-agnostic version of `numpy.size` that will work on torch/TensorFlow/Jax tensors as well as NumPy arrays.
+    """
+    if is_numpy_array(array):
+        return np.size(array)
+    elif is_torch_tensor(array):
+        return array.numel()
+    elif is_tf_tensor(array):
+        return tf.size(array)
+    elif is_jax_tensor(array):
+        return array.size
+    else:
+        raise ValueError(f"Type not supported for expand_dims: {type(array)}.")
