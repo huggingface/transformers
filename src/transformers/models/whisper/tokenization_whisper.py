@@ -89,9 +89,130 @@ def get_pairs(word):
     return pairs
 
 
+LANGUAGES = {
+    "en": "english",
+    "zh": "chinese",
+    "de": "german",
+    "es": "spanish",
+    "ru": "russian",
+    "ko": "korean",
+    "fr": "french",
+    "ja": "japanese",
+    "pt": "portuguese",
+    "tr": "turkish",
+    "pl": "polish",
+    "ca": "catalan",
+    "nl": "dutch",
+    "ar": "arabic",
+    "sv": "swedish",
+    "it": "italian",
+    "id": "indonesian",
+    "hi": "hindi",
+    "fi": "finnish",
+    "vi": "vietnamese",
+    "iw": "hebrew",
+    "uk": "ukrainian",
+    "el": "greek",
+    "ms": "malay",
+    "cs": "czech",
+    "ro": "romanian",
+    "da": "danish",
+    "hu": "hungarian",
+    "ta": "tamil",
+    "no": "norwegian",
+    "th": "thai",
+    "ur": "urdu",
+    "hr": "croatian",
+    "bg": "bulgarian",
+    "lt": "lithuanian",
+    "la": "latin",
+    "mi": "maori",
+    "ml": "malayalam",
+    "cy": "welsh",
+    "sk": "slovak",
+    "te": "telugu",
+    "fa": "persian",
+    "lv": "latvian",
+    "bn": "bengali",
+    "sr": "serbian",
+    "az": "azerbaijani",
+    "sl": "slovenian",
+    "kn": "kannada",
+    "et": "estonian",
+    "mk": "macedonian",
+    "br": "breton",
+    "eu": "basque",
+    "is": "icelandic",
+    "hy": "armenian",
+    "ne": "nepali",
+    "mn": "mongolian",
+    "bs": "bosnian",
+    "kk": "kazakh",
+    "sq": "albanian",
+    "sw": "swahili",
+    "gl": "galician",
+    "mr": "marathi",
+    "pa": "punjabi",
+    "si": "sinhala",
+    "km": "khmer",
+    "sn": "shona",
+    "yo": "yoruba",
+    "so": "somali",
+    "af": "afrikaans",
+    "oc": "occitan",
+    "ka": "georgian",
+    "be": "belarusian",
+    "tg": "tajik",
+    "sd": "sindhi",
+    "gu": "gujarati",
+    "am": "amharic",
+    "yi": "yiddish",
+    "lo": "lao",
+    "uz": "uzbek",
+    "fo": "faroese",
+    "ht": "haitian creole",
+    "ps": "pashto",
+    "tk": "turkmen",
+    "nn": "nynorsk",
+    "mt": "maltese",
+    "sa": "sanskrit",
+    "lb": "luxembourgish",
+    "my": "myanmar",
+    "bo": "tibetan",
+    "tl": "tagalog",
+    "mg": "malagasy",
+    "as": "assamese",
+    "tt": "tatar",
+    "haw": "hawaiian",
+    "ln": "lingala",
+    "ha": "hausa",
+    "ba": "bashkir",
+    "jw": "javanese",
+    "su": "sundanese",
+}
+
+# language code lookup by name, with a few language aliases
+TO_LANGUAGE_CODE = {
+    **{language: code for code, language in LANGUAGES.items()},
+    "burmese": "my",
+    "valencian": "ca",
+    "flemish": "nl",
+    "haitian": "ht",
+    "letzeburgesch": "lb",
+    "pushto": "ps",
+    "panjabi": "pa",
+    "moldavian": "ro",
+    "moldovan": "ro",
+    "sinhalese": "si",
+    "castilian": "es",
+}
+
+TASK_IDS = ["translate", "transcribe"]
+
+
 class WhisperTokenizer(PreTrainedTokenizer):
     """
-    Construct an Whisper tokenizer.
+    Construct a Whisper tokenizer.
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods. Users should refer to
     the superclass for more information regarding such methods.
@@ -109,22 +230,30 @@ class WhisperTokenizer(PreTrainedTokenizer):
         unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+        bos_token (`str`, *optional*, defaults to `"<|startoftranscript|>"`):
             The beginning of sequence token.
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word.
-        add_bos_token (`bool`, *optional*, defaults to `False`):
-            Whether or not to add an initial <|endoftext|> to the input. This allows to treat the leading word just as
-            any other word.
+        land_id (`str`, *optional*, defaults to `None`):
+            The language identifier for transcription labels. Appended to the start of the sequence in multilingual
+            speech recognition and speech translation tasks.
+        predict_timestamps (`bool`, *optional*, defaults to `False`):
+            Whether to omit the `<|notimestamps|>` token at the start of the sequence.
+        task (`str`, *optional*, defaults to `None`):
+            Task identifier to append at the start of sequence (if any).
+        multilingual (`bool`, *optional*, defaults to `False`):
+            Whether to tokenize text for multilingual speech recognition or speech translation tasks.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = MAX_MODEL_INPUT_SIZES
     model_input_names = ["input_ids", "attention_mask"]
+
+    prefix_tokens: List[int] = []
 
     def __init__(
         self,
@@ -133,11 +262,14 @@ class WhisperTokenizer(PreTrainedTokenizer):
         normalizer_file=None,
         errors="replace",
         unk_token="<|endoftext|>",
-        bos_token="<|endoftext|>",
+        bos_token="<|startoftranscript|>",
         eos_token="<|endoftext|>",
         pad_token=None,
         add_prefix_space=False,
-        add_bos_token=False,
+        lang_id=None,
+        predict_timestamps=False,
+        task=None,
+        multilingual=False,
         **kwargs
     ):
 
@@ -152,10 +284,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             pad_token=pad_token,
             add_prefix_space=add_prefix_space,
-            add_bos_token=add_bos_token,
             **kwargs,
         )
-        self.add_bos_token = add_bos_token
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -178,6 +308,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+        self.prefix_tokens = self.get_decoder_prompt_ids(
+            language=lang_id, task=task, predict_timestamps=predict_timestamps, multilingual=multilingual
+        )
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
@@ -231,27 +364,63 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.build_inputs_with_special_tokens with GPT2 -> Whisper
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        if self.add_bos_token:
-            bos_token_ids = [self.bos_token_id]
+    def get_decoder_prompt_ids(self, language=None, task=None, predict_timestamps=False, multilingual=False):
+        if language is not None:
+            language = language.lower()
+            if language in TO_LANGUAGE_CODE:
+                language = TO_LANGUAGE_CODE[language]
+            else:
+                raise ValueError(f"Unsupported language: {language}. Language should be in: {TO_LANGUAGE_CODE.keys()}")
+
+        if task is not None:
+            if task not in TASK_IDS:
+                raise ValueError(f"Unsupported task: {task}. Task should be in: {TASK_IDS}")
+
+        if multilingual:
+            task = task or "transcribe"
+            language = language or "en"
         else:
-            bos_token_ids = []
+            task = None
+            language = None
 
-        output = bos_token_ids + token_ids_0
+        # we want to get the 'special token ids' for: the SOS token, the translate/transcribe tokens,
+        # and the 'notimestamps' token, but these are only available **after** the init method
+        # for the tokenizer, as the 'special_tokens_map_file' is parsed in the `from_pretrained` method
+        # **after** the init for the tokenizer.
+        # init here: https://github.com/huggingface/transformers/blob/803475fb69097e802985eb4f85b52199c66a52de/src/transformers/tokenization_utils_base.py#L1932
+        # special tokens here: https://github.com/huggingface/transformers/blob/803475fb69097e802985eb4f85b52199c66a52de/src/transformers/tokenization_utils_base.py#L1962
 
+        all_special_ids: List[int] = self.all_special_ids
+        sot: int = all_special_ids[1]
+        translate: int = all_special_ids[-6]
+        transcribe: int = all_special_ids[-5]
+        notimestamps: int = all_special_ids[-1]
+
+        langs = tuple(LANGUAGES.keys())
+        sot_sequence = [sot]
+        if language is not None:
+            sot_sequence.append(sot + 1 + langs.index(language))
+        if task is not None:
+            sot_sequence.append(transcribe if task == "transcribe" else translate)
+        if not predict_timestamps:
+            sot_sequence.append(notimestamps)
+        self.prefix_tokens = sot_sequence
+
+    # Copied from transformers.models.speech_to_text.tokenization_speech_to_text.Speech2TextTokenizer.build_inputs_with_special_tokens
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
+        """Build model inputs from a sequence by appending eos_token_id."""
         if token_ids_1 is None:
-            return output
+            return self.prefix_tokens + token_ids_0 + [self.eos_token_id]
+        # We don't expect to process pairs, but leave the pair logic for API consistency
+        return self.prefix_tokens + token_ids_0 + token_ids_1 + [self.eos_token_id]
 
-        return output + bos_token_ids + token_ids_1
-
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.get_special_tokens_mask with GPT2 -> Whisper
+    # Copied from transformers.models.speech_to_text.tokenization_speech_to_text.Speech2TextTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
-        Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer `prepare_for_model` or `encode_plus` methods.
+        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
+        special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
             token_ids_0 (`List[int]`):
@@ -264,19 +433,17 @@ class WhisperTokenizer(PreTrainedTokenizer):
         Returns:
             `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
+
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
                 token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
             )
 
-        if not self.add_bos_token:
-            return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=False
-            )
-
+        prefix_ones = [1] * len(self.prefix_tokens)
+        suffix_ones = [1]
         if token_ids_1 is None:
-            return [1] + ([0] * len(token_ids_0))
-        return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
+            return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
+        return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._tokenize with GPT2 -> Whisper
     def _tokenize(self, text):
