@@ -65,20 +65,22 @@ training_ds = ds["train"]
 testing_ds = ds["test"]
 
 
-def get_processor_types_from_config_class(config_class):
+def get_processor_types_from_config_class(config_class, allowed_mappings=None):
     """Return a tuple of processors for `config_class`.
 
     We use `tuple` here to include (potentially) both slow & fast tokenizers.
     """
+    if allowed_mappings is None:
+        allowed_mappings = ["processor", "tokenizer", "feature_extractor"]
 
     processor_types = ()
 
     # Check first if a model has `ProcessorMixin`. Otherwise, check if it has tokenizers or a feature extractor.
-    if config_class in PROCESSOR_MAPPING:
+    if config_class in PROCESSOR_MAPPING and "processor" in allowed_mappings:
         processor_types = PROCESSOR_MAPPING[config_class]
-    elif config_class in TOKENIZER_MAPPING:
+    elif config_class in TOKENIZER_MAPPING and "tokenizer" in allowed_mappings:
         processor_types = TOKENIZER_MAPPING[config_class]
-    elif config_class in FEATURE_EXTRACTOR_MAPPING:
+    elif config_class in FEATURE_EXTRACTOR_MAPPING and "feature_extractor" in allowed_mappings:
         processor_types = FEATURE_EXTRACTOR_MAPPING[config_class]
     else:
         # Some configurations have no processor at all. For example, generic composite models like
@@ -191,9 +193,18 @@ def build_processor(config_class, processor_class):
         if config is not None:
             assert isinstance(config, config_class)
             tokenizer_class = config.tokenizer_class
+            new_processor_class = None
             if tokenizer_class is not None:
                 new_processor_class = getattr(transformers_module, tokenizer_class)
                 if new_processor_class != processor_class:
+                    processor = build_processor(config_class, new_processor_class)
+            # If `tokenizer_class` is not specified in `config`, let's use `config` to get the process class via auto
+            # mappings, but only allow the tokenizer mapping being used. This is to make `Wav2Vec2Conformer` build
+            if processor is None:
+                new_processor_classes = get_processor_types_from_config_class(config.__class__, allowed_mappings=["tokenizer"])
+                new_processor_classes = [x for x in new_processor_classes if x is not None and x not in [processor_class, new_processor_class]]
+                if len(new_processor_classes) > 0:
+                    new_processor_class = new_processor_classes[0]
                     processor = build_processor(config_class, new_processor_class)
 
     if processor is None:
