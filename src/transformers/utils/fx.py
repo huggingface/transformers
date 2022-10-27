@@ -128,6 +128,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "plbart",
     "resnet",
     "roberta",
+    "segformer",
     "speech_to_text",
     "speech_to_text_2",
     "swin",
