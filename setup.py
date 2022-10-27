@@ -123,6 +123,7 @@ _deps = [
     "jax>=0.2.8,!=0.3.2,<=0.3.6",
     "jaxlib>=0.1.65,<=0.3.6",
     "jieba",
+    "kenlm",
     "nltk",
     "numpy>=1.17",
     "onnxconverter-common",
@@ -274,7 +275,7 @@ extras["sigopt"] = deps_list("sigopt")
 extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer")
+extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm")
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]

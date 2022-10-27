@@ -108,6 +108,7 @@ from .import_utils import (
     is_in_notebook,
     is_ipex_available,
     is_jumanpp_available,
+    is_kenlm_available,
     is_librosa_available,
     is_more_itertools_available,
     is_ninja_available,
