@@ -733,6 +733,7 @@ class HFTracer(Tracer):
                 *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_MASKED_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
+                *get_values(MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES),
                 "GPT2DoubleHeadsModel",
             ]:
                 inputs_dict["labels"] = torch.zeros(shape, dtype=torch.long, device=device)
