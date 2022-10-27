@@ -778,9 +778,8 @@ class M2M100Encoder(M2M100PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         embed_pos = self.embed_positions(input_ids, inputs_embeds)
+        embed_pos = embed_pos.to(inputs_embeds.device)
 
-        if embed_pos.device != inputs_embeds.device:
-            embed_pos = embed_pos.to(inputs_embeds.device)
         hidden_states = inputs_embeds + embed_pos
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -1013,9 +1012,8 @@ class M2M100Decoder(M2M100PreTrainedModel):
 
         # embed positions
         positions = self.embed_positions(input_ids, inputs_embeds, past_key_values_length)
+        positions = positions.to(inputs_embeds.device)
 
-        if positions.device != inputs_embeds.device:
-            positions = positions.to(inputs_embeds.device)
         hidden_states = inputs_embeds + positions
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
