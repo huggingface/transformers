@@ -129,6 +129,7 @@ def router_z_loss_func(router_logits: torch.Tensor) -> float:
     return torch.sum(z_loss) / (num_groups * tokens_per_group)
 
 
+# aux loss function
 def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> float:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
@@ -152,6 +153,10 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     # cast the expert indices to int64, otherwise one-hot encoding will fail
     if expert_indices.dtype != torch.int64:
         expert_indices = expert_indices.to(torch.int64)
+
+    if len(expert_indices.shape) == 2:
+        expert_indices = expert_indices.unsqueeze(2)
+
     expert_mask = torch.nn.functional.one_hot(expert_indices, num_experts)
 
     # For a given token, determine if it was routed to a given expert.
@@ -1587,11 +1592,11 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
+            decoder_router_logits=decoder_outputs.router_probs,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
             encoder_router_logits=encoder_outputs.router_probs,
-            decoder_router_logits=decoder_outputs.router_probs,
         )
 
 
@@ -1793,11 +1798,20 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
         if not return_dict:
-            output = (decoder_outputs[1:], encoder_outputs)
+            output = (lm_logits,)
             if output_router_logits:  # only return the loss if they are not None
-                output = (lm_logits, encoder_z_loss, encoder_aux_loss, decoder_z_loss, decoder_aux_loss) + output
-            return ((loss,) + output) if loss is not None else output
+                output += (
+                    encoder_z_loss,
+                    encoder_aux_loss,
+                    decoder_z_loss,
+                    decoder_aux_loss,
+                    *decoder_outputs[1:],
+                    *encoder_outputs,
+                )
+            else:
+                output += (*decoder_outputs[1:], *encoder_outputs)
 
+            return ((loss,) + output) if loss is not None else output
         return Seq2SeqMoEOutput(
             loss=loss,
             logits=lm_logits,
