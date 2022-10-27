@@ -484,25 +484,25 @@ def build_composite_models(config_class, output_dir):
 
     from transformers import (
         BertConfig,
-        BertModel,
         BertLMHeadModel,
-        EncoderDecoderModel,
-        TFEncoderDecoderModel,
+        BertModel,
         BertTokenizer,
         BertTokenizerFast,
-        GPT2TokenizerFast,
+        EncoderDecoderModel,
+        GPT2Config,
+        GPT2LMHeadModel,
         GPT2Tokenizer,
+        GPT2TokenizerFast,
+        SpeechEncoderDecoderModel,
+        TFEncoderDecoderModel,
+        TFVisionEncoderDecoderModel,
+        VisionEncoderDecoderModel,
+        ViTConfig,
         ViTFeatureExtractor,
         ViTModel,
-        GPT2LMHeadModel,
-        VisionEncoderDecoderModel,
-        SpeechEncoderDecoderModel,
-        TFVisionEncoderDecoderModel,
-        ViTConfig,
-        GPT2Config,
         Wav2Vec2Config,
-        Wav2Vec2Processor,
         Wav2Vec2Model,
+        Wav2Vec2Processor,
     )
 
     # These will be removed at the end if they are empty
@@ -573,14 +573,12 @@ def build_composite_models(config_class, output_dir):
             result["processor"] = tuple(set([x.__name__ for x in encoder_processor + decoder_processor]))
 
             result["pytorch"] = {model_class.__name__: {"model": model_class.__name__, "checkpoint": model_path}}
-            print(f"{model_class.__name__}: OK")
 
             result["tensorflow"] = {}
             if tf_model_class is not None:
                 result["tensorflow"] = {
                     tf_model_class.__name__: {"model": tf_model_class.__name__, "checkpoint": model_path}
                 }
-                print(f"{tf_model_class.__name__}: OK")
 
         except Exception as e:
             result["error"] = f"Failed to build models for {config_class.__name__}: {e}"
@@ -793,8 +791,9 @@ def build_simple_report(results):
 
 if __name__ == "__main__":
 
-    if os.getcwd() != os.path.abspath(os.path.dirname(os.path.dirname(__file__))):
-        raise ValueError(f"This script should be run from the root of the clone of `transformers` {os.getcwd()}")
+    clone_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+    if os.getcwd() != clone_path:
+        raise ValueError(f"This script should be run from the root of the clone of `transformers` {clone_path}")
 
     _pytorch_arch_mappings = [
         x
