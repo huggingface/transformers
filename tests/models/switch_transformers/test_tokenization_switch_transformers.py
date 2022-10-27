@@ -143,11 +143,11 @@ class SwitchTransformersTokenizationTest(TokenizerTesterMixin, unittest.TestCase
 
     @cached_property
     def switch_transformers_base_tokenizer(self):
-        return SwitchTransformersTokenizer.from_pretrained("switch_transformers-base")
+        return SwitchTransformersTokenizer.from_pretrained("HFLAY/switch_base_8")
 
     @cached_property
     def switch_transformers_base_tokenizer_fast(self):
-        return SwitchTransformersTokenizerFast.from_pretrained("switch_transformers-base")
+        return SwitchTransformersTokenizerFast.from_pretrained("HFLAY/switch_base_8")
 
     def get_tokenizer(self, **kwargs) -> SwitchTransformersTokenizer:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, pad_token=None, **kwargs)
@@ -382,6 +382,6 @@ class SwitchTransformersTokenizationTest(TokenizerTesterMixin, unittest.TestCase
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="switch_transformers-base",
+            model_name="switch_base_8",
             revision="5a7ff2d8f5117c194c7e32ec1ccbf04642cca99b",
         )

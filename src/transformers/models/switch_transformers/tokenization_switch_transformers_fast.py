@@ -34,35 +34,50 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
+# PRETRAINED_VOCAB_FILES_MAP = {
+#     "vocab_file": {
+#         "ybelkada/switch_transformers-base": (
+#             "https://huggingface.co/ybelkada/switch_transformers-base/resolve/main/spiece.model"
+#         ),
+#         "switch_transformers-base": "https://huggingface.co/switch_transformers-base/resolve/main/spiece.model",
+#         "switch_transformers-large": "https://huggingface.co/switch_transformers-large/resolve/main/spiece.model",
+#         "switch_transformers-3b": "https://huggingface.co/switch_transformers-3b/resolve/main/spiece.model",
+#         "switch_transformers-11b": "https://huggingface.co/switch_transformers-11b/resolve/main/spiece.model",
+#     },
+#     "tokenizer_file": {
+#         "ybelkada/switch_transformers-base": (
+#             "https://huggingface.co/ybelkada/switch_transformers-base/resolve/main/tokenizer.json"
+#         ),
+#         "switch_transformers-base": "https://huggingface.co/switch_transformers-base/resolve/main/tokenizer.json",
+#         "switch_transformers-large": "https://huggingface.co/switch_transformers-large/resolve/main/tokenizer.json",
+#         "switch_transformers-3b": "https://huggingface.co/switch_transformers-3b/resolve/main/tokenizer.json",
+#         "switch_transformers-11b": "https://huggingface.co/switch_transformers-11b/resolve/main/tokenizer.json",
+#     },
+# }
+
+
+# # TODO(PVP) - this should be removed in Transformers v5
+# PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+#     "ybelkada/switch_transformers-base": 512,
+#     "switch_transformers-base": 512,
+#     "switch_transformers-large": 512,
+#     "switch_transformers-3b": 512,
+#     "switch_transformers-11b": 512,
+# }
+
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "ybelkada/switch_transformers-base": (
-            "https://huggingface.co/ybelkada/switch_transformers-base/resolve/main/spiece.model"
-        ),
-        "switch_transformers-base": "https://huggingface.co/switch_transformers-base/resolve/main/spiece.model",
-        "switch_transformers-large": "https://huggingface.co/switch_transformers-large/resolve/main/spiece.model",
-        "switch_transformers-3b": "https://huggingface.co/switch_transformers-3b/resolve/main/spiece.model",
-        "switch_transformers-11b": "https://huggingface.co/switch_transformers-11b/resolve/main/spiece.model",
+        "HFLAY/switch_base_8": "https://huggingface.co/HFLAY/switch_base_8/blob/main/spiece.model",
     },
     "tokenizer_file": {
-        "ybelkada/switch_transformers-base": (
-            "https://huggingface.co/ybelkada/switch_transformers-base/resolve/main/tokenizer.json"
-        ),
-        "switch_transformers-base": "https://huggingface.co/switch_transformers-base/resolve/main/tokenizer.json",
-        "switch_transformers-large": "https://huggingface.co/switch_transformers-large/resolve/main/tokenizer.json",
-        "switch_transformers-3b": "https://huggingface.co/switch_transformers-3b/resolve/main/tokenizer.json",
-        "switch_transformers-11b": "https://huggingface.co/switch_transformers-11b/resolve/main/tokenizer.json",
+        "HFLAY/switch_base_8": "https://huggingface.co/HFLAY/switch_base_8/blob/main/tokenizer.json",
     },
 }
 
 
 # TODO(PVP) - this should be removed in Transformers v5
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "ybelkada/switch_transformers-base": 512,
-    "switch_transformers-base": 512,
-    "switch_transformers-large": 512,
-    "switch_transformers-3b": 512,
-    "switch_transformers-11b": 512,
+    "HFLAY/switch_base_8": 512,
 }
 
 

@@ -31,32 +31,44 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
+# PRETRAINED_VOCAB_FILES_MAP = {
+#     "vocab_file": {
+#         "google/switch-base-8": "https://huggingface.co/google/switch-base-8/resolve/main/spiece.model",
+#         "google/switch-base-16": "https://huggingface.co/switch-base-16/resolve/main/spiece.model",
+#         "google/switch-base-32": "https://huggingface.co/google/switch-base-32/resolve/main/spiece.model",
+#         "google/switch-base-64": "https://huggingface.co/google/switch-base-64/resolve/main/spiece.model",
+#         "google/switch-base-128": "https://huggingface.co/google/switch-base-128/resolve/main/spiece.model",
+#         "google/switch-base-256": "https://huggingface.co/google/switch-base-256/resolve/main/spiece.model",
+#         "google/switch-large-128": "https://huggingface.co/google/switch-large-128/resolve/main/spiece.model",
+#         "google/switch-xxl-128": "https://huggingface.co/google/switch-xxl-128/resolve/main/spiece.model",
+#         "google/switch-c-2048": "https://huggingface.co/google/switch-c-2048/resolve/main/spiece.model",
+#     }
+# }
+
+
+# # TODO(PVP) - this should be removed in Transformers v5
+# PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+#     "google/switch-base-8": 512,
+#     "google/switch-base-16": 512,
+#     "google/switch-base-32": 512,
+#     "google/switch-base-64": 512,
+#     "google/switch-base-128": 512,
+#     "google/switch-base-256": 512,
+#     "google/switch-large-128": 512,
+#     "google/switch-xxl-128": 512,
+#     "google/switch-c-2048": 512,
+# }
+
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "google/switch-base-8": "https://huggingface.co/google/switch-base-8/resolve/main/spiece.model",
-        "google/switch-base-16": "https://huggingface.co/switch-base-16/resolve/main/spiece.model",
-        "google/switch-base-32": "https://huggingface.co/google/switch-base-32/resolve/main/spiece.model",
-        "google/switch-base-64": "https://huggingface.co/google/switch-base-64/resolve/main/spiece.model",
-        "google/switch-base-128": "https://huggingface.co/google/switch-base-128/resolve/main/spiece.model",
-        "google/switch-base-256": "https://huggingface.co/google/switch-base-256/resolve/main/spiece.model",
-        "google/switch-large-128": "https://huggingface.co/google/switch-large-128/resolve/main/spiece.model",
-        "google/switch-xxl-128": "https://huggingface.co/google/switch-xxl-128/resolve/main/spiece.model",
-        "google/switch-c-2048": "https://huggingface.co/google/switch-c-2048/resolve/main/spiece.model",
+        "HFLAY/switch_base_8": "https://huggingface.co/HFLAY/switch_base_8/blob/main/spiece.model",
     }
 }
 
 
 # TODO(PVP) - this should be removed in Transformers v5
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/switch-base-8": 512,
-    "google/switch-base-16": 512,
-    "google/switch-base-32": 512,
-    "google/switch-base-64": 512,
-    "google/switch-base-128": 512,
-    "google/switch-base-256": 512,
-    "google/switch-large-128": 512,
-    "google/switch-xxl-128": 512,
-    "google/switch-c-2048": 512,
+    "HFLAY/switch_base_8": 512,
 }
 
 
