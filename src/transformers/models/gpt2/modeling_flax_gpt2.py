@@ -597,11 +597,13 @@ class FlaxGPT2Module(nn.Module):
             self.config.vocab_size,
             self.embed_dim,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            dtype=self.dtype,
         )
         self.wpe = nn.Embed(
             self.config.max_position_embeddings,
             self.embed_dim,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.embd_pdrop)
         self.h = FlaxGPT2BlockCollection(self.config, dtype=self.dtype)

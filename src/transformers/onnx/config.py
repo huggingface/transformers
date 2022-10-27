@@ -486,7 +486,9 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
 
         return common_inputs
 
-    def fill_with_past_key_values_(self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str):
+    def fill_with_past_key_values_(
+        self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str, inverted_values_shape: bool = False
+    ):
         """
         Fill the input_or_outputs mapping with past_key_values dynamic axes considering.
 
@@ -494,6 +496,8 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
             inputs_or_outputs: The mapping to fill.
             direction: either "inputs" or "outputs", it specifies whether input_or_outputs is the input mapping or the
                 output mapping, this is important for axes naming.
+            inverted_values_shape:
+                If `True`, store values on dynamic axis 1, else on axis 2.
 
         """
         if direction not in ["inputs", "outputs"]:
@@ -502,7 +506,10 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         name = "past_key_values" if direction == "inputs" else "present"
         for i in range(self.num_layers):
             inputs_or_outputs[f"{name}.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
-            inputs_or_outputs[f"{name}.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
+            if inverted_values_shape:
+                inputs_or_outputs[f"{name}.{i}.value"] = {0: "batch", 1: "past_sequence + sequence"}
+            else:
+                inputs_or_outputs[f"{name}.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
 
     def _flatten_past_key_values_(self, flattened_output, name, idx, t):
         flattened_output[f"{name}.{idx}.key"] = t[0]

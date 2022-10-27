@@ -119,7 +119,7 @@ Carga los atributos de tu configuración personalizada en el modelo de la siguie
 >>> model = DistilBertModel(my_config)
 ```
   
-Esto crea un modelo con valores aleatorios, en lugar de crearlo con los pesos del preentramiento, por lo que no serás capaz de usar este modelo para nada útil hasta que no lo entrenes. El entrenamiento es un proceso costoso, tanto en cuestión de recursos como de tiempo, por lo que generalmente es mejor usar un modelo preentrenado para obtener mejores resultados más rápido, consumiendo una fracción de los recursos que un entrenamiento completo hubiera requerido. 
+Esto crea un modelo con valores aleatorios, en lugar de crearlo con los pesos del preentrenamiento, por lo que no serás capaz de usar este modelo para nada útil hasta que no lo entrenes. El entrenamiento es un proceso costoso, tanto en cuestión de recursos como de tiempo, por lo que generalmente es mejor usar un modelo preentrenado para obtener mejores resultados más rápido, consumiendo una fracción de los recursos que un entrenamiento completo hubiera requerido. 
 
 Puedes crear un modelo preentrenado con [`~PreTrainedModel.from_pretrained`]:
 
@@ -127,7 +127,7 @@ Puedes crear un modelo preentrenado con [`~PreTrainedModel.from_pretrained`]:
 >>> model = DistilBertModel.from_pretrained("distilbert-base-uncased")
 ```
 
-Cuando cargues tus pesos del preentramiento, el modelo por defecto se carga automáticamente si nos lo proporciona 🤗 Transformers. Sin embargo, siempre puedes reemplazar (todos o algunos de) los atributos del modelo por defecto por los tuyos:
+Cuando cargues tus pesos del preentrenamiento, el modelo por defecto se carga automáticamente si nos lo proporciona 🤗 Transformers. Sin embargo, siempre puedes reemplazar (todos o algunos de) los atributos del modelo por defecto por los tuyos:
 
 ```py
 >>> model = DistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
@@ -144,7 +144,7 @@ Carga los atributos de tu configuración personalizada en el modelo de la siguie
 >>> tf_model = TFDistilBertModel(my_config)
 ```
 
-Esto crea un modelo con valores aleatorios, en lugar de crearlo con los pesos del preentramiento, por lo que no serás capaz de usar este modelo para nada útil hasta que no lo entrenes. El entrenamiento es un proceso costoso, tanto en cuestión de recursos como de tiempo, por lo que generalmente es mejor usar un modelo preentrenado para obtener mejores resultados más rápido, consumiendo solo una fracción de los recursos que un entrenamiento completo hubiera requerido. 
+Esto crea un modelo con valores aleatorios, en lugar de crearlo con los pesos del preentrenamiento, por lo que no serás capaz de usar este modelo para nada útil hasta que no lo entrenes. El entrenamiento es un proceso costoso, tanto en cuestión de recursos como de tiempo, por lo que generalmente es mejor usar un modelo preentrenado para obtener mejores resultados más rápido, consumiendo solo una fracción de los recursos que un entrenamiento completo hubiera requerido. 
 
 Puedes crear un modelo preentrenado con [`~TFPreTrainedModel.from_pretrained`]:
 
@@ -152,7 +152,7 @@ Puedes crear un modelo preentrenado con [`~TFPreTrainedModel.from_pretrained`]:
 >>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased")
 ```
 
-Cuando cargues tus pesos del preentramiento, el modelo por defecto se carga automáticamente si este nos lo proporciona 🤗 Transformers. Sin embargo, siempre puedes reemplazar (todos o algunos de) los atributos del modelo por defecto por los tuyos:
+Cuando cargues tus pesos del preentrenamiento, el modelo por defecto se carga automáticamente si este nos lo proporciona 🤗 Transformers. Sin embargo, siempre puedes reemplazar (todos o algunos de) los atributos del modelo por defecto por los tuyos:
 
 ```py
 >>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
@@ -217,7 +217,7 @@ Ambos *tokenizers* son compatibles con los métodos comunes, como los de encodif
 
 <Tip warning={true}>
 
-No todos los modelos son compatibles con un *tokenizer* rápido. Échale un vistazo a esta [tabla](index#supported-frameworks) para comprobar si un modelo en específico es compatible con un *tokenizer* rápido.
+No todos los modelos son compatibles con un *tokenizer* rápido. Échale un vistazo a esta [tabla](index#supported-frameworks) para comprobar si un modelo específico es compatible con un *tokenizer* rápido.
 
 </Tip>
 
@@ -229,7 +229,7 @@ Si has entrenado tu propio *tokenizer*, puedes crear uno desde tu archivo de “
 >>> my_tokenizer = DistilBertTokenizer(vocab_file="my_vocab_file.txt", do_lower_case=False, padding_side="left")
 ```
 
-Es importante recordar que los vocabularios que provienen de un *tokenizer* personalizado serán diferentes a los vocabularios generados por el *tokenizer* de un modelo preentrenado. Debes usar el vocabulario de un *tokenizer* preentrenado si vas a usar un modelo preentrenado, de lo contrario las entradas no tendrán sentido. Crea un *tokenizer* con el vocabulario de un modelo preentrenado usado la clase [`DistilBertTokenizer`]:
+Es importante recordar que los vocabularios que provienen de un *tokenizer* personalizado serán diferentes a los vocabularios generados por el *tokenizer* de un modelo preentrenado. Debes usar el vocabulario de un *tokenizer* preentrenado si vas a usar un modelo preentrenado, de lo contrario las entradas no tendrán sentido. Crea un *tokenizer* con el vocabulario de un modelo preentrenado usando la clase [`DistilBertTokenizer`]:
 
 
 ```py
@@ -249,7 +249,7 @@ Crea un *tokenizer* rápido con la clase [`DistilBertTokenizerFast`]:
 
 <Tip>
 
-Por defecto, el [`AutoTokenizer`] intentará cargar un *tokenizer* rápido. Puedes desactivar este compartimiento cambiando el parámetro `use_fast=False` de `from_pretrained`.
+Por defecto, el [`AutoTokenizer`] intentará cargar un *tokenizer* rápido. Puedes desactivar este comportamiento cambiando el parámetro `use_fast=False` de `from_pretrained`.
 
 
 </Tip>
@@ -258,7 +258,7 @@ Por defecto, el [`AutoTokenizer`] intentará cargar un *tokenizer* rápido. Pued
 
 Un extractor de características procesa entradas de audio e imagen. Hereda de la clase base [`~feature_extraction_utils.FeatureExtractionMixin`] y también puede heredar de la clase [`ImageFeatureExtractionMixin`] para el procesamiento de características de las imágenes o de la clase [`SequenceFeatureExtractor`] para el procesamiento de entradas de audio.
 
-Dependiendo de si trabajas en una tarea de audio o de video, puedes crear un extractor de características asociado al modelo que estes usando. Por ejemplo, podrías crear un [`ViTFeatureExtractor`] por defecto si estas usando [ViT](model_doc/vit) para clasificación de imágenes:
+Dependiendo de si trabajas en una tarea de audio o de video, puedes crear un extractor de características asociado al modelo que estés usando. Por ejemplo, podrías crear un [`ViTFeatureExtractor`] por defecto si estás usando [ViT](model_doc/vit) para clasificación de imágenes:
 
 ```py
 >>> from transformers import ViTFeatureExtractor

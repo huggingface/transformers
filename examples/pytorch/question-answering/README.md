@@ -115,7 +115,7 @@ python run_seq2seq_qa.py \
   --dataset_name squad_v2 \
   --context_column context \
   --question_column question \
-  --answer_column answer \
+  --answer_column answers \
   --do_train \
   --do_eval \
   --per_device_train_batch_size 12 \

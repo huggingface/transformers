@@ -65,13 +65,19 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         chunk_length=30,
         n_fft=400,
         padding_value=0.0,
+        return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
         **kwargs
     ):
-        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
+        super().__init__(
+            feature_size=feature_size,
+            sampling_rate=sampling_rate,
+            padding_value=padding_value,
+            return_attention_mask=return_attention_mask,
+            **kwargs,
+        )
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.chunk_length = chunk_length
-        self.return_attention_mask = True
         self.n_samples = chunk_length * sampling_rate
         self.nb_max_frames = self.n_samples // hop_length
         self.sampling_rate = sampling_rate
@@ -218,6 +224,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask: Optional[bool] = None,
         padding: Optional[str] = "max_length",
         max_length: Optional[int] = None,
+        sampling_rate: Optional[int] = None,
         **kwargs
     ) -> BatchFeature:
         """
@@ -261,6 +268,19 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 The value that is used to fill the padding values / vectors.
         """
 
+        if sampling_rate is not None:
+            if sampling_rate != self.sampling_rate:
+                raise ValueError(
+                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of"
+                    f" {self.sampling_rate}. Please make sure that the provided `raw_speech` input was sampled with"
+                    f" {self.sampling_rate} and not {sampling_rate}."
+                )
+        else:
+            logger.warning(
+                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
+                "Failing to do so can result in silent errors that might be hard to debug."
+            )
+
         is_batched = bool(
             isinstance(raw_speech, (list, tuple))
             and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
@@ -287,7 +307,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             max_length=max_length if max_length else self.n_samples,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=False,
             **kwargs,
         )
         # make sure list is in array format

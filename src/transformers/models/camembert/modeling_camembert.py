@@ -728,7 +728,11 @@ class CamembertLMHead(nn.Module):
 
     def _tie_weights(self):
         # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-        self.bias = self.decoder.bias
+        # For accelerate compatibility and to not break backward compatibility
+        if self.decoder.bias.device.type == "meta":
+            self.decoder.bias = self.bias
+        else:
+            self.bias = self.decoder.bias
 
 
 @add_start_docstrings(
@@ -752,6 +756,7 @@ class CamembertModel(CamembertPreTrainedModel):
     """
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _no_split_modules = []
 
     # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Camembert
     def __init__(self, config, add_pooling_layer=True):

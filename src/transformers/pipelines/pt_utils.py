@@ -83,7 +83,10 @@ class PipelineIterator(IterableDataset):
                     elif isinstance(element[0], np.ndarray):
                         loader_batched[k] = tuple(np.expand_dims(el[self._loader_batch_index], 0) for el in element)
                     continue
-                if isinstance(element[self._loader_batch_index], torch.Tensor):
+                if element is None:
+                    # This can happen for optional data that get passed around
+                    loader_batched[k] = None
+                elif isinstance(element[self._loader_batch_index], torch.Tensor):
                     # Take correct batch data, but make it looked like batch_size=1
                     # For compatibility with other methods within transformers
 
@@ -290,3 +293,16 @@ class KeyDataset(Dataset):
 
     def __getitem__(self, i):
         return self.dataset[i][self.key]
+
+
+class KeyPairDataset(Dataset):
+    def __init__(self, dataset: Dataset, key1: str, key2: str):
+        self.dataset = dataset
+        self.key1 = key1
+        self.key2 = key2
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, i):
+        return {"text": self.dataset[i][self.key1], "text_pair": self.dataset[i][self.key2]}

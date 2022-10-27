@@ -44,8 +44,8 @@ def center_to_corners_format(x):
     Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
     (x_0, y_0, x_1, y_1).
     """
-    x_c, y_c, w, h = x.unbind(-1)
-    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
+    center_x, center_y, width, height = x.unbind(-1)
+    b = [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)]
     return torch.stack(b, dim=-1)
 
 
@@ -190,13 +190,13 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
     return masks[to_keep], scores[to_keep], labels[to_keep]
 
 
-def check_segment_validity(mask_labels, mask_probs, k, overlap_mask_area_threshold=0.8):
+def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
     # Get the mask associated with the k class
     mask_k = mask_labels == k
     mask_k_area = mask_k.sum()
 
     # Compute the area of all the stuff in query k
-    original_area = (mask_probs[k] >= 0.5).sum()
+    original_area = (mask_probs[k] >= mask_threshold).sum()
     mask_exists = mask_k_area > 0 and original_area > 0
 
     # Eliminate disconnected tiny segments
@@ -212,6 +212,7 @@ def compute_segments(
     mask_probs,
     pred_scores,
     pred_labels,
+    mask_threshold: float = 0.5,
     overlap_mask_area_threshold: float = 0.8,
     label_ids_to_fuse: Optional[Set[int]] = None,
     target_size: Tuple[int, int] = None,
@@ -240,7 +241,9 @@ def compute_segments(
         should_fuse = pred_class in label_ids_to_fuse
 
         # Check if mask exists and large enough to be a segment
-        mask_exists, mask_k = check_segment_validity(mask_labels, mask_probs, k, overlap_mask_area_threshold)
+        mask_exists, mask_k = check_segment_validity(
+            mask_labels, mask_probs, k, mask_threshold, overlap_mask_area_threshold
+        )
 
         if mask_exists:
             if pred_class in stuff_memory_list:
@@ -1210,6 +1213,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self,
         outputs,
         threshold: float = 0.5,
+        mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
         target_sizes: Optional[List[Tuple[int, int]]] = None,
         return_coco_annotation: Optional[bool] = False,
@@ -1221,6 +1225,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
                 The overlap mask area threshold to merge or discard small disconnected parts within each binary
                 instance mask.
@@ -1269,11 +1275,13 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             # Get segmentation map and segment information of batch item
             target_size = target_sizes[i] if target_sizes is not None else None
             segmentation, segments = compute_segments(
-                mask_probs_item,
-                pred_scores_item,
-                pred_labels_item,
-                overlap_mask_area_threshold,
-                target_size,
+                mask_probs=mask_probs_item,
+                pred_scores=pred_scores_item,
+                pred_labels=pred_labels_item,
+                mask_threshold=mask_threshold,
+                overlap_mask_area_threshold=overlap_mask_area_threshold,
+                label_ids_to_fuse=[],
+                target_size=target_size,
             )
 
             # Return segmentation map in run-length encoding (RLE) format
@@ -1287,6 +1295,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self,
         outputs,
         threshold: float = 0.5,
+        mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
         label_ids_to_fuse: Optional[Set[int]] = None,
         target_sizes: Optional[List[Tuple[int, int]]] = None,
@@ -1299,6 +1308,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 The outputs from [`DetrForSegmentation`].
             threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
                 The overlap mask area threshold to merge or discard small disconnected parts within each binary
                 instance mask.
@@ -1356,12 +1367,13 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             # Get segmentation map and segment information of batch item
             target_size = target_sizes[i] if target_sizes is not None else None
             segmentation, segments = compute_segments(
-                mask_probs_item,
-                pred_scores_item,
-                pred_labels_item,
-                overlap_mask_area_threshold,
-                label_ids_to_fuse,
-                target_size,
+                mask_probs=mask_probs_item,
+                pred_scores=pred_scores_item,
+                pred_labels=pred_labels_item,
+                mask_threshold=mask_threshold,
+                overlap_mask_area_threshold=overlap_mask_area_threshold,
+                label_ids_to_fuse=label_ids_to_fuse,
+                target_size=target_size,
             )
 
             results.append({"segmentation": segmentation, "segments_info": segments})

@@ -1033,9 +1033,7 @@ class TFWhisperMainLayer(tf.keras.layers.Layer):
          >>> model = TFWhisperModel.from_pretrained("openai/whisper-base")
          >>> feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
          >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-         >>> inputs = feature_extractor(
-         ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="tf"
-         ... )
+         >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="tf")
          >>> input_features = inputs.input_features
          >>> decoder_input_ids = tf.convert_to_tensor([[1, 1]]) * model.config.decoder_start_token_id
          >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
@@ -1160,9 +1158,7 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
          >>> model = TFWhisperModel.from_pretrained("openai/whisper-base")
          >>> feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
          >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-         >>> inputs = feature_extractor(
-         ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="tf"
-         ... )
+         >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="tf")
          >>> input_features = inputs.input_features
          >>> decoder_input_ids = tf.convert_to_tensor([[1, 1]]) * model.config.decoder_start_token_id
          >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
@@ -1288,16 +1284,16 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="tf")
         >>> input_features = inputs.input_features
 
-        >>> generated_ids = model.generate(inputs=input_features)
+        >>> generated_ids = model.generate(input_ids=input_features)
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> transcription
-        ' Mr. Quilter is the apostle of the middle classes, and we are glad to'
+        ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
-            if decoder_input_ids is None:
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )

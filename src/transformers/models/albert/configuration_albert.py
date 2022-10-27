@@ -101,7 +101,7 @@ class AlbertConfig(PretrainedConfig):
     ...     intermediate_size=3072,
     ... )
 
-    >>> # Initializing a model from the ALBERT-base style configuration
+    >>> # Initializing a model (with random weights) from the ALBERT-base style configuration
     >>> model = AlbertModel(albert_xxlarge_configuration)
 
     >>> # Accessing the model configuration
