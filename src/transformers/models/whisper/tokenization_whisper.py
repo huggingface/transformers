@@ -241,10 +241,10 @@ class WhisperTokenizer(PreTrainedTokenizer):
             The language of the transcription text. The corresponding language id token is appended to the start of the
             sequence in multilingual speech recognition and speech translation tasks, e.g. for Spanish the token
             `<|es|>` is appended to the start of sequence.
-        predict_timestamps (`bool`, *optional*, defaults to `False`):
-            Whether to omit the `<|notimestamps|>` token at the start of the sequence.
         task (`str`, *optional*, defaults to `None`):
             Task identifier to append at the start of sequence (if any).
+        predict_timestamps (`bool`, *optional*, defaults to `False`):
+            Whether to omit the `<|notimestamps|>` token at the start of the sequence.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -264,8 +264,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
         pad_token=None,
         add_prefix_space=False,
         language=None,
-        predict_timestamps=False,
         task=None,
+        predict_timestamps=False,
         **kwargs
     ):
 
@@ -306,8 +306,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
         self.language = language
-        self.predict_timestamps = predict_timestamps
         self.task = task
+        self.predict_timestamps = predict_timestamps
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
