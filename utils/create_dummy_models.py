@@ -324,6 +324,10 @@ def convert_feature_extractor(feature_extractor, tiny_config):
         kwargs["size"] = tiny_config.image_size
         kwargs["crop_size"] = tiny_config.image_size
         to_convert = True
+    elif hasattr(tiny_config, "vision_config") and tiny_config.vision_config is not None and hasattr(tiny_config.vision_config, "image_size"):
+        kwargs["size"] = tiny_config.vision_config.image_size
+        kwargs["crop_size"] = tiny_config.vision_config.image_size
+        to_convert = True
 
     # Speech2TextModel specific.
     if hasattr(tiny_config, "input_feat_per_channel"):
@@ -543,7 +547,11 @@ def build(config_class, models_to_create, output_dir):
     config_overrides = {k: v for k, v in result.items() if k in ["vocab_size"] and v is not None}
     # Update `vocab_size`
     for k, v in config_overrides.items():
-        setattr(tiny_config, k, v)
+        if hasattr(tiny_config, k):
+            setattr(tiny_config, k, v)
+        # currently only `vocab_size` is involved, so let's just look `text_config`
+        elif hasattr(tiny_config, "text_config") and tiny_config.text_config is not None and hasattr(tiny_config.text_config, k):
+            setattr(tiny_config.text_config, k, v)
 
     if result["warnings"]:
         logger.warning(result["warnings"])
