@@ -38,6 +38,7 @@ from .generic import (
     PaddingStrategy,
     TensorType,
     cached_property,
+    expand_dims,
     find_labels,
     flatten_dict,
     is_jax_tensor,
@@ -46,8 +47,11 @@ from .generic import (
     is_tf_tensor,
     is_torch_device,
     is_torch_tensor,
+    reshape,
+    squeeze,
     to_numpy,
     to_py_obj,
+    transpose,
     working_or_temp_dir,
 )
 from .hub import (
@@ -104,6 +108,7 @@ from .import_utils import (
     is_in_notebook,
     is_ipex_available,
     is_jumanpp_available,
+    is_kenlm_available,
     is_librosa_available,
     is_more_itertools_available,
     is_ninja_available,

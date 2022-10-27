@@ -273,7 +273,8 @@ class GroupViTConfig(PretrainedConfig):
     r"""
     [`GroupViTConfig`] is the configuration class to store the configuration of a [`GroupViTModel`]. It is used to
     instantiate a GroupViT model according to the specified arguments, defining the text model and vision model
-    configs.
+    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the GroupViT
+    [nvidia/groupvit-gcc-yfcc](https://huggingface.co/nvidia/groupvit-gcc-yfcc) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

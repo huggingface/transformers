@@ -11,32 +11,26 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 
 # How to add a model to 🤗 Transformers?
 
-Adding a new model is often difficult and requires an in-depth knowledge of the 🤗 Transformers library and ideally also
-of the model's original repository. At Hugging Face, we are trying to empower the community more and more to add models
-independently. Thus, for some new models that the community wants to be added to 🤗 Transformers, we create a customized
-*call-for-model-addition* that explains step-by-step how to add the requested model. With this
-*call-for-model-addition*, we want to teach a motivated and experienced contributor of the community how to port a
-model to 🤗 Transformers.
+The 🤗 Transformers library is often able to offer new models thanks to community contributors. But this can be a challenging project and requires an in-depth knowledge of the 🤗 Transformers library and the model to implement. At Hugging Face, we're trying to empower more of the community to actively add models and we've put together this guide to walk you through the process of adding a PyTorch model (make sure you have [PyTorch installed](https://pytorch.org/get-started/locally/)).
 
-If this sounds like something you would be interested in, feel free to check out the currently open
-“calls-for-model-addition” [here](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model/open_model_proposals/README.md)
-and to contact us.
+<Tip>
 
-If selected, you will then work closely with one member of the Hugging Face team to integrate the model into 🤗
-Transformers. By doing so, you will both gain a theoretical and deep practical understanding of the proposed model. But
-more importantly, you will have made a major open-source contribution to 🤗 Transformers. Along the way, you will:
+If you're interested in implementing a TensorFlow model, take a look at the [How to convert a 🤗 Transformers model to TensorFlow](add_tensorflow_model) guide!
 
--  get insights into open-source best practices
--  understand the design principles of one of the most popular NLP libraries
--  learn how to do efficiently test large NLP models
--  learn how to integrate Python utilities like `black`, `isort`, `make fix-copies` into a library to always
-  ensure clean and readable code
+</Tip>
 
-We are also more than happy if you want to add a model that cannot be found in the “calls-for-model-addition” folder.
-The following sections explain in detail how to add a new model. It might also be very helpful to check out already
-added models to see if those resemble the model you would like to add [here](https://github.com/huggingface/transformers/pulls?q=is%3Apr+label%3A%22PR+for+Model+Addition%22+is%3Aclosed).
+Along the way, you'll:
 
-To start, let's try to get a general overview of the Transformers library.
+- get insights into open-source best practices
+- understand the design principles behind one of the most popular deep learning libraries
+- learn how to efficiently test large models
+- learn how to integrate Python utilities like `black`, `isort`, and `make fix-copies` to ensure clean and readable code
+
+A Hugging Face team member will be available to help you along the way so you'll never be alone. 🤗 ❤️
+
+To get started, open a [New model addition](https://github.com/huggingface/transformers/issues/new?assignees=&labels=New+model&template=new-model-addition.yml) issue for the model you want to see in 🤗 Transformers. If you're not especially picky about contributing a specific model, you can filter by the [New model label](https://github.com/huggingface/transformers/labels/New%20model) to see if there are any unclaimed model requests and work on it.
+
+Once you've opened a new model request, the first step is to get familiar with 🤗 Transformers if you aren't already!
 
 ## General overview of 🤗 Transformers
 
@@ -144,20 +138,20 @@ In the following, we try to give you a general recipe that we found most useful 
 The following list is a summary of everything that has to be done to add a model and can be used by you as a To-Do
 List:
 
--  1. ☐ (Optional) Understood theoretical aspects
--  2. ☐ Prepared transformers dev environment
--  3. ☐ Set up debugging environment of the original repository
--  4. ☐ Created script that successfully runs forward pass using original repository and checkpoint
--  5. ☐ Successfully added the model skeleton to Transformers
--  6. ☐ Successfully converted original checkpoint to Transformers checkpoint
--  7. ☐ Successfully ran forward pass in Transformers that gives identical output to original checkpoint
--  8. ☐ Finished model tests in Transformers
--  9. ☐ Successfully added Tokenizer in Transformers
--  10. ☐ Run end-to-end integration tests
--  11. ☐ Finished docs
--  12. ☐ Uploaded model weights to the hub
--  13. ☐ Submitted the pull request
--  14. ☐ (Optional) Added a demo notebook
+☐ (Optional) Understood the model's theoretical aspects<br>
+☐ Prepared 🤗 Transformers dev environment<br>
+☐ Set up debugging environment of the original repository<br>
+☐ Created script that successfully runs the `forward()` pass using the original repository and checkpoint<br>
+☐ Successfully added the model skeleton to 🤗 Transformers<br>
+☐ Successfully converted original checkpoint to 🤗 Transformers checkpoint<br>
+☐ Successfully ran `forward()` pass in 🤗 Transformers that gives identical output to original checkpoint<br>
+☐ Finished model tests in 🤗 Transformers<br>
+☐ Successfully added tokenizer in 🤗 Transformers<br>
+☐ Run end-to-end integration tests<br>
+☐ Finished docs<br>
+☐ Uploaded model weights to the Hub<br>
+☐ Submitted the pull request<br>
+☐ (Optional) Added a demo notebook
 
 To begin with, we usually recommend to start by getting a good theoretical understanding of `BrandNewBert`. However,
 if you prefer to understand the theoretical aspects of the model *on-the-job*, then it is totally fine to directly dive
@@ -773,7 +767,7 @@ tests for you.
 
 Now, all the necessary functionality for *brand_new_bert* is added - you're almost done! The only thing left to add is
 a nice docstring and a doc page. The Cookiecutter should have added a template file called
-`docs/source/model_doc/brand_new_bert.rst` that you should fill out. Users of your model will usually first look at
+`docs/source/model_doc/brand_new_bert.mdx` that you should fill out. Users of your model will usually first look at
 this page before using your model. Hence, the documentation must be understandable and concise. It is very useful for
 the community to add some *Tips* to show how the model should be used. Don't hesitate to ping the Hugging Face team
 regarding the docstrings.

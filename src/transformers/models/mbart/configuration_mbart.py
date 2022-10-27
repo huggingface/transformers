@@ -93,12 +93,12 @@ class MBartConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import MBartModel, MBartConfig
+    >>> from transformers import MBartConfig, MBartModel
 
     >>> # Initializing a MBART facebook/mbart-large-cc25 style configuration
     >>> configuration = MBartConfig()
 
-    >>> # Initializing a model from the facebook/mbart-large-cc25 style configuration
+    >>> # Initializing a model (with random weights) from the facebook/mbart-large-cc25 style configuration
     >>> model = MBartModel(configuration)
 
     >>> # Accessing the model configuration

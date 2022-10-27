@@ -77,9 +77,12 @@ src/transformers/models/groupvit/modeling_groupvit.py
 src/transformers/models/groupvit/modeling_tf_groupvit.py
 src/transformers/models/hubert/modeling_hubert.py
 src/transformers/models/imagegpt/configuration_imagegpt.py
+src/transformers/models/layoutlm/configuration_layoutlm.py
 src/transformers/models/layoutlm/modeling_layoutlm.py
 src/transformers/models/layoutlm/modeling_tf_layoutlm.py
+src/transformers/models/layoutlmv2/configuration_layoutlmv2.py
 src/transformers/models/layoutlmv2/modeling_layoutlmv2.py
+src/transformers/models/layoutlmv3/configuration_layoutlmv3.py
 src/transformers/models/layoutlmv3/modeling_layoutlmv3.py
 src/transformers/models/layoutlmv3/modeling_tf_layoutlmv3.py
 src/transformers/models/levit/configuration_levit.py
@@ -90,7 +93,9 @@ src/transformers/models/longt5/modeling_longt5.py
 src/transformers/models/marian/modeling_marian.py
 src/transformers/models/markuplm/modeling_markuplm.py
 src/transformers/models/maskformer/configuration_maskformer.py
+src/transformers/models/mbart/configuration_mbart.py
 src/transformers/models/mbart/modeling_mbart.py
+src/transformers/models/mctct/configuration_mctct.py
 src/transformers/models/megatron_bert/configuration_megatron_bert.py
 src/transformers/models/mobilebert/configuration_mobilebert.py
 src/transformers/models/mobilebert/modeling_mobilebert.py
