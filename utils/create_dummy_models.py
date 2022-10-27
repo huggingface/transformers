@@ -1,3 +1,18 @@
+# coding=utf-8
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import argparse
 import collections.abc
 import importlib
@@ -43,26 +58,6 @@ if not is_tf_available():
 FRAMEWORKS = ["pytorch", "tensorflow"]
 INVALID_ARCH = []
 TARGET_VOCAB_SIZE = 1024
-
-_pytorch_arch_mappings = [
-    x
-    for x in dir(transformers_module)
-    if x.startswith("MODEL_") and x.endswith("_MAPPING") and x != "MODEL_NAMES_MAPPING"
-]
-_tensorflow_arch_mappings = [
-    x for x in dir(transformers_module) if x.startswith("TF_MODEL_") and x.endswith("_MAPPING")
-]
-# _flax_arch_mappings = [x for x in dir(transformers_module) if x.startswith("FLAX_MODEL_") and x.endswith("_MAPPING")]
-
-pytorch_arch_mappings = [getattr(transformers_module, x) for x in _pytorch_arch_mappings]
-tensorflow_arch_mappings = [getattr(transformers_module, x) for x in _tensorflow_arch_mappings]
-# flax_arch_mappings = [getattr(transformers_module, x) for x in _flax_arch_mappings]
-
-unexportable_model_architectures = []
-
-ds = load_dataset("wikitext", "wikitext-2-raw-v1")
-training_ds = ds["train"]
-testing_ds = ds["test"]
 
 
 def get_processor_types_from_config_class(config_class, allowed_mappings=None):
@@ -172,7 +167,8 @@ def build_processor(config_class, processor_class):
     processor = None
     try:
         processor = processor_class.from_pretrained(checkpoint)
-    except Exception:
+    except Exception as e:
+        logger.error(e)
         pass
 
     # Try to get a new processor class from checkpoint. This is helpful for a checkpoint without necessary file to load
@@ -188,7 +184,8 @@ def build_processor(config_class, processor_class):
     ):
         try:
             config = AutoConfig.from_pretrained(checkpoint)
-        except Exception:
+        except Exception as e:
+            logger.error(e)
             config = None
         if config is not None:
             assert isinstance(config, config_class)
@@ -236,7 +233,8 @@ def build_processor(config_class, processor_class):
             if all(len(v) > 0 for v in attrs.values()):
                 try:
                     processor = processor_class(**{k: v[0] for k, v in attrs.items()})
-                except Exception:
+                except Exception as e:
+                    logger.error(e)
                     pass
         else:
             # `checkpoint` might lack some file(s) to load a processor. For example, `facebook/hubert-base-ls960`
@@ -324,7 +322,11 @@ def convert_feature_extractor(feature_extractor, tiny_config):
         kwargs["size"] = tiny_config.image_size
         kwargs["crop_size"] = tiny_config.image_size
         to_convert = True
-    elif hasattr(tiny_config, "vision_config") and tiny_config.vision_config is not None and hasattr(tiny_config.vision_config, "image_size"):
+    elif (
+        hasattr(tiny_config, "vision_config")
+        and tiny_config.vision_config is not None
+        and hasattr(tiny_config.vision_config, "image_size")
+    ):
         kwargs["size"] = tiny_config.vision_config.image_size
         kwargs["crop_size"] = tiny_config.vision_config.image_size
         to_convert = True
@@ -550,7 +552,11 @@ def build(config_class, models_to_create, output_dir):
         if hasattr(tiny_config, k):
             setattr(tiny_config, k, v)
         # currently only `vocab_size` is involved, so let's just look `text_config`
-        elif hasattr(tiny_config, "text_config") and tiny_config.text_config is not None and hasattr(tiny_config.text_config, k):
+        elif (
+            hasattr(tiny_config, "text_config")
+            and tiny_config.text_config is not None
+            and hasattr(tiny_config.text_config, k)
+        ):
             setattr(tiny_config.text_config, k, v)
 
     if result["warnings"]:
@@ -669,6 +675,29 @@ def build_simple_report(results):
 
 if __name__ == "__main__":
 
+    if os.getcwd() != os.path.abspath(os.path.dirname(os.path.dirname(__file__))):
+        raise ValueError(f"This script should be run from the root of the clone of `transformers` {os.getcwd()}")
+
+    _pytorch_arch_mappings = [
+        x
+        for x in dir(transformers_module)
+        if x.startswith("MODEL_") and x.endswith("_MAPPING") and x != "MODEL_NAMES_MAPPING"
+    ]
+    _tensorflow_arch_mappings = [
+        x for x in dir(transformers_module) if x.startswith("TF_MODEL_") and x.endswith("_MAPPING")
+    ]
+    # _flax_arch_mappings = [x for x in dir(transformers_module) if x.startswith("FLAX_MODEL_") and x.endswith("_MAPPING")]
+
+    pytorch_arch_mappings = [getattr(transformers_module, x) for x in _pytorch_arch_mappings]
+    tensorflow_arch_mappings = [getattr(transformers_module, x) for x in _tensorflow_arch_mappings]
+    # flax_arch_mappings = [getattr(transformers_module, x) for x in _flax_arch_mappings]
+
+    unexportable_model_architectures = []
+
+    ds = load_dataset("wikitext", "wikitext-2-raw-v1")
+    training_ds = ds["train"]
+    testing_ds = ds["test"]
+
     def list_str(values):
         return values.split(",")
 
@@ -685,12 +714,6 @@ if __name__ == "__main__":
         type=list_str,
         help="Comma-separated list of model type(s) from which the tiny models will be created.",
     )
-    parser.add_argument(
-        "--black_list",
-        type=list_str,
-        help="Comma-separated list of model type(s) to ignore.",
-        default="convbert,blenderbot-small,rag,dpr,retribert,layoutlmv2",
-    )
     parser.add_argument("output_path", type=Path, help="Path indicating where to store generated model.")
 
     args = parser.parse_args()
@@ -704,11 +727,6 @@ if __name__ == "__main__":
 
     # A map from config classes to tuples of processors (tokenizer, feature extractor, processor) classes
     processor_type_map = {c: get_processor_types_from_config_class(c) for c in config_classes}
-
-    # Ignore some model types
-    # TODO: Discuss with Lysandre about the reason behind this
-    if args.black_list:
-        config_classes = [c for c in config_classes if c.model_type not in args.black_list]
 
     to_create = {
         c: {
