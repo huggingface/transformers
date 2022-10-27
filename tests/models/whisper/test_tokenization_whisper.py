@@ -33,6 +33,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = WhisperTokenizer
     test_rust_tokenizer = False
     test_sentencepiece = False
+    test_seq2seq = False
 
     def setUp(self):
         super().setUp()
