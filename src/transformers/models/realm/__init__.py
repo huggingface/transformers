@@ -43,6 +43,7 @@ else:
         "REALM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "RealmEmbedder",
         "RealmForOpenQA",
+        "RealmBertModel",
         "RealmKnowledgeAugEncoder",
         "RealmPreTrainedModel",
         "RealmReader",
@@ -72,6 +73,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_realm import (
             REALM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RealmBertModel,
             RealmEmbedder,
             RealmForOpenQA,
             RealmKnowledgeAugEncoder,

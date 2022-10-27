@@ -114,6 +114,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("poolformer", "PoolFormerModel"),
         ("prophetnet", "ProphetNetModel"),
         ("qdqbert", "QDQBertModel"),
+        ("realm", "RealmBertModel"),
         ("reformer", "ReformerModel"),
         ("regnet", "RegNetModel"),
         ("rembert", "RemBertModel"),
