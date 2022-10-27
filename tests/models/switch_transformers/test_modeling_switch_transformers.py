@@ -979,7 +979,6 @@ class SwitchTransformerRouterTest(unittest.TestCase):
                 [[[True], [False]], [[False], [True]], [[False], [False]]],
             ]
         )
-        
 
         router_z_loss = router_z_loss_func(router_logits)
         auxiliary_loss = load_balancing_loss_func(router_logits, torch.argmax(expert_index, dim=-1))
@@ -999,29 +998,27 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of Switch-C transformers. We only check the logits
         of the first batch.
         """
-        model = SwitchTransformersModel.from_pretrained(
-            "HFLAY/switch_base_8", torch_dtype=torch.bfloat16
-        ).eval()
+        model = SwitchTransformersModel.from_pretrained("HFLAY/switch_base_8", torch_dtype=torch.bfloat16).eval()
         input_ids = torch.ones((32, 64), dtype=torch.long)
         decoder_input_ids = torch.ones((32, 64), dtype=torch.long)
 
         # fmt: off
         EXPECTED_MEAN_LOGITS = torch.Tensor(
             [
-            -0.204102, -0.193359, 0.523438, -0.296875, 0.108887,
-             0.0211182, 0.605469, -0.100586, -0.0551758, 0.296875,
-             0.0090332, 0.174805, 0.139648, -0.170898, -0.0981445,
-             0.0245361, 0.0373535, 0.050293, -0.212891, 0.129883,
-             0.390625, -0.203125, -0.122559, -0.180664, 0.0437012,
-             -0.349609, -0.0250244, -0.104004, -0.15918, -0.133789
+                -0.204102, -0.193359, 0.523438, -0.296875, 0.108887,
+                0.0211182, 0.605469, -0.100586, -0.0551758, 0.296875,
+                0.0090332, 0.174805, 0.139648, -0.170898, -0.0981445,
+                0.0245361, 0.0373535, 0.050293, -0.212891, 0.129883,
+                0.390625, -0.203125, -0.122559, -0.180664, 0.0437012,
+                -0.349609, -0.0250244, -0.104004, -0.15918, -0.133789
             ]
         ).to(torch.bfloat16)
         # fmt: on
 
         hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state
-        hf_logits = hf_logits[0,0,:30]
+        hf_logits = hf_logits[0, 0, :30]
 
-        torch.testing.assert_allclose(hf_logits, EXPECTED_MEAN_LOGITS, rtol = 6e-3,atol=9e-3)
+        torch.testing.assert_allclose(hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3)
 
     def test_small_generate(self):
         # Generate test using the smalled switch-C model.
@@ -1056,12 +1053,13 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         ).eval()
         tokenizer = AutoTokenizer.from_pretrained("t5-small")
 
-        inputs = ["A <extra_id_0> walks into a bar a orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>." ] * BATCH_SIZE
+        inputs = [
+            "A <extra_id_0> walks into a bar a orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>."
+        ] * BATCH_SIZE
         encoded_input = tokenizer.batch_encode_plus(inputs, return_tensors="pt")
 
         sequences = model.generate(**encoded_input)
         batch_output = tokenizer.batch_decode(sequences, skip_special_tokens=False)
 
         for i in range(0, BATCH_SIZE, 2):
-            self.assertEqual(batch_output[i], batch_output[i+1])
-
+            self.assertEqual(batch_output[i], batch_output[i + 1])

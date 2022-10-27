@@ -23,9 +23,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "HFLAY/switch_base_8": (
-        "https://huggingface.co/ybelkada/switch_transformers-base/resolve/main/config.json"
-    ),
+    "HFLAY/switch_base_8": "https://huggingface.co/ybelkada/switch_transformers-base/resolve/main/config.json",
 }
 
 

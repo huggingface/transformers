@@ -263,7 +263,9 @@ class TokensChooseMaskedRouter(nn.Module):
         router_logits = self.classifier(token_inputs)
 
         # Apply Softmax and cast back to the original `dtype`
-        router_probabilities = nn.functional.softmax(router_logits, dim=-1, dtype = self.dtype).to(self.input_tokens_dtype)
+        router_probabilities = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(
+            self.input_tokens_dtype
+        )
         return router_probabilities, router_logits
 
     def forward(self, token_inputs: torch.Tensor, apply_jitter: bool = True, **kwargs) -> Tuple:
@@ -1528,9 +1530,15 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
                 warnings.warn(__HEAD_MASK_WARNING_MSG, FutureWarning)
                 decoder_head_mask = head_mask
 
-        if output_router_logits and self.config.num_sparse_encoder_layers == 0 and self.config.num_sparse_encoder_layers == 0:
-            raise ValueError("You asked to return `output_router_logits` but the transformer in dense, and does\
-                               not contain any sparse MLP Layers. Set `output_router_logits = False` and restart")
+        if (
+            output_router_logits
+            and self.config.num_sparse_encoder_layers == 0
+            and self.config.num_sparse_encoder_layers == 0
+        ):
+            raise ValueError(
+                "You asked to return `output_router_logits` but the transformer in dense, and does                    "
+                "           not contain any sparse MLP Layers. Set `output_router_logits = False` and restart"
+            )
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -1775,19 +1783,18 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
                 # Compute the router loss (z_loss + auxiliary loss) for each router in the encoder and decoder
                 encoder_router_logits, encoder_expert_indexes = encoder_outputs.router_probs
                 encoder_z_loss = router_z_loss_func(encoder_router_logits)
-                encoder_aux_loss = load_balancing_loss_func(encoder_router_logits,encoder_expert_indexes)
+                encoder_aux_loss = load_balancing_loss_func(encoder_router_logits, encoder_expert_indexes)
 
                 decoder_router_logits, decoder_expert_indexes = decoder_outputs.router_probs
                 decoder_z_loss = router_z_loss_func(decoder_router_logits)
-                decoder_aux_loss = load_balancing_loss_func(decoder_router_logits,decoder_expert_indexes)
+                decoder_aux_loss = load_balancing_loss_func(decoder_router_logits, decoder_expert_indexes)
 
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
-
         if not return_dict:
             output = (decoder_outputs[1:], encoder_outputs)
-            if output_router_logits: # only return the loss if they are not None
+            if output_router_logits:  # only return the loss if they are not None
                 output = (lm_logits, encoder_z_loss, encoder_aux_loss, decoder_z_loss, decoder_aux_loss) + output
             return ((loss,) + output) if loss is not None else output
 
