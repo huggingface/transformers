@@ -253,8 +253,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
     max_model_input_sizes = MAX_MODEL_INPUT_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
-    prefix_tokens: List[int] = []
-
     def __init__(
         self,
         vocab_file,
@@ -308,9 +306,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
-        self.prefix_tokens = self.get_decoder_prompt_ids(
-            language=lang_id, task=task, predict_timestamps=predict_timestamps, multilingual=multilingual
-        )
+
+        self.language = lang_id
+        self.predict_timestamps = predict_timestamps
+        self.task = task
+        self.multilingual = multilingual
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
@@ -364,7 +364,14 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    def get_decoder_prompt_ids(self, language=None, task=None, predict_timestamps=False, multilingual=False):
+    def set_bos_sequence(self, language=None, task=None, predict_timestamps=False, multilingual=False):
+        all_special_ids: List[int] = self.all_special_ids
+        bos_token_id: int = all_special_ids[1]
+        translate_token_id: int = all_special_ids[-6]
+        transcribe_token_id: int = all_special_ids[-5]
+        notimestamps_token_id: int = all_special_ids[-1]
+        langs = tuple(LANGUAGES.keys())
+
         if language is not None:
             language = language.lower()
             if language in TO_LANGUAGE_CODE:
@@ -383,28 +390,23 @@ class WhisperTokenizer(PreTrainedTokenizer):
             task = None
             language = None
 
-        # we want to get the 'special token ids' for: the SOS token, the translate/transcribe tokens,
-        # and the 'notimestamps' token, but these are only available **after** the init method
-        # for the tokenizer, as the 'special_tokens_map_file' is parsed in the `from_pretrained` method
-        # **after** the init for the tokenizer.
-        # init here: https://github.com/huggingface/transformers/blob/803475fb69097e802985eb4f85b52199c66a52de/src/transformers/tokenization_utils_base.py#L1932
-        # special tokens here: https://github.com/huggingface/transformers/blob/803475fb69097e802985eb4f85b52199c66a52de/src/transformers/tokenization_utils_base.py#L1962
-
-        all_special_ids: List[int] = self.all_special_ids
-        sot: int = all_special_ids[1]
-        translate: int = all_special_ids[-6]
-        transcribe: int = all_special_ids[-5]
-        notimestamps: int = all_special_ids[-1]
-
-        langs = tuple(LANGUAGES.keys())
-        sot_sequence = [sot]
+        bos_sequence = []
         if language is not None:
-            sot_sequence.append(sot + 1 + langs.index(language))
+            bos_sequence.append(bos_token_id + 1 + langs.index(language))
         if task is not None:
-            sot_sequence.append(transcribe if task == "transcribe" else translate)
+            bos_sequence.append(transcribe_token_id if task == "transcribe" else translate_token_id)
         if not predict_timestamps:
-            sot_sequence.append(notimestamps)
-        self.prefix_tokens = sot_sequence
+            bos_sequence.append(notimestamps_token_id)
+        return bos_sequence
+
+    @property
+    def prefix_tokens(self):
+        return self.set_bos_sequence(
+            language=self.language,
+            task=self.task,
+            multilingual=self.multilingual,
+            predict_timestamps=self.predict_timestamps,
+        )
 
     # Copied from transformers.models.speech_to_text.tokenization_speech_to_text.Speech2TextTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
