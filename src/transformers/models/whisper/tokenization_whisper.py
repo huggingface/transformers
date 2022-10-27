@@ -237,9 +237,10 @@ class WhisperTokenizer(PreTrainedTokenizer):
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word.
-        land_id (`str`, *optional*, defaults to `None`):
-            The language identifier for transcription labels. Appended to the start of the sequence in multilingual
-            speech recognition and speech translation tasks.
+        language (`str`, *optional*, defaults to `None`):
+            The language of the transcription text. The corresponding language id token is appended to the start of the
+            sequence in multilingual speech recognition and speech translation tasks, e.g. for Spanish the token
+            `<|es|>` is appended to the start of sequence.
         predict_timestamps (`bool`, *optional*, defaults to `False`):
             Whether to omit the `<|notimestamps|>` token at the start of the sequence.
         task (`str`, *optional*, defaults to `None`):
@@ -264,7 +265,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         eos_token="<|endoftext|>",
         pad_token=None,
         add_prefix_space=False,
-        lang_id=None,
+        language=None,
         predict_timestamps=False,
         task=None,
         multilingual=False,
@@ -307,7 +308,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
-        self.language = lang_id
+        self.language = language
         self.predict_timestamps = predict_timestamps
         self.task = task
         self.multilingual = multilingual
@@ -383,14 +384,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
             if task not in TASK_IDS:
                 raise ValueError(f"Unsupported task: {task}. Task should be in: {TASK_IDS}")
 
-        if multilingual:
-            task = task or "transcribe"
-            language = language or "en"
-        else:
-            task = None
-            language = None
-
-        bos_sequence = []
+        bos_sequence = [bos_token_id]
         if language is not None:
             bos_sequence.append(bos_token_id + 1 + langs.index(language))
         if task is not None:
