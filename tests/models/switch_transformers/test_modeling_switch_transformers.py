@@ -866,6 +866,7 @@ class TestAsymmetricSwitchTransformers(unittest.TestCase):
         assert len(model.decoder.block) == len(model.encoder.block) == 2
 
 
+@require_torch
 class SwitchTransformerRouterTest(unittest.TestCase):
     r"""
     Switch Transformers has different blocks from classic transformer based models.
