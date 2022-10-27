@@ -2569,7 +2569,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     )
                     resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
 
-                    # Since we set _raise_exceptions_for_missing_entries=False, we don't get an expception but a None
+                    # Since we set _raise_exceptions_for_missing_entries=False, we don't get an exception but a None
                     # result when internet is up, the repo and revision exist, but the file does not.
                     if resolved_archive_file is None and filename == SAFE_WEIGHTS_NAME:
                         # Maybe the checkpoint is sharded, we try to grab the index name in this case.
