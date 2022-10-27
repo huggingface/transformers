@@ -201,8 +201,14 @@ def build_processor(config_class, processor_class):
             # If `tokenizer_class` is not specified in `config`, let's use `config` to get the process class via auto
             # mappings, but only allow the tokenizer mapping being used. This is to make `Wav2Vec2Conformer` build
             if processor is None:
-                new_processor_classes = get_processor_types_from_config_class(config.__class__, allowed_mappings=["tokenizer"])
-                new_processor_classes = [x for x in new_processor_classes if x is not None and x not in [processor_class, new_processor_class]]
+                new_processor_classes = get_processor_types_from_config_class(
+                    config.__class__, allowed_mappings=["tokenizer"]
+                )
+                new_processor_classes = [
+                    x
+                    for x in new_processor_classes
+                    if x is not None and x not in [processor_class, new_processor_class]
+                ]
                 if len(new_processor_classes) > 0:
                     new_processor_class = new_processor_classes[0]
                     processor = build_processor(config_class, new_processor_class)
