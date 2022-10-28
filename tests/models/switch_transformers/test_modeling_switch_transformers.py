@@ -94,8 +94,8 @@ class SwitchTransformersModelTester:
         self.scope = None
         self.decoder_layers = decoder_layers
         self.sparse_step = sparse_step
-        self.num_sparse_decoder_layers=num_sparse_decoder_layers
-        self.num_sparse_encoder_layers=num_sparse_encoder_layers
+        self.num_sparse_decoder_layers = num_sparse_decoder_layers
+        self.num_sparse_encoder_layers = num_sparse_encoder_layers
 
     def get_large_model_config(self):
         return SwitchTransformersConfig.from_pretrained("HFLAY/switch_base_8")
@@ -161,7 +161,7 @@ class SwitchTransformersModelTester:
             decoder_start_token_id=self.decoder_start_token_id,
             sparse_step=self.sparse_step,
             num_sparse_encoder_layers=self.num_sparse_encoder_layers,
-            num_sparse_decoder_layers=self.num_sparse_decoder_layers
+            num_sparse_decoder_layers=self.num_sparse_decoder_layers,
         )
 
     def check_prepare_lm_labels_via_shift_left(
@@ -1011,9 +1011,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of Switch-C transformers. We only check the logits
         of the first batch.
         """
-        model = SwitchTransformersModel.from_pretrained(
-            "HFLAY/switch_base_8", torch_dtype=torch.bfloat16
-        ).eval()
+        model = SwitchTransformersModel.from_pretrained("HFLAY/switch_base_8", torch_dtype=torch.bfloat16).eval()
         input_ids = torch.ones((32, 64), dtype=torch.long)
         decoder_input_ids = torch.ones((32, 64), dtype=torch.long)
 
