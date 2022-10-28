@@ -264,7 +264,7 @@ And here is the equivalent code for TensorFlow:
 まず、使用するバージョンのPythonで仮想環境を作成し、アクティベートします。
 
 その後、Flax, PyTorch, TensorFlowのうち少なくとも1つをインストールする必要があります。
-TensorFlowインストールページ](https://www.tensorflow.org/install/)、[PyTorchインストールページ](https://pytorch.org/get-started/locally/#start-locally)、[Flax](https://github.com/google/flax#quick-install)、[Jax](https://github.com/google/jax#installation)インストールページで、お使いのプラットフォーム別のインストールコマンドを参照してください。
+[TensorFlowインストールページ](https://www.tensorflow.org/install/)、[PyTorchインストールページ](https://pytorch.org/get-started/locally/#start-locally)、[Flax](https://github.com/google/flax#quick-install)、[Jax](https://github.com/google/jax#installation)インストールページで、お使いのプラットフォーム別のインストールコマンドを参照してください。
 
 これらのバックエンドのいずれかがインストールされている場合、🤗Transformersは以下のようにpipを使用してインストールすることができます:
 
