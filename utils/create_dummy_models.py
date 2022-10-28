@@ -497,6 +497,7 @@ def build_composite_models(config_class, output_dir):
         TFEncoderDecoderModel,
         TFVisionEncoderDecoderModel,
         VisionEncoderDecoderModel,
+        VisionTextDualEncoderModel,
         ViTConfig,
         ViTFeatureExtractor,
         ViTModel,
@@ -535,6 +536,16 @@ def build_composite_models(config_class, output_dir):
         decoder_class = BertLMHeadModel
         model_class = SpeechEncoderDecoderModel
         tf_model_class = None
+    elif config_class.model_type == "vision-text-dual-encoder":
+        # Not encoder-decoder, but encoder-encoder. We just keep the same name as above to make code easier
+        encoder_config_class = ViTConfig
+        decoder_config_class = BertConfig
+        encoder_processor = (ViTFeatureExtractor,)
+        decoder_processor = (BertTokenizerFast, BertTokenizer)
+        encoder_class = ViTModel
+        decoder_class = BertModel
+        model_class = VisionTextDualEncoderModel
+        tf_model_class = None
 
     with tempfile.TemporaryDirectory() as tmpdir:
 
@@ -552,7 +563,20 @@ def build_composite_models(config_class, output_dir):
             # build encoder-decoder
             encoder_path = os.path.join(encoder_output_dir, encoder_class.__name__)
             decoder_path = os.path.join(decoder_output_dir, decoder_class.__name__)
-            model = model_class.from_encoder_decoder_pretrained(encoder_path, decoder_path)
+
+            if config_class.model_type != "vision-text-dual-encoder":
+                # Specify these explicitly for encoder-decoder like models, but not for `vision-text-dual-encoder` as it
+                # has no decoder.
+                decoder_config = decoder_config_class.from_pretrained(decoder_path)
+                decoder_config.is_decoder = True
+                decoder_config.add_cross_attention = True
+                model = model_class.from_encoder_decoder_pretrained(
+                    encoder_path,
+                    decoder_path,
+                    decoder_config=decoder_config,
+                )
+            elif config_class.model_type == "vision-text-dual-encoder":
+                model = model_class.from_vision_text_pretrained(encoder_path, decoder_path)
 
             model_path = os.path.join(output_dir, model_class.__name__)
             model.save_pretrained(model_path)
@@ -605,7 +629,12 @@ def build(config_class, models_to_create, output_dir):
             it. Models in different frameworks with the same architecture will be saved in the same subdirectory.
     """
 
-    if config_class.model_type in ["encoder-decoder", "vision-encoder-decoder", "speech-encoder-decoder"]:
+    if config_class.model_type in [
+        "encoder-decoder",
+        "vision-encoder-decoder",
+        "speech-encoder-decoder",
+        "vision-text-dual-encoder",
+    ]:
         return build_composite_models(config_class, output_dir)
 
     result = {k: {} for k in models_to_create}
