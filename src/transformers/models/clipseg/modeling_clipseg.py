@@ -1266,21 +1266,24 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
 
     def get_conditional_embeddings(
         self,
-        input_ids: Optional[torch.Tensor],
+        batch_size: int = None,
+        input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         conditional_pixel_values: Optional[torch.Tensor] = None,
-        batch_size: Optional[int] = None,
     ):
-        # compute conditional embeddings from texts
         if input_ids is not None:
+            # compute conditional embeddings from texts
             if len(input_ids) != batch_size:
-                raise ValueError("Make sure to pass as many texts as there are query images")
-            conditional_embeddings = self.clipseg.get_text_features(
-                input_ids, attention_mask=attention_mask, position_ids=position_ids
-            )
-        # compute conditional embeddings from images
+                raise ValueError("Make sure to pass as many prompt texts as there are query images")
+            with torch.no_grad():
+                conditional_embeddings = self.clipseg.get_text_features(
+                    input_ids, attention_mask=attention_mask, position_ids=position_ids
+                )
         elif conditional_pixel_values is not None:
+            # compute conditional embeddings from images
+            if len(conditional_pixel_values) != batch_size:
+                raise ValueError("Make sure to pass as many prompt images as there are query images")
             with torch.no_grad():
                 conditional_embeddings = self.clipseg.get_image_features(conditional_pixel_values)
         else:
@@ -1323,15 +1326,22 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         # step 2: compute conditional embeddings, either from text, images or an own provided embedding
         if conditional_embeddings is None:
             conditional_embeddings = self.get_conditional_embeddings(
-                input_ids,
+                batch_size=pixel_values.shape[0],
+                input_ids=input_ids,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 conditional_pixel_values=conditional_pixel_values,
-                batch_size=pixel_values.shape[0],
             )
         else:
-            if (not isinstance(conditional_embeddings, torch.Tensor)) or (conditional_embeddings.ndim != 2):
-                raise ValueError("Make sure to pass conditional embeddings as a two-dimensional tensor")
+            if conditional_embeddings.shape[0] != pixel_values.shape[0]:
+                raise ValueError(
+                    "Make sure to pass as many conditional embeddings as there are query images in the batch"
+                )
+            if conditional_embeddings.shape[1] != self.config.projection_dim:
+                raise ValueError(
+                    "Make sure that the feature dimension of the conditional embeddings matches"
+                    " `config.projection_dim`."
+                )
 
         predicted_masks = self.decoder(activations, conditional_embeddings)
 
