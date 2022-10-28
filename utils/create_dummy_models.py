@@ -987,9 +987,9 @@ if __name__ == "__main__":
             raise ValueError("The argument `organization` could not be `None`. No model is uploaded")
 
         to_upload = []
-        for model_type in os.listdir(args.output_dir):
-            for arch in os.listdir(os.path.join(args.output_dir, model_type)):
-                to_upload.append(os.path.join(args.output_dir, model_type, arch))
+        for model_type in os.listdir(args.output_path):
+            for arch in os.listdir(os.path.join(args.output_path, model_type)):
+                to_upload.append(os.path.join(args.output_path, model_type, arch))
 
         upload_results = {}
         if len(to_upload) > 0:
