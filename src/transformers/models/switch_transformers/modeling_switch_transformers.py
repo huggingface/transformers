@@ -1736,13 +1736,13 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
                     encoder_outputs.router_probs
                 )
                 encoder_z_loss = router_z_loss_func(encoder_router_logits)
-                encoder_aux_loss = load_balancing_loss_func(encoder_router_logits, encoder_expert_indexes)
+                encoder_aux_loss = abs(load_balancing_loss_func(encoder_router_logits, encoder_expert_indexes))
 
                 decoder_router_logits, decoder_expert_indexes = self._unpack_router_logits(
                     decoder_outputs.router_probs
                 )
                 decoder_z_loss = router_z_loss_func(decoder_router_logits)
-                decoder_aux_loss = load_balancing_loss_func(decoder_router_logits, decoder_expert_indexes)
+                decoder_aux_loss = abs(load_balancing_loss_func(decoder_router_logits, decoder_expert_indexes))
 
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
 
