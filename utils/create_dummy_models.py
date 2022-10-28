@@ -524,7 +524,7 @@ def upload_models(output_dir):
                 logger.warning(f"PR open in {hub_pr_url}")
 
 
-def build_composite_models(config_class, output_dir):
+def build_composite_models(config_class, output_dir, upload=False):
 
     import tempfile
 
@@ -661,12 +661,13 @@ def build_composite_models(config_class, output_dir):
     if not result["warnings"]:
         del result["warnings"]
 
-    upload_models(output_dir)
+    if upload:
+        upload_models(output_dir)
 
     return result
 
 
-def build(config_class, models_to_create, output_dir):
+def build(config_class, models_to_create, output_dir, upload=False):
     """Create all models for a certain model type.
 
     Args:
@@ -686,7 +687,7 @@ def build(config_class, models_to_create, output_dir):
         "speech-encoder-decoder",
         "vision-text-dual-encoder",
     ]:
-        return build_composite_models(config_class, output_dir)
+        return build_composite_models(config_class, output_dir, upload=upload)
 
     result = {k: {} for k in models_to_create}
 
@@ -818,7 +819,8 @@ def build(config_class, models_to_create, output_dir):
     if not result["warnings"]:
         del result["warnings"]
 
-    upload_models(output_dir)
+    if upload:
+        upload_models(output_dir)
 
     return result
 
@@ -915,6 +917,7 @@ if __name__ == "__main__":
         type=list_str,
         help="Comma-separated list of model type(s) from which the tiny models will be created.",
     )
+    parser.add_argument("--upload", action="store_true", help="If to upload the created tiny models to the Hub.")
     parser.add_argument("output_path", type=Path, help="Path indicating where to store generated model.")
 
     args = parser.parse_args()
@@ -942,7 +945,7 @@ if __name__ == "__main__":
     results = {}
     for c, models_to_create in list(to_create.items()):
         print(f"Create models for {c.__name__} ...")
-        result = build(c, models_to_create, output_dir=os.path.join(args.output_path, c.model_type))
+        result = build(c, models_to_create, output_dir=os.path.join(args.output_path, c.model_type), upload=args.upload)
         results[c.__name__] = result
         print("=" * 40)
 
