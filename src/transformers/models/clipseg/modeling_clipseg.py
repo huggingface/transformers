@@ -1332,10 +1332,6 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
             if (not isinstance(conditional_embeddings, torch.Tensor)) or (conditional_embeddings.ndim != 2):
                 raise ValueError("Make sure to pass conditional embeddings as a two-dimensional tensor")
 
-        # TODO remove these assertions
-        expected_pooled_output = torch.tensor([0.2551, -0.8039, -0.1766])
-        assert torch.allclose(pooled_output[0, :3], expected_pooled_output, atol=1e-3)
-
         predicted_masks = self.decoder(activations, conditional_embeddings)
 
         if output_hidden_states:
@@ -1343,6 +1339,8 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
 
         loss = None
         if labels is not None:
+            # TODO check whether this is correct
+            loss_fn = nn.BCELoss()
             loss = loss_fn(predicted_masks, labels)
 
         if not return_dict:

@@ -169,6 +169,8 @@ def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     assert torch.allclose(outputs.predicted_masks[0, 0, :3, :3], expected_masks_slice, atol=1e-3)
     expected_cond = torch.tensor([0.0548, 0.0067, -0.1543])
     assert torch.allclose(outputs.conditional_embeddings[0, :3], expected_cond, atol=1e-3)
+    expected_pooled_output = torch.tensor([0.2551, -0.8039, -0.1766])
+    assert torch.allclose(outputs.pooled_output[0, :3], expected_pooled_output, atol=1e-3)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
