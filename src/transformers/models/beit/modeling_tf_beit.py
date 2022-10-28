@@ -28,7 +28,7 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPooling,
     TFSemanticSegmenterOutput,
-    TFMaskedLMOutput
+    TFMaskedLMOutput,
     TFSequenceClassifierOutput,
 )
 from ...modeling_tf_utils import (
