@@ -493,7 +493,7 @@ def upload_models(output_dir):
 
     organization = "ydshieh"
 
-    ckpt_dirs = [x for x in os.listdir(output_dir) if x != "processor" and os.path.isdir(os.path.join(output_dir, x))]
+    ckpt_dirs = [x for x in os.listdir(output_dir) if x != "processors" and os.path.isdir(os.path.join(output_dir, x))]
     for ckpt_dir in ckpt_dirs:
         ckpt_dir = os.path.join(output_dir, ckpt_dir)
 
