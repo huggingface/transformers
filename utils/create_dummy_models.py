@@ -201,10 +201,16 @@ def build_processor(config_class, processor_class):
                 new_processor_classes = get_processor_types_from_config_class(
                     config.__class__, allowed_mappings=["tokenizer"]
                 )
+                # Used to avoid infinite recursion between a pair of fast/slow tokenizer types
+                names = [
+                    x.__class__.__name__.replace("Fast", "")
+                    for x in [processor_class, new_processor_class]
+                    if x is not None
+                ]
                 new_processor_classes = [
                     x
                     for x in new_processor_classes
-                    if x is not None and x not in [processor_class, new_processor_class]
+                    if x is not None and x.__class__.__name__.replace("Fast", "") not in names
                 ]
                 if len(new_processor_classes) > 0:
                     new_processor_class = new_processor_classes[0]
