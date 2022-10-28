@@ -60,53 +60,15 @@ _CHECKPOINT_FOR_DOC = "google/switch-base-8"
 SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/switch-base-8",
     "google/switch-base-16",
+    "google/switch-base-32",
+    "google/switch-base-64",
+    "google/switch-base-128",
+    "google/switch-base-256",
+    "google/switch-large-128",
+    "google/switch-xxl-128",
+    "google/switch-c-2048",
     # See all SwitchTransformers models at https://huggingface.co/models?filter=switch_transformers
 ]
-
-
-def _one_hot(tensor, num_classes, axis=-1, dtype=torch.bool):
-    r"""
-    This function mimics the behavior of jax.nn.functional.one_hot in PyTorch. It takes a tensor of indices, the number
-    of desired classes and the axis to apply the one-hot encoding. If any value is outside the range [0, num_classes),
-    it will be set to zeros.
-
-    Args:
-        tensor (`torch.Tensor`):
-            Input tensor
-        num_classes (`int`):
-            Number of classes to process for one hot encoding
-        axis (`int`, *optional*):
-            The lookup axis to check for one-hot encoding
-        dtype (`torch.dtype`, *optional*):
-            Output `dtype`. The one hot encoded vector will be casted to this dtype
-    """
-    if tensor.is_floating_point():
-        raise "Input tensor for one hot encoding must be an `int32` or `int64`"
-
-    if axis >= len(tensor.shape):
-        raise "Axis is out of bounds"
-
-    if axis == -1:
-        axis = len(tensor.shape)
-    elif axis < -1:
-        raise "Axis must be greater than -1"
-    else:
-        axis = axis + 1
-
-    # Get the final output shape
-    output_shape = list(tensor.shape)
-    output_shape.insert(axis, num_classes)
-
-    # Create an empty output of zeros
-    out = torch.zeros(tuple(output_shape), dtype=dtype)
-
-    # Mask out the places where it is outside the range [0, num_classes)
-    # kudos to GitHub copilot for this line
-    mask = (tensor >= 0) & (tensor < num_classes)
-    out[mask, tensor[mask]] = 1
-
-    return out.to(tensor.device)
-
 
 # Router loss
 def router_z_loss_func(router_logits: torch.Tensor) -> float:
@@ -190,24 +152,24 @@ class RouterOutput:
     router_probs: torch.FloatTensor = None
 
 
-class TokensChooseMaskedRouter(nn.Module):
+class SwitchTransformersTop1Router(nn.Module):
     """
-    Masked matmul router using tokens choose top-k experts assignment.
+    Masked matmul router using tokens choose top-1 experts assignment.
 
     This router uses the same mechanism as in Switch Transformer (https://arxiv.org/abs/2101.03961) and V-MoE
     (https://arxiv.org/abs/2106.05974): tokens choose their top experts. Items are sorted by router_probs and then
     routed to their choice of expert until the expert's expert_capacity is reached. There is no guarantee that each
     token is processed by an expert, or that each expert receives at least one token.
 
-    Attributes:
-    num_selected_experts (`int`):
-        Maximum number of experts to which each token is routed. Tokens may be routed to fewer experts if particular
-        experts are oversubscribed / reach capacity.
-    batch_prioritized_routing (`bool`):
-        Whether or not to use Batch Prioritized Routing (BPR), originally introduced in V-MoE
-        (https://arxiv.org/abs/2106.05974). With BPR, we prioritize routing those top-k tokens with the highest router
-        probability, rather than simply using each tokens left-to-right ordering in the batch. This prioritization is
-        important because the experts have limited capacity.
+    Parameters:
+        num_selected_experts (`int`):
+            Maximum number of experts to which each token is routed. Tokens may be routed to fewer experts if particular
+            experts are oversubscribed / reach capacity.
+        batch_prioritized_routing (`bool`):
+            Whether or not to use Batch Prioritized Routing (BPR), originally introduced in V-MoE
+            (https://arxiv.org/abs/2106.05974). With BPR, we prioritize routing those top-k tokens with the highest router
+            probability, rather than simply using each tokens left-to-right ordering in the batch. This prioritization is
+            important because the experts have limited capacity.
     """
 
     def __init__(self, config, **kwargs):
@@ -286,8 +248,9 @@ class TokensChooseMaskedRouter(nn.Module):
         Args:
         Computes dispatch and combine torch.Tensors for routing to experts.
             token_inputs: <float>[num_groups, tokens_per_group, hidden_dim] inputs to send to experts. num_experts:
-            Number of experts. expert_capacity: Each group will send this many tokens to each expert. apply_jitter: If
-            true, apply jitter noise during routing.
+                Number of experts. expert_capacity: Each group will send this many tokens to each expert.
+            apply_jitter:
+                If true, apply jitter noise during routing.
         Returns:
             Router indices or mask torch.Tensors (depending on router type).
         """
@@ -306,31 +269,11 @@ class TokensChooseMaskedRouter(nn.Module):
         else:
             padding_mask = None
 
-        expert_index = self._compute_routing_instructions(router_probs, **kwargs)
+        expert_index = torch.argmax(router_probs, dim=-1)
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
 
         router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
-        # router_z_loss = router_z_loss_func(router_logits)
         return expert_index, router_probs, router_logits
-
-    def _compute_routing_instructions(
-        self,
-        router_probs: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Computes masks for the top-k experts per token.
-
-        Args:
-            router_probs (`torch.Tensor`):
-                Router raw probabilities tensor of shape [num_groups, tokens_per_group, num_experts] used to determine
-                the routing of tokens to the experts.
-        Returns:
-            Dispatch and combine arrays for routing with masked matmuls.
-        """
-        # Top-k router probability and corresponding expert indices for each token.
-        # Shape: [num_groups, tokens_per_group, num_selected_experts].
-        expert_index = torch.argmax(router_probs, dim=-1)
-        return expert_index
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->SwitchTransformers
@@ -470,9 +413,8 @@ class SwitchTransformersSparseMLP(nn.Module):
         In total the list of supported Routers are the following:
 
         """
-        # TODO, use a ALL_ROUTER_TYPE map instead of havind all the ifs? then just if None raise error.
         if config.router_type.lower() == "tokens_masked":
-            return TokensChooseMaskedRouter(config)
+            return SwitchTransformersTop1Router(config)
         else:
             raise NotImplementedError(
                 f"{config.router_type.lower()} not implemented ! Please chose a router in "
@@ -496,7 +438,7 @@ class SwitchTransformersSparseMLP(nn.Module):
         router_mask, router_probs, router_logits = self.router(hidden_states)
         expert_index = torch.argmax(router_mask, dim=-1)
 
-        # next_states = torch.zeros_like(hidden_states)
+        next_states = hidden_states.clone()
         for idx, expert in enumerate(self.experts.values()):
 
             # 1. Get the index of the tokens that are routed to the current expert
@@ -504,9 +446,9 @@ class SwitchTransformersSparseMLP(nn.Module):
             token_indices = router_mask[:, :, idx].bool()
 
             # 2. Update only the hidden states affected by the routing
-            hidden_states[token_indices] = expert(hidden_states[token_indices])
+            next_states[token_indices] = expert(hidden_states[token_indices])
 
-        hidden_states = router_probs * hidden_states
+        hidden_states = router_probs * next_states
         return hidden_states, (router_logits, expert_index)
 
 
