@@ -993,9 +993,19 @@ class RealmPreTrainedModel(PreTrainedModel):
         return flattened_inputs
 
 
+@add_start_docstrings(
+    "RealmBertModel performs the same tasks as the original BertModel",
+    REALM_START_DOCSTRING,
+)
 class RealmBertModel(RealmPreTrainedModel):
-    """
-    Same as the original BertModel but remove docstrings.
+    r"""
+    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
+    cross-attention is added between the self-attention layers, following the architecture described in [Attention is
+    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin. To behave as an decoder the model needs to be
+    initialized with the `is_decoder` argument of the configuration set to `True`. To be used in a Seq2Seq model, the
+    model needs to initialized with both `is_decoder` argument and `add_cross_attention` set to `True`; an
+    `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
     def __init__(self, config, add_pooling_layer=True):
@@ -1025,6 +1035,8 @@ class RealmBertModel(RealmPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @add_start_docstrings_to_model_forward(REALM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -1041,6 +1053,24 @@ class RealmBertModel(RealmPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import RealmTokenizer, RealmBertModel
+        >>> import torch
+
+        >>> tokenizer = RealmTokenizer.from_pretrained("google/realm-cc-news-pretrained-embedder")
+        >>> model = RealmBertModel.from_pretrained("google/realm-cc-news-pretrained-embedder")
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_state = outputs.last_hidden_state
+        ```
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
