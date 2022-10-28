@@ -1277,7 +1277,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         elif conditional_pixel_values is not None:
             with torch.no_grad():
                 conditional_embeddings = self.clipseg.get_image_features(conditional_pixel_values)
-        # TODO support the use conditional directly
+        # TODO support the use of conditional directly
         # elif conditional is not None and type(conditional) == torch.Tensor and conditional.ndim == 2:
         #     cond = conditional
         else:
@@ -1312,9 +1312,6 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
 
             # we add +1 here as the hidden states also include the initial embeddings
             activations = [vision_outputs.hidden_states[i + 1] for i in [0] + self.extract_layers]
-
-            # for idx, act in enumerate(activations):
-            #     print(f"First values of activations {idx}:", act[0,:3,:3])
 
         # step 2: compute conditional vector, either from text or images
         conditional_embeddings = self.get_conditional_embeddings(
