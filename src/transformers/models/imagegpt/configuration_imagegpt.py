@@ -173,7 +173,7 @@ class ImageGPTOnnxConfig(OnnxConfig):
         Generate inputs to provide to the ONNX exporter for the specific framework
 
         Args:
-            preprocessor: ([`PreTrainedTokenizerBase`] or [`FeatureExtractionMixin`]):
+            preprocessor ([`PreTrainedTokenizerBase`] or [`FeatureExtractionMixin`]):
                 The preprocessor associated with this model configuration.
             batch_size (`int`, *optional*, defaults to -1):
                 The batch size to export the model for (-1 means dynamic axis).
