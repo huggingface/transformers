@@ -15,7 +15,6 @@
 """ Testing suite for the TensorFlow Beit model. """
 
 
-
 import collections.abc
 import inspect
 import unittest
