@@ -17,7 +17,6 @@
 import copy
 import os
 from collections import OrderedDict
-from functools import reduce
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 
 
@@ -270,8 +269,20 @@ class CLIPSegConfig(PretrainedConfig):
             The inital value of the *logit_scale* paramter. Default is used as per the original CLIPSeg implementation.
         extract_layers (`List[int]`, *optional*, defaults to [3, 6, 9]):
             Layers to extract when forwarding the query image through the frozen visual backbone of CLIP.
-        reduce_dim (`int`, *optional*, defaults to 128):
+        reduce_dim (`int`, *optional*, defaults to 64):
             Dimensionality to reduce the CLIP vision embedding.
+        decoder_num_attention_heads (`int`, *optional*, defaults to 4):
+            Number of attention heads in the decoder of CLIPSeg.
+        decoder_attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        decoder_hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported. layer_norm_eps (`float`, *optional*,
+            defaults to 1e-5): The epsilon used by the layer normalization layers.
+        decoder_intermediate_size (`int`, *optional*, defaults to 2048):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layers in the Transformer decoder.
+        conditional_layer (`int`, *optional*, defaults to 0):
+            ...
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -308,7 +319,12 @@ class CLIPSegConfig(PretrainedConfig):
         projection_dim=512,
         logit_scale_init_value=2.6592,
         extract_layers=[3, 6, 9],
-        reduce_dim=128,
+        reduce_dim=64,
+        decoder_num_attention_heads=4,
+        decoder_attention_dropout=0.0,
+        decoder_hidden_act="quick_gelu",
+        decoder_intermediate_size=2048,
+        conditional_layer=0,
         **kwargs
     ):
         super().__init__(text_config_dict=text_config_dict, vision_config_dict=vision_config_dict, **kwargs)
@@ -326,8 +342,13 @@ class CLIPSegConfig(PretrainedConfig):
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
-        self.reduce_dim = reduce_dim
         self.extract_layers = extract_layers
+        self.reduce_dim = reduce_dim
+        self.decoder_num_attention_heads = decoder_num_attention_heads
+        self.decoder_attention_dropout = decoder_attention_dropout
+        self.decoder_hidden_act = decoder_hidden_act
+        self.decoder_intermediate_size = decoder_intermediate_size
+        self.conditional_layer = conditional_layer
         self.initializer_factor = 1.0
 
     @classmethod

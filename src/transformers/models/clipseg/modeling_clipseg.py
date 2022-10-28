@@ -14,7 +14,8 @@
 # limitations under the License.
 """ PyTorch CLIPSeg model."""
 
-
+import copy
+import math
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
 
@@ -207,9 +208,14 @@ class CLIPSegAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
+        print_values=False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
+        if print_values:
+            print("Shape of initial queries:", hidden_states.shape)
+            print("First values of initial queries:", hidden_states[0,:3,:3])
+        
         bsz, tgt_len, embed_dim = hidden_states.size()
 
         # get query proj
@@ -221,6 +227,11 @@ class CLIPSegAttention(nn.Module):
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
+
+        if print_values:
+            print("Shape of q:", query_states.shape)
+            print("First values of q:", query_states[:3,0,:3])
+            print("First values of k:", key_states[:3,0,:3])
 
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
@@ -312,6 +323,7 @@ class CLIPSegEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
+        print_values=False,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -1092,13 +1104,93 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         )
 
 
+class CLIPSegDecoderLayer(nn.Module):
+    """
+    CLIPSeg decoder layer, which is identical to `CLIPSegEncoderLayer`, except that normalization is applied
+    after self-attention/MLP, rather than before.
+    """
+
+    # Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer.__init__
+    def __init__(self, config: CLIPSegConfig):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.self_attn = CLIPSegAttention(config)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim)
+        self.mlp = CLIPSegMLP(config)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        causal_attention_mask: torch.Tensor,
+        output_attentions: Optional[bool] = False,
+        print_values=False,
+    ) -> Tuple[torch.FloatTensor]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+                `(config.encoder_attention_heads,)`.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+        """
+        residual = hidden_states
+
+        if print_values:
+            print("Hidden states before self-attention:", hidden_states[0,:3,:3])
+
+        hidden_states, attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            causal_attention_mask=causal_attention_mask,
+            output_attentions=output_attentions,
+            print_values=print_values,
+        )
+
+        if print_values:
+            print("Hidden states after self-attention:", hidden_states[0,:3,:3])
+
+        hidden_states = residual + hidden_states
+        hidden_states = self.layer_norm1(hidden_states)
+
+        if print_values:
+            print("Hidden states after first norm + residual:", hidden_states[0,:3,:3])
+
+        residual = hidden_states
+        
+        if print_values:
+            print("Hidden states before MLP:", hidden_states[0,:3,:3])
+        
+        hidden_states = self.mlp(hidden_states)
+
+        if print_values:
+            print("Hidden states after MLP:", hidden_states[0,:3,:3])
+
+        hidden_states = residual + hidden_states
+
+        hidden_states = self.layer_norm2(hidden_states)
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
+
+
 class CLIPSegDecoder(CLIPSegPreTrainedModel):
     def __init__(self, config: CLIPSegConfig):
         super().__init__(config)
 
+        self.conditional_layer = config.conditional_layer
+
         self.film_mul = nn.Linear(config.projection_dim, config.reduce_dim)
         self.film_add = nn.Linear(config.projection_dim, config.reduce_dim)
 
+        # TODO remove, this is probably not used
         self.reduce = nn.Linear(config.vision_config.hidden_size, config.reduce_dim)
 
         self.transposed_convolution = nn.ConvTranspose2d(
@@ -1106,13 +1198,49 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         )
 
         depth = len(config.extract_layers)
-        self.reduces = nn.ModuleList([nn.Linear(768, config.reduce_dim) for _ in range(depth)])
-        # self.blocks = nn.ModuleList(
-        #     [nn.TransformerEncoderLayer(d_model=reduce_dim, nhead=n_heads) for _ in range(len(self.extract_layers))]
-        # )
+        self.reduces = nn.ModuleList(
+            [nn.Linear(config.vision_config.hidden_size, config.reduce_dim) for _ in range(depth)]
+        )
 
-    def forward(self, hidden_states):
-        return -1
+        decoder_config = copy.deepcopy(config.vision_config)
+        decoder_config.hidden_size = config.reduce_dim
+        decoder_config.num_attention_heads = config.decoder_num_attention_heads
+        decoder_config.intermediate_size = config.decoder_intermediate_size
+        decoder_config.hidden_act = "relu"
+        self.layers = nn.ModuleList([CLIPSegDecoderLayer(decoder_config) for _ in range(len(config.extract_layers))])
+
+    def forward(self, hidden_states, conditional_embeddings):
+        # TODO probably just not include the first hidden states
+        activations = hidden_states[1:]
+        _activations = activations[::-1]
+
+        a = None
+        for i, (activation, layer, reduce) in enumerate(zip(_activations, self.layers, self.reduces)):
+            if a is not None:
+                a = reduce(activation) + a
+            else:
+                a = reduce(activation)
+
+            if i == self.conditional_layer:
+                a = self.film_mul(conditional_embeddings) * a.permute(1, 0, 2) + self.film_add(conditional_embeddings)
+                a = a.permute(1, 0, 2)
+
+            if i == 0:
+                print(f"Activation before layer {i}:", a[0,:3,:3])
+            a = layer(a, attention_mask=None, causal_attention_mask=None, print_values=False)[0]
+            if i == 0:
+                print(f"Activation after layer {i}:", a[0,:3,:3])
+        
+        a = a[1:].permute(1, 2, 0)  # remove cls token and reshape to [batch_size, features, tokens]
+
+        size = int(math.sqrt(a.shape[2]))
+
+        batch_size = conditional_embeddings.shape[0]
+        a = a.view(batch_size, a.shape[1], size, size)
+
+        a = self.transposed_convolution(a)
+
+        return a
 
 
 class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
@@ -1125,7 +1253,6 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         self.clipseg = CLIPSegModel(config)
         self.extract_layers = config.extract_layers
 
-        # TODO: decoder
         self.decoder = CLIPSegDecoder(config)
 
         # Initialize weights and apply final processing
@@ -1185,12 +1312,20 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
             # we add +1 here as the hidden states also include the initial embeddings
             activations = [vision_outputs.hidden_states[i + 1] for i in [0] + self.extract_layers]
 
+            # for idx, act in enumerate(activations):
+            #     print(f"First values of activations {idx}:", act[0,:3,:3])
+
         # step 2: compute conditional vector, either from text or images
         conditional_embeddings = self.get_conditional_embeddings(
             input_ids, conditional_pixel_values, batch_size=pixel_values.shape[0]
         )
 
-        print("Shape of cond:", conditional_embeddings.shape)
-        print("First values of cond:", conditional_embeddings[0, :3])
+        # TODO remove these assertions
+        expected_pooled_output = torch.tensor([0.2551, -0.8039, -0.1766])
+        assert torch.allclose(pooled_output[0, :3], expected_pooled_output, atol=1e-3)
+        expected_cond = torch.tensor([0.0548, 0.0067, -0.1543])
+        assert torch.allclose(conditional_embeddings[0, :3], expected_cond, atol=1e-3)
+
+        decoder_outputs = self.decoder(activations, conditional_embeddings)
 
         return vision_outputs

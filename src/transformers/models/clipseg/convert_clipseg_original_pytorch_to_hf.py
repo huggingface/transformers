@@ -32,7 +32,7 @@ def rename_key(name):
         name = name.replace("c_fc", "fc1")
     if "c_proj" in name:
         name = name.replace("c_proj", "fc2")
-    if "attn" in name:
+    if "attn" in name and "self" not in name:
         name = name.replace("attn", "self_attn")
     # text encoder
     if "token_embedding" in name:
@@ -57,6 +57,21 @@ def rename_key(name):
         name = name.replace("visual.proj", "visual_projection.weight")
     if "text_projection" in name:
         name = name.replace("text_projection", "text_projection.weight")
+    # decoder
+    if "trans_conv" in name:
+        name = name.replace("trans_conv", "transposed_convolution")
+    if "film_mul" in name or "film_add" in name or "reduce" in name or "transposed_convolution" in name:
+        name = "decoder." + name
+    if "blocks" in name:
+        name = name.replace("blocks", "decoder.layers")
+    if "linear1" in name:
+        name = name.replace("linear1", "mlp.fc1")
+    if "linear2" in name:
+        name = name.replace("linear2", "mlp.fc2")
+    if "norm1" in name and "layer_" not in name:
+        name = name.replace("norm1", "layer_norm1")
+    if "norm2" in name and "layer_" not in name:
+        name = name.replace("norm2", "layer_norm2")
 
     return name
 
@@ -88,6 +103,18 @@ def convert_state_dict(orig_state_dict, config):
                     dim : dim * 2
                 ]
                 orig_state_dict[f"clipseg.{prefix}.encoder.layers.{layer_num}.self_attn.v_proj.bias"] = val[-dim:]
+        elif "self_attn" in key and "out_proj" not in key:
+            key_split = key.split(".")
+            layer_num = int(key_split[1])
+            dim = config.reduce_dim
+            if "weight" in key:
+                orig_state_dict[f"decoder.layers.{layer_num}.self_attn.q_proj.weight"] = val[:dim, :]
+                orig_state_dict[f"decoder.layers.{layer_num}.self_attn.k_proj.weight"] = val[dim : dim * 2, :]
+                orig_state_dict[f"decoder.layers.{layer_num}.self_attn.v_proj.weight"] = val[-dim:, :]
+            else:
+                orig_state_dict[f"decoder.layers.{layer_num}.self_attn.q_proj.bias"] = val[:dim]
+                orig_state_dict[f"decoder.layers.{layer_num}.self_attn.k_proj.bias"] = val[dim : dim * 2]
+                orig_state_dict[f"decoder.layers.{layer_num}.self_attn.v_proj.bias"] = val[-dim:]
         else:
             new_name = rename_key(key)
             if "visual_projection" in new_name or "text_projection" in new_name:
@@ -116,15 +143,15 @@ def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path):
         if key.startswith("model"):
             state_dict.pop(key, None)
 
-    print("ORIGINAL STATE DICT")
-    for name, param in state_dict.items():
-        print(name, param.shape)
-
     state_dict = convert_state_dict(state_dict, config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
 
     print("Missing keys:", missing_keys)
     print("Unexpected keys:", unexpected_keys)
+
+    print("QUERIES of first decoder block")
+    print(model.decoder.layers[0].self_attn.q_proj.weight.shape)
+    print(model.decoder.layers[0].self_attn.q_proj.weight[:3,:3])
 
     # TODO create feature extractor
     # feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/{}".format(model_name.replace("_", "-")))
