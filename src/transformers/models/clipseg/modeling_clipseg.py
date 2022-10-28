@@ -1317,7 +1317,8 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
             pooled_output = self.clipseg.visual_projection(vision_outputs[1])
 
             # we add +1 here as the hidden states also include the initial embeddings
-            activations = [vision_outputs.hidden_states[i + 1] for i in [0] + self.extract_layers]
+            hidden_states = vision_outputs.hidden_states if return_dict else vision_outputs[2]
+            activations = [hidden_states[i + 1] for i in [0] + self.extract_layers]
 
         # step 2: compute conditional embeddings, either from text, images or an own provided embedding
         if conditional_embeddings is None:

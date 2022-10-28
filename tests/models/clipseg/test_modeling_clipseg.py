@@ -24,7 +24,8 @@ import numpy as np
 
 import requests
 import transformers
-from transformers import CLIPSegConfig, CLIPSegTextConfig, CLIPSegVisionConfig
+from transformers.models.auto import get_values
+from transformers import CLIPSegConfig, CLIPSegTextConfig, CLIPSegVisionConfig, MODEL_MAPPING
 from transformers.testing_utils import (
     is_flax_available,
     is_pt_flax_cross_test,
@@ -362,7 +363,8 @@ class CLIPSegModelTester:
 
     def get_config(self):
         return CLIPSegConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64, reduce_dim=32,
+            extract_layers=[1,2,3],
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -383,7 +385,7 @@ class CLIPSegModelTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
-            "return_loss": True,
+            # "return_loss": True,
         }
         return config, inputs_dict
 
@@ -636,6 +638,28 @@ class CLIPSegModelTest(ModelTesterMixin, unittest.TestCase):
                 for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs_loaded[:4]):
                     self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
 
+    def test_training(self):
+        if not self.model_tester.is_training:
+            return
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+
+            if model_class in get_values(MODEL_MAPPING):
+                continue
+
+            print("Model class:", model_class)
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            for k,v in inputs.items():
+                print(k,v.shape)
+            loss = model(**inputs).loss
+            loss.backward()
+    
     @slow
     def test_model_from_pretrained(self):
         for model_name in CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
