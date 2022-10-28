@@ -203,14 +203,10 @@ def build_processor(config_class, processor_class):
                 )
                 # Used to avoid infinite recursion between a pair of fast/slow tokenizer types
                 names = [
-                    x.__class__.__name__.replace("Fast", "")
-                    for x in [processor_class, new_processor_class]
-                    if x is not None
+                    x.__name__.replace("Fast", "") for x in [processor_class, new_processor_class] if x is not None
                 ]
                 new_processor_classes = [
-                    x
-                    for x in new_processor_classes
-                    if x is not None and x.__class__.__name__.replace("Fast", "") not in names
+                    x for x in new_processor_classes if x is not None and x.__name__.replace("Fast", "") not in names
                 ]
                 if len(new_processor_classes) > 0:
                     new_processor_class = new_processor_classes[0]
@@ -584,7 +580,10 @@ def build_composite_models(config_class, output_dir):
             elif config_class.model_type == "vision-text-dual-encoder":
                 model = model_class.from_vision_text_pretrained(encoder_path, decoder_path)
 
-            model_path = os.path.join(output_dir, model_class.__name__)
+            model_path = os.path.join(
+                output_dir,
+                f"{model_class.__name__}-{encoder_config_class.model_type}-{decoder_config_class.model_type}",
+            )
             model.save_pretrained(model_path)
 
             if tf_model_class is not None:
