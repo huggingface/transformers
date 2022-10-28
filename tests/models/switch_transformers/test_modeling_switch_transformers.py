@@ -875,7 +875,13 @@ class SwitchTransformerRouterTest(unittest.TestCase):
     Original implementation of the routers here:
 
     """
-
+    config = SwitchTransformersConfig(
+            num_experts=2,
+            hidden_size=8,
+            d_ff=16,
+            router_jitter_noise=0,
+            expert_capacity=4,
+    )
     def test_equivalency_balancy_loss(self):
         r"""
         This test checks if the balancy loss is correctly implemented
@@ -930,11 +936,6 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         This test tests the equivalency between the `SwitchTransformersTop1Router`
         originally implemented from here: TODO: provide link
         """
-        hidden_dim = 4
-        num_experts = 2
-        num_selected_experts = 1  # Switch routing case
-        expert_capacity = 1  # Total capacity = 2*2*1 = 4 < num_tokens
-        jitter_noise = 0.0
 
         input_tokens = torch.Tensor(
             [
@@ -951,15 +952,8 @@ class SwitchTransformerRouterTest(unittest.TestCase):
             ]
         )
 
-        config = SwitchTransformersConfig(
-            num_experts=num_experts,
-            hidden_size=hidden_dim,
-            num_selected_experts=num_selected_experts,
-            router_jitter_noise=jitter_noise,
-            expert_capacity=expert_capacity,
-            batch_prioritized_routing=False,
-        )
-        model = SwitchTransformersTop1Router(config)
+
+        model = SwitchTransformersTop1Router(self.config)
 
         model.classifier.weight = torch.nn.Parameter(
             torch.Tensor(
@@ -983,6 +977,21 @@ class SwitchTransformerRouterTest(unittest.TestCase):
 
         # self.assertTrue(torch.allclose(expert_index.bool().unsqueeze(-1), expected_dispatch_mask))
 
+    def test_max_routing_capacity(self):
+        model = SwitchTransformersTop1Router(self.config)
+        seq_len = 128
+        batch_size = 4
+        hidden_states = torch.stack(batch_size*[torch.rand((seq_len,self.config.hidden_size))])
+
+        router_probs, router_logits = model._compute_router_probabilities(hidden_states)
+        expert_index = torch.argmax(router_probs, dim=-1)
+        expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.config.num_experts)
+
+        token_priority = torch.cumsum(expert_index, dim =-2)
+        expert_capacity_mask = (token_priority <= self.config.expert_capacity)
+        expert_index =  expert_index * expert_capacity_mask
+
+        assert(torch.sum(expert_index) <= batch_size * self.config.num_experts * self.config.expert_capacity)
 
 @slow
 @require_torch
@@ -994,7 +1003,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of Switch-C transformers. We only check the logits
         of the first batch.
         """
-        model = SwitchTransformersModel.from_pretrained("HFLAY/switch_base_8", torch_dtype=torch.bfloat16).eval()
+        model = SwitchTransformersModel.from_pretrained("HFLAY/switch_base_8",expert_capacity = 65, torch_dtype=torch.bfloat16).eval()
         input_ids = torch.ones((32, 64), dtype=torch.long)
         decoder_input_ids = torch.ones((32, 64), dtype=torch.long)
 

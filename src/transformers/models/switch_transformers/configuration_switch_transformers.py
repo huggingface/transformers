@@ -75,12 +75,8 @@ class SwitchTransformersConfig(PretrainedConfig):
         router_dtype (`str`, *optional*, default to `float32`):
             The `dtype` used for the routers. It is preferable to keep the `dtype` to `float32` as specified in the
             "selective precision" discussion in https://arxiv.org/abs/2101.03961.
-        batch_prioritized_routing (`bool`, *optional*, defaults to `False`):
-            Whether to use batch prioritized routing.
         add_router_probs (`bool`, *optional*, defaults to `False`):
             Whether to output router probabilities to compute router auxiliary loss.
-        num_selected_experts (`int`, *optional*, defaults to 2):
-            Number of experts to select for each token.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
             The number of buckets to use for each attention layer.
         relative_attention_max_distance (`int`, *optional*, defaults to 128):
@@ -123,9 +119,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         router_bias=False,
         router_jitter_noise=0.01,
         router_dtype="float32",
-        num_selected_experts=2,
         router_ignore_padding_tokens=False,
-        batch_prioritized_routing=False,
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
         dropout_rate=0.1,
@@ -180,9 +174,6 @@ class SwitchTransformersConfig(PretrainedConfig):
         self.router_ignore_padding_tokens = router_ignore_padding_tokens
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.relative_attention_max_distance = relative_attention_max_distance
-        self.batch_prioritized_routing = batch_prioritized_routing
-
-        self.num_selected_experts = num_selected_experts
 
         self.dropout_rate = dropout_rate
         self.layer_norm_epsilon = layer_norm_epsilon
