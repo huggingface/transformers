@@ -53,8 +53,15 @@ _CONFIG_FOR_DOC = "RobertaPreLayerNormConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "princeton-nlp/efficient_mlm_m0.15",
+    "princeton-nlp/efficient_mlm_m0.20",
+    "princeton-nlp/efficient_mlm_m0.30",
     "princeton-nlp/efficient_mlm_m0.40",
-    # See all RoBERTa-PreLayerNorm models at https://huggingface.co/models?filter=roberta-prelayernorm
+    "princeton-nlp/efficient_mlm_m0.50",
+    "princeton-nlp/efficient_mlm_m0.60",
+    "princeton-nlp/efficient_mlm_m0.70",
+    "princeton-nlp/efficient_mlm_m0.80",
+    # See all RoBERTaWithPreLayerNorm models at https://huggingface.co/models?filter=roberta_with_prelayernorm
 ]
 
 
@@ -273,27 +280,25 @@ class RobertaPreLayerNormSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
 class RobertaPreLayerNormSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = hidden_states + input_tensor
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->RobertaPreLayerNorm
 class RobertaPreLayerNormAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         self.self = RobertaPreLayerNormSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = RobertaPreLayerNormSelfOutput(config)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -325,7 +330,7 @@ class RobertaPreLayerNormAttention(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(
-            hidden_states,
+            self.LayerNorm(hidden_states),
             attention_mask,
             head_mask,
             encoder_hidden_states,
@@ -338,10 +343,10 @@ class RobertaPreLayerNormAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
 class RobertaPreLayerNormIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
@@ -349,23 +354,22 @@ class RobertaPreLayerNormIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.LayerNorm(hidden_states)
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
 class RobertaPreLayerNormOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = hidden_states + input_tensor
         return hidden_states
 
 
@@ -683,7 +687,6 @@ ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING = r"""
     "The bare RoBERTa-PreLayerNorm Model transformer outputting raw hidden-states without any specific head on top.",
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaModel with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm
 class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
     """
 
@@ -708,6 +711,7 @@ class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
 
         self.embeddings = RobertaPreLayerNormEmbeddings(config)
         self.encoder = RobertaPreLayerNormEncoder(config)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.pooler = RobertaPreLayerNormPooler(config) if add_pooling_layer else None
 
@@ -850,6 +854,7 @@ class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
+        sequence_output = self.LayerNorm(sequence_output)
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:

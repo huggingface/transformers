@@ -358,17 +358,15 @@ class FlaxRobertaPreLayerNormSelfOutput(nn.Module):
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
             dtype=self.dtype,
         )
-        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(self, hidden_states, input_tensor, deterministic: bool = True):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = hidden_states + input_tensor
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertAttention with Bert->RobertaPreLayerNorm
 class FlaxRobertaPreLayerNormAttention(nn.Module):
     config: RobertaPreLayerNormConfig
     causal: bool = False
@@ -377,6 +375,7 @@ class FlaxRobertaPreLayerNormAttention(nn.Module):
     def setup(self):
         self.self = FlaxRobertaPreLayerNormSelfAttention(self.config, causal=self.causal, dtype=self.dtype)
         self.output = FlaxRobertaPreLayerNormSelfOutput(self.config, dtype=self.dtype)
+        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
 
     def __call__(
         self,
@@ -392,7 +391,7 @@ class FlaxRobertaPreLayerNormAttention(nn.Module):
         # FLAX expects: attention_mask.shape == (*batch_sizes, 1, 1, kv_length) such that it is broadcastable
         # with attn_weights.shape == (*batch_sizes, num_heads, q_length, kv_length)
         attn_outputs = self.self(
-            hidden_states,
+            self.LayerNorm(hidden_states),
             attention_mask,
             layer_head_mask=layer_head_mask,
             key_value_states=key_value_states,
@@ -411,12 +410,12 @@ class FlaxRobertaPreLayerNormAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertIntermediate with Bert->RobertaPreLayerNorm
 class FlaxRobertaPreLayerNormIntermediate(nn.Module):
     config: RobertaPreLayerNormConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
+        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.dense = nn.Dense(
             self.config.intermediate_size,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
@@ -425,12 +424,12 @@ class FlaxRobertaPreLayerNormIntermediate(nn.Module):
         self.activation = ACT2FN[self.config.hidden_act]
 
     def __call__(self, hidden_states):
+        hidden_states = self.LayerNorm(hidden_states)
         hidden_states = self.dense(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertOutput with Bert->RobertaPreLayerNorm
 class FlaxRobertaPreLayerNormOutput(nn.Module):
     config: RobertaPreLayerNormConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -442,12 +441,11 @@ class FlaxRobertaPreLayerNormOutput(nn.Module):
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
-        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
 
     def __call__(self, hidden_states, attention_output, deterministic: bool = True):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
-        hidden_states = self.LayerNorm(hidden_states + attention_output)
+        hidden_states = hidden_states + attention_output
         return hidden_states
 
 
@@ -910,7 +908,6 @@ class FlaxRobertaPreLayerNormPreTrainedModel(FlaxPreTrainedModel):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertModule with Bert->RobertaPreLayerNorm
 class FlaxRobertaPreLayerNormModule(nn.Module):
     config: RobertaPreLayerNormConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -924,6 +921,7 @@ class FlaxRobertaPreLayerNormModule(nn.Module):
             dtype=self.dtype,
             gradient_checkpointing=self.gradient_checkpointing,
         )
+        self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.pooler = FlaxRobertaPreLayerNormPooler(self.config, dtype=self.dtype)
 
     def __call__(
@@ -965,6 +963,7 @@ class FlaxRobertaPreLayerNormModule(nn.Module):
             return_dict=return_dict,
         )
         hidden_states = outputs[0]
+        hidden_states = self.LayerNorm(hidden_states)
         pooled = self.pooler(hidden_states) if self.add_pooling_layer else None
 
         if not return_dict:

@@ -65,8 +65,15 @@ _CONFIG_FOR_DOC = "RobertaPreLayerNormConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 TF_ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "princeton-nlp/efficient_mlm_m0.15",
+    "princeton-nlp/efficient_mlm_m0.20",
+    "princeton-nlp/efficient_mlm_m0.30",
     "princeton-nlp/efficient_mlm_m0.40",
-    # See all RoBERTa-PreLayerNorm models at https://huggingface.co/models?filter=roberta-prelayernorm
+    "princeton-nlp/efficient_mlm_m0.50",
+    "princeton-nlp/efficient_mlm_m0.60",
+    "princeton-nlp/efficient_mlm_m0.70",
+    "princeton-nlp/efficient_mlm_m0.80",
+    # See all RoBERTaWithPreLayerNorm models at https://huggingface.co/models?filter=roberta_with_prelayernorm
 ]
 
 
@@ -320,7 +327,6 @@ class TFRobertaPreLayerNormSelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->RobertaPreLayerNorm
 class TFRobertaPreLayerNormSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: RobertaPreLayerNormConfig, **kwargs):
         super().__init__(**kwargs)
@@ -328,24 +334,23 @@ class TFRobertaPreLayerNormSelfOutput(tf.keras.layers.Layer):
         self.dense = tf.keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.dropout(inputs=hidden_states, training=training)
-        hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
+        hidden_states = hidden_states + input_tensor
 
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->RobertaPreLayerNorm
 class TFRobertaPreLayerNormAttention(tf.keras.layers.Layer):
     def __init__(self, config: RobertaPreLayerNormConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.self_attention = TFRobertaPreLayerNormSelfAttention(config, name="self")
         self.dense_output = TFRobertaPreLayerNormSelfOutput(config, name="output")
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -362,7 +367,7 @@ class TFRobertaPreLayerNormAttention(tf.keras.layers.Layer):
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         self_outputs = self.self_attention(
-            hidden_states=input_tensor,
+            hidden_states=self.LayerNorm(inputs=input_tensor),
             attention_mask=attention_mask,
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
@@ -380,11 +385,11 @@ class TFRobertaPreLayerNormAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->RobertaPreLayerNorm
 class TFRobertaPreLayerNormIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: RobertaPreLayerNormConfig, **kwargs):
         super().__init__(**kwargs)
 
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dense = tf.keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
@@ -395,13 +400,13 @@ class TFRobertaPreLayerNormIntermediate(tf.keras.layers.Layer):
             self.intermediate_act_fn = config.hidden_act
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
+        hidden_states = self.LayerNorm(inputs=hidden_states)
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->RobertaPreLayerNorm
 class TFRobertaPreLayerNormOutput(tf.keras.layers.Layer):
     def __init__(self, config: RobertaPreLayerNormConfig, **kwargs):
         super().__init__(**kwargs)
@@ -409,13 +414,12 @@ class TFRobertaPreLayerNormOutput(tf.keras.layers.Layer):
         self.dense = tf.keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.dropout(inputs=hidden_states, training=training)
-        hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
+        hidden_states = hidden_states + input_tensor
 
         return hidden_states
 
@@ -578,7 +582,6 @@ class TFRobertaPreLayerNormEncoder(tf.keras.layers.Layer):
 
 
 @keras_serializable
-# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaMainLayer with Roberta->RobertaPreLayerNorm
 class TFRobertaPreLayerNormMainLayer(tf.keras.layers.Layer):
     config_class = RobertaPreLayerNormConfig
 
@@ -594,6 +597,7 @@ class TFRobertaPreLayerNormMainLayer(tf.keras.layers.Layer):
         self.output_hidden_states = config.output_hidden_states
         self.return_dict = config.use_return_dict
         self.encoder = TFRobertaPreLayerNormEncoder(config, name="encoder")
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.pooler = TFRobertaPreLayerNormPooler(config, name="pooler") if add_pooling_layer else None
         # The embeddings must be the last declaration in order to follow the weights order
         self.embeddings = TFRobertaPreLayerNormEmbeddings(config, name="embeddings")
@@ -752,6 +756,7 @@ class TFRobertaPreLayerNormMainLayer(tf.keras.layers.Layer):
         )
 
         sequence_output = encoder_outputs[0]
+        sequence_output = self.LayerNorm(inputs=sequence_output)
         pooled_output = self.pooler(hidden_states=sequence_output) if self.pooler is not None else None
 
         if not return_dict:
