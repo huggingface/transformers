@@ -362,7 +362,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return word
 
     @property
-    def prefix_tokens(self):
+    def prefix_tokens(self, language=None, task=None, predict_timestamps=None):
+        self.language = language if language is not None else self.language
+        self.task = task if task is not None else self.task
+        self.predict_timestamps = predict_timestamps if predict_timestamps is not None else self.predict_timestamps
+
         all_special_ids = self.all_special_ids
         bos_token_id = all_special_ids[-106]
         translate_token_id = all_special_ids[-6]
