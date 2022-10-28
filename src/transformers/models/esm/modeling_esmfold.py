@@ -49,11 +49,11 @@ class EsmForProteinFolding(EsmPreTrainedModel):
     def __init__(self, config=None, **kwargs):
         super().__init__(config=config)
 
-        self.config = config if config else EsmConfig(**kwargs)
+        self.config = config if config else EsmConfig(is_folding_model=True, **kwargs)
 
         self.distogram_bins = 64
 
-        self.esm = EsmModel(config=config)
+        self.esm = EsmModel(config=config, add_pooling_layer=False)
 
         self.esm.requires_grad_(False)
         if self.config.esmfold_config.fp16_esm:
@@ -65,21 +65,14 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         self.register_buffer("af2_to_esm", self._af2_to_esm_from_vocab_list(config.vocab_list))
         self.esm_s_combine = nn.Parameter(torch.zeros(self.esm_layers + 1))
 
-        c_s = self.config.esmfold_config.trunk_sequence_state_dim
-        c_z = self.config.esmfold_config.trunk_pairwise_state_dim
+        c_s = self.config.esmfold_config.trunk.sequence_state_dim
+        c_z = self.config.esmfold_config.trunk.pairwise_state_dim
         self.esm_s_mlp = nn.Sequential(
             LayerNorm(self.esm_feats),
             nn.Linear(self.esm_feats, c_s),
             nn.ReLU(),
             nn.Linear(c_s, c_s),
         )
-        if self.config.esmfold_config.use_esm_attn_map:
-            self.esm_z_mlp = nn.Sequential(
-                LayerNorm(self.esm_attns),
-                nn.Linear(self.esm_attns, c_z),
-                nn.ReLU(),
-                nn.Linear(c_z, c_z),
-            )
 
         # 0 is padding, N is unknown residues, N + 1 is mask.
         self.n_tokens_embed = residue_constants.restype_num + 3
@@ -93,21 +86,23 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         if self.config.esmfold_config.embed_aa:
             self.embedding = nn.Embedding(self.n_tokens_embed, c_s, padding_idx=0)
 
-        self.trunk = FoldingTrunk(self.config.esmfold_config, self.config.structure_config)
+        # Matt: We want our config objects to be JSON serializable, which means avoiding having dataclasses
+        # as keys.
+        trunk_cfg_dict = self.config.esmfold_config.trunk
+
+        self.trunk = FoldingTrunk(trunk_cfg_dict)
 
         self.distogram_head = nn.Linear(c_z, self.distogram_bins)
         self.ptm_head = nn.Linear(c_z, self.distogram_bins)
         self.lm_head = nn.Linear(c_s, self.n_tokens_embed)
         self.lddt_bins = 50
         self.lddt_head = nn.Sequential(
-            nn.LayerNorm(self.config.structure_config.c_s),
-            nn.Linear(self.config.structure_config.c_s, self.config.esmfold_config.lddt_head_hid_dim),
+            nn.LayerNorm(self.config.esmfold_config.trunk.structure_module.c_s),
+            nn.Linear(self.config.esmfold_config.trunk.structure_module.c_s, self.config.esmfold_config.lddt_head_hid_dim),
             nn.Linear(self.config.esmfold_config.lddt_head_hid_dim, self.config.esmfold_config.lddt_head_hid_dim),
             nn.Linear(self.config.esmfold_config.lddt_head_hid_dim, 37 * self.lddt_bins),
         )
         # cls eos padding mask
-
-
 
     @staticmethod
     def _af2_to_esm_from_vocab_list(vocab_list: List[str]) -> torch.Tensor:

@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 from contextlib import ExitStack
-from dataclasses import dataclass, asdict
 
 import torch
 import torch.nn as nn
@@ -69,30 +68,30 @@ class RelativePosition(nn.Module):
 
 
 class FoldingTrunk(nn.Module):
-    def __init__(self, config, structure_config):
+    def __init__(self, config):
         super().__init__()
         self.config = config
-        assert self.config.trunk_max_recycles > 0
+        assert self.config.max_recycles > 0
 
-        c_s = self.config.trunk_sequence_state_dim
-        c_z = self.config.trunk_pairwise_state_dim
+        c_s = self.config.sequence_state_dim
+        c_z = self.config.pairwise_state_dim
 
-        assert c_s % self.config.trunk_sequence_head_width == 0
-        assert c_z % self.config.trunk_pairwise_head_width == 0
+        assert c_s % self.config.sequence_head_width == 0
+        assert c_z % self.config.pairwise_head_width == 0
         block = TriangularSelfAttentionBlock
 
-        self.pairwise_positional_embedding = RelativePosition(self.config.trunk_position_bins, c_z)
+        self.pairwise_positional_embedding = RelativePosition(self.config.position_bins, c_z)
 
         self.blocks = nn.ModuleList(
             [
                 block(
                     sequence_state_dim=c_s,
                     pairwise_state_dim=c_z,
-                    sequence_head_width=self.config.trunk_sequence_head_width,
-                    pairwise_head_width=self.config.trunk_pairwise_head_width,
-                    dropout=self.config.trunk_dropout,
+                    sequence_head_width=self.config.sequence_head_width,
+                    pairwise_head_width=self.config.pairwise_head_width,
+                    dropout=self.config.dropout,
                 )
-                for i in range(self.config.trunk_num_blocks)
+                for i in range(self.config.num_blocks)
             ]
         )
 
@@ -102,11 +101,11 @@ class FoldingTrunk(nn.Module):
         self.recycle_disto = nn.Embedding(self.recycle_bins, c_z)
         self.recycle_disto.weight[0].detach().zero_()
 
-        self.structure_module = StructureModule(**asdict(structure_config))  # type: ignore
+        self.structure_module = StructureModule(**config.structure_module.to_dict())  # type: ignore
         self.trunk2sm_s = nn.Linear(c_s, self.structure_module.c_s)
         self.trunk2sm_z = nn.Linear(c_z, self.structure_module.c_z)
 
-        self.chunk_size = self.config.trunk_chunk_size
+        self.chunk_size = self.config.chunk_size
 
     def set_chunk_size(self, chunk_size):
         # This parameter means the axial attention will be computed
@@ -131,7 +130,7 @@ class FoldingTrunk(nn.Module):
         s_s_0 = seq_feats
         s_z_0 = pair_feats
 
-        no_recycles = self.config.trunk_max_recycles
+        no_recycles = self.config.max_recycles
 
         def trunk_iter(s, z, residx, mask):
             z = z + self.pairwise_positional_embedding(residx, mask=mask)

@@ -23,7 +23,7 @@ from tempfile import TemporaryDirectory
 import torch
 
 import esm as esm_module
-from transformers.models.esm.configuration_esm import EsmConfig
+from transformers.models.esm.configuration_esm import EsmConfig, EsmFoldConfig, TrunkConfig, StructureModuleConfig
 from transformers.models.esm.modeling_esm import (
     EsmForMaskedLM,
     EsmForSequenceClassification,
@@ -74,13 +74,31 @@ def convert_esm_checkpoint_to_pytorch(
     """
     if model.startswith("esmfold"):
         esm = MODEL_MAPPING[model]()
-        alphabet = None
+        alphabet = esm.esm.alphabet
     else:
         esm, alphabet = MODEL_MAPPING[model]()
     esm.eval()  # disable dropout
-    original_esm_model = esm
-    # TODO Copy model parameters out of ESMFold here including the mask_idx
-    if hasattr(esm, "args"):
+
+    if model.startswith("esmfold"):
+        embed_dim = esm.esm.embed_dim
+        num_layers = esm.esm.num_layers
+        num_attention_heads = esm.esm.attention_heads
+        intermediate_size = 4 * embed_dim
+        token_dropout = esm.esm.token_dropout
+        emb_layer_norm_before = False  # This code path does not exist in ESM-2
+        position_embedding_type = "rotary"
+        is_folding_model = True
+        esmfold_config = EsmFoldConfig()
+        for key, val in esm.cfg.items():
+            if hasattr(esmfold_config, key) and key != "trunk":
+                setattr(esmfold_config, key, val)
+        for key, val in esm.cfg.trunk.items():
+            if hasattr(esmfold_config.trunk, key) and key != "structure_module":
+                setattr(esmfold_config.trunk, key, val)
+        for key, val in esm.cfg.trunk.structure_module.items():
+            if hasattr(esmfold_config.trunk.structure_module, key):
+                setattr(esmfold_config.trunk.structure_module, key, val)
+    elif hasattr(esm, "args"):
         # Indicates an ESM-1b or ESM-1v model
         embed_dim = esm.args.embed_dim
         num_layers = esm.args.layers
@@ -89,6 +107,8 @@ def convert_esm_checkpoint_to_pytorch(
         token_dropout = esm.args.token_dropout
         emb_layer_norm_before = True if esm.emb_layer_norm_before else False
         position_embedding_type = "absolute"
+        is_folding_model = False
+        esmfold_config = None
     else:
         # Indicates an ESM-2 model
         embed_dim = esm.embed_dim
@@ -98,12 +118,18 @@ def convert_esm_checkpoint_to_pytorch(
         token_dropout = esm.token_dropout
         emb_layer_norm_before = False  # This code path does not exist in ESM-2
         position_embedding_type = "rotary"
+        is_folding_model = False
+        esmfold_config = None
 
-    if alphabet is not None:
-        mask_token_idx = alphabet.mask_idx
+    vocab_list = tuple(alphabet.all_toks)
+
+    if is_folding_model:
+        original_folding_model = esm
+        original_esm_model = esm.esm
     else:
-        breakpoint()
-        print()
+        original_folding_model = None
+        original_esm_model = esm
+
     config = EsmConfig(
         vocab_size=original_esm_model.embed_tokens.num_embeddings,
         mask_token_id=alphabet.mask_idx,
@@ -115,14 +141,18 @@ def convert_esm_checkpoint_to_pytorch(
         layer_norm_eps=1e-5,  # PyTorch default used in fairseq
         attention_probs_dropout_prob=0.0,
         hidden_dropout_prob=0.0,
-        pad_token_id=esm.padding_idx,
+        pad_token_id=alphabet.padding_idx,
         emb_layer_norm_before=emb_layer_norm_before,
         token_dropout=token_dropout,
         position_embedding_type=position_embedding_type,
+        is_folding_model=is_folding_model,
+        esmfold_config=esmfold_config,
+        vocab_list=vocab_list
     )
     if classification_head:
         config.num_labels = esm.classification_heads["mnli"].out_proj.weight.shape[0]
-    print("Our BERT config:", config)
+    print("Our ESM config:", config)
+
     if model.startswith("esmfold"):
         model = EsmForProteinFolding(config)
     elif classification_head:
@@ -200,7 +230,12 @@ def convert_esm_checkpoint_to_pytorch(
         bert_output.dense.bias = esm_layer.fc2.bias
         # end of layer
 
-    if classification_head:
+    if is_folding_model:
+        breakpoint()  # Can I just copy state dicts or something from here?
+        model.esm_s_combine.weight = esm.esm_s_combine.weight
+
+
+    elif classification_head:
         model.classifier.dense.weight = esm.esm.classification_heads["mnli"].dense.weight
         model.classifier.dense.bias = esm.classification_heads["mnli"].dense.bias
         model.classifier.out_proj.weight = esm.classification_heads["mnli"].out_proj.weight

@@ -16,8 +16,9 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import Optional
+import copy
 
 
 logger = logging.get_logger(__name__)
@@ -123,11 +124,10 @@ class EsmConfig(PretrainedConfig):
         token_dropout=False,
         is_folding_model=False,
         esmfold_config=None,
-        structure_config=None,
         vocab_list=None,
         **kwargs
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(pad_token_id=pad_token_id, mask_token_id=mask_token_id, **kwargs)
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -145,8 +145,6 @@ class EsmConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.emb_layer_norm_before = emb_layer_norm_before
         self.token_dropout = token_dropout
-        self.mask_token_id = mask_token_id
-        self.pad_token_id = pad_token_id
         self.is_folding_model = is_folding_model
         if is_folding_model:
             if esmfold_config is None:
@@ -155,32 +153,32 @@ class EsmConfig(PretrainedConfig):
             elif isinstance(esmfold_config, dict):
                 esmfold_config = EsmFoldConfig(**esmfold_config)
             self.esmfold_config = esmfold_config
-
-            if structure_config is None:
-                logger.info("No structure_config supplied for folding model, using default values.")
-                structure_config = StructureConfig()
-            elif isinstance(structure_config, dict):
-                structure_config = StructureConfig(**structure_config)
-            self.structure_config = structure_config
-
             if vocab_list is None:
                 logger.warning("No vocab_list supplied for folding model, assuming the ESM-2 vocabulary!")
-                self.vocab_list = ('<cls>', '<pad>', '<eos>', '<unk>', 'L', 'A', 'G', 'V', 'S', 'E', 'R', 'T', 'I', 'D',
-                                   'P', 'K', 'Q', 'N', 'F', 'Y', 'M', 'H', 'W', 'C', 'X', 'B', 'U', 'Z', 'O', '.', '-',
-                                   '<null_1>', '<mask>')
+                self.vocab_list = get_default_vocab_list()
             else:
                 self.vocab_list = vocab_list
         else:
             self.esmfold_config = None
-            self.structure_config = None
             self.vocab_list = None
-        if self.esmfold_config is not None and self.esmfold_config.use_esm_attn_map:
+        if self.esmfold_config is not None and getattr(self.esmfold_config, "use_esm_attn_map", False):
             raise ValueError("The HuggingFace port of ESMFold does not support use_esm_attn_map at this time!")
+
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+
+        Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+        if isinstance(self.esmfold_config, EsmFoldConfig):
+            output["esmfold_config"] = self.esmfold_config.to_dict()
+        return output
 
 
 @dataclass
 class EsmFoldConfig:
-    _name: str = "ESMFoldConfig"
     esm_type: str = None
     fp16_esm: bool = True
     use_esm_attn_map: bool = False
@@ -192,22 +190,60 @@ class EsmFoldConfig:
     bypass_lm: bool = False
 
     lddt_head_hid_dim: int = 128
+    trunk = None
 
-    trunk_num_blocks: int = 48
-    trunk_sequence_state_dim: int = 1024
-    trunk_pairwise_state_dim: int = 128
-    trunk_sequence_head_width: int = 32
-    trunk_pairwise_head_width: int = 32
-    trunk_position_bins: int = 32
-    trunk_dropout: float = 0
-    trunk_layer_drop: float = 0
-    trunk_cpu_grad_checkpoint: bool = False
-    trunk_max_recycles: int = 4
-    trunk_chunk_size: Optional[int] = 128
+    def __post_init__(self):
+        if self.trunk is None:
+            self.trunk = TrunkConfig()
+        elif isinstance(self.trunk, dict):
+            self.trunk = TrunkConfig(**self.trunk)
+
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+
+        Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = asdict(self)
+        output["trunk"] = self.trunk.to_dict()
+        return output
+    
 
 @dataclass
-class StructureConfig:
-    # This is passed to OpenFold, so we can't really fold this into one of our config objects
+class TrunkConfig:
+    num_blocks: int = 48
+    sequence_state_dim: int = 1024
+    pairwise_state_dim: int = 128
+    sequence_head_width: int = 32
+    pairwise_head_width: int = 32
+    position_bins: int = 32
+    dropout: float = 0
+    layer_drop: float = 0
+    cpu_grad_checkpoint: bool = False
+    max_recycles: int = 4
+    chunk_size: Optional[int] = 128
+    structure_module = None
+
+    def __post_init__(self):
+        if self.structure_module is None:
+            self.structure_module = StructureModuleConfig()
+        elif isinstance(self.structure_module, dict):
+            self.structure_module = StructureModuleConfig(**self.structure_module)
+
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+
+        Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = asdict(self)
+        output["structure_module"] = self.structure_module.to_dict()
+        return output
+
+@dataclass
+class StructureModuleConfig:
     c_s: int = 384
     c_z: int = 128
     c_ipa: int = 16
@@ -224,5 +260,10 @@ class StructureConfig:
     epsilon: float = 1e-8
     inf: float = 1e5
 
+    def to_dict(self):
+        return asdict(self)
 
-
+def get_default_vocab_list():
+    return ('<cls>', '<pad>', '<eos>', '<unk>', 'L', 'A', 'G', 'V', 'S', 'E', 'R', 'T', 'I', 'D',
+     'P', 'K', 'Q', 'N', 'F', 'Y', 'M', 'H', 'W', 'C', 'X', 'B', 'U', 'Z', 'O', '.', '-',
+     '<null_1>', '<mask>')
