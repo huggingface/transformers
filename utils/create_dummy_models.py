@@ -501,28 +501,37 @@ def upload_models(output_dir, organization):
         arch_name = ckpt_dir.split(os.path.sep)[-1]
         repo_name = f"tiny-random-{arch_name}"
 
-        repo_url = create_repo(repo_id=repo_name, organization=organization, exist_ok=True, repo_type="model")
+        repo_exist = False
+        try:
+            create_repo(repo_id=repo_name, organization=organization, exist_ok=False, repo_type="model")
+        except Exception as e:
+            if "You already created" in str(e):
+                repo_exist = True
+                create_repo(repo_id=repo_name, organization=organization, exist_ok=True, repo_type="model")
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            repo = Repository(local_dir=tmpdir, clone_from=f"{organization}/{repo_name}")
-            repo.git_pull()
-            shutil.copytree(ckpt_dir, tmpdir, dirs_exist_ok=True)
+            try:
+                repo = Repository(local_dir=tmpdir, clone_from=f"{organization}/{repo_name}")
+                repo.git_pull()
+                shutil.copytree(ckpt_dir, tmpdir, dirs_exist_ok=True)
 
-            push = False
-            if push:
-                repo.git_add(auto_lfs_track=True)
-                repo.git_commit(f"Upload tiny models for {arch_name}")
-                repo.git_push(blocking=True)  # this prints a progress bar with the upload
-                logger.warning(f"Tiny models {arch_name} pushed to {organization}/{repo_name}")
-            else:
-                hub_pr_url = upload_folder(
-                    folder_path=ckpt_dir,
-                    repo_id=f"{organization}/{repo_name}",
-                    repo_type="model", commit_message=f"Update tiny models for {arch_name}",
-                    commit_description=f"Upload tiny models for {arch_name}",
-                    create_pr=True,
-                )
-                logger.warning(f"PR open in {hub_pr_url}")
+                push = not repo_exist
+                if push:
+                    repo.git_add(auto_lfs_track=True)
+                    repo.git_commit(f"Upload tiny models for {arch_name}")
+                    repo.git_push(blocking=True)  # this prints a progress bar with the upload
+                    logger.warning(f"Tiny models {arch_name} pushed to {organization}/{repo_name}")
+                else:
+                    hub_pr_url = upload_folder(
+                        folder_path=ckpt_dir,
+                        repo_id=f"{organization}/{repo_name}",
+                        repo_type="model", commit_message=f"Update tiny models for {arch_name}",
+                        commit_description=f"Upload tiny models for {arch_name}",
+                        create_pr=True,
+                    )
+                    logger.warning(f"PR open in {hub_pr_url}")
+            except Exception as e:
+                logger.error(f"Failed to upload tiny models for {arch_name}: {e}")
 
 
 def build_composite_models(config_class, output_dir, upload=False, organization=None):
