@@ -70,6 +70,7 @@ SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all SwitchTransformers models at https://huggingface.co/models?filter=switch_transformers
 ]
 
+
 # Router loss
 def router_z_loss_func(router_logits: torch.Tensor) -> float:
     r"""
@@ -163,13 +164,13 @@ class SwitchTransformersTop1Router(nn.Module):
 
     Parameters:
         num_selected_experts (`int`):
-            Maximum number of experts to which each token is routed. Tokens may be routed to fewer experts if particular
-            experts are oversubscribed / reach capacity.
+            Maximum number of experts to which each token is routed. Tokens may be routed to fewer experts if
+            particular experts are oversubscribed / reach capacity.
         batch_prioritized_routing (`bool`):
             Whether or not to use Batch Prioritized Routing (BPR), originally introduced in V-MoE
-            (https://arxiv.org/abs/2106.05974). With BPR, we prioritize routing those top-k tokens with the highest router
-            probability, rather than simply using each tokens left-to-right ordering in the batch. This prioritization is
-            important because the experts have limited capacity.
+            (https://arxiv.org/abs/2106.05974). With BPR, we prioritize routing those top-k tokens with the highest
+            router probability, rather than simply using each tokens left-to-right ordering in the batch. This
+            prioritization is important because the experts have limited capacity.
     """
 
     def __init__(self, config, **kwargs):
@@ -1228,7 +1229,7 @@ SWITCH_TRANSFORMERS_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. SWITCH_TRANSFORMERS is a model with relative position
             embeddings so you should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`SwitchTransformersTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1245,7 +1246,7 @@ SWITCH_TRANSFORMERS_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`SwitchTransformersTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -1326,7 +1327,7 @@ SWITCH_TRANSFORMERS_ENCODER_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. SWITCH_TRANSFORMERS is a model with relative position
             embeddings so you should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`SwitchTransformersTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
             To know more on how to prepare `input_ids` for pretraining take a look a [SWITCH_TRANSFORMERS
@@ -1450,9 +1451,9 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import SwitchTransformersTokenizer, SwitchTransformersModel
+        >>> from transformers import T5Tokenizer, SwitchTransformersModel
 
-        >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switch_transformers-base")
+        >>> tokenizer = T5Tokenizer.from_pretrained("ybelkada/switch_transformers-base")
         >>> model = SwitchTransformersModel.from_pretrained("ybelkada/switch_transformers-base")
 
         >>> input_ids = tokenizer(
@@ -1634,9 +1635,9 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         Examples:
 
         ```python
-        >>> from transformers import SwitchTransformersTokenizer, SwitchTransformersForConditionalGeneration
+        >>> from transformers import T5Tokenizer, SwitchTransformersForConditionalGeneration
 
-        >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switch_transformers-base")
+        >>> tokenizer = T5Tokenizer.from_pretrained("ybelkada/switch_transformers-base")
         >>> model = SwitchTransformersForConditionalGeneration.from_pretrained("ybelkada/switch_transformers-base")
 
         >>> # training
@@ -1904,9 +1905,9 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import SwitchTransformersTokenizer, SwitchTransformersEncoderModel
+        >>> from transformers import T5Tokenizer, SwitchTransformersEncoderModel
 
-        >>> tokenizer = SwitchTransformersTokenizer.from_pretrained("ybelkada/switch_transformers-base")
+        >>> tokenizer = T5Tokenizer.from_pretrained("ybelkada/switch_transformers-base")
         >>> model = SwitchTransformersEncoderModel.from_pretrained("ybelkada/switch_transformers-base")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"

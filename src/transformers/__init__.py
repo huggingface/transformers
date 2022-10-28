@@ -544,7 +544,6 @@ else:
     _import_structure["models.rembert"].append("RemBertTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
-    _import_structure["models.switch_transformers"].append("SwitchTransformersTokenizer")
     _import_structure["models.xglm"].append("XGLMTokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizer")
@@ -613,7 +612,6 @@ else:
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
     _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
-    _import_structure["models.switch_transformers"].append("SwitchTransformersTokenizerFast")
     _import_structure["models.t5"].append("T5TokenizerFast")
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
@@ -3554,7 +3552,6 @@ if TYPE_CHECKING:
         from .models.reformer import ReformerTokenizer
         from .models.rembert import RemBertTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
-        from .models.switch_transformers import SwitchTransformersTokenizer
         from .models.t5 import T5Tokenizer
         from .models.xglm import XGLMTokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
@@ -3617,7 +3614,6 @@ if TYPE_CHECKING:
         from .models.roformer import RoFormerTokenizerFast
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
-        from .models.switch_transformers import SwitchTransformersTokenizerFast
         from .models.t5 import T5TokenizerFast
         from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
