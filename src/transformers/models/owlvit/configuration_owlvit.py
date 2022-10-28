@@ -260,9 +260,9 @@ class OwlViTConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_config_dict (`dict`, *optional*):
+        text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`OwlViTTextConfig`].
-        vision_config_dict (`dict`, *optional*):
+        vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`OwlViTVisionConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
             Dimensionality of text and vision projection layers.
@@ -289,11 +289,11 @@ class OwlViTConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("text_config_dict is None. Initializing the OwlViTTextConfig with default values.")
+            logger.info("text_config is None. Initializing the OwlViTTextConfig with default values.")
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config_dict is None. initializing the OwlViTVisionConfig with default values.")
+            logger.info("vision_config is None. initializing the OwlViTVisionConfig with default values.")
 
         self.text_config = OwlViTTextConfig(**text_config)
         self.vision_config = OwlViTVisionConfig(**vision_config)
