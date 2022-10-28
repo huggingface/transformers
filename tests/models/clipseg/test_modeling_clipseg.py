@@ -24,8 +24,8 @@ import numpy as np
 
 import requests
 import transformers
+from transformers import MODEL_MAPPING, CLIPSegConfig, CLIPSegTextConfig, CLIPSegVisionConfig
 from transformers.models.auto import get_values
-from transformers import CLIPSegConfig, CLIPSegTextConfig, CLIPSegVisionConfig, MODEL_MAPPING
 from transformers.testing_utils import (
     is_flax_available,
     is_pt_flax_cross_test,
@@ -363,8 +363,11 @@ class CLIPSegModelTester:
 
     def get_config(self):
         return CLIPSegConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64, reduce_dim=32,
-            extract_layers=[1,2,3],
+            self.text_model_tester.get_config(),
+            self.vision_model_tester.get_config(),
+            projection_dim=64,
+            reduce_dim=32,
+            extract_layers=[1, 2, 3],
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -378,6 +381,23 @@ class CLIPSegModelTester:
             result.logits_per_text.shape, (self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
         )
 
+    def create_and_check_model_for_image_segmentation(self, config, input_ids, attention_maks, pixel_values):
+        model = CLIPSegForImageSegmentation(config).to(torch_device).eval()
+        with torch.no_grad():
+            result = model(input_ids, pixel_values)
+        self.parent.assertEqual(
+            result.predicted_masks.shape,
+            (
+                self.vision_model_tester.batch_size,
+                1,
+                self.vision_model_tester.image_size,
+                self.vision_model_tester.image_size,
+            ),
+        )
+        self.parent.assertEqual(
+            result.conditional_embeddings.shape, (self.text_model_tester.batch_size, config.projection_dim)
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, attention_mask, pixel_values = config_and_inputs
@@ -385,7 +405,6 @@ class CLIPSegModelTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
-            # "return_loss": True,
         }
         return config, inputs_dict
 
@@ -412,6 +431,10 @@ class CLIPSegModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_for_image_segmentation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_for_image_segmentation(*config_and_inputs)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -655,11 +678,11 @@ class CLIPSegModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            for k,v in inputs.items():
-                print(k,v.shape)
+            for k, v in inputs.items():
+                print(k, v.shape)
             loss = model(**inputs).loss
             loss.backward()
-    
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
