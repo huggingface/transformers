@@ -18,7 +18,6 @@
 import copy
 import math
 import warnings
-from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
@@ -75,8 +74,8 @@ def router_z_loss_func(router_logits: torch.Tensor) -> float:
     r"""
     Compute the router z-loss implemented in PyTorch.
 
-    The router z-loss was introduced in [Designing Effective Sparse Expert Models](https://arxiv.org/abs/2202.08906). It
-    encourages router logits to remain small in an effort to improve stability.
+    The router z-loss was introduced in [Designing Effective Sparse Expert Models](https://arxiv.org/abs/2202.08906).
+    It encourages router logits to remain small in an effort to improve stability.
 
     Args:
         router_logits (`float`):
@@ -95,9 +94,9 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
-    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the
-    loss function presented in equations (4) - (6) of the paper.
-    It aims at penalizing cases where the routing between experts is too unbalanced.
+    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
 
     Args:
         router_probs (`torch.Tensor`):
@@ -128,7 +127,6 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
 
     router_prob_per_group_and_expert = torch.mean(router_probs, axis=-2)
     return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
-
 
 
 class SwitchTransformersTop1Router(nn.Module):
@@ -190,9 +188,7 @@ class SwitchTransformersTop1Router(nn.Module):
         router_logits = self.classifier(hidden_states)
 
         # Apply Softmax and cast back to the original `dtype`
-        router_probabilities = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(
-            self.input_dtype
-        )
+        router_probabilities = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(self.input_dtype)
         return router_probabilities, router_logits
 
     def forward(self, hidden_states: torch.Tensor) -> Tuple:
@@ -230,10 +226,10 @@ class SwitchTransformersTop1Router(nn.Module):
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
 
         # Mask tokens outside expert capacity. Sum over the sequence
-        token_priority = torch.cumsum(expert_index, dim =-2)
+        token_priority = torch.cumsum(expert_index, dim=-2)
         # mask if the token routed to to the expert will overflow
-        expert_capacity_mask = (token_priority <= self.expert_capacity)
-        expert_index =  expert_index * expert_capacity_mask
+        expert_capacity_mask = token_priority <= self.expert_capacity
+        expert_index = expert_index * expert_capacity_mask
 
         router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
         return expert_index, router_probs, router_logits
@@ -264,6 +260,7 @@ class SwitchTransformersLayerNorm(nn.Module):
             hidden_states = hidden_states.to(self.weight.dtype)
 
         return self.weight * hidden_states
+
 
 ALL_LAYERNORM_LAYERS.append(SwitchTransformersLayerNorm)
 
