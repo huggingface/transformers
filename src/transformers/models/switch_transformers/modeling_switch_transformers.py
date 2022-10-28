@@ -70,6 +70,7 @@ SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all SwitchTransformers models at https://huggingface.co/models?filter=switch_transformers
 ]
 
+
 # Router loss
 def router_z_loss_func(router_logits: torch.Tensor) -> float:
     r"""
@@ -163,13 +164,13 @@ class SwitchTransformersTop1Router(nn.Module):
 
     Parameters:
         num_selected_experts (`int`):
-            Maximum number of experts to which each token is routed. Tokens may be routed to fewer experts if particular
-            experts are oversubscribed / reach capacity.
+            Maximum number of experts to which each token is routed. Tokens may be routed to fewer experts if
+            particular experts are oversubscribed / reach capacity.
         batch_prioritized_routing (`bool`):
             Whether or not to use Batch Prioritized Routing (BPR), originally introduced in V-MoE
-            (https://arxiv.org/abs/2106.05974). With BPR, we prioritize routing those top-k tokens with the highest router
-            probability, rather than simply using each tokens left-to-right ordering in the batch. This prioritization is
-            important because the experts have limited capacity.
+            (https://arxiv.org/abs/2106.05974). With BPR, we prioritize routing those top-k tokens with the highest
+            router probability, rather than simply using each tokens left-to-right ordering in the batch. This
+            prioritization is important because the experts have limited capacity.
     """
 
     def __init__(self, config, **kwargs):
@@ -780,7 +781,7 @@ class SwitchTransformersBlock(nn.Module):
         past_key_value=None,
         use_cache=False,
         output_attentions=False,
-        output_router_logits=False,
+        output_router_logits=True,
         return_dict=True,
     ):
 
@@ -1022,7 +1023,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        output_router_logits=None,
+        output_router_logits=True,
         return_dict=None,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -1575,6 +1576,9 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
+        self.router_z_loss_coef = config.router_z_loss_coef
+        self.router_aux_loss_coef = config.router_aux_loss_coef
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1620,7 +1624,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        output_router_logits: Optional[bool] = None,
+        output_router_logits: Optional[bool] = True,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqMoEOutput]:
         r"""
@@ -1741,7 +1745,11 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
                 decoder_aux_loss = load_balancing_loss_func(decoder_router_logits, decoder_expert_indexes)
 
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
-            # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
+
+            if output_router_logits and labels is not None:
+                z_loss = self.router_z_loss_coef * (encoder_z_loss + decoder_z_loss)
+                aux_loss = self.router_aux_loss_coef * (encoder_aux_loss + decoder_aux_loss)
+                loss = loss + z_loss + aux_loss
 
         if not return_dict:
             output = (lm_logits,)
@@ -1895,7 +1903,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        output_router_logits: Optional[bool] = None,
+        output_router_logits: Optional[bool] = True,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], MoEModelOutput]:
         r"""
