@@ -490,70 +490,54 @@ def fill_result_with_error(result, error, models_to_create):
                 result[framework][model_arch.__name__] = {"model": None, "checkpoint": None, "error": error}
 
 
-def upload_models(output_dir, organization):
-    """Upload the tiny models.
+def upload_model(model_dir, organization):
+    """Upload the tiny models"""
 
-    The directory `output_dir` contains the checkpoints for all model architectures with a model type. Each model
-    architecture has all its checkpoints in a single subdirectory of `output_dir`.
-    """
+    arch_name = model_dir.split(os.path.sep)[-1]
+    repo_name = f"tiny-random-{arch_name}"
 
-    if organization is None:
-        logger.error("The argument `organization` could not be `None`. No model is uploaded")
-        return
-
-    ckpt_dirs = [x for x in os.listdir(output_dir) if x != "processors" and os.path.isdir(os.path.join(output_dir, x))]
-    for ckpt_dir in ckpt_dirs:
-        ckpt_dir = os.path.join(output_dir, ckpt_dir)
-
-        arch_name = ckpt_dir.split(os.path.sep)[-1]
-        repo_name = f"tiny-random-{arch_name}"
-
-        repo_exist = False
-        error = None
-        try:
-            create_repo(repo_id=repo_name, organization=organization, exist_ok=False, repo_type="model")
-        except Exception as e:
-            error = e
-            if "You already created" in str(e):
-                error = None
-                logger.warning("Remote repository exists and will be cloned.")
-                repo_exist = True
-                try:
-                    create_repo(repo_id=repo_name, organization=organization, exist_ok=True, repo_type="model")
-                except Exception as e:
-                    error = e
-
-        if error:
-            logger.error(error)
-            return
-
-        with tempfile.TemporaryDirectory() as tmpdir:
+    repo_exist = False
+    error = None
+    try:
+        create_repo(repo_id=repo_name, organization=organization, exist_ok=False, repo_type="model")
+    except Exception as e:
+        error = e
+        if "You already created" in str(e):
+            error = None
+            logger.warning("Remote repository exists and will be cloned.")
+            repo_exist = True
             try:
-                repo = Repository(local_dir=tmpdir, clone_from=f"{organization}/{repo_name}")
-                repo.git_pull()
-                shutil.copytree(ckpt_dir, tmpdir, dirs_exist_ok=True)
-
-                push = not repo_exist
-                if push:
-                    repo.git_add(auto_lfs_track=True)
-                    repo.git_commit(f"Upload tiny models for {arch_name}")
-                    repo.git_push(blocking=True)  # this prints a progress bar with the upload
-                    logger.warning(f"Tiny models {arch_name} pushed to {organization}/{repo_name}")
-                else:
-                    hub_pr_url = upload_folder(
-                        folder_path=ckpt_dir,
-                        repo_id=f"{organization}/{repo_name}",
-                        repo_type="model",
-                        commit_message=f"Update tiny models for {arch_name}",
-                        commit_description=f"Upload tiny models for {arch_name}",
-                        create_pr=True,
-                    )
-                    logger.warning(f"PR open in {hub_pr_url}")
+                create_repo(repo_id=repo_name, organization=organization, exist_ok=True, repo_type="model")
             except Exception as e:
-                logger.error(f"Failed to upload tiny models for {arch_name}: {e}")
+                error = e
+    if error:
+        raise ValueError(error)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+
+        repo = Repository(local_dir=tmpdir, clone_from=f"{organization}/{repo_name}")
+        repo.git_pull()
+        shutil.copytree(model_dir, tmpdir, dirs_exist_ok=True)
+
+        push = not repo_exist
+        if push:
+            repo.git_add(auto_lfs_track=True)
+            repo.git_commit(f"Upload tiny models for {arch_name}")
+            repo.git_push(blocking=True)  # this prints a progress bar with the upload
+            logger.warning(f"Tiny models {arch_name} pushed to {organization}/{repo_name}")
+        else:
+            hub_pr_url = upload_folder(
+                folder_path=model_dir,
+                repo_id=f"{organization}/{repo_name}",
+                repo_type="model",
+                commit_message=f"Update tiny models for {arch_name}",
+                commit_description=f"Upload tiny models for {arch_name}",
+                create_pr=True,
+            )
+            logger.warning(f"PR open in {hub_pr_url}")
 
 
-def build_composite_models(config_class, output_dir, upload=False, organization=None):
+def build_composite_models(config_class, output_dir):
 
     import tempfile
 
@@ -690,13 +674,10 @@ def build_composite_models(config_class, output_dir, upload=False, organization=
     if not result["warnings"]:
         del result["warnings"]
 
-    if upload:
-        upload_models(output_dir, organization=organization)
-
     return result
 
 
-def build(config_class, models_to_create, output_dir, upload=False, organization=None):
+def build(config_class, models_to_create, output_dir):
     """Create all models for a certain model type.
 
     Args:
@@ -716,7 +697,7 @@ def build(config_class, models_to_create, output_dir, upload=False, organization
         "speech-encoder-decoder",
         "vision-text-dual-encoder",
     ]:
-        return build_composite_models(config_class, output_dir, upload=upload, organization=organization)
+        return build_composite_models(config_class, output_dir)
 
     result = {k: {} for k in models_to_create}
 
@@ -847,9 +828,6 @@ def build(config_class, models_to_create, output_dir, upload=False, organization
         del result["error"]
     if not result["warnings"]:
         del result["warnings"]
-
-    if upload:
-        upload_models(output_dir, organization=organization)
 
     return result
 
@@ -983,9 +961,7 @@ if __name__ == "__main__":
         result = build(
             c,
             models_to_create,
-            output_dir=os.path.join(args.output_path, c.model_type),
-            upload=args.upload,
-            organization=args.organization,
+            output_dir=os.path.join(args.output_path, c.model_type)
         )
         results[c.__name__] = result
         print("=" * 40)
@@ -1005,3 +981,25 @@ if __name__ == "__main__":
 
     with open("simple_failed_report.txt", "w") as fp:
         fp.write(failed_report)
+
+    if args.upload:
+        if args.organization is None:
+            raise ValueError("The argument `organization` could not be `None`. No model is uploaded")
+
+        to_upload = []
+        for model_type in os.listdir(args.output_dir):
+            for arch in os.listdir(os.path.join(args.output_dir, model_type)):
+                to_upload.append(os.path.join(args.output_dir, model_type, arch))
+
+        upload_results = {}
+        if len(to_upload) > 0:
+            for model_dir in to_upload:
+                try:
+                    upload_model(model_dir, args.organization)
+                except Exception as e:
+                    error = f"Failed to upload {model_dir}: {e}"
+                    logger.error(error)
+                    upload_results[model_dir] = error
+
+        with open("failed_uploads.json", "w") as fp:
+            json.dump(upload_results, fp, indent=4)
