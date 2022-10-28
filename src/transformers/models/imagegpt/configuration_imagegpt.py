@@ -15,15 +15,15 @@
 """ OpenAI ImageGPT configuration"""
 
 from collections import OrderedDict
-from typing import Any, Mapping, Optional
-
-from transformers.feature_extraction_utils import FeatureExtractionMixin
-from transformers.utils.generic import TensorType
+from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 
+
+if TYPE_CHECKING:
+    from ... import FeatureExtractionMixin, TensorType
 
 logger = logging.get_logger(__name__)
 
@@ -164,7 +164,7 @@ class ImageGPTOnnxConfig(OnnxConfig):
         batch_size: int = 1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
+        framework: Optional["TensorType"] = None,
         num_channels: int = 3,
         image_width: int = 32,
         image_height: int = 32,
