@@ -1201,12 +1201,10 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         self.layers = nn.ModuleList([CLIPSegDecoderLayer(decoder_config) for _ in range(len(config.extract_layers))])
 
     def forward(self, hidden_states, conditional_embeddings):
-        # TODO probably just not include the first hidden states
-        activations = hidden_states[1:]
-        _activations = activations[::-1]
+        activations = hidden_states[::-1]
 
         a = None
-        for i, (activation, layer, reduce) in enumerate(zip(_activations, self.layers, self.reduces)):
+        for i, (activation, layer, reduce) in enumerate(zip(activations, self.layers, self.reduces)):
             if a is not None:
                 a = reduce(activation) + a
             else:
@@ -1237,7 +1235,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         super().__init__(config)
 
         self.config = config
-        
+
         # TODO perhaps use clip here?
         self.clipseg = CLIPSegModel(config)
         self.extract_layers = config.extract_layers
@@ -1302,9 +1300,9 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
             )
             pooled_output = self.clipseg.visual_projection(vision_outputs[1])
 
-            # we add +1 here as the hidden states also include the initial embeddings
             hidden_states = vision_outputs.hidden_states if return_dict else vision_outputs[2]
-            activations = [hidden_states[i + 1] for i in [0] + self.extract_layers]
+            # we add +1 here as the hidden states also include the initial embeddings
+            activations = [hidden_states[i + 1] for i in self.extract_layers]
 
         # step 2: compute conditional embeddings, either from text, images or an own provided embedding
         if conditional_embeddings is None:
