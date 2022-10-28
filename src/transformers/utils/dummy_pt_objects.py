@@ -4886,14 +4886,14 @@ class SwitchTransformersPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class SwitchTransformersTop1Router(metaclass=DummyObject):
+class SwitchTransformersSparseMLP(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class SwitchTransformersSparseML(metaclass=DummyObject):
+class SwitchTransformersTop1Router(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
