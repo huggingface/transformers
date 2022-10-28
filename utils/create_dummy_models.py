@@ -809,6 +809,7 @@ def build_failed_report(results, include_warning=True):
 def build_simple_report(results):
 
     text = ""
+    failed_text = ""
     for config_name in results:
         for framework in FRAMEWORKS:
             if framework not in results[config_name]:
@@ -816,11 +817,12 @@ def build_simple_report(results):
             for arch_name in results[config_name][framework]:
                 if "error" in results[config_name][framework][arch_name]:
                     result = results[config_name][framework][arch_name]["error"]
+                    failed_text += f"{arch_name}: {result}\n"
                 else:
                     result = "OK"
                 text += f"{arch_name}: {result}\n"
 
-    return text
+    return text, failed_text
 
 
 if __name__ == "__main__":
@@ -905,6 +907,9 @@ if __name__ == "__main__":
         json.dump(failed_results, fp, indent=4)
 
     # Build the failure report
-    simple_report = build_simple_report(results)
+    simple_report, failed_report = build_simple_report(results)
     with open("simple_report.txt", "w") as fp:
         fp.write(simple_report)
+
+    with open("simple_failed_report.txt", "w") as fp:
+        fp.write(failed_report)
