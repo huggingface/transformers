@@ -68,7 +68,7 @@ class SwitchTransformersModelTester:
         decoder_layers=None,
         sparse_step=1,
         num_sparse_decoder_layers=2,
-        num_sparse_encoder_layers=0,
+        num_sparse_encoder_layers=2,
     ):
 
         self.parent = parent
@@ -249,7 +249,7 @@ class SwitchTransformersModelTester:
             decoder_attention_mask=decoder_attention_mask,
             labels=lm_labels,
         )
-        self.parent.assertEqual(len(outputs), 4)
+        self.parent.assertEqual(len(outputs), 10)
         self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
         self.parent.assertEqual(outputs["loss"].size(), ())
 
@@ -264,9 +264,9 @@ class SwitchTransformersModelTester:
     ):
         model = SwitchTransformersModel(config=config).get_decoder().to(torch_device).eval()
         # first forward pass
-        outputs = model(input_ids, use_cache=True)
-        outputs_use_cache_conf = model(input_ids)
-        outputs_no_past = model(input_ids, use_cache=False)
+        outputs = model(input_ids, use_cache=True, output_router_logits=False)
+        outputs_use_cache_conf = model(input_ids, output_router_logits=False)
+        outputs_no_past = model(input_ids, use_cache=False, output_router_logits=False)
 
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
@@ -279,8 +279,8 @@ class SwitchTransformersModelTester:
         # append to next input_ids and
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
-        output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_no_past = model(next_input_ids, output_router_logits=False)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values,  output_router_logits=False)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -310,7 +310,7 @@ class SwitchTransformersModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        output, past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True).to_tuple()
+        output, past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True, output_router_logits=False).to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -328,8 +328,8 @@ class SwitchTransformersModelTester:
         )
 
         # get two different outputs
-        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask)[
+        output_from_no_past = model(next_input_ids, attention_mask=attn_mask, output_router_logits=False)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask, output_router_logits=False)[
             "last_hidden_state"
         ]
 
@@ -352,7 +352,7 @@ class SwitchTransformersModelTester:
     ):
         model = SwitchTransformersModel(config=config).get_decoder().to(torch_device).eval()
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
+        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True, output_router_logits=False)
 
         output, past_key_values = outputs.to_tuple()
 
@@ -364,8 +364,8 @@ class SwitchTransformersModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([attention_mask, next_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask, output_router_logits=False)["last_hidden_state"]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values, output_router_logits=False)[
             "last_hidden_state"
         ]
 
@@ -517,6 +517,7 @@ class SwitchTransformersModelTester:
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
             "use_cache": False,
+            "output_router_logits": False,
         }
         return config, inputs_dict
 
@@ -852,6 +853,7 @@ class TestAsymmetricSwitchTransformers(unittest.TestCase):
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             labels=lm_labels,
+            output_router_logits=False,
         )
         # outputs = model(*inputs)
         assert len(outputs) == 4
