@@ -493,7 +493,8 @@ def upload_models(output_dir, organization):
     """
 
     if organization is None:
-        raise ValueError("The argument `organization` could not be `None`.")
+        logger.error("The argument `organization` could not be `None`. No model is uploaded")
+        return
 
     ckpt_dirs = [x for x in os.listdir(output_dir) if x != "processors" and os.path.isdir(os.path.join(output_dir, x))]
     for ckpt_dir in ckpt_dirs:
@@ -503,12 +504,23 @@ def upload_models(output_dir, organization):
         repo_name = f"tiny-random-{arch_name}"
 
         repo_exist = False
+        error = None
         try:
             create_repo(repo_id=repo_name, organization=organization, exist_ok=False, repo_type="model")
         except Exception as e:
+            error = e
             if "You already created" in str(e):
+                error = None
+                logger.warning("Remote repository exists and will be cloned.")
                 repo_exist = True
-                create_repo(repo_id=repo_name, organization=organization, exist_ok=True, repo_type="model")
+                try:
+                    create_repo(repo_id=repo_name, organization=organization, exist_ok=True, repo_type="model")
+                except Exception as e:
+                    error = e
+
+        if error:
+            logger.error(error)
+            return
 
         with tempfile.TemporaryDirectory() as tmpdir:
             try:
