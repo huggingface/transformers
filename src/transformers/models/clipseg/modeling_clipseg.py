@@ -113,6 +113,30 @@ class CLIPSegOutput(ModelOutput):
         )
 
 
+@dataclass
+class CLIPSegImageSegmentationOutput(ModelOutput):
+    """
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+            Contrastive loss for image-text similarity.
+        ...
+        vision_model_output (`BaseModelOutputWithPooling`):
+            The output of the [`CLIPSegVisionModel`].
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    predicted_masks: torch.FloatTensor = None
+    conditional_embeddings: torch.FloatTensor = None
+    pooled_output: torch.FloatTensor = None
+    vision_model_output: BaseModelOutputWithPooling = None
+
+    def to_tuple(self) -> Tuple[Any]:
+        return tuple(
+            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
+            for k in self.keys()
+        )
+
+
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->CLIPSeg
 class CLIPSegVisionEmbeddings(nn.Module):
     def __init__(self, config: CLIPSegVisionConfig):
@@ -1211,12 +1235,7 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
                 a = self.film_mul(conditional_embeddings) * a.permute(1, 0, 2) + self.film_add(conditional_embeddings)
                 a = a.permute(1, 0, 2)
 
-            print(f"Activation before layer {i}:", a[0, :3, :3])
             a = layer(a, attention_mask=None, causal_attention_mask=None, print_values=False)[0]
-            print(f"Activation after layer {i}:", a[0, :3, :3])
-
-        # seq, batch, feat
-        # now it should become batch, feat, seq
 
         a = a[:, 1:, :].permute(0, 2, 1)  # remove cls token and reshape to [batch_size, reduce_dim, seq_len]
 
@@ -1245,40 +1264,41 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_conditional_embeddings(self, input_ids, conditional_pixel_values, batch_size):
-        # conditional can be either in the form of text, an image or an existing embedding tensor
-        # so either input_ids, pixel_values or existing embeddings
-
-        # # compute conditional from a single string
-        # if conditional is not None and type(conditional) == str:
-        #     cond = self.compute_conditional(conditional)
-        #     cond = cond.repeat(batch_size, 1)
-
-        # compute conditional from text
+    def get_conditional_embeddings(
+        self,
+        input_ids: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        conditional_pixel_values: Optional[torch.Tensor] = None,
+        batch_size: Optional[int] = None,
+    ):
+        # compute conditional embeddings from texts
         if input_ids is not None:
             if len(input_ids) != batch_size:
                 raise ValueError("Make sure to pass as many texts as there are query images")
-            conditional_embeddings = self.clipseg.get_text_features(input_ids)
-        # compute conditional from image
+            conditional_embeddings = self.clipseg.get_text_features(
+                input_ids, attention_mask=attention_mask, position_ids=position_ids
+            )
+        # compute conditional embeddings from images
         elif conditional_pixel_values is not None:
             with torch.no_grad():
                 conditional_embeddings = self.clipseg.get_image_features(conditional_pixel_values)
-        # TODO support the use of conditional directly
-        # elif conditional is not None and type(conditional) == torch.Tensor and conditional.ndim == 2:
-        #     cond = conditional
         else:
-            raise ValueError("invalid conditional")
+            raise ValueError(
+                "Invalid conditional, should be either provided as `input_ids` or `conditional_pixel_values`"
+            )
 
         return conditional_embeddings
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         conditional_pixel_values: Optional[torch.FloatTensor] = None,
+        conditional_embeddings: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        return_loss: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1299,23 +1319,40 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
             # we add +1 here as the hidden states also include the initial embeddings
             activations = [vision_outputs.hidden_states[i + 1] for i in [0] + self.extract_layers]
 
-        # step 2: compute conditional vector, either from text or images
-        conditional_embeddings = self.get_conditional_embeddings(
-            input_ids, conditional_pixel_values, batch_size=pixel_values.shape[0]
-        )
+        # step 2: compute conditional embeddings, either from text, images or an own provided embedding
+        if conditional_embeddings is None:
+            conditional_embeddings = self.get_conditional_embeddings(
+                input_ids,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                conditional_pixel_values=conditional_pixel_values,
+                batch_size=pixel_values.shape[0],
+            )
+        else:
+            if (not isinstance(conditional_embeddings, torch.Tensor)) or (conditional_embeddings.ndim != 2):
+                raise ValueError("Make sure to pass conditional embeddings as a two-dimensional tensor")
 
         # TODO remove these assertions
         expected_pooled_output = torch.tensor([0.2551, -0.8039, -0.1766])
         assert torch.allclose(pooled_output[0, :3], expected_pooled_output, atol=1e-3)
-        expected_cond = torch.tensor([0.0548, 0.0067, -0.1543])
-        assert torch.allclose(conditional_embeddings[0, :3], expected_cond, atol=1e-3)
 
-        decoder_outputs = self.decoder(activations, conditional_embeddings)
+        predicted_masks = self.decoder(activations, conditional_embeddings)
 
-        # TODO remove these assertions
-        expected_decoder_outputs = torch.tensor(
-            [[-4.2436, -4.2398, -4.2027], [-4.1997, -4.1958, -4.1688], [-4.1144, -4.0943, -4.0736]]
+        if output_hidden_states:
+            raise NotImplementedError("To do")
+
+        loss = None
+        if labels is not None:
+            loss = loss_fn(predicted_masks, labels)
+
+        if not return_dict:
+            output = (predicted_masks, conditional_embeddings, pooled_output) + vision_outputs
+            return ((loss,) + output) if loss is not None else output
+
+        return CLIPSegImageSegmentationOutput(
+            loss=loss,
+            predicted_masks=predicted_masks,
+            conditional_embeddings=conditional_embeddings,
+            pooled_output=pooled_output,
+            vision_model_output=vision_outputs,
         )
-        assert torch.allclose(decoder_outputs[0, 0, :3, :3], expected_decoder_outputs, atol=1e-3)
-
-        return vision_outputs

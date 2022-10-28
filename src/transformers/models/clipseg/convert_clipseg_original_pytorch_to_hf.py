@@ -149,10 +149,6 @@ def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     print("Missing keys:", missing_keys)
     print("Unexpected keys:", unexpected_keys)
 
-    print("QUERIES of first decoder block")
-    print(model.decoder.layers[0].self_attn.q_proj.weight.shape)
-    print(model.decoder.layers[0].self_attn.q_proj.weight[:3, :3])
-
     # TODO create feature extractor
     # feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/{}".format(model_name.replace("_", "-")))
     image = Image.open("/Users/nielsrogge/Documents/cats.jpg").convert("RGB")
@@ -163,13 +159,17 @@ def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     # input_ids = CLIPTokenizer(prompts, padding="max_length", return_tensors="pt")
     input_ids = torch.tensor([[1, 2] + [9] * 75]).repeat(4, 1)
 
-    print("Shape of pixel values:", pixel_values.shape)
-    print("Shape of input ids:", input_ids.shape)
+    with torch.no_grad():
+        outputs = model(input_ids, pixel_values)
 
-    outputs = model(input_ids, pixel_values)
-    print(outputs.keys())
-
-    # assert torch.allclose(outputs, expected_slice, atol=1e-3)
+    # verify values
+    expected_masks_slice = torch.tensor(
+        [[-4.2436, -4.2398, -4.2027], [-4.1997, -4.1958, -4.1688], [-4.1144, -4.0943, -4.0736]]
+    )
+    assert torch.allclose(outputs.predicted_masks[0, 0, :3, :3], expected_masks_slice, atol=1e-3)
+    expected_cond = torch.tensor([0.0548, 0.0067, -0.1543])
+    assert torch.allclose(outputs.conditional_embeddings[0, :3], expected_cond, atol=1e-3)
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model to {pytorch_dump_folder_path}")
