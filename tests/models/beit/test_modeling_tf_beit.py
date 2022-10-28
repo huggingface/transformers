@@ -506,7 +506,7 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
             [[-3.2437, 0.5072, -13.9174], [-3.2456, 0.4948, -13.9401], [-3.2033, 0.5121, -13.8550]]
         )
 
-        tf.debugging.assert_near(logits[:3, :3], expected_slice, atol=1e-4))
+        tf.debugging.assert_near(logits[:3, :3], expected_slice, atol=1e-4)
     
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
