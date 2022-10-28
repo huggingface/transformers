@@ -905,16 +905,10 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
-            module.router.classifier.weight.data.normal_(
-                mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5)
-            )
+            module.router.classifier.weight.data.normal_(mean=0.0, std=factor * 1)
             for idx in range(self.config.num_experts):
-                module.experts[f"expert_{idx}"].wi.weight.data.normal_(
-                    mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5)
-                )
-                module.experts[f"expert_{idx}"].wo.weight.data.normal_(
-                    mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5)
-                )
+                module.experts[f"expert_{idx}"].wi.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+                module.experts[f"expert_{idx}"].wo.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (SwitchTransformersAttention, SwitchTransformersStack)):
