@@ -27,7 +27,7 @@ from pathlib import Path
 from datasets import load_dataset
 
 from check_config_docstrings import get_checkpoint_from_config_class
-from huggingface_hub import Repository, create_commit, create_repo
+from huggingface_hub import Repository, create_commit, create_repo, upload_folder
 from transformers import (
     CONFIG_MAPPING,
     FEATURE_EXTRACTOR_MAPPING,
@@ -512,15 +512,22 @@ def upload_models(output_dir):
                 repo.git_push(blocking=True)  # this prints a progress bar with the upload
                 logger.warning(f"Tiny models {arch_name} pushed to {organization}/{repo_name}")
             else:
-                hub_pr_url = create_commit(
+                hub_pr_url = upload_folder(
+                    folder_path=ckpt_dir,
                     repo_id=f"{organization}/{repo_name}",
-                    # TODO: Add
-                    operations=[],
-                    commit_message=f"Update tiny models for {arch_name}",
+                    repo_type="model", commit_message=f"Update tiny models for {arch_name}",
                     commit_description=f"Upload tiny models for {arch_name}",
-                    repo_type="model",
                     create_pr=True,
                 )
+                # hub_pr_url = create_commit(
+                #     repo_id=f"{organization}/{repo_name}",
+                #     # TODO: Add
+                #     operations=[],
+                #     commit_message=f"Update tiny models for {arch_name}",
+                #     commit_description=f"Upload tiny models for {arch_name}",
+                #     repo_type="model",
+                #     create_pr=True,
+                # )
                 logger.warning(f"PR open in {hub_pr_url}")
 
 
