@@ -285,7 +285,7 @@ class OwlViTConfig(PretrainedConfig):
         return_dict=True,
         **kwargs
     ):
-        super().__init__(text_config=text_config, vision_config=vision_config, **kwargs)
+        super().__init__(**kwargs)
 
         if text_config is None:
             text_config = {}
