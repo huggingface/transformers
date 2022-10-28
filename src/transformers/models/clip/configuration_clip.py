@@ -304,6 +304,14 @@ class CLIPConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
+        # If `_config_dict` exist, we use them for the backward compatibility.
+        text_config_dict = kwargs.pop("text_config_dict", None)
+        vision_config_dict = kwargs.pop("vision_config_dict", None)
+        if text_config_dict is not None:
+            text_config = text_config_dict
+        if vision_config_dict is not None:
+            vision_config = vision_config_dict
+
         if text_config is None:
             text_config = {}
             logger.info("text_config is None. Initializing the CLIPTextConfig with default values.")
@@ -312,7 +320,7 @@ class CLIPConfig(PretrainedConfig):
             vision_config = {}
             logger.info("vision_config is None. initializing the CLIPVisionConfig with default values.")
 
-        self.text_config = CLIPTextConfig(**vision_config)
+        self.text_config = CLIPTextConfig(**text_config)
         self.vision_config = CLIPVisionConfig(**vision_config)
 
         self.projection_dim = projection_dim
