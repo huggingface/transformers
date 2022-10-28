@@ -151,7 +151,7 @@ def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path):
 
     print("QUERIES of first decoder block")
     print(model.decoder.layers[0].self_attn.q_proj.weight.shape)
-    print(model.decoder.layers[0].self_attn.q_proj.weight[:3,:3])
+    print(model.decoder.layers[0].self_attn.q_proj.weight[:3, :3])
 
     # TODO create feature extractor
     # feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/{}".format(model_name.replace("_", "-")))

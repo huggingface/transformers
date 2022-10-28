@@ -214,8 +214,8 @@ class CLIPSegAttention(nn.Module):
 
         if print_values:
             print("Shape of initial queries:", hidden_states.shape)
-            print("First values of initial queries:", hidden_states[0,:3,:3])
-        
+            print("First values of initial queries:", hidden_states[0, :3, :3])
+
         bsz, tgt_len, embed_dim = hidden_states.size()
 
         # get query proj
@@ -230,8 +230,8 @@ class CLIPSegAttention(nn.Module):
 
         if print_values:
             print("Shape of q:", query_states.shape)
-            print("First values of q:", query_states[:3,0,:3])
-            print("First values of k:", key_states[:3,0,:3])
+            print("First values of q:", query_states[:3, 0, :3])
+            print("First values of k:", key_states[:3, 0, :3])
 
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
@@ -1106,8 +1106,8 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
 
 class CLIPSegDecoderLayer(nn.Module):
     """
-    CLIPSeg decoder layer, which is identical to `CLIPSegEncoderLayer`, except that normalization is applied
-    after self-attention/MLP, rather than before.
+    CLIPSeg decoder layer, which is identical to `CLIPSegEncoderLayer`, except that normalization is applied after
+    self-attention/MLP, rather than before.
     """
 
     # Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer.__init__
@@ -1140,7 +1140,7 @@ class CLIPSegDecoderLayer(nn.Module):
         residual = hidden_states
 
         if print_values:
-            print("Hidden states before self-attention:", hidden_states[0,:3,:3])
+            print("Hidden states before self-attention:", hidden_states[0, :3, :3])
 
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -1151,23 +1151,23 @@ class CLIPSegDecoderLayer(nn.Module):
         )
 
         if print_values:
-            print("Hidden states after self-attention:", hidden_states[0,:3,:3])
+            print("Hidden states after self-attention:", hidden_states[0, :3, :3])
 
         hidden_states = residual + hidden_states
         hidden_states = self.layer_norm1(hidden_states)
 
         if print_values:
-            print("Hidden states after first norm + residual:", hidden_states[0,:3,:3])
+            print("Hidden states after first norm + residual:", hidden_states[0, :3, :3])
 
         residual = hidden_states
-        
+
         if print_values:
-            print("Hidden states before MLP:", hidden_states[0,:3,:3])
-        
+            print("Hidden states before MLP:", hidden_states[0, :3, :3])
+
         hidden_states = self.mlp(hidden_states)
 
         if print_values:
-            print("Hidden states after MLP:", hidden_states[0,:3,:3])
+            print("Hidden states after MLP:", hidden_states[0, :3, :3])
 
         hidden_states = residual + hidden_states
 
@@ -1225,13 +1225,14 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
                 a = self.film_mul(conditional_embeddings) * a.permute(1, 0, 2) + self.film_add(conditional_embeddings)
                 a = a.permute(1, 0, 2)
 
-            if i == 0:
-                print(f"Activation before layer {i}:", a[0,:3,:3])
+            print(f"Activation before layer {i}:", a[0, :3, :3])
             a = layer(a, attention_mask=None, causal_attention_mask=None, print_values=False)[0]
-            if i == 0:
-                print(f"Activation after layer {i}:", a[0,:3,:3])
-        
-        a = a[1:].permute(1, 2, 0)  # remove cls token and reshape to [batch_size, features, tokens]
+            print(f"Activation after layer {i}:", a[0, :3, :3])
+
+        # seq, batch, feat
+        # now it should become batch, feat, seq
+
+        a = a[:, 1:, :].permute(0, 2, 1)  # remove cls token and reshape to [batch_size, reduce_dim, seq_len]
 
         size = int(math.sqrt(a.shape[2]))
 
@@ -1327,5 +1328,11 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         assert torch.allclose(conditional_embeddings[0, :3], expected_cond, atol=1e-3)
 
         decoder_outputs = self.decoder(activations, conditional_embeddings)
+
+        # TODO remove these assertions
+        expected_decoder_outputs = torch.tensor(
+            [[-4.2436, -4.2398, -4.2027], [-4.1997, -4.1958, -4.1688], [-4.1144, -4.0943, -4.0736]]
+        )
+        assert torch.allclose(decoder_outputs[0, 0, :3, :3], expected_decoder_outputs, atol=1e-3)
 
         return vision_outputs
