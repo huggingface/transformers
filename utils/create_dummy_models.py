@@ -215,6 +215,11 @@ def build_processor(config_class, processor_class):
                 ]
                 if len(new_processor_classes) > 0:
                     new_processor_class = new_processor_classes[0]
+                    # Let's use fast tokenizer if there is any
+                    for x in new_processor_classes:
+                        if x.__name__.endswith("Fast"):
+                            new_processor_class = x
+                            break
                     processor = build_processor(config_class, new_processor_class)
 
     if processor is None:
