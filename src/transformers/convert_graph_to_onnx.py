@@ -461,7 +461,7 @@ def quantize(onnx_model_path: Path) -> Path:
         mode=QuantizationMode.IntegerOps,
         static=False,
         weight_qType=True,
-        input_qType=False,
+        activation_qType=False,
         tensors_range=None,
         nodes_to_quantize=None,
         nodes_to_exclude=None,
