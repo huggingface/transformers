@@ -1728,11 +1728,15 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
             if output_router_logits:
                 # Compute the router loss (z_loss + auxiliary loss) for each router in the encoder and decoder
-                encoder_router_logits, encoder_expert_indexes = encoder_outputs.router_probs
+                encoder_router_logits, encoder_expert_indexes = self._unpack_router_logits(
+                    encoder_outputs.router_probs
+                )
                 encoder_z_loss = router_z_loss_func(encoder_router_logits)
                 encoder_aux_loss = load_balancing_loss_func(encoder_router_logits, encoder_expert_indexes)
 
-                decoder_router_logits, decoder_expert_indexes = decoder_outputs.router_probs
+                decoder_router_logits, decoder_expert_indexes = self._unpack_router_logits(
+                    decoder_outputs.router_probs
+                )
                 decoder_z_loss = router_z_loss_func(decoder_router_logits)
                 decoder_aux_loss = load_balancing_loss_func(decoder_router_logits, decoder_expert_indexes)
 
@@ -1771,6 +1775,16 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             encoder_router_logits=encoder_outputs.router_probs,
             decoder_router_logits=decoder_outputs.router_probs,
         )
+
+    def _unpack_router_logits(self, router_outputs):
+        total_router_logits = []
+        total_expert_indexes = []
+        for router_output in router_outputs:
+            if router_output[0] is not None:
+                router_logits, expert_indexes = router_output
+                total_router_logits.append(router_logits)
+                total_expert_indexes.append(expert_indexes)
+        return torch.cat(total_router_logits, dim=1), torch.cat(total_expert_indexes, dim=1)
 
     def prepare_inputs_for_generation(
         self,
