@@ -280,7 +280,9 @@ class SwitchTransformersModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids, output_router_logits=False)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values,  output_router_logits=False)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values, output_router_logits=False)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -310,7 +312,9 @@ class SwitchTransformersModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        output, past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True, output_router_logits=False).to_tuple()
+        output, past_key_values = model(
+            input_ids, attention_mask=attn_mask, use_cache=True, output_router_logits=False
+        ).to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -328,10 +332,12 @@ class SwitchTransformersModelTester:
         )
 
         # get two different outputs
-        output_from_no_past = model(next_input_ids, attention_mask=attn_mask, output_router_logits=False)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask, output_router_logits=False)[
+        output_from_no_past = model(next_input_ids, attention_mask=attn_mask, output_router_logits=False)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens, past_key_values=past_key_values, attention_mask=attn_mask, output_router_logits=False
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -364,10 +370,15 @@ class SwitchTransformersModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([attention_mask, next_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask, output_router_logits=False)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values, output_router_logits=False)[
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask, output_router_logits=False)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
+            output_router_logits=False,
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
