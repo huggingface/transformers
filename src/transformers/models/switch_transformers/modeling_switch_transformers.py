@@ -1118,6 +1118,10 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                     output_router_logits=output_router_logits,
                 )
 
+            if output_router_logits:
+                router_probs = layer_outputs[-1]
+                layer_outputs = layer_outputs[:-1]
+
             # layer_outputs is a tuple with:
             # hidden-states, key-value-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
             if use_cache is False:
@@ -1141,7 +1145,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                     all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
 
             if output_router_logits:
-                all_router_probs = all_router_probs + (layer_outputs[-1],)
+                all_router_probs = all_router_probs + (router_probs,)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
