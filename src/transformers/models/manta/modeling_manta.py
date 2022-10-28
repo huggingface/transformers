@@ -207,6 +207,24 @@ class MantaConvFeatures(nn.Module):
 
         left_pad = (kernel_size - 1) // 2
         self.pad = (left_pad, kernel_size - 1 - left_pad)
+        
+        self.reset_parameters()
+    
+    def reset_parameters(self):
+        """
+        See https://pytorch.org/docs/stable/_modules/torch/nn/modules/conv.html#Conv1d, in the `_ConvNd` class :
+            > Setting a=sqrt(5) in kaiming_uniform is the same as initializing with
+            > uniform(-1/sqrt(k), 1/sqrt(k)), where k = weight.size(1) * prod(*kernel_size)
+            > For more details see: https://github.com/pytorch/pytorch/issues/15314#issuecomment-477448573"
+
+        The reason we permute the weights before init is because `kaiming_uniform_` uses the number of in and out
+        features for initialization, which are computed as tensor.size(0) and tensor.size(1). However, these
+        dimensions do not correspond for my weights.
+        """
+        if self.groups == self.out_channels:
+            nn.init.kaiming_uniform_(self.weight.permute(3, 0, 1, 2), a=math.sqrt(5))
+        else:
+            nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
 
     def forward(self, x: torch.Tensor):
         if self.groups == 1:

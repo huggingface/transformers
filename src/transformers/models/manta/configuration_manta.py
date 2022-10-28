@@ -186,6 +186,6 @@ class MantaConfig(PretrainedConfig):
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
-            tie_word_embeddings=False,
+            tie_word_embeddings=kwargs.pop("tie_word_embeddings", False),
             **kwargs,
         )
