@@ -89,6 +89,10 @@ class SwitchTransformersConfig(PretrainedConfig):
             The ratio for all dropout layers.
         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
+        router_z_loss_coef (`float`, *optional*, defaults to 0.001):
+            The z loss factor for the total loss.
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
+            The aux loss factor for the total loss.
         initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
@@ -125,6 +129,8 @@ class SwitchTransformersConfig(PretrainedConfig):
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
         dropout_rate=0.1,
+        router_z_loss_coef=0.001,
+        router_aux_loss_coef=0.001,
         layer_norm_epsilon=1e-6,
         initializer_factor=1.0,
         feed_forward_proj="relu",
@@ -184,6 +190,9 @@ class SwitchTransformersConfig(PretrainedConfig):
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
         self.add_router_probs = add_router_probs
+
+        self.router_z_loss_coef = router_z_loss_coef
+        self.router_aux_loss_coef = router_aux_loss_coef
 
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
