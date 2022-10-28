@@ -425,6 +425,8 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+        self.gradient_checkpointing = False
+
     def get_input_embeddings(self):
         return self.embed_in
 
