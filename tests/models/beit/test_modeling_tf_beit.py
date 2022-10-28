@@ -591,7 +591,7 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
                 ]
             )
 
-        tf.debugging.assert_near(logits[0, :3, :3, :3], expected_slice, atol=1e-4))
+        tf.debugging.assert_near(logits[0, :3, :3, :3], expected_slice, atol=1e-4)
 
     @slow
     def test_post_processing_semantic_segmentation(self):
