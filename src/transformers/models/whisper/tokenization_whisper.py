@@ -361,7 +361,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    def set_bos_sequence(self, language=None, task=None, predict_timestamps=False):
+    @property
+    def prefix_tokens(self):
         all_special_ids = self.all_special_ids
         bos_token_id = all_special_ids[-106]
         translate_token_id = all_special_ids[-6]
@@ -369,33 +370,27 @@ class WhisperTokenizer(PreTrainedTokenizer):
         notimestamps_token_id = all_special_ids[-1]
         langs = tuple(LANGUAGES.keys())
 
-        if language is not None:
-            language = language.lower()
-            if language in TO_LANGUAGE_CODE:
-                language = TO_LANGUAGE_CODE[language]
+        if self.language is not None:
+            self.language = self.language.lower()
+            if self.language in TO_LANGUAGE_CODE:
+                language_id = TO_LANGUAGE_CODE[self.language]
             else:
-                raise ValueError(f"Unsupported language: {language}. Language should be in: {TO_LANGUAGE_CODE.keys()}")
+                raise ValueError(
+                    f"Unsupported language: {self.language}. Language should be in: {TO_LANGUAGE_CODE.keys()}"
+                )
 
-        if task is not None:
-            if task not in TASK_IDS:
-                raise ValueError(f"Unsupported task: {task}. Task should be in: {TASK_IDS}")
+        if self.task is not None:
+            if self.task not in TASK_IDS:
+                raise ValueError(f"Unsupported task: {self.task}. Task should be in: {TASK_IDS}")
 
         bos_sequence = [bos_token_id]
-        if language is not None:
-            bos_sequence.append(bos_token_id + 1 + langs.index(language))
-        if task is not None:
-            bos_sequence.append(transcribe_token_id if task == "transcribe" else translate_token_id)
-        if not predict_timestamps:
+        if self.language is not None:
+            bos_sequence.append(bos_token_id + 1 + langs.index(language_id))
+        if self.task is not None:
+            bos_sequence.append(transcribe_token_id if self.task == "transcribe" else translate_token_id)
+        if not self.predict_timestamps:
             bos_sequence.append(notimestamps_token_id)
         return bos_sequence
-
-    @property
-    def prefix_tokens(self):
-        return self.set_bos_sequence(
-            language=self.language,
-            task=self.task,
-            predict_timestamps=self.predict_timestamps,
-        )
 
     # Copied from transformers.models.speech_to_text.tokenization_speech_to_text.Speech2TextTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
