@@ -305,7 +305,7 @@ def get_tiny_config(config_class):
 
 def convert_tokenizer(tokenizer_fast: PreTrainedTokenizerFast):
 
-    new_tokenizer = tokenizer_fast.train_new_from_iterator(training_ds["text"], TARGET_VOCAB_SIZE)
+    new_tokenizer = tokenizer_fast.train_new_from_iterator(training_ds["text"], TARGET_VOCAB_SIZE, show_progress=False)
 
     # Make sure it at least runs
     if not isinstance(new_tokenizer, LayoutLMv3TokenizerFast):
