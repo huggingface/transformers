@@ -484,14 +484,15 @@ def fill_result_with_error(result, error, models_to_create):
                 result[framework][model_arch.__name__] = {"model": None, "checkpoint": None, "error": error}
 
 
-def upload_models(output_dir):
+def upload_models(output_dir, organization):
     """Upload the tiny models.
 
     The directory `output_dir` contains the checkpoints for all model architectures with a model type. Each model
     architecture has all its checkpoints in a single subdirectory of `output_dir`.
     """
 
-    organization = "ydshieh"
+    if organization is None:
+        raise ValueError("The argument `organization` could not be `None`.")
 
     ckpt_dirs = [x for x in os.listdir(output_dir) if x != "processors" and os.path.isdir(os.path.join(output_dir, x))]
     for ckpt_dir in ckpt_dirs:
@@ -524,7 +525,7 @@ def upload_models(output_dir):
                 logger.warning(f"PR open in {hub_pr_url}")
 
 
-def build_composite_models(config_class, output_dir, upload=False):
+def build_composite_models(config_class, output_dir, upload=False, organization=None):
 
     import tempfile
 
@@ -662,12 +663,12 @@ def build_composite_models(config_class, output_dir, upload=False):
         del result["warnings"]
 
     if upload:
-        upload_models(output_dir)
+        upload_models(output_dir, organization=organization)
 
     return result
 
 
-def build(config_class, models_to_create, output_dir, upload=False):
+def build(config_class, models_to_create, output_dir, upload=False, organization=None):
     """Create all models for a certain model type.
 
     Args:
@@ -687,7 +688,7 @@ def build(config_class, models_to_create, output_dir, upload=False):
         "speech-encoder-decoder",
         "vision-text-dual-encoder",
     ]:
-        return build_composite_models(config_class, output_dir, upload=upload)
+        return build_composite_models(config_class, output_dir, upload=upload, organization=organization)
 
     result = {k: {} for k in models_to_create}
 
@@ -820,7 +821,7 @@ def build(config_class, models_to_create, output_dir, upload=False):
         del result["warnings"]
 
     if upload:
-        upload_models(output_dir)
+        upload_models(output_dir, organization=organization)
 
     return result
 
@@ -918,6 +919,7 @@ if __name__ == "__main__":
         help="Comma-separated list of model type(s) from which the tiny models will be created.",
     )
     parser.add_argument("--upload", action="store_true", help="If to upload the created tiny models to the Hub.")
+    parser.add_argument("--organization", default=None, type=str, help="The organization on the Hub to which the tiny models will be uploaded.")
     parser.add_argument("output_path", type=Path, help="Path indicating where to store generated model.")
 
     args = parser.parse_args()
