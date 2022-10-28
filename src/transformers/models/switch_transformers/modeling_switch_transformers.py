@@ -824,11 +824,9 @@ class SwitchTransformersBlock(nn.Module):
         outputs = (hidden_states,)
 
         if use_cache:
-            outputs = outputs + (present_key_value_state,) + attention_outputs
+            outputs = outputs + (present_key_value_state,) + attention_outputs + (router_tuple,)
         else:
-            outputs = outputs + attention_outputs
-
-        outputs = outputs + (router_tuple,)
+            outputs = outputs + attention_outputs + (router_tuple,)
 
         return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights), (router_tuple)
 
@@ -1118,9 +1116,8 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                     output_router_logits=output_router_logits,
                 )
 
-            if output_router_logits:
-                router_probs = layer_outputs[-1]
-                layer_outputs = layer_outputs[:-1]
+            router_probs = layer_outputs[-1]
+            layer_outputs = layer_outputs[:-1]
 
             # layer_outputs is a tuple with:
             # hidden-states, key-value-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)

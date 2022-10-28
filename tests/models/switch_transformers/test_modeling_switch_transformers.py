@@ -69,6 +69,7 @@ class SwitchTransformersModelTester:
         sparse_step=1,
         num_sparse_decoder_layers=2,
         num_sparse_encoder_layers=2,
+        expert_capacity=100,
     ):
 
         self.parent = parent
@@ -96,6 +97,7 @@ class SwitchTransformersModelTester:
         self.sparse_step = sparse_step
         self.num_sparse_decoder_layers = num_sparse_decoder_layers
         self.num_sparse_encoder_layers = num_sparse_encoder_layers
+        self.expert_capacity = expert_capacity
 
     def get_large_model_config(self):
         return SwitchTransformersConfig.from_pretrained("HFLAY/switch_base_8")
@@ -141,6 +143,7 @@ class SwitchTransformersModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
+            expert_capacity=self.expert_capacity,
         )
 
     def get_config(self):

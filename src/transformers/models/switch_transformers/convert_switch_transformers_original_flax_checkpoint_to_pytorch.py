@@ -28,7 +28,6 @@ from transformers.utils import logging
 logging.set_verbosity_info()
 
 
-
 # should not include what is already done by the `from_pt` argument
 MOE_LAYER_NAME_MAPPING = {
     "/attention/": "/0/SelfAttention/",

@@ -23,7 +23,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-     "google/switch-base-8": "https://huggingface.co/google/switch-base-8/blob/main/config.json",
+    "google/switch-base-8": "https://huggingface.co/google/switch-base-8/blob/main/config.json",
 }
 
 
