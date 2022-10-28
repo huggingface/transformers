@@ -485,6 +485,31 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
         )
          
     @slow
+    def test_inference_masked_image_modeling_head(self):
+        model = TFBeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
+
+        feature_extractor = self.default_feature_extractor
+        image = prepare_img()
+        pixel_values = feature_extractor(images=image, return_tensors="tf")
+
+        # prepare bool_masked_pos
+        bool_masked_pos = tf.ones((1, 196), dtype=tf.dtypes.bool)
+
+        # forward pass
+        outputs = model(pixel_values=pixel_values, bool_masked_pos=bool_masked_pos)
+        logits = outputs.logits
+
+        # verify the logits
+        expected_shape = tf.convert_to_tensor([1, 196, 8192])
+        self.assertEqual(logits.shape, expected_shape)
+
+        expected_slice = tf.convert_to_tensor(
+            [[-3.2437, 0.5072, -13.9174], [-3.2456, 0.4948, -13.9401], [-3.2033, 0.5121, -13.8550]]
+        )
+
+        tf.debugging.assert_near(logits[:3, :3], expected_slice, atol=1e-4))
+    
+    @slow
     def test_inference_image_classification_head_imagenet_1k(self):
         model = TFBeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
 
@@ -506,3 +531,87 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
 
         expected_top2 = [model.config.label2id[i] for i in ["remote control, remote", "tabby, tabby cat"]]
         self.assertEqual(tf.nn.top_k(outputs.logits[0], 2).indices.numpy().tolist(), expected_top2)
+
+    @slow
+    def test_inference_image_classification_head_imagenet_22k(self):
+        model = TFBeitForImageClassification.from_pretrained("microsoft/beit-large-patch16-224-pt22k-ft22k")
+
+        feature_extractor = self.default_feature_extractor
+        image = prepare_img()
+        inputs = feature_extractor(images=image, return_tensors="tf")
+
+        # forward pass
+        outputs = model(**inputs)
+        logits = outputs.logits
+
+        # verify the logits
+        expected_shape = tf.convert_to_tensor([1, 21841])
+        self.assertEqual(logits.shape, expected_shape)
+
+        expected_slice = tf.convert_to_tensor([1.6881, -0.2787, 0.5901])
+
+        tf.debugging.assert_near(logits[0, :3], expected_slice, atol=1e-4)
+
+        expected_class_idx = 2396
+        self.assertEqual(logits.argmax(-1).item(), expected_class_idx)
+
+    @slow
+    def test_inference_semantic_segmentation(self):
+        model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+        
+        feature_extractor = TFBeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
+
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        image = Image.open(ds[0]["file"])
+        inputs = feature_extractor(images=image, return_tensors="tf")
+
+        # forward pass
+        outputs = model(**inputs)
+        logits = outputs.logits
+
+        # verify the logits
+        expected_shape = tf.convert_to_tensor([1, 150, 160, 160])
+        self.assertEqual(logits.shape, expected_shape)
+
+        is_pillow_less_than_9 = version.parse(PIL.__version__) < version.parse("9.0.0")
+
+        if is_pillow_less_than_9:
+            expected_slice = tf.convert_to_tensor(
+                [
+                    [[-4.9225, -2.3954, -3.0522], [-2.8822, -1.0046, -1.7561], [-2.9549, -1.3228, -2.1347]],
+                    [[-5.8168, -3.4129, -4.0778], [-3.8651, -2.2214, -3.0277], [-3.8356, -2.4643, -3.3535]],
+                    [[-0.0078, 3.9952, 4.0754], [2.9856, 4.6944, 5.0035], [3.2413, 4.7813, 4.9969]],
+                ]
+            )
+        else:
+            expected_slice = tf.convert_to_tensor(
+                [
+                    [[-4.8960, -2.3688, -3.0355], [-2.8478, -0.9836, -1.7418], [-2.9449, -1.3332, -2.1456]],
+                    [[-5.8081, -3.4124, -4.1006], [-3.8561, -2.2081, -3.0323], [-3.8365, -2.4601, -3.3669]],
+                    [[-0.0309, 3.9868, 4.0540], [2.9640, 4.6877, 4.9976], [3.2081, 4.7690, 4.9942]],
+                ]
+            )
+
+        tf.debugging.assert_near(logits[0, :3, :3, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_post_processing_semantic_segmentation(self):
+        model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+        
+        feature_extractor = TFBeitFeatureExtractor(do_resize=True, size=640, do_center_crop=False)
+
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        image = Image.open(ds[0]["file"])
+        inputs = feature_extractor(images=image, return_tensors="tf")
+
+        # forward pass
+        outputs = model(**inputs)
+        outputs.logits = tf.stop_gradient(outputs.logits)
+
+        segmentation = feature_extractor.post_process_semantic_segmentation(outputs=outputs, target_sizes=[(500, 300)])
+        expected_shape = tf.convert_to_tensor([500, 300])
+        self.assertEqual(segmentation[0].shape, expected_shape)
+
+        segmentation = feature_extractor.post_process_semantic_segmentation(outputs=outputs)
+        expected_shape = tf.convert_to_tensor([160, 160])
+        self.assertEqual(segmentation[0].shape, expected_shape)
