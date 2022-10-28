@@ -1136,7 +1136,6 @@ class CLIPSegDecoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
-        print_values=False,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -1150,9 +1149,6 @@ class CLIPSegDecoderLayer(nn.Module):
         """
         residual = hidden_states
 
-        if print_values:
-            print("Hidden states before self-attention:", hidden_states[0, :3, :3])
-
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -1160,27 +1156,12 @@ class CLIPSegDecoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        if print_values:
-            print("Hidden states after self-attention:", hidden_states[0, :3, :3])
-
         hidden_states = residual + hidden_states
         hidden_states = self.layer_norm1(hidden_states)
 
-        if print_values:
-            print("Hidden states after first norm + residual:", hidden_states[0, :3, :3])
-
         residual = hidden_states
-
-        if print_values:
-            print("Hidden states before MLP:", hidden_states[0, :3, :3])
-
         hidden_states = self.mlp(hidden_states)
-
-        if print_values:
-            print("Hidden states after MLP:", hidden_states[0, :3, :3])
-
         hidden_states = residual + hidden_states
-
         hidden_states = self.layer_norm2(hidden_states)
 
         outputs = (hidden_states,)
@@ -1235,7 +1216,7 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
                 a = self.film_mul(conditional_embeddings) * a.permute(1, 0, 2) + self.film_add(conditional_embeddings)
                 a = a.permute(1, 0, 2)
 
-            a = layer(a, attention_mask=None, causal_attention_mask=None, print_values=False)[0]
+            a = layer(a, attention_mask=None, causal_attention_mask=None)[0]
 
         a = a[:, 1:, :].permute(0, 2, 1)  # remove cls token and reshape to [batch_size, reduce_dim, seq_len]
 
