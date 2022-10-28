@@ -1255,6 +1255,8 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
     def __init__(self, config: CLIPSegConfig):
         super().__init__(config)
 
+        self.config = config
+        
         # TODO perhaps use clip here?
         self.clipseg = CLIPSegModel(config)
         self.extract_layers = config.extract_layers

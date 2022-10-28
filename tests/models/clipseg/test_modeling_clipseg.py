@@ -148,7 +148,7 @@ class CLIPSegVisionModelTester:
 @require_torch
 class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as CLIPSEG does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as CLIPSeg does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
@@ -167,7 +167,7 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="CLIPSEG does not use inputs_embeds")
+    @unittest.skip(reason="CLIPSeg does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -327,7 +327,7 @@ class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="CLIPSEG does not use inputs_embeds")
+    @unittest.skip(reason="CLIPSeg does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -452,7 +452,7 @@ class CLIPSegModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    # override as the `logit_scale` parameter initilization is different for CLIPSEG
+    # override as the some parameters require custom initialization
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -462,13 +462,16 @@ class CLIPSegModelTest(ModelTesterMixin, unittest.TestCase):
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     # check if `logit_scale` is initilized as per the original implementation
-                    if name == "logit_scale":
+                    if "logit_scale" in name:
                         self.assertAlmostEqual(
                             param.data.item(),
                             np.log(1 / 0.07),
                             delta=1e-3,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
+                    elif "film" in name or "transposed_conv" in name or "reduce" in name:
+                        # those parameters use PyTorch' default initialization scheme
+                        pass
                     else:
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),
@@ -490,7 +493,7 @@ class CLIPSegModelTest(ModelTesterMixin, unittest.TestCase):
 
             try:
                 input_ids = inputs_dict["input_ids"]
-                pixel_values = inputs_dict["pixel_values"]  # CLIPSEG needs pixel_values
+                pixel_values = inputs_dict["pixel_values"]  # CLIPSeg needs pixel_values
                 traced_model = torch.jit.trace(model, (input_ids, pixel_values))
             except RuntimeError:
                 self.fail("Couldn't trace module.")
