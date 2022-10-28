@@ -14,6 +14,41 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
+<!---
+A useful guide for English-Traditional Japanese translation of Hugging Face documentation
+- Use square quotes, e.g.,「引用」
+
+Dictionary
+
+API: API(翻訳しない)
+add: 追加
+checkpoint: チェックポイント
+code: コード
+community: コミュニティ
+confidence: 信頼度
+dataset: データセット
+documentation: ドキュメント
+example: 例
+finetune: 微調整
+Hugging Face: Hugging Face(翻訳しない)
+implementation: 実装
+inference: 推論
+library: ライブラリ
+module: モジュール
+NLP/Natural Language Processing: NLPと表示される場合は翻訳されず、Natural Language Processingと表示される場合は翻訳される
+online demos: オンラインデモ
+pipeline: pipeline(翻訳しない)
+pretrained/pretrain: 学習済み
+Python data structures (e.g., list, set, dict): リスト、セット、ディクショナリと訳され、括弧内は原文英語
+repository: repository(翻訳しない)
+summary: 概要
+token-: token-(翻訳しない)
+Trainer: Trainer(翻訳しない)
+transformer: transformer(翻訳しない)
+tutorial: チュートリアル
+user: ユーザ
+-->
+
 <p align="center">
     <br>
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers_logo_name.png" width="400"/>
