@@ -1774,6 +1774,7 @@ else:
             "RealmReader",
             "RealmRetriever",
             "RealmScorer",
+            "RealmBertModel",
             "load_tf_weights_in_realm",
         ]
     )
@@ -4563,6 +4564,7 @@ if TYPE_CHECKING:
         from .models.rag import RagModel, RagPreTrainedModel, RagSequenceForGeneration, RagTokenForGeneration
         from .models.realm import (
             REALM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RealmBertModel,
             RealmEmbedder,
             RealmForOpenQA,
             RealmKnowledgeAugEncoder,

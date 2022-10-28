@@ -4175,6 +4175,13 @@ class RagTokenForGeneration(metaclass=DummyObject):
 REALM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class RealmBertModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class RealmEmbedder(metaclass=DummyObject):
     _backends = ["torch"]
 
