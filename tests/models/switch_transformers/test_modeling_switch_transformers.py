@@ -71,6 +71,7 @@ class SwitchTransformersModelTester:
         num_sparse_decoder_layers=2,
         num_sparse_encoder_layers=2,
         expert_capacity=100,
+        router_jitter_noise=0.0,
     ):
 
         self.parent = parent
@@ -99,6 +100,7 @@ class SwitchTransformersModelTester:
         self.num_sparse_decoder_layers = num_sparse_decoder_layers
         self.num_sparse_encoder_layers = num_sparse_encoder_layers
         self.expert_capacity = expert_capacity
+        self.router_jitter_noise = router_jitter_noise
 
     def get_large_model_config(self):
         return SwitchTransformersConfig.from_pretrained("HFLAY/switch_base_8")
@@ -145,6 +147,7 @@ class SwitchTransformersModelTester:
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
             expert_capacity=self.expert_capacity,
+            router_jitter_noise=self.router_jitter_noise,
         )
 
     def get_config(self):
