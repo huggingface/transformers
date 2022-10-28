@@ -34,10 +34,10 @@ if is_torch_available():
         SwitchTransformersEncoderModel,
         SwitchTransformersForConditionalGeneration,
         SwitchTransformersModel,
+        SwitchTransformersTop1Router,
     )
     from transformers.models.switch_transformers.modeling_switch_transformers import (
         SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TokensChooseMaskedRouter,
         load_balancing_loss_func,
         router_z_loss_func,
     )
@@ -927,7 +927,7 @@ class SwitchTransformerRouterTest(unittest.TestCase):
 
     def test_equivalency_token_chose_masked_router(self):
         r"""
-        This test tests the equivalency between the `TokensChooseMaskedRouter`
+        This test tests the equivalency between the `SwitchTransformersTop1Router`
         originally implemented from here: TODO: provide link
         """
         hidden_dim = 4
@@ -959,7 +959,7 @@ class SwitchTransformerRouterTest(unittest.TestCase):
             expert_capacity=expert_capacity,
             batch_prioritized_routing=False,
         )
-        model = TokensChooseMaskedRouter(config)
+        model = SwitchTransformersTop1Router(config)
 
         model.classifier.weight = torch.nn.Parameter(
             torch.Tensor(
