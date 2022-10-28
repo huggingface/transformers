@@ -458,8 +458,7 @@ def quantize(onnx_model_path: Path) -> Path:
     # onnxruntime renamed input_qType to activation_qType in v1.13.1, so we
     # check the onnxruntime version to ensure backward compatibility.
     # See also: https://github.com/microsoft/onnxruntime/pull/12873
-    ort_version = parse(onnxruntime.__version__)
-    if ort_version < parse("1.13.1"):
+    if parse(onnxruntime.__version__) < parse("1.13.1"):
         quantizer = ONNXQuantizer(
             model=copy_model,
             per_channel=False,
