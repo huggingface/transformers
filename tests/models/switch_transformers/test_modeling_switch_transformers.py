@@ -34,10 +34,10 @@ if is_torch_available():
         SwitchTransformersEncoderModel,
         SwitchTransformersForConditionalGeneration,
         SwitchTransformersModel,
+        SwitchTransformersTop1Router,
     )
     from transformers.models.switch_transformers.modeling_switch_transformers import (
         SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
-        SwitchTransformersTop1Router,
         load_balancing_loss_func,
         router_z_loss_func,
     )
