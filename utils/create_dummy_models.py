@@ -703,9 +703,10 @@ def build(config_class, models_to_create, output_dir):
             and hasattr(tiny_config.text_config, k)
         ):
             setattr(tiny_config.text_config, k, v)
-            # `text_config_dict` should exist in this case. We need to update its value here too in order to
-            # make `save_pretrained -> from_pretrained` work.
-            tiny_config.text_config_dict[k] = v
+            # If `text_config_dict` exists, we need to update its value here too in order to # make
+            # `save_pretrained -> from_pretrained` work.
+            if hasattr(tiny_config, "text_config_dict"):
+                tiny_config.text_config_dict[k] = v
 
     if result["warnings"]:
         logger.warning(result["warnings"])
