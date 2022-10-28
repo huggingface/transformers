@@ -21,11 +21,13 @@ import json
 import os
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 from datasets import load_dataset
 
 from check_config_docstrings import get_checkpoint_from_config_class
+from huggingface_hub import Repository, create_commit, create_repo
 from transformers import (
     CONFIG_MAPPING,
     FEATURE_EXTRACTOR_MAPPING,
@@ -480,6 +482,48 @@ def fill_result_with_error(result, error, models_to_create):
                 result[framework][model_arch.__name__] = {"model": None, "checkpoint": None, "error": error}
 
 
+def upload_models(output_dir):
+    """Upload the tiny models.
+
+    The directory `output_dir` contains the checkpoints for all model architectures with a model type. Each model
+    architecture has all its checkpoints in a single subdirectory of `output_dir`.
+    """
+
+    organization = "ydshieh"
+
+    ckpt_dirs = [x for x in os.listdir(output_dir) if x != "processor" and os.path.isdir(os.path.join(output_dir, x))]
+    for ckpt_dir in ckpt_dirs:
+        ckpt_dir = os.path.join(output_dir, ckpt_dir)
+
+        arch_name = ckpt_dir.split(os.path.sep)[-1]
+        repo_name = f"tiny-random-{arch_name}"
+
+        repo_url = create_repo(repo_id=repo_name, organization=organization, exist_ok=True, repo_type="model")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Repository(local_dir=tmpdir, clone_from=f"{organization}/{repo_name}")
+            repo.git_pull()
+            shutil.copytree(ckpt_dir, tmpdir, dirs_exist_ok=True)
+
+            push = False
+            if push:
+                repo.git_add(auto_lfs_track=True)
+                repo.git_commit(f"Upload tiny models for {arch_name}")
+                repo.git_push(blocking=True)  # this prints a progress bar with the upload
+                logger.warning(f"Tiny models {arch_name} pushed to {organization}/{repo_name}")
+            else:
+                hub_pr_url = create_commit(
+                    repo_id=f"{organization}/{repo_name}",
+                    # TODO: Add
+                    operations=[],
+                    commit_message=f"Update tiny models for {arch_name}",
+                    commit_description=f"Upload tiny models for {arch_name}",
+                    repo_type="model",
+                    create_pr=True,
+                )
+                logger.warning(f"PR open in {hub_pr_url}")
+
+
 def build_composite_models(config_class, output_dir):
 
     import tempfile
@@ -616,6 +660,8 @@ def build_composite_models(config_class, output_dir):
         del result["error"]
     if not result["warnings"]:
         del result["warnings"]
+
+    upload_models(output_dir)
 
     return result
 
@@ -771,6 +817,8 @@ def build(config_class, models_to_create, output_dir):
         del result["error"]
     if not result["warnings"]:
         del result["warnings"]
+
+    upload_models(output_dir)
 
     return result
 
