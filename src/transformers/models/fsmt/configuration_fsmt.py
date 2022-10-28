@@ -125,7 +125,10 @@ class FSMTConfig(PretrainedConfig):
     ```python
     >>> from transformers import FSMTConfig, FSMTModel
 
+    >>> # Initializing a FSMT configuration
     >>> config = FSMTConfig.from_pretrained("facebook/wmt19-en-ru")
+
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = FSMTModel(config)
     ```"""
     model_type = "fsmt"
