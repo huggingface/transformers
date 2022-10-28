@@ -44,6 +44,7 @@ from transformers.models.auto.configuration_auto import AutoConfig, model_type_t
 from transformers.processing_utils import ProcessorMixin, transformers_module
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
+
 # make sure tokenizer plays nice with multiprocessing
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -525,7 +526,8 @@ def upload_models(output_dir, organization):
                     hub_pr_url = upload_folder(
                         folder_path=ckpt_dir,
                         repo_id=f"{organization}/{repo_name}",
-                        repo_type="model", commit_message=f"Update tiny models for {arch_name}",
+                        repo_type="model",
+                        commit_message=f"Update tiny models for {arch_name}",
                         commit_description=f"Upload tiny models for {arch_name}",
                         create_pr=True,
                     )
@@ -928,7 +930,12 @@ if __name__ == "__main__":
         help="Comma-separated list of model type(s) from which the tiny models will be created.",
     )
     parser.add_argument("--upload", action="store_true", help="If to upload the created tiny models to the Hub.")
-    parser.add_argument("--organization", default=None, type=str, help="The organization on the Hub to which the tiny models will be uploaded.")
+    parser.add_argument(
+        "--organization",
+        default=None,
+        type=str,
+        help="The organization on the Hub to which the tiny models will be uploaded.",
+    )
     parser.add_argument("output_path", type=Path, help="Path indicating where to store generated model.")
 
     args = parser.parse_args()
@@ -956,7 +963,13 @@ if __name__ == "__main__":
     results = {}
     for c, models_to_create in list(to_create.items()):
         print(f"Create models for {c.__name__} ...")
-        result = build(c, models_to_create, output_dir=os.path.join(args.output_path, c.model_type), upload=args.upload, organization=args.organization)
+        result = build(
+            c,
+            models_to_create,
+            output_dir=os.path.join(args.output_path, c.model_type),
+            upload=args.upload,
+            organization=args.organization,
+        )
         results[c.__name__] = result
         print("=" * 40)
 
