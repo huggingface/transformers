@@ -956,7 +956,7 @@ if __name__ == "__main__":
     results = {}
     for c, models_to_create in list(to_create.items()):
         print(f"Create models for {c.__name__} ...")
-        result = build(c, models_to_create, output_dir=os.path.join(args.output_path, c.model_type), upload=args.upload)
+        result = build(c, models_to_create, output_dir=os.path.join(args.output_path, c.model_type), upload=args.upload, organization=args.organization)
         results[c.__name__] = result
         print("=" * 40)
 
