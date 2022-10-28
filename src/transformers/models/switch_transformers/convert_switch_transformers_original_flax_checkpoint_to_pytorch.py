@@ -28,35 +28,6 @@ from transformers.utils import logging
 logging.set_verbosity_info()
 
 
-MODEL_MAPPING = {
-    "switch_base_8": [
-        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
-    ],
-    "switch_base_16": [
-        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
-    ],
-    "switch_base_32": [
-        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
-    ],
-    "switch_base_64": [
-        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
-    ],
-    "switch_base_128": [
-        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
-    ],
-    "switch_base_256": [
-        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
-    ],
-    "switch_base_512": [
-        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
-    ],
-    "switch_base_1024": [
-        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
-    ],
-    "switch_base_2048": [
-        "https://github.com/google/flaxformer/tree/main/flaxformer/t5x/configs/moe/models/switch_base.gin"
-    ],
-}
 
 # should not include what is already done by the `from_pt` argument
 MOE_LAYER_NAME_MAPPING = {
