@@ -3035,6 +3035,8 @@ else:
     )
     _import_structure["models.mbart"].extend(
         [
+            "FlaxMBartDecoderPreTrainedModel",
+            "FlaxMBartForCausalLM",
             "FlaxMBartForConditionalGeneration",
             "FlaxMBartForQuestionAnswering",
             "FlaxMBartForSequenceClassification",
@@ -5586,6 +5588,8 @@ if TYPE_CHECKING:
         from .models.longt5 import FlaxLongT5ForConditionalGeneration, FlaxLongT5Model, FlaxLongT5PreTrainedModel
         from .models.marian import FlaxMarianModel, FlaxMarianMTModel, FlaxMarianPreTrainedModel
         from .models.mbart import (
+            FlaxMBartDecoderPreTrainedModel,
+            FlaxMBartForCausalLM,
             FlaxMBartForConditionalGeneration,
             FlaxMBartForQuestionAnswering,
             FlaxMBartForSequenceClassification,

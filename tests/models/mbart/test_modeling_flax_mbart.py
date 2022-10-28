@@ -18,10 +18,17 @@ import numpy as np
 import timeout_decorator  # noqa
 
 from transformers import MBartConfig, is_flax_available
-from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
+from transformers.testing_utils import (
+    is_pt_flax_cross_test,
+    require_flax,
+    require_sentencepiece,
+    require_tokenizers,
+    slow,
+)
 from transformers.utils import cached_property
 
 from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
+from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
@@ -41,6 +48,7 @@ if is_flax_available():
         FlaxMBartForQuestionAnswering,
         FlaxMBartForSequenceClassification,
         FlaxMBartModel,
+        FlaxMBartForCausalLM,
         shift_tokens_right,
     )
 
@@ -462,3 +470,153 @@ class FlaxMBartModelIntegrationTest(unittest.TestCase):
     @slow
     def test_batch_generation_en_ro(self):
         self._assert_generated_batch_equal_expected()
+
+
+class MBartStandaloneDecoderModelTester:
+    def __init__(
+        self,
+        parent,
+        vocab_size: int = 99,
+        batch_size: int = 13,
+        d_model: int = 16,
+        decoder_seq_length: int = 7,
+        is_training: bool = True,
+        is_decoder: bool = True,
+        use_attention_mask: bool = True,
+        use_cache: bool = False,
+        use_labels: bool = True,
+        decoder_start_token_id: int = 2,
+        decoder_ffn_dim: int = 32,
+        decoder_layers: int = 4,
+        encoder_attention_heads: int = 4,
+        decoder_attention_heads: int = 4,
+        max_position_embeddings: int = 30,
+        is_encoder_decoder: bool = False,
+        pad_token_id: int = 0,
+        bos_token_id: int = 1,
+        eos_token_id: int = 2,
+        scope=None,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.decoder_seq_length = decoder_seq_length
+        # For common tests
+        self.seq_length = self.decoder_seq_length
+        self.is_training = is_training
+        self.use_attention_mask = use_attention_mask
+        self.use_labels = use_labels
+
+        self.vocab_size = vocab_size
+        self.d_model = d_model
+        self.hidden_size = d_model
+        self.num_hidden_layers = decoder_layers
+        self.decoder_layers = decoder_layers
+        self.decoder_ffn_dim = decoder_ffn_dim
+        self.encoder_attention_heads = encoder_attention_heads
+        self.decoder_attention_heads = decoder_attention_heads
+        self.num_attention_heads = decoder_attention_heads
+        self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
+        self.pad_token_id = pad_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.use_cache = use_cache
+        self.max_position_embeddings = max_position_embeddings
+        self.is_encoder_decoder = is_encoder_decoder
+
+        self.scope = None
+        self.decoder_key_length = decoder_seq_length
+        self.base_model_out_len = 2
+        self.decoder_attention_idx = 1
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+
+        attention_mask = None
+        if self.use_attention_mask:
+            attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
+
+        lm_labels = None
+        if self.use_labels:
+            lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+
+        config = MBartConfig(
+            vocab_size=self.vocab_size,
+            d_model=self.d_model,
+            decoder_layers=self.decoder_layers,
+            decoder_ffn_dim=self.decoder_ffn_dim,
+            encoder_attention_heads=self.encoder_attention_heads,
+            decoder_attention_heads=self.decoder_attention_heads,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.bos_token_id,
+            use_cache=self.use_cache,
+            pad_token_id=self.pad_token_id,
+            decoder_start_token_id=self.decoder_start_token_id,
+            max_position_embeddings=self.max_position_embeddings,
+            is_encoder_decoder=self.is_encoder_decoder,
+        )
+
+        return (
+            config,
+            input_ids,
+            attention_mask,
+            lm_labels,
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            attention_mask,
+            lm_labels,
+        ) = config_and_inputs
+
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+        return config, inputs_dict
+
+
+@require_flax
+class FlaxMBartStandaloneDecoderModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (FlaxMBartForCausalLM,) if is_flax_available() else ()
+    all_generative_model_classes = (FlaxMBartForCausalLM,) if is_flax_available() else ()
+    test_pruning = False
+    is_encoder_decoder = False
+
+    def setUp(
+        self,
+    ):
+        self.model_tester = MBartStandaloneDecoderModelTester(self, is_training=False)
+        self.config_tester = ConfigTester(self, config_class=MBartConfig)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_retain_grad_hidden_states_attentions(self):
+        # decoder cannot keep gradients
+        return
+
+    # skip test as base and causallm differ in structure
+    def test_save_load_from_base(self):
+        pass
+
+    # skip test as base and causallm differ in structure
+    def test_save_load_to_base(self):
+        pass
+
+    # skip test as base and causallm differ in structure
+    @is_pt_flax_cross_test
+    def test_save_load_from_base_pt(self):
+        pass
+
+    # skip test as base and causallm differ in structure
+    @is_pt_flax_cross_test
+    def test_save_load_to_base_pt(self):
+        pass
+
+    # skip test as base and causallm differ in structure
+    @is_pt_flax_cross_test
+    def test_save_load_bf16_to_base_pt(self):
+        pass

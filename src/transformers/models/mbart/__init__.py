@@ -81,6 +81,8 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_flax_mbart"] = [
+        "FlaxMBartDecoderPreTrainedModel",
+        "FlaxMBartForCausalLM",
         "FlaxMBartForConditionalGeneration",
         "FlaxMBartForQuestionAnswering",
         "FlaxMBartForSequenceClassification",
@@ -139,6 +141,8 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_flax_mbart import (
+            FlaxMBartDecoderPreTrainedModel,
+            FlaxMBartForCausalLM,
             FlaxMBartForConditionalGeneration,
             FlaxMBartForQuestionAnswering,
             FlaxMBartForSequenceClassification,
