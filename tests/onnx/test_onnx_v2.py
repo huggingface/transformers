@@ -193,6 +193,7 @@ PYTORCH_EXPORT_MODELS = {
     ("detr", "facebook/detr-resnet-50"),
     ("distilbert", "distilbert-base-cased"),
     ("electra", "google/electra-base-generator"),
+    ("imagegpt", "openai/imagegpt-small"),
     ("resnet", "microsoft/resnet-50"),
     ("roberta", "roberta-base"),
     ("roformer", "junnyu/roformer_chinese_base"),
