@@ -239,10 +239,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
             other word.
         language (`str`, *optional*, defaults to `None`):
             The language of the transcription text. The corresponding language id token is appended to the start of the
-            sequence in multilingual speech recognition and speech translation tasks, e.g. for Spanish the token
-            `<|es|>` is appended to the start of sequence.
+            sequence for multilingual speech recognition and speech translation tasks, e.g. for Spanish the token
+            `<|es|>` is appended to the start of sequence. This should be used for multilingual fine-tuning only.
         task (`str`, *optional*, defaults to `None`):
-            Task identifier to append at the start of sequence (if any).
+            Task identifier to append at the start of sequence (if any). This should be used for mulitlingual
+            fine-tuning, with `transcribe` for speech recognition and `translate` for speech translation.
         predict_timestamps (`bool`, *optional*, defaults to `False`):
             Whether to omit the `<|notimestamps|>` token at the start of the sequence.
     """
@@ -361,12 +362,30 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    @property
-    def prefix_tokens(self, language=None, task=None, predict_timestamps=None):
+    def set_prefix_tokens(self, language: str = None, task: str = None, predict_timestamps: bool = None):
+        """
+        Override the prefix tokens appended to the start of the label sequence. This method can be used standalone to
+        update the prefix tokens as required when fine-tuning. Example:
+
+        ```python
+        >>> tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny", language="spanish")
+        >>> tokenizer.set_prefix_tokens(language="french")  # update the language prefix token
+        ```
+
+        Args:
+            language (`str`, *optional*, defaults to `None`):
+                The language of the transcription text.
+            task (`str`, *optional*, defaults to `None`):
+                Task identifier to append at the start of sequence (if any).
+            predict_timestamps (`bool`, *optional*, defaults to `None`):
+                Whether to omit the `<|notimestamps|>` token at the start of the sequence.
+        """
         self.language = language if language is not None else self.language
         self.task = task if task is not None else self.task
         self.predict_timestamps = predict_timestamps if predict_timestamps is not None else self.predict_timestamps
 
+    @property
+    def prefix_tokens(self) -> List[int]:
         all_special_ids = self.all_special_ids
         bos_token_id = all_special_ids[-106]
         translate_token_id = all_special_ids[-6]
