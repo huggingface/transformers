@@ -205,7 +205,7 @@ class SwitchTransformersTop1Router(nn.Module):
             hidden_states (`torch.Tensor`) :
                 [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
         Returns:
-            Router indices or mask torch.Tensors (depending on router type).
+            Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`] Tuple containing the expert index, the router probs and the router logits. The router probabilities and logits are required to compute the loss. 
         """
         router_probs, router_logits = self._compute_router_probabilities(hidden_states)
 
@@ -829,7 +829,7 @@ class SwitchTransformersBlock(nn.Module):
 
         outputs = outputs + (router_tuple,)
 
-        return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
+        return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights), (router_tuple)
 
 
 class SwitchTransformersPreTrainedModel(PreTrainedModel):
@@ -1309,6 +1309,9 @@ SWITCH_TRANSFORMERS_ENCODER_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        output_router_logits (`bool`, *optional*):
+            Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
+            should not be returned during inference.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
