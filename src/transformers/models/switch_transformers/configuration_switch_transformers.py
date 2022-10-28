@@ -49,7 +49,7 @@ class SwitchTransformersConfig(PretrainedConfig):
             num_heads`.
         d_ff (`int`, *optional*, defaults to 2048):
             Size of the intermediate feed forward layer in each `SwitchTransformersBlock`.
-        expert_capacity (`int`, *optional*, defaults to 1):
+        expert_capacity (`int`, *optional*, defaults to 64):
             Number of tokens that can be stored in each expert. If set to 1, the model will behave like a regular
             Transformer.
         num_layers (`int`, *optional*, defaults to 12):
@@ -114,7 +114,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         num_sparse_decoder_layers=3,
         num_heads=12,
         num_experts=8,
-        expert_capacity=1,
+        expert_capacity=64,
         router_type="tokens_masked",
         router_bias=False,
         router_jitter_noise=0.01,

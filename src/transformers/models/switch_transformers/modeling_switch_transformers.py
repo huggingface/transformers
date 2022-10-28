@@ -225,7 +225,7 @@ class SwitchTransformersTop1Router(nn.Module):
         expert_index = torch.argmax(router_probs, dim=-1)
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
 
-        # Mask tokens outside expert capacity. Sum over the sequence
+        # Mask tokens outside expert capacity. Sum over each sequence
         token_priority = torch.cumsum(expert_index, dim=-2)
         # mask if the token routed to to the expert will overflow
         expert_capacity_mask = token_priority <= self.expert_capacity
@@ -839,7 +839,7 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
     """
 
     config_class = SwitchTransformersConfig
-    base_model_prefix = "transformer"
+    base_model_prefix = "switch_transformers"
     supports_gradient_checkpointing = True
     _no_split_modules = ["SwitchTransformersBlock"]
 

@@ -50,6 +50,7 @@ else:
         "SwitchTransformersModel",
         "SwitchTransformersPreTrainedModel",
         "SwitchTransformersTop1Router",
+        "SwitchTransformersSparseMLP",
     ]
 
 
@@ -72,6 +73,7 @@ if TYPE_CHECKING:
             SwitchTransformersForConditionalGeneration,
             SwitchTransformersModel,
             SwitchTransformersPreTrainedModel,
+            SwitchTransformersSparseMLP,
             SwitchTransformersTop1Router,
         )
 

@@ -1957,6 +1957,7 @@ else:
             "SwitchTransformersModel",
             "SwitchTransformersPreTrainedModel",
             "SwitchTransformersTop1Router",
+            "SwitchTransformersSparseMLP",
         ]
     )
     _import_structure["models.trajectory_transformer"].extend(
@@ -4683,6 +4684,7 @@ if TYPE_CHECKING:
             SwitchTransformersForConditionalGeneration,
             SwitchTransformersModel,
             SwitchTransformersPreTrainedModel,
+            SwitchTransformersSparseMLP,
             SwitchTransformersTop1Router,
         )
         from .models.t5 import (
