@@ -344,51 +344,6 @@ class SwitchTransformersDenseGatedActDense(nn.Module):
         return hidden_states
 
 
-class SwitchTransformersLayerFF(nn.Module):
-    r"""
-    Switch Transformers Feed Forward layer module. This is a wrapper around the Mixture of Experts module.
-
-    Attributes:
-        is_sparse (`bool`):
-            Whether the MLP layer is a `Sparse` layer (contains a Mixture of Experts) or not
-        mlp (`torch.nn.Module`):
-            The MLP layer of the Feed Forward layer
-        layer_norm (`torch.nn.Module`):
-            The pre-MLP layer norm. This module is equivalent to the `pre_mlp_layer_norm` in `t5x`
-        dropout (`torch.nn.Module`):
-            Post-MLP dropout layer.
-    """
-
-    def __init__(self, config: SwitchTransformersConfig, is_sparse=False):
-        super().__init__()
-        self.is_sparse = is_sparse
-
-        # Check if it is a sparse layer, if not then it is a dense layer
-        if not self.is_sparse:
-            self.mlp = SwitchTransformersDenseActDense(config)
-        else:
-            self.mlp = SwitchTransformersSparseMLP(config)
-
-        self.layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-        self.dropout = nn.Dropout(config.dropout_rate)
-
-    def forward(self, hidden_states, output_router_logits):
-        forwarded_states = self.layer_norm(hidden_states)
-        forwarded_states = self.mlp(forwarded_states)
-
-        if isinstance(forwarded_states, tuple):
-            forwarded_states, router_tuple = forwarded_states
-        else:
-            router_tuple = None
-
-        output = hidden_states + self.dropout(forwarded_states)
-
-        if output_router_logits and router_tuple is not None:
-            output = (output, router_tuple)
-
-        return output
-
-
 class SwitchTransformersSparseMLP(nn.Module):
     r"""
     Implementation of the Switch Transformers Sparse MLP module. TODO: Add a LOT of details here
@@ -439,6 +394,9 @@ class SwitchTransformersSparseMLP(nn.Module):
         router_mask, router_probs, router_logits = self.router(hidden_states)
         expert_index = torch.argmax(router_mask, dim=-1)
 
+        # The routers introduced might not always map all the tokens, to a router, which means that some hidden states
+        # can be unchanged from one layer to another. That is why the hidden states are cloned before updating only the seleced ones.
+
         next_states = hidden_states.clone()
         for idx, expert in enumerate(self.experts.values()):
 
@@ -451,6 +409,51 @@ class SwitchTransformersSparseMLP(nn.Module):
 
         hidden_states = router_probs * next_states
         return hidden_states, (router_logits, expert_index)
+
+
+class SwitchTransformersLayerFF(nn.Module):
+    r"""
+    Switch Transformers Feed Forward layer module. This is a wrapper around the Mixture of Experts module.
+
+    Attributes:
+        is_sparse (`bool`):
+            Whether the MLP layer is a `Sparse` layer (contains a Mixture of Experts) or not
+        mlp (`torch.nn.Module`):
+            The MLP layer of the Feed Forward layer
+        layer_norm (`torch.nn.Module`):
+            The pre-MLP layer norm. This module is equivalent to the `pre_mlp_layer_norm` in `t5x`
+        dropout (`torch.nn.Module`):
+            Post-MLP dropout layer.
+    """
+
+    def __init__(self, config: SwitchTransformersConfig, is_sparse=False):
+        super().__init__()
+        self.is_sparse = is_sparse
+
+        # Check if it is a sparse layer, if not then it is a dense layer
+        if not self.is_sparse:
+            self.mlp = SwitchTransformersDenseActDense(config)
+        else:
+            self.mlp = SwitchTransformersSparseMLP(config)
+
+        self.layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.dropout = nn.Dropout(config.dropout_rate)
+
+    def forward(self, hidden_states, output_router_logits):
+        forwarded_states = self.layer_norm(hidden_states)
+        forwarded_states = self.mlp(forwarded_states)
+
+        if isinstance(forwarded_states, tuple):
+            forwarded_states, router_tuple = forwarded_states
+        else:
+            router_tuple = None
+
+        output = hidden_states + self.dropout(forwarded_states)
+
+        if output_router_logits and router_tuple is not None:
+            output = (output, router_tuple)
+
+        return output
 
 
 # Copied from transformers.models.t5.modeling_t5.T5Attention with T5->SwitchTransformers
