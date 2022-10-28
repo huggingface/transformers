@@ -171,7 +171,7 @@ Apply the `group_texts` function over the entire dataset:
 >>> lm_dataset = tokenized_eli5.map(group_texts, batched=True, num_proc=4)
 ```
 
-Now create a batch of examples using [`DataCollatorForLanguageModeling`]. It'll also *dynamically pad* your text to the length of the longest element in its batch (instead of the entire dataset) so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient. 
+Now create a batch of examples using [`DataCollatorForLanguageModeling`]. It's more efficient to *dynamically pad* the sentences to the longest length in a batch during collation, instead of padding the whole dataset to the maximium length.
 
 <frameworkcontent>
 <pt>

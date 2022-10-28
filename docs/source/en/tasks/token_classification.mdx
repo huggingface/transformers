@@ -151,7 +151,7 @@ To apply the preprocessing function over the entire dataset, use 🤗 Datasets [
 >>> tokenized_wnut = wnut.map(tokenize_and_align_labels, batched=True)
 ```
 
-Now create a batch of examples using [`DataCollatorWithPadding`]. It'll also *dynamically pad* your text and labels to the length of the longest element in its batch (instead of the entire dataset) so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
+Now create a batch of examples using [`DataCollatorWithPadding`]. It's more efficient to *dynamically pad* the sentences to the longest length in a batch during collation, instead of padding the whole dataset to the maximium length.
 
 <frameworkcontent>
 <pt>
@@ -214,14 +214,7 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 ## Train
 
-<frameworkcontent>
-<pt>
-<Tip>
-
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
-
-</Tip>
-You're ready to start training your model now! Map the expected ids to their labels with `id2label` and `label2id`:
+Before you start training your model, create a map of the expected ids to their labels with `id2label` and `label2id`:
 
 ```py
 >>> id2label = {
@@ -256,7 +249,14 @@ You're ready to start training your model now! Map the expected ids to their lab
 ... }
 ```
 
-Then you can load DistilBERT with [`AutoModelForTokenClassification`] along with the number of expected labels, and the label mappings:
+<frameworkcontent>
+<pt>
+<Tip>
+
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+
+</Tip>
+You're ready to start training your model now! Load DistilBERT with [`AutoModelForTokenClassification`] along with the number of expected labels, and the label mappings:
 
 ```py
 >>> from transformers import AutoModelForTokenClassification, TrainingArguments, Trainer
@@ -325,41 +325,6 @@ To finetune a model in TensorFlow, start by setting up an optimizer function, le
 ...     weight_decay_rate=0.01,
 ...     num_warmup_steps=0,
 ... )
-```
-
-Map the expected ids to their labels with `id2label` and `label2id`:
-
-```py
->>> id2label = {
-...     0: "O",
-...     1: "B-corporation",
-...     2: "I-corporation",
-...     3: "B-creative-work",
-...     4: "I-creative-work",
-...     5: "B-group",
-...     6: "I-group",
-...     7: "B-location",
-...     8: "I-location",
-...     9: "B-person",
-...     10: "I-person",
-...     11: "B-product",
-...     12: "I-product",
-... }
->>> label2id = {
-...     "O": 0,
-...     "B-corporation": 1,
-...     "I-corporation": 2,
-...     "B-creative-work": 3,
-...     "I-creative-work": 4,
-...     "B-group": 5,
-...     "I-group": 6,
-...     "B-location": 7,
-...     "I-location": 8,
-...     "B-person": 9,
-...     "I-person": 10,
-...     "B-product": 11,
-...     "I-product": 12,
-... }
 ```
 
 Then you can load DistilBERT with [`TFAutoModelForTokenClassification`] along with the number of expected labels, and the label mappings:

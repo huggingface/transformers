@@ -91,7 +91,7 @@ To apply the preprocessing function over the entire dataset, use 🤗 Datasets [
 tokenized_imdb = imdb.map(preprocess_function, batched=True)
 ```
 
-Now create a batch of examples using [`DataCollatorWithPadding`]. It'll *dynamically pad* your text to the length of the longest element in its batch (instead of the entire dataset) so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
+Now create a batch of examples using [`DataCollatorWithPadding`]. It's more efficient to *dynamically pad* the sentences to the longest length in a batch during collation, instead of padding the whole dataset to the maximium length.
 
 <frameworkcontent>
 <pt>
@@ -136,6 +136,13 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 ## Train
 
+Before you start training your model, create a map of the expected ids to their labels with `id2label` and `label2id`:
+
+```py
+>>> id2label = {0: "NEGATIVE", 1: "POSITIVE"}
+>>> label2id = {"NEGATIVE": 0, "POSITIVE": 1}
+```
+
 <frameworkcontent>
 <pt>
 <Tip>
@@ -143,14 +150,7 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
 
 </Tip>
-You're ready to start training your model now! Map the expected ids to their labels with `id2label` and `label2id`:
-
-```py
->>> id2label = {0: "NEGATIVE", 1: "POSITIVE"}
->>> label2id = {"NEGATIVE": 0, "POSITIVE": 1}
-```
-
-Then you can load DistilBERT with [`AutoModelForSequenceClassification`] along with the number of expected labels, and the label mappings:
+You're ready to start training your model now! Load DistilBERT with [`AutoModelForSequenceClassification`] along with the number of expected labels, and the label mappings:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification, TrainingArguments, Trainer
@@ -222,13 +222,6 @@ To finetune a model in TensorFlow, start by setting up an optimizer function, le
 >>> batches_per_epoch = len(tokenized_imdb["train"]) // batch_size
 >>> total_train_steps = int(batches_per_epoch * num_epochs)
 >>> optimizer, schedule = create_optimizer(init_lr=2e-5, num_warmup_steps=0, num_train_steps=total_train_steps)
-```
-
-Map the expected ids to their labels with `id2label` and `label2id`:
-
-```py
->>> id2label = {0: "NEGATIVE", 1: "POSITIVE"}
->>> label2id = {"NEGATIVE": 0, "POSITIVE": 1}
 ```
 
 Then you can load DistilBERT with [`TFAutoModelForSequenceClassification`] along with the number of expected labels, and the label mappings:
