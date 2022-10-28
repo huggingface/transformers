@@ -461,8 +461,8 @@ class TFBeitModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFData2VecVisionModel.from_pretrained(model_name)
+        for model_name in TF_BEIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFBeitModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
