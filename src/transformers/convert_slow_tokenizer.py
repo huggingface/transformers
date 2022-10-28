@@ -1127,7 +1127,6 @@ SLOW_TO_FAST_CONVERTERS = {
     "RoFormerTokenizer": RoFormerConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
-    "SwitchTransformersTokenizer": T5Converter,
     "XLMRobertaTokenizer": XLMRobertaConverter,
     "XLNetTokenizer": XLNetConverter,
     "SplinterTokenizer": SplinterConverter,
