@@ -44,6 +44,8 @@ from transformers.models.auto.configuration_auto import AutoConfig, model_type_t
 from transformers.processing_utils import ProcessorMixin, transformers_module
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
+# make sure tokenizer plays nice with multiprocessing
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 logging.set_verbosity_error()
 logger = logging.get_logger(__name__)
@@ -519,15 +521,6 @@ def upload_models(output_dir):
                     commit_description=f"Upload tiny models for {arch_name}",
                     create_pr=True,
                 )
-                # hub_pr_url = create_commit(
-                #     repo_id=f"{organization}/{repo_name}",
-                #     # TODO: Add
-                #     operations=[],
-                #     commit_message=f"Update tiny models for {arch_name}",
-                #     commit_description=f"Upload tiny models for {arch_name}",
-                #     repo_type="model",
-                #     create_pr=True,
-                # )
                 logger.warning(f"PR open in {hub_pr_url}")
 
 
