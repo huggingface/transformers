@@ -35,6 +35,7 @@ from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFModelInputType,
     TFPreTrainedModel,
+    get_initializer,
     keras_serializable,
     unpack_inputs,
 )
@@ -1831,7 +1832,7 @@ class TFLongT5Model(TFLongT5PreTrainedModel):
             input_dim=self.config.vocab_size,
             output_dim=self.config.d_model,
             embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.initializer_factor),
-            name="model.shared",
+            name="shared",
         )
         # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
         self.shared.load_weight_prefix = "shared"
@@ -1979,8 +1980,8 @@ class TFLongT5ForConditionalGeneration(TFLongT5PreTrainedModel, TFCausalLanguage
         self.shared = tf.keras.layers.Embedding(
             input_dim=self.config.vocab_size,
             output_dim=self.config.d_model,
-            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.initializer_factor),
-            name="model.shared",
+            embeddings_initializer=get_initializer(self.config.initializer_factor),
+            name="shared",
         )
         # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
         self.shared.load_weight_prefix = "shared"
@@ -2258,8 +2259,8 @@ class TFLongT5EncoderModel(TFLongT5PreTrainedModel):
         self.shared = tf.keras.layers.Embedding(
             input_dim=self.config.vocab_size,
             output_dim=self.config.d_model,
-            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.initializer_factor),
-            name="model.shared",
+            embeddings_initializer=get_initializer(self.config.initializer_factor),
+            name="shared",
         )
         # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
         self.shared.load_weight_prefix = "shared"
