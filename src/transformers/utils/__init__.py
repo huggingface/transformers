@@ -38,11 +38,21 @@ from .generic import (
     PaddingStrategy,
     TensorType,
     cached_property,
+    expand_dims,
     find_labels,
     flatten_dict,
+    is_jax_tensor,
+    is_numpy_array,
     is_tensor,
+    is_tf_tensor,
+    is_torch_device,
+    is_torch_tensor,
+    reshape,
+    squeeze,
+    tensor_size,
     to_numpy,
     to_py_obj,
+    transpose,
     working_or_temp_dir,
 )
 from .hub import (
@@ -98,7 +108,10 @@ from .import_utils import (
     is_ftfy_available,
     is_in_notebook,
     is_ipex_available,
+    is_jumanpp_available,
+    is_kenlm_available,
     is_librosa_available,
+    is_more_itertools_available,
     is_ninja_available,
     is_onnx_available,
     is_pandas_available,
@@ -121,6 +134,7 @@ from .import_utils import (
     is_soundfile_availble,
     is_spacy_available,
     is_speech_available,
+    is_sudachi_available,
     is_tensorflow_probability_available,
     is_tensorflow_text_available,
     is_tf2onnx_available,
@@ -161,6 +175,7 @@ SAFE_WEIGHTS_NAME = "model.safetensors"
 SAFE_WEIGHTS_INDEX_NAME = "model.safetensors.index.json"
 CONFIG_NAME = "config.json"
 FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
+IMAGE_PROCESSOR_NAME = FEATURE_EXTRACTOR_NAME
 MODEL_CARD_NAME = "modelcard.json"
 
 SENTENCEPIECE_UNDERLINE = "▁"

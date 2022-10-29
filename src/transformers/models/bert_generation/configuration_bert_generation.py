@@ -72,7 +72,7 @@ class BertGenerationConfig(PretrainedConfig):
     >>> # Initializing a BertGeneration config
     >>> configuration = BertGenerationConfig()
 
-    >>> # Initializing a model from the config
+    >>> # Initializing a model (with random weights) from the config
     >>> model = BertGenerationEncoder(configuration)
 
     >>> # Accessing the model configuration

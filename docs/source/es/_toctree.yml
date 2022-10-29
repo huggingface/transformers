@@ -28,10 +28,14 @@
   - local: custom_models
     title: Compartir modelos personalizados
   - sections:
+    - local: tasks/question_answering
+      title: Respuesta a preguntas
     - local: tasks/language_modeling
       title: Modelado de lenguaje
     - local: tasks/summarization
       title: Generación de resúmenes
+    - local: tasks/multiple_choice
+      title: Selección múltiple
     - local: tasks/image_classification
       title: Clasificación de imágenes
     title: Fine-tuning para tareas posteriores

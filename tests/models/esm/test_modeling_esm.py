@@ -240,12 +240,20 @@ class EsmModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
+    @unittest.skip("Esm does not support embedding resizing")
+    def test_resize_embeddings_untied(self):
+        pass
+
+    @unittest.skip("Esm does not support embedding resizing")
+    def test_resize_tokens_embeddings(self):
+        pass
+
 
 @require_torch
 class EsmModelIntegrationTest(TestCasePlus):
     @slow
     def test_inference_masked_lm(self):
-        model = EsmForMaskedLM.from_pretrained("Rocketknight1/esm-2-8m")
+        model = EsmForMaskedLM.from_pretrained("Rocketknight1/esm2_t6_8M_UR50D")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
@@ -261,7 +269,7 @@ class EsmModelIntegrationTest(TestCasePlus):
 
     @slow
     def test_inference_no_head(self):
-        model = EsmModel.from_pretrained("Rocketknight1/esm-2-8m")
+        model = EsmModel.from_pretrained("Rocketknight1/esm2_t6_8M_UR50D")
 
         input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
         output = model(input_ids)[0]
@@ -270,24 +278,3 @@ class EsmModelIntegrationTest(TestCasePlus):
             [[[0.1444, 0.5413, 0.3248], [0.3034, 0.0053, 0.3108], [0.3228, -0.2499, 0.3415]]]
         )
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
-
-    def test_lm_head_ignore_keys(self):
-        from copy import deepcopy
-
-        keys_to_ignore_on_save_tied = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
-        keys_to_ignore_on_save_untied = [r"lm_head.decoder.bias"]
-        config = EsmConfig.from_pretrained("Rocketknight1/esm-2-8m")
-        config_tied = deepcopy(config)
-        config_tied.tie_word_embeddings = True
-        config_untied = deepcopy(config)
-        config_untied.tie_word_embeddings = False
-        for cls in [EsmForMaskedLM]:
-            model = cls(config_tied)
-            self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_tied, cls)
-
-            # the keys should be different when embeddings aren't tied
-            model = cls(config_untied)
-            self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_untied, cls)
-
-            # test that saving works with updated ignore keys - just testing that it doesn't fail
-            model.save_pretrained(self.get_auto_remove_tmp_dir())

@@ -32,10 +32,18 @@ from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
+from ..models.auto.modeling_auto import AutoModelForDepthEstimation
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..tokenization_utils_fast import PreTrainedTokenizerFast
-from ..utils import HUGGINGFACE_CO_RESOLVE_ENDPOINT, is_tf_available, is_torch_available, logging
+from ..utils import (
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
+    is_kenlm_available,
+    is_pyctcdecode_available,
+    is_tf_available,
+    is_torch_available,
+    logging,
+)
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
@@ -51,6 +59,7 @@ from .base import (
     infer_framework_load_model,
 )
 from .conversational import Conversation, ConversationalPipeline
+from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
@@ -72,6 +81,7 @@ from .token_classification import (
 from .visual_question_answering import VisualQuestionAnsweringPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
+from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
 
 
 if is_tf_available():
@@ -124,6 +134,7 @@ if is_torch_available():
         AutoModelForTokenClassification,
         AutoModelForVision2Seq,
         AutoModelForVisualQuestionAnswering,
+        AutoModelForZeroShotObjectDetection,
     )
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -333,6 +344,20 @@ SUPPORTED_TASKS = {
         "tf": (),
         "pt": (AutoModelForObjectDetection,) if is_torch_available() else (),
         "default": {"model": {"pt": ("facebook/detr-resnet-50", "2729413")}},
+        "type": "image",
+    },
+    "zero-shot-object-detection": {
+        "impl": ZeroShotObjectDetectionPipeline,
+        "tf": (),
+        "pt": (AutoModelForZeroShotObjectDetection,) if is_torch_available() else (),
+        "default": {"model": {"pt": ("google/owlvit-base-patch32", "17740e1")}},
+        "type": "multimodal",
+    },
+    "depth-estimation": {
+        "impl": DepthEstimationPipeline,
+        "tf": (),
+        "pt": (AutoModelForDepthEstimation,) if is_torch_available() else (),
+        "default": {"model": {"pt": ("Intel/dpt-large", "e93beec")}},
         "type": "image",
     },
 }
@@ -819,11 +844,12 @@ def pipeline(
 
                     kwargs["decoder"] = decoder
                 except ImportError as e:
-                    logger.warning(
-                        f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Try to install"
-                        " `pyctcdecode` and `kenlm`: (`pip install pyctcdecode`, `pip install"
-                        f" https://github.com/kpu/kenlm/archive/master.zip`): Error: {e}"
-                    )
+                    logger.warning(f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Error: {e}")
+                    if not is_kenlm_available():
+                        logger.warning("Try to install `kenlm`: `pip install kenlm")
+
+                    if not is_pyctcdecode_available():
+                        logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
 
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:

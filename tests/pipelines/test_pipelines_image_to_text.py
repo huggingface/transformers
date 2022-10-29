@@ -16,7 +16,7 @@ import unittest
 
 from transformers import MODEL_FOR_VISION_2_SEQ_MAPPING, TF_MODEL_FOR_VISION_2_SEQ_MAPPING, is_vision_available
 from transformers.pipelines import pipeline
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, require_vision, slow
+from transformers.testing_utils import require_tf, require_torch, require_vision, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -31,7 +31,6 @@ else:
             pass
 
 
-@is_pipeline_test
 @require_vision
 class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_VISION_2_SEQ_MAPPING
@@ -57,7 +56,7 @@ class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
 
     @require_tf
     def test_small_model_tf(self):
-        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2")
+        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2", framework="tf")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
 
         outputs = pipe(image)
@@ -65,12 +64,7 @@ class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
             outputs,
             [
                 {
-                    "generated_text": (
-                        " intermedi intermedi intermedi intermedi intermedi "
-                        "explorer explorer explorer explorer explorer explorer "
-                        "explorer medicine medicine medicine medicine medicine "
-                        "medicine medicine"
-                    )
+                    "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
                 },
             ],
         )
@@ -81,25 +75,21 @@ class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
             [
                 [
                     {
-                        "generated_text": (
-                            " intermedi intermedi intermedi intermedi intermedi "
-                            "explorer explorer explorer explorer explorer explorer "
-                            "explorer medicine medicine medicine medicine medicine "
-                            "medicine medicine"
-                        )
-                    },
+                        "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
+                    }
                 ],
                 [
                     {
-                        "generated_text": (
-                            " intermedi intermedi intermedi intermedi intermedi "
-                            "explorer explorer explorer explorer explorer explorer "
-                            "explorer medicine medicine medicine medicine medicine "
-                            "medicine medicine"
-                        )
-                    },
+                        "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
+                    }
                 ],
             ],
+        )
+
+        outputs = pipe(image, max_new_tokens=1)
+        self.assertEqual(
+            outputs,
+            [{"generated_text": "growth"}],
         )
 
     @require_torch
@@ -155,7 +145,7 @@ class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
     @slow
     @require_tf
     def test_large_model_tf(self):
-        pipe = pipeline("image-to-text", model="ydshieh/vit-gpt2-coco-en")
+        pipe = pipeline("image-to-text", model="ydshieh/vit-gpt2-coco-en", framework="tf")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
 
         outputs = pipe(image)

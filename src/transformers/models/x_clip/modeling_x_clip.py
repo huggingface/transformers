@@ -1061,21 +1061,46 @@ class XCLIPVisionModel(XCLIPPreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import XCLIPProcessor, XCLIPVisionModel
+        >>> from decord import VideoReader, cpu
+        >>> import torch
+        >>> import numpy as np
 
+        >>> from transformers import AutoProcessor, XCLIPVisionModel
+        >>> from huggingface_hub import hf_hub_download
+
+        >>> np.random.seed(0)
+
+
+        >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+        ...     converted_len = int(clip_len * frame_sample_rate)
+        ...     end_idx = np.random.randint(converted_len, seg_len)
+        ...     start_idx = end_idx - converted_len
+        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
+        ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
+        ...     return indices
+
+
+        >>> # video clip consists of 300 frames (10 seconds at 30 FPS)
+        >>> file_path = hf_hub_download(
+        ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
+        ... )
+        >>> vr = VideoReader(file_path, num_threads=1, ctx=cpu(0))
+
+        >>> # sample 16 frames
+        >>> vr.seek(0)
+        >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=1, seg_len=len(vr))
+        >>> video = vr.get_batch(indices).asnumpy()
+
+        >>> processor = AutoProcessor.from_pretrained("microsoft/xclip-base-patch32")
         >>> model = XCLIPVisionModel.from_pretrained("microsoft/xclip-base-patch32")
-        >>> processor = XCLIPProcessor.from_pretrained("microsoft/xclip-base-patch32")
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> pixel_values = processor(videos=list(video), return_tensors="pt").pixel_values
 
-        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> batch_size, num_frames, num_channels, height, width = pixel_values.shape
+        >>> pixel_values = pixel_values.reshape(-1, num_channels, height, width)
 
-        >>> outputs = model(**inputs)
+        >>> outputs = model(pixel_values)
         >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
         return self.vision_model(
             pixel_values=pixel_values,
@@ -1288,10 +1313,10 @@ class XCLIPModel(XCLIPPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import CLIPTokenizer, XCLIPModel
+        >>> from transformers import AutoTokenizer, AutoModel
 
-        >>> model = XCLIPModel.from_pretrained("microsoft/xclip-base-patch32")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("microsoft/xclip-base-patch32")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/xclip-base-patch32")
+        >>> model = AutoModel.from_pretrained("microsoft/xclip-base-patch32")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
@@ -1334,17 +1359,40 @@ class XCLIPModel(XCLIPPreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import XCLIPProcessor, XCLIPModel
+        >>> from decord import VideoReader, cpu
+        >>> import torch
+        >>> import numpy as np
 
-        >>> model = XCLIPModel.from_pretrained("microsoft/xclip-base-patch32")
-        >>> processor = XCLIPProcessor.from_pretrained("microsoft/xclip-base-patch32")
+        >>> from transformers import AutoProcessor, AutoModel
+        >>> from huggingface_hub import hf_hub_download
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> np.random.seed(0)
 
-        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+        ...     converted_len = int(clip_len * frame_sample_rate)
+        ...     end_idx = np.random.randint(converted_len, seg_len)
+        ...     start_idx = end_idx - converted_len
+        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
+        ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
+        ...     return indices
+
+
+        >>> # video clip consists of 300 frames (10 seconds at 30 FPS)
+        >>> file_path = hf_hub_download(
+        ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
+        ... )
+        >>> vr = VideoReader(file_path, num_threads=1, ctx=cpu(0))
+
+        >>> # sample 16 frames
+        >>> vr.seek(0)
+        >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=1, seg_len=len(vr))
+        >>> video = vr.get_batch(indices).asnumpy()
+
+        >>> processor = AutoProcessor.from_pretrained("microsoft/xclip-base-patch32")
+        >>> model = AutoModel.from_pretrained("microsoft/xclip-base-patch32")
+
+        >>> inputs = processor(videos=list(video), return_tensors="pt")
 
         >>> video_features = model.get_video_features(**inputs)
         ```"""
@@ -1399,23 +1447,54 @@ class XCLIPModel(XCLIPPreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import XCLIPProcessor, XCLIPModel
+        >>> from decord import VideoReader, cpu
+        >>> import torch
+        >>> import numpy as np
 
-        >>> model = XCLIPModel.from_pretrained("microsoft/xclip-base-patch32")
-        >>> processor = XCLIPProcessor.from_pretrained("microsoft/xclip-base-patch32")
+        >>> from transformers import AutoProcessor, AutoModel
+        >>> from huggingface_hub import hf_hub_download
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> np.random.seed(0)
+
+
+        >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+        ...     converted_len = int(clip_len * frame_sample_rate)
+        ...     end_idx = np.random.randint(converted_len, seg_len)
+        ...     start_idx = end_idx - converted_len
+        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
+        ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
+        ...     return indices
+
+
+        >>> # video clip consists of 300 frames (10 seconds at 30 FPS)
+        >>> file_path = hf_hub_download(
+        ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
+        ... )
+        >>> vr = VideoReader(file_path, num_threads=1, ctx=cpu(0))
+
+        >>> # sample 16 frames
+        >>> vr.seek(0)
+        >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=1, seg_len=len(vr))
+        >>> video = vr.get_batch(indices).asnumpy()
+
+        >>> processor = AutoProcessor.from_pretrained("microsoft/xclip-base-patch32")
+        >>> model = AutoModel.from_pretrained("microsoft/xclip-base-patch32")
 
         >>> inputs = processor(
-        ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
+        ...     text=["playing sports", "eating spaghetti", "go shopping"],
+        ...     videos=list(video),
+        ...     return_tensors="pt",
+        ...     padding=True,
         ... )
 
-        >>> outputs = model(**inputs)
+        >>> # forward pass
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
         >>> logits_per_video = outputs.logits_per_video  # this is the video-text similarity score
         >>> probs = logits_per_video.softmax(dim=1)  # we can take the softmax to get the label probabilities
+        >>> print(probs)
+        tensor([[1.9496e-04, 9.9960e-01, 2.0825e-04]])
         ```"""
         # Use X_CLIP model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

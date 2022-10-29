@@ -76,12 +76,12 @@ class LevitConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import LevitModel, LevitConfig
+    >>> from transformers import LevitConfig, LevitModel
 
     >>> # Initializing a LeViT levit-128S style configuration
     >>> configuration = LevitConfig()
 
-    >>> # Initializing a model from the levit-128S style configuration
+    >>> # Initializing a model (with random weights) from the levit-128S style configuration
     >>> model = LevitModel(configuration)
 
     >>> # Accessing the model configuration
