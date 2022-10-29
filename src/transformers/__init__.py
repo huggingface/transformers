@@ -3253,8 +3253,8 @@ if TYPE_CHECKING:
         MarkupLMProcessor,
         MarkupLMTokenizer,
     )
-    from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig
     from .models.mask2former import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Mask2FormerConfig
+    from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig
     from .models.mbart import MBartConfig
     from .models.mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig, MCTCTProcessor
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
@@ -3611,8 +3611,8 @@ if TYPE_CHECKING:
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor
         from .models.layoutlmv3 import LayoutLMv3FeatureExtractor
         from .models.levit import LevitFeatureExtractor
-        from .models.maskformer import MaskFormerFeatureExtractor
         from .models.mask2former import Mask2FormerFeatureExtractor
+        from .models.maskformer import MaskFormerFeatureExtractor
         from .models.mobilevit import MobileViTFeatureExtractor
         from .models.owlvit import OwlViTFeatureExtractor
         from .models.perceiver import PerceiverFeatureExtractor
@@ -4281,17 +4281,17 @@ if TYPE_CHECKING:
             MarkupLMModel,
             MarkupLMPreTrainedModel,
         )
-        from .models.maskformer import (
-            MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MaskFormerForInstanceSegmentation,
-            MaskFormerModel,
-            MaskFormerPreTrainedModel,
-        )
         from .models.mask2former import (
             MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             Mask2FormerForInstanceSegmentation,
             Mask2FormerModel,
             Mask2FormerPreTrainedModel,
+        )
+        from .models.maskformer import (
+            MASKFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MaskFormerForInstanceSegmentation,
+            MaskFormerModel,
+            MaskFormerPreTrainedModel,
         )
         from .models.mbart import (
             MBartForCausalLM,

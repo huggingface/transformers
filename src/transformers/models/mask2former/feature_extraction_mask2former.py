@@ -35,6 +35,157 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+# Copied from transformers.models.detr.feature_extraction_detr.binary_mask_to_rle
+def binary_mask_to_rle(mask):
+    """
+    Args:
+    Converts given binary mask of shape (height, width) to the run-length encoding (RLE) format.
+        mask (`torch.Tensor` or `numpy.array`):
+            A binary mask tensor of shape `(height, width)` where 0 denotes background and 1 denotes the target
+            segment_id or class_id.
+    Returns:
+        `List`: Run-length encoded list of the binary mask. Refer to COCO API for more information about the RLE
+        format.
+    """
+    if is_torch_tensor(mask):
+        mask = mask.numpy()
+
+    pixels = mask.flatten()
+    pixels = np.concatenate([[0], pixels, [0]])
+    runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
+    runs[1::2] -= runs[::2]
+    return [x for x in runs]
+
+
+# Copied from transformers.models.detr.feature_extraction_detr.convert_segmentation_to_rle
+def convert_segmentation_to_rle(segmentation):
+    """
+    Converts given segmentation map of shape (height, width) to the run-length encoding (RLE) format.
+    Args:
+        segmentation (`torch.Tensor` or `numpy.array`):
+            A segmentation map of shape `(height, width)` where each value denotes a segment or class id.
+    Returns:
+        `List[List]`: A list of lists, where each list is the run-length encoding of a segment / class id.
+    """
+    segment_ids = torch.unique(segmentation)
+
+    run_length_encodings = []
+    for idx in segment_ids:
+        mask = torch.where(segmentation == idx, 1, 0)
+        rle = binary_mask_to_rle(mask)
+        run_length_encodings.append(rle)
+
+    return run_length_encodings
+
+
+# Copied from transformers.models.detr.feature_extraction_detr.remove_low_and_no_objects
+def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
+    """
+    Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
+    `labels`.
+    Args:
+        masks (`torch.Tensor`):
+            A tensor of shape `(num_queries, height, width)`.
+        scores (`torch.Tensor`):
+            A tensor of shape `(num_queries)`.
+        labels (`torch.Tensor`):
+            A tensor of shape `(num_queries)`.
+        object_mask_threshold (`float`):
+            A number between 0 and 1 used to binarize the masks.
+    Raises:
+        `ValueError`: Raised when the first dimension doesn't match in all input tensors.
+    Returns:
+        `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
+        < `object_mask_threshold`.
+    """
+    if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
+        raise ValueError("mask, scores and labels must have the same shape!")
+
+    to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
+
+    return masks[to_keep], scores[to_keep], labels[to_keep]
+
+
+# Copied from transformers.models.detr.feature_extraction_detr.check_segment_validity
+def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
+    # Get the mask associated with the k class
+    mask_k = mask_labels == k
+    mask_k_area = mask_k.sum()
+
+    # Compute the area of all the stuff in query k
+    original_area = (mask_probs[k] >= mask_threshold).sum()
+    mask_exists = mask_k_area > 0 and original_area > 0
+
+    # Eliminate disconnected tiny segments
+    if mask_exists:
+        area_ratio = mask_k_area / original_area
+        if not area_ratio.item() > overlap_mask_area_threshold:
+            mask_exists = False
+
+    return mask_exists, mask_k
+
+
+# Copied from transformers.models.detr.feature_extraction_detr.compute_segments
+def compute_segments(
+    mask_probs,
+    pred_scores,
+    pred_labels,
+    mask_threshold: float = 0.5,
+    overlap_mask_area_threshold: float = 0.8,
+    label_ids_to_fuse: Optional[Set[int]] = None,
+    target_size: Tuple[int, int] = None,
+):
+    height = mask_probs.shape[1] if target_size is None else target_size[0]
+    width = mask_probs.shape[2] if target_size is None else target_size[1]
+
+    segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
+    segments: List[Dict] = []
+
+    if target_size is not None:
+        mask_probs = nn.functional.interpolate(
+            mask_probs.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
+        )[0]
+
+    current_segment_id = 0
+
+    # Weigh each mask by its prediction score
+    mask_probs *= pred_scores.view(-1, 1, 1)
+    mask_labels = mask_probs.argmax(0)  # [height, width]
+
+    # Keep track of instances of each class
+    stuff_memory_list: Dict[str, int] = {}
+    for k in range(pred_labels.shape[0]):
+        pred_class = pred_labels[k].item()
+        should_fuse = pred_class in label_ids_to_fuse
+
+        # Check if mask exists and large enough to be a segment
+        mask_exists, mask_k = check_segment_validity(
+            mask_labels, mask_probs, k, mask_threshold, overlap_mask_area_threshold
+        )
+
+        if mask_exists:
+            if pred_class in stuff_memory_list:
+                current_segment_id = stuff_memory_list[pred_class]
+            else:
+                current_segment_id += 1
+
+            # Add current object segment to final segmentation map
+            segmentation[mask_k] = current_segment_id
+            segment_score = round(pred_scores[k].item(), 6)
+            segments.append(
+                {
+                    "id": current_segment_id,
+                    "label_id": pred_class,
+                    "was_fused": should_fuse,
+                    "score": segment_score,
+                }
+            )
+            if should_fuse:
+                stuff_memory_list[pred_class] = current_segment_id
+
+    return segmentation, segments
+
+
 class Mask2FormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a Mask2Former feature extractor. The feature extractor can be used to prepare image(s) and optional
@@ -453,276 +604,221 @@ class Mask2FormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtraction
 
         return encoded_inputs
 
-    def post_process_segmentation(
-        self, outputs: "Mask2FormerForInstanceSegmentationOutput", target_size: Tuple[int, int] = None
-    ) -> "torch.Tensor":
-        """
-        Converts the output of [`Mask2FormerForInstanceSegmentationOutput`] into image segmentation predictions. Only
-        supports PyTorch.
-
-        Args:
-            outputs ([`Mask2FormerForInstanceSegmentationOutput`]):
-                The outputs from [`Mask2FormerForInstanceSegmentation`].
-
-            target_size (`Tuple[int, int]`, *optional*):
-                If set, the `masks_queries_logits` will be resized to `target_size`.
-
-        Returns:
-            `torch.Tensor`:
-                A tensor of shape (`batch_size, num_labels, height, width`).
-        """
-        # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
-        class_queries_logits = outputs.class_queries_logits
-        # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_queries_logits = outputs.masks_queries_logits
-        if target_size is not None:
-            masks_queries_logits = interpolate(
-                masks_queries_logits,
-                size=target_size,
-                mode="bilinear",
-                align_corners=False,
-            )
-        # remove the null class `[..., :-1]`
-        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
-        # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_probs = masks_queries_logits.sigmoid()
-        # now we want to sum over the queries,
-        # $ out_{c,h,w} =  \sum_q p_{q,c} * m_{q,h,w} $
-        # where $ softmax(p) \in R^{q, c} $ is the mask classes
-        # and $ sigmoid(m) \in R^{q, h, w}$ is the mask probabilities
-        # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
-        
-        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
-
-        return segmentation
-
-    def remove_low_and_no_objects(self, masks, scores, labels, object_mask_threshold, num_labels):
-        """
-        Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores`
-        and `labels`.
-
-        Args:
-            masks (`torch.Tensor`):
-                A tensor of shape `(num_queries, height, width)`.
-            scores (`torch.Tensor`):
-                A tensor of shape `(num_queries)`.
-            labels (`torch.Tensor`):
-                A tensor of shape `(num_queries)`.
-            object_mask_threshold (`float`):
-                A number between 0 and 1 used to binarize the masks.
-
-        Raises:
-            `ValueError`: Raised when the first dimension doesn't match in all input tensors.
-
-        Returns:
-            `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the
-            region < `object_mask_threshold`.
-        """
-        if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
-            raise ValueError("mask, scores and labels must have the same shape!")
-
-        to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
-
-        return masks[to_keep], scores[to_keep], labels[to_keep]
-
     def post_process_semantic_segmentation(
-        self, outputs: "Mask2FormerForInstanceSegmentationOutput", target_size: Tuple[int, int] = None
+        self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None
     ) -> "torch.Tensor":
         """
-        Converts the output of [`Mask2FormerForInstanceSegmentationOutput`] into semantic segmentation predictions. Only
-        supports PyTorch.
-
+        Converts the output of [`MaskFormerForInstanceSegmentation`] into semantic segmentation maps. Only supports
+        PyTorch.
         Args:
-            outputs ([`Mask2FormerForInstanceSegmentationOutput`]):
-                The outputs from [`Mask2FormerForInstanceSegmentation`].
-
+            outputs ([`MaskFormerForInstanceSegmentation`]):
+                Raw outputs of the model.
+            target_sizes (`List[Tuple[int, int]]`, *optional*, defaults to `None`):
+                List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
+                final size (height, width) of each prediction. If left to None, predictions will not be resized.
         Returns:
-            `torch.Tensor`: A tensor of shape `batch_size, height, width`.
+            `List[torch.Tensor]`:
+                A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
+                corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
+                `torch.Tensor` correspond to a semantic class id.
         """
-        segmentation = self.post_process_segmentation(outputs, target_size)
-        semantic_segmentation = segmentation.argmax(dim=1)
+        class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
+
+        # Remove the null class `[..., :-1]`
+        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
+        masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+
+        # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
+        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+        batch_size = class_queries_logits.shape[0]
+
+        # Resize logits and compute semantic segmentation maps
+        if target_sizes is not None:
+            if batch_size != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+            semantic_segmentation = []
+            for idx in range(batch_size):
+                resized_logits = torch.nn.functional.interpolate(
+                    segmentation[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                )
+                semantic_map = resized_logits[0].argmax(dim=0)
+                semantic_segmentation.append(semantic_map)
+        else:
+            semantic_segmentation = segmentation.argmax(dim=1)
+            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+
         return semantic_segmentation
+
+    def post_process_instance_segmentation(
+        self,
+        outputs,
+        threshold: float = 0.5,
+        mask_threshold: float = 0.5,
+        overlap_mask_area_threshold: float = 0.8,
+        target_sizes: Optional[List[Tuple[int, int]]] = None,
+        return_coco_annotation: Optional[bool] = False,
+    ) -> List[Dict]:
+        """
+        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into instance segmentation predictions. Only
+        supports PyTorch.
+        Args:
+            outputs ([`MaskFormerForInstanceSegmentation`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*, defaults to 0.5):
+                The probability score threshold to keep predicted instance masks.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
+            overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
+                The overlap mask area threshold to merge or discard small disconnected parts within each binary
+                instance mask.
+            target_sizes (`List[Tuple]`, *optional*):
+                List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
+                final size (height, width) of each prediction. If left to None, predictions will not be resized.
+            return_coco_annotation (`bool`, *optional*):
+                Defaults to `False`. If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE)
+                format.
+        Returns:
+            `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
+            - **segmentation** -- A tensor of shape `(height, width)` where each pixel represents a `segment_id` or
+              `List[List]` run-length encoding (RLE) of the segmentation map if return_coco_annotation is set to
+              `True`. Set to `None` if no mask if found above `threshold`.
+            - **segments_info** -- A dictionary that contains additional information on each segment.
+                - **id** -- An integer representing the `segment_id`.
+                - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
+                - **score** -- Prediction score of segment with `segment_id`.
+        """
+        class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
+
+        batch_size = class_queries_logits.shape[0]
+        num_labels = class_queries_logits.shape[-1] - 1
+
+        mask_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+
+        # Predicted label and score of each query (batch_size, num_queries)
+        pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
+
+        # Loop over items in batch size
+        results: List[Dict[str, Tensor]] = []
+
+        for i in range(batch_size):
+            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
+                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
+            )
+
+            # No mask found
+            if mask_probs_item.shape[0] <= 0:
+                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
+                segmentation = torch.zeros((height, width)) - 1
+                results.append({"segmentation": segmentation, "segments_info": []})
+                continue
+
+            # Get segmentation map and segment information of batch item
+            target_size = target_sizes[i] if target_sizes is not None else None
+            segmentation, segments = compute_segments(
+                mask_probs_item,
+                pred_scores_item,
+                pred_labels_item,
+                mask_threshold,
+                overlap_mask_area_threshold,
+                target_size,
+            )
+
+            # Return segmentation map in run-length encoding (RLE) format
+            if return_coco_annotation:
+                segmentation = convert_segmentation_to_rle(segmentation)
+
+            results.append({"segmentation": segmentation, "segments_info": segments})
+        return results
 
     def post_process_panoptic_segmentation(
         self,
-        outputs: "Mask2FormerForInstanceSegmentationOutput",
-        object_mask_threshold: float = 0.8,
+        outputs,
+        threshold: float = 0.5,
+        mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
         label_ids_to_fuse: Optional[Set[int]] = None,
+        target_sizes: Optional[List[Tuple[int, int]]] = None,
     ) -> List[Dict]:
         """
-        Converts the output of [`Mask2FormerForInstanceSegmentationOutput`] into image panoptic segmentation
+        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image panoptic segmentation
         predictions. Only supports PyTorch.
-
         Args:
-            outputs ([`Mask2FormerForInstanceSegmentationOutput`]):
-                The outputs from [`Mask2FormerForInstanceSegmentation`].
-            object_mask_threshold (`float`, *optional*, defaults to 0.8):
-                The object mask threshold.
+            outputs ([`MaskFormerForInstanceSegmentationOutput`]):
+                The outputs from [`MaskFormerForInstanceSegmentation`].
+            threshold (`float`, *optional*, defaults to 0.5):
+                The probability score threshold to keep predicted instance masks.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
-                The overlap mask area threshold to use.
+                The overlap mask area threshold to merge or discard small disconnected parts within each binary
+                instance mask.
             label_ids_to_fuse (`Set[int]`, *optional*):
                 The labels in this state will have all their instances be fused together. For instance we could say
                 there can only be one sky in an image, but several persons, so the label ID for sky would be in that
                 set, but not the one for person.
-
+            target_sizes (`List[Tuple]`, *optional*):
+                List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
+                final size (height, width) of each prediction in batch. If left to None, predictions will not be
+                resized.
         Returns:
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
-            - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`.
-            - **segments** -- a dictionary with the following keys
+            - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`, set
+              to `None` if no mask if found above `threshold`. If `target_sizes` is specified, segmentation is resized
+              to the corresponding `target_sizes` entry.
+            - **segments_info** -- A dictionary that contains additional information on each segment.
                 - **id** -- an integer representing the `segment_id`.
-                - **label_id** -- an integer representing the segment's label.
+                - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
                 - **was_fused** -- a boolean, `True` if `label_id` was in `label_ids_to_fuse`, `False` otherwise.
+                  Multiple instances of the same class / label were fused and assigned a single `segment_id`.
+                - **score** -- Prediction score of segment with `segment_id`.
         """
 
         if label_ids_to_fuse is None:
             logger.warning("`label_ids_to_fuse` unset. No instance will be fused.")
             label_ids_to_fuse = set()
-        # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
-        class_queries_logits = outputs.class_queries_logits
-        # keep track of the number of labels, subtract -1 for null class
+
+        class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
+
+        batch_size = class_queries_logits.shape[0]
         num_labels = class_queries_logits.shape[-1] - 1
-        # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_queries_logits = outputs.masks_queries_logits
-        # since all images are padded, they all have the same spatial dimensions
-        _, _, height, width = masks_queries_logits.shape
-        # for each query, the best scores and their indeces
+
+        mask_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+
+        # Predicted label and score of each query (batch_size, num_queries)
         pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
-        # pred_scores and pred_labels shape = [BATH,NUM_QUERIES]
-        mask_probs = masks_queries_logits.sigmoid()
-        # mask probs has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        # now, we need to iterate over the batch size to correctly process the segmentation we got from the queries using our thresholds. Even if the original predicted masks have the same shape across the batch, they won't after thresholding so batch-wise operations are impossible
+
+        # Loop over items in batch size
         results: List[Dict[str, Tensor]] = []
-        for mask_probs, pred_scores, pred_labels in zip(mask_probs, pred_scores, pred_labels):
-            mask_probs, pred_scores, pred_labels = self.remove_low_and_no_objects(
-                mask_probs, pred_scores, pred_labels, object_mask_threshold, num_labels
+
+        for i in range(batch_size):
+            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
+                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
             )
-            we_detect_something = mask_probs.shape[0] > 0
 
-            segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
-            segments: List[Dict] = []
+            # No mask found
+            if mask_probs_item.shape[0] <= 0:
+                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
+                segmentation = torch.zeros((height, width)) - 1
+                results.append({"segmentation": segmentation, "segments_info": []})
+                continue
 
-            if we_detect_something:
-                current_segment_id = 0
-                # weight each mask by its score
-                mask_probs *= pred_scores.view(-1, 1, 1)
-                # find out for each pixel what is the most likely class to be there
-                mask_labels = mask_probs.argmax(0)
-                # mask_labels shape = [H,W] where each pixel has a class label
-                stuff_memory_list: Dict[str, int] = {}
-                # this is a map between stuff and segments id, the used it to keep track of the instances of one class
-                for k in range(pred_labels.shape[0]):
-                    pred_class = pred_labels[k].item()
-                    # check if pred_class should be fused. For example, class "sky" cannot have more then one instance
-                    should_fuse = pred_class in label_ids_to_fuse
-                    # get the mask associated with the k class
-                    mask_k = mask_labels == k
-                    # create the area, since bool we just need to sum :)
-                    mask_k_area = mask_k.sum()
-                    # this is the area of all the stuff in query k
-                    original_area = (mask_probs[k] >= 0.5).sum()
+            # Get segmentation map and segment information of batch item
+            target_size = target_sizes[i] if target_sizes is not None else None
+            segmentation, segments = compute_segments(
+                mask_probs_item,
+                pred_scores_item,
+                pred_labels_item,
+                mask_threshold,
+                overlap_mask_area_threshold,
+                label_ids_to_fuse,
+                target_size,
+            )
 
-                    mask_exists = mask_k_area > 0 and original_area > 0
-
-                    if mask_exists:
-                        # find out how much of the all area mask_k is using
-                        area_ratio = mask_k_area / original_area
-                        mask_k_is_overlapping_enough = area_ratio.item() > overlap_mask_area_threshold
-
-                        if mask_k_is_overlapping_enough:
-                            # merge stuff regions
-                            if pred_class in stuff_memory_list:
-                                current_segment_id = stuff_memory_list[pred_class]
-                            else:
-                                current_segment_id += 1
-                            # then we update out mask with the current segment
-                            segmentation[mask_k] = current_segment_id
-                            segments.append(
-                                {
-                                    "id": current_segment_id,
-                                    "label_id": pred_class,
-                                    "was_fused": should_fuse,
-                                }
-                            )
-                            if should_fuse:
-                                stuff_memory_list[pred_class] = current_segment_id
-            results.append({"segmentation": segmentation, "segments": segments})
+            results.append({"segmentation": segmentation, "segments_info": segments})
         return results
-
-    def post_process_instance_segmentation(
-        self,
-        outputs: "Mask2FormerForInstanceSegmentationOutput",
-        test_topk_per_image: Optional[int] = 200,
-        panoptic_on: Optional[bool] = True,
-        instance_label_ids: Optional[Set[int]] = None,
-    ) -> List[Dict]:
-        """
-        Converts the output of [`Mask2FormerForInstanceSegmentationOutput`] into image instance segmentation
-        predictions. Only supports PyTorch.
-
-        Args:
-            outputs ([`Mask2FormerForInstanceSegmentationOutput`]):
-                The outputs from [`Mask2FormerForInstanceSegmentation`].
-            test_topk_per_image (`int`, *optional*, defaults to 200):
-                instance segmentation parameter, keep topk instances per image
-            panoptic_on (`bool`, *optional*, defaults to True):
-                whether to output panoptic segmentation prediction
-            instance_label_ids (`Set[int]`, *optional*):
-                A set of label_ids for each instance/thing category
-
-        Returns:
-            `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
-            - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`.
-            - **boxes** -- a tensor of shape `(M, 4)` 
-            - **scores** --  tensor of shape `(M)` that represents the confidence score of predicted class
-            - **classes** -- a tensor of shape `(M)` that represents the predicted class 
-        """
-
-        if instance_label_ids is None:
-            logger.warning("`instance_label_ids` unset.")
-            instance_label_ids = set()
-        # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
-        class_queries_logits = outputs.class_queries_logits
-        # keep track of the number of labels, subtract -1 for null class
-        num_labels = class_queries_logits.shape[-1] - 1
-        # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
-        masks_queries_logits = outputs.masks_queries_logits
-
-        results: List[Dict[str, Tensor]] = []
-        
-        for mask_pred, mask_cls in zip(masks_queries_logits,class_queries_logits):
-            
-            mask_cls  = mask_cls.shape[-2]
-            scores = nn.functional.softmax(mask_cls, dim=-1)[:, :-1]
-
-            labels = torch.arange(num_labels).unsqueeze(0).repeat(num_queries, 1).flatten(0, 1)
-            scores_per_image, topk_indices = scores.flatten(0, 1).topk(test_topk_per_image, sorted=False)
-
-            labels_per_image = labels[topk_indices]
-            topk_indices = topk_indices // num_labels
-            mask_pred = mask_pred[topk_indices]
-            mask_pred = mask_pred[topk_indices]
-    
-            if panoptic_on:
-                keep = torch.zeros_like(scores_per_image).bool()
-                
-                for i, lab in enumerate(labels_per_image):
-                    keep[i] = lab in instance_label_ids
-
-                scores_per_image = scores_per_image[keep]
-                labels_per_image = labels_per_image[keep]
-                mask_pred = mask_pred[keep]
-                
-            segmentation = (mask_pred > 0).int()
-        
-            pred_boxes = torch.zeros(mask_pred.size(0), 4)
-
-            # calculate average mask prob
-            mask_scores_per_image = (mask_pred.sigmoid().flatten(1) * segmentation.flatten(1)).sum(1) / (segmentation.flatten(1).sum(1) + 1e-6)
-            scores = scores_per_image * mask_scores_per_image
-            pred_classes = labels_per_image
-
-            results.append({"segmentation": segmentation, "boxes": pred_boxes, "scores": scores, "classes": pred_classes})
-
-        return results
-    

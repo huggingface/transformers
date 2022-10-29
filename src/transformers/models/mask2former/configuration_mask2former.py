@@ -19,9 +19,10 @@ from typing import Dict, List, Optional
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
+from ..deformable_detr import DeformableDetrConfig
 from ..detr import DetrConfig
 from ..swin import SwinConfig
-from ..deformable_detr import DeformableDetrConfig
+
 
 MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "shivi/mask2former-instance-swin-small-coco": "https://huggingface.co/shivi/mask2former-instance-swin-small-coco/resolve/main/config.json",

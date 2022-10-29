@@ -16,8 +16,8 @@
 
 import collections.abc
 import math
-import warnings
 import random
+import warnings
 from dataclasses import dataclass
 from numbers import Number
 from typing import Dict, List, Optional, Tuple
@@ -26,14 +26,12 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-
-from transformers.utils import logging
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
+
+from transformers.utils import logging
+
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithCrossAttentions, BaseModelOutput
-from ...modeling_utils import ModuleUtilsMixin, PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -44,12 +42,16 @@ from ...file_utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
+from ...modeling_utils import ModuleUtilsMixin, PreTrainedModel
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import is_ninja_available
+from ..deformable_detr import DeformableDetrConfig
+from ..deformable_detr.load_custom import load_cuda_kernels
 from ..detr import DetrConfig
 from ..swin import SwinConfig
-from ..deformable_detr import DeformableDetrConfig
 from .configuration_mask2former import Mask2FormerConfig
-from ..deformable_detr.load_custom import load_cuda_kernels
+
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
