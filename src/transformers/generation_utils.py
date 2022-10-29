@@ -106,19 +106,33 @@ class ContrastiveSearchEncoderDecoderOutput(ModelOutput):
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
-        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when
-        `config.output_scores=True`):
+        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
             at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
             each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
-        decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`:
-        is passed or when `config.output_hidden_states=True`):
+        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+        decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+        cross_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+        decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor = None
     scores: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
@@ -136,6 +150,9 @@ class ContrastiveSearchDecoderOnlyOutput(ModelOutput):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
             at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
             each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
+        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
         hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is
         passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
@@ -144,6 +161,7 @@ class ContrastiveSearchDecoderOnlyOutput(ModelOutput):
 
     sequences: torch.LongTensor = None
     scores: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
@@ -628,32 +646,29 @@ class GenerationMixin:
 
     @staticmethod
     def _expand_inputs_for_generation(
-        input_ids: torch.LongTensor,
         expand_size: int = 1,
         is_encoder_decoder: bool = False,
-        attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[ModelOutput] = None,
+        input_ids: Optional[torch.LongTensor] = None,
         **model_kwargs,
     ) -> Tuple[torch.LongTensor, Dict[str, Any]]:
-        expanded_return_idx = (
-            torch.arange(input_ids.shape[0]).view(-1, 1).repeat(1, expand_size).view(-1).to(input_ids.device)
-        )
-        input_ids = input_ids.index_select(0, expanded_return_idx)
+        if input_ids is not None:
+            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
 
-        if "token_type_ids" in model_kwargs:
-            token_type_ids = model_kwargs["token_type_ids"]
-            model_kwargs["token_type_ids"] = token_type_ids.index_select(0, expanded_return_idx)
+        if model_kwargs.get("token_type_ids") is not None:
+            model_kwargs["token_type_ids"] = model_kwargs["token_type_ids"].repeat_interleave(expand_size, dim=0)
 
-        if attention_mask is not None:
-            model_kwargs["attention_mask"] = attention_mask.index_select(0, expanded_return_idx)
+        if model_kwargs.get("attention_mask") is not None:
+            model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat_interleave(expand_size, dim=0)
 
         if is_encoder_decoder:
+            encoder_outputs = model_kwargs.get("encoder_outputs")
             if encoder_outputs is None:
                 raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
-            encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.index_select(
-                0, expanded_return_idx.to(encoder_outputs.last_hidden_state.device)
+            encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
+                expand_size, dim=0
             )
             model_kwargs["encoder_outputs"] = encoder_outputs
+
         return input_ids, model_kwargs
 
     @staticmethod
@@ -1533,7 +1548,7 @@ class GenerationMixin:
 
             # 11. expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids,
+                input_ids=input_ids,
                 expand_size=num_return_sequences,
                 is_encoder_decoder=self.config.is_encoder_decoder,
                 **model_kwargs,
@@ -1571,7 +1586,10 @@ class GenerationMixin:
             )
             # 11. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids, expand_size=num_beams, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
+                input_ids=input_ids,
+                expand_size=num_beams,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+                **model_kwargs,
             )
             # 12. run beam search
             return self.beam_search(
@@ -1611,7 +1629,7 @@ class GenerationMixin:
 
             # 12. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids,
+                input_ids=input_ids,
                 expand_size=num_beams * num_return_sequences,
                 is_encoder_decoder=self.config.is_encoder_decoder,
                 **model_kwargs,
@@ -1658,7 +1676,10 @@ class GenerationMixin:
             )
             # 11. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids, expand_size=num_beams, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
+                input_ids=input_ids,
+                expand_size=num_beams,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+                **model_kwargs,
             )
             # 12. run beam search
             return self.group_beam_search(
@@ -1739,7 +1760,10 @@ class GenerationMixin:
             )
             # 11. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids, expand_size=num_beams, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
+                input_ids=input_ids,
+                expand_size=num_beams,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+                **model_kwargs,
             )
             # 12. run beam search
             return self.constrained_beam_search(
@@ -1861,12 +1885,22 @@ class GenerationMixin:
 
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
+        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
+        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
+
+        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
+        if return_dict_in_generate and self.config.is_encoder_decoder:
+            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
+            encoder_hidden_states = (
+                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
+            )
 
         # keep track of which sequences are already finished
         unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
 
         this_peer_finished = False  # used by synced_gpus only
+        batch_size = input_ids.shape[0]
 
         while True:
             if synced_gpus:
@@ -1879,13 +1913,14 @@ class GenerationMixin:
                 if this_peer_finished_flag.item() == 0.0:
                     break
 
-            # prepare inputs
-            model_kwargs["use_cache"] = True
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-
             # if the first step in the loop, encode all the prefix and obtain three parameters: (1) past_key_values;
             # (2) last_hidden_states; (3) logit_for_next_step; (4) update model kwargs for the next step
             if model_kwargs.get("past") is None:
+
+                # prepare inputs
+                model_kwargs["use_cache"] = True
+                model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
                 # encode the given prefix and prepare model inputs; encoder-decoder model process the prefix and save
                 # the `encoder_outputs`
                 outputs = self(
@@ -1913,12 +1948,15 @@ class GenerationMixin:
                     outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
                 )
 
+                # Expands model inputs top_k times, for batched forward passes (akin to beam search).
+                _, model_kwargs = self._expand_inputs_for_generation(
+                    expand_size=top_k, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
+                )
+
             # contrastive_search main logic start:
             # contrastive search decoding consists of two steps: (1) candidate tokens recall; (2) candidate re-rank by
             # degeneration penalty
-            bsz, seqlen, embed_dim = last_hidden_states.size()
 
-            # logits processor
             logit_for_next_step = logits_processor(input_ids, logit_for_next_step)
             logit_for_next_step = logits_warper(input_ids, logit_for_next_step)
             next_probs = nn.functional.softmax(logit_for_next_step, dim=-1)
@@ -1928,6 +1966,12 @@ class GenerationMixin:
             if return_dict_in_generate:
                 if output_scores:
                     scores += (logit_for_next_step,)
+                if output_attentions:
+                    decoder_attentions += (
+                        (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
+                    )
+                    if self.config.is_encoder_decoder:
+                        cross_attentions += (outputs.cross_attentions,)
 
                 if output_hidden_states:
                     decoder_hidden_states += (
@@ -1936,36 +1980,18 @@ class GenerationMixin:
                         else (outputs.hidden_states,)
                     )
 
-            # enlarge the past_key_values
+            # Replicates the new past_key_values to match the `top_k` candidates
             new_key_values = []
-            for layer in past_key_values:
+            for layer in model_kwargs["past"]:
                 items = []
                 # item is either the key or the value matrix
                 for item in layer:
                     items.append(item.repeat_interleave(top_k, dim=0))
                 new_key_values.append(items)
-            past_key_values = new_key_values
+            model_kwargs["past"] = new_key_values
 
-            # build next attention mask
-            if "attention_mask" in model_inputs:
-                attention_mask = model_kwargs["attention_mask"]  # [B, S]
-                attention_mask = attention_mask.repeat_interleave(top_k, dim=0)
-            else:
-                attention_mask = None
-
-            # encoder-decoder model also contains the `encoder_outputs`
-            if self.config.is_encoder_decoder and "encoder_outputs" in model_inputs:
-                encoder_outputs = model_inputs["encoder_outputs"]
-            else:
-                encoder_outputs = None
-            next_model_inputs = self.prepare_inputs_for_generation(
-                top_k_ids.view(-1, 1),
-                past=past_key_values,
-                attention_mask=attention_mask,
-                use_cache=True,
-                encoder_outputs=encoder_outputs,
-            )
             # compute the candidate tokens by the language model and collects their hidden_states
+            next_model_inputs = self.prepare_inputs_for_generation(top_k_ids.view(-1, 1), **model_kwargs)
             outputs = self(
                 **next_model_inputs, return_dict=True, output_hidden_states=True, output_attentions=output_attentions
             )
@@ -1990,13 +2016,13 @@ class GenerationMixin:
             # (model confidence minus degeneration penalty); (6) decoder hidden_states
             next_tokens = top_k_ids[range(len(top_k_ids)), selected_idx]
             next_hidden = torch.stack(torch.split(next_hidden.squeeze(dim=1), top_k))
-            next_hidden = next_hidden[range(bsz), selected_idx, :]
+            next_hidden = next_hidden[range(batch_size), selected_idx, :]
             last_hidden_states = torch.cat([last_hidden_states, next_hidden.unsqueeze(1)], dim=1)
 
             decoder_hidden_states = []
             for layer in full_hidden_states:
                 layer = torch.stack(torch.split(layer.squeeze(dim=1), top_k))
-                layer = layer[range(bsz), selected_idx, :]
+                layer = layer[range(batch_size), selected_idx, :]
                 decoder_hidden_states.append(layer)
 
             # select the past_key_value
@@ -2005,21 +2031,26 @@ class GenerationMixin:
                 items = []
                 # item is either the key or the value matrix
                 for item in layer:
-                    bsz_and_beam, num_head, seq_len, esz = item.size()
-                    bsz = int(bsz_and_beam // top_k)
                     item = torch.stack(torch.split(item, top_k, dim=0))  # [B, K, num_head, seq_len, esz]
-                    item = item[range(bsz), selected_idx, :, :, :]  # [B, num_head, seq_len, esz]
+                    item = item[range(batch_size), selected_idx, :, :, :]  # [B, num_head, seq_len, esz]
                     items.append(item)
                 new_key_values.append(items)
             past_key_values = new_key_values
 
-            logit_for_next_step = torch.stack(torch.split(logits, top_k))[range(bsz), selected_idx, :]
+            logit_for_next_step = torch.stack(torch.split(logits, top_k))[range(batch_size), selected_idx, :]
 
             # Rebuilds the relevant parts of the model output for the selected token, for use in the next iteration
             if self.config.is_encoder_decoder:
+                if output_attentions:
+                    cross_attentions = []
+                    for layer in outputs.cross_attentions:
+                        layer = torch.stack(torch.split(layer, top_k, dim=0))[range(batch_size), selected_idx, ...]
+                        cross_attentions.append(layer)
                 outputs = Seq2SeqLMOutput(
                     past_key_values=past_key_values,
                     decoder_hidden_states=decoder_hidden_states,
+                    decoder_attentions=model_kwargs["attention_mask"],
+                    cross_attentions=cross_attentions or None,
                 )
             else:
                 outputs = CausalLMOutputWithPast(
@@ -2060,12 +2091,17 @@ class GenerationMixin:
                 return ContrastiveSearchEncoderDecoderOutput(
                     sequences=input_ids,
                     scores=scores,
+                    encoder_attentions=encoder_attentions,
+                    encoder_hidden_states=encoder_hidden_states,
+                    decoder_attentions=decoder_attentions,
+                    cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
                 )
             else:
                 return ContrastiveSearchDecoderOnlyOutput(
                     sequences=input_ids,
                     scores=scores,
+                    attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
                 )
         else:
