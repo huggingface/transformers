@@ -23,8 +23,8 @@ This directory contains 2 scripts that showcase how to fine-tune any model suppo
 Try out the inference widget here: https://huggingface.co/google/vit-base-patch16-224
 
 Content:
-- [PyTorch version, Trainer](#pytorch-version-no-trainer)
-- [PyTorch version, no Trainer](#pytorch-version-trainer)
+- [PyTorch version, Trainer](#pytorch-version-trainer)
+- [PyTorch version, no Trainer](#pytorch-version-no-trainer)
 
 ## PyTorch version, Trainer
 

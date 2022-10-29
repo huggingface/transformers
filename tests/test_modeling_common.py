@@ -53,6 +53,7 @@ from transformers.testing_utils import (
     is_pt_tf_cross_test,
     is_staging_test,
     require_accelerate,
+    require_safetensors,
     require_torch,
     require_torch_gpu,
     require_torch_multi_gpu,
@@ -61,6 +62,8 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
+    SAFE_WEIGHTS_INDEX_NAME,
+    SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     is_accelerate_available,
@@ -395,7 +398,9 @@ class ModelTesterMixin:
                 model_slow_init = base_class_copy.from_pretrained(tmpdirname, _fast_init=False)
 
                 for key in model_fast_init.state_dict().keys():
-                    max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
+                    max_diff = torch.max(
+                        torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key])
+                    ).item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_initialization(self):
@@ -655,6 +660,7 @@ class ModelTesterMixin:
                     attention_mask = inputs["attention_mask"]
                     decoder_input_ids = inputs["decoder_input_ids"]
                     decoder_attention_mask = inputs["decoder_attention_mask"]
+                    model(main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
                     traced_model = torch.jit.trace(
                         model, (main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
                     )
@@ -662,11 +668,13 @@ class ModelTesterMixin:
                     input_ids = inputs["input_ids"]
                     bbox = inputs["bbox"]
                     image = inputs["image"].tensor
+                    model(input_ids, bbox, image)
                     traced_model = torch.jit.trace(
                         model, (input_ids, bbox, image), check_trace=False
                     )  # when traced model is checked, an error is produced due to name mangling
                 else:
                     main_input = inputs[main_input_name]
+                    model(main_input)
                     traced_model = torch.jit.trace(model, main_input)
             except RuntimeError:
                 self.fail("Couldn't trace module.")
@@ -2304,10 +2312,11 @@ class ModelTesterMixin:
             if model_class._no_split_modules is None:
                 continue
 
-            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
-            base_output = model(**inputs_dict)
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_class)
 
             model_size = compute_module_sizes(model)[""]
             max_size = int(self.model_split_percents[0] * model_size)
@@ -2324,7 +2333,8 @@ class ModelTesterMixin:
                 )
 
                 self.check_device_map_is_respected(new_model, new_model.hf_device_map)
-                new_output = new_model(**inputs_dict)
+                torch.manual_seed(0)
+                new_output = new_model(**inputs_dict_class)
 
                 self.assertTrue(torch.allclose(base_output[0], new_output[0]))
 
@@ -2337,10 +2347,12 @@ class ModelTesterMixin:
             if model_class._no_split_modules is None:
                 continue
 
-            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
-            base_output = model(**inputs_dict)
+
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_class)
 
             model_size = compute_module_sizes(model)[""]
             # We test several splits of sizes to make sure it works.
@@ -2355,7 +2367,9 @@ class ModelTesterMixin:
                     self.assertSetEqual(set(new_model.hf_device_map.values()), {0, "cpu"})
 
                     self.check_device_map_is_respected(new_model, new_model.hf_device_map)
-                    new_output = new_model(**inputs_dict)
+
+                    torch.manual_seed(0)
+                    new_output = new_model(**inputs_dict_class)
 
                     self.assertTrue(torch.allclose(base_output[0], new_output[0]))
 
@@ -2368,10 +2382,12 @@ class ModelTesterMixin:
             if model_class._no_split_modules is None:
                 continue
 
-            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
-            base_output = model(**inputs_dict)
+
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_class)
 
             model_size = compute_module_sizes(model)[""]
             # We test several splits of sizes to make sure it works.
@@ -2386,7 +2402,9 @@ class ModelTesterMixin:
                     self.assertSetEqual(set(new_model.hf_device_map.values()), {0, 1})
 
                     self.check_device_map_is_respected(new_model, new_model.hf_device_map)
-                    new_output = new_model(**inputs_dict)
+
+                    torch.manual_seed(0)
+                    new_output = new_model(**inputs_dict_class)
 
                     self.assertTrue(torch.allclose(base_output[0], new_output[0]))
 
@@ -2969,6 +2987,57 @@ class ModelUtilsTest(TestCasePlus):
         _ = BertModel.from_pretrained(
             "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/pytorch_model.bin", config=config
         )
+
+    @require_safetensors
+    def test_safetensors_save_and_load(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True)
+            # No pytorch_model.bin file, only a model.safetensors
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_NAME)))
+
+            new_model = BertModel.from_pretrained(tmp_dir)
+
+            # Check models are equal
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.allclose(p1, p2))
+
+    @require_safetensors
+    def test_safetensors_load_from_hub(self):
+        safetensors_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-safetensors")
+        pytorch_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # Check models are equal
+        for p1, p2 in zip(safetensors_model.parameters(), pytorch_model.parameters()):
+            self.assertTrue(torch.allclose(p1, p2))
+
+    @require_safetensors
+    def test_safetensors_save_and_load_sharded(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True, max_shard_size="100kB")
+            # No pytorch_model.bin index file, only a model.safetensors index
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_INDEX_NAME)))
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)))
+            # No regular weights file
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_NAME)))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+
+            new_model = BertModel.from_pretrained(tmp_dir)
+
+            # Check models are equal
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.allclose(p1, p2))
+
+    @require_safetensors
+    def test_safetensors_load_from_hub_sharded(self):
+        safetensors_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded-safetensors")
+        pytorch_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
+
+        # Check models are equal
+        for p1, p2 in zip(safetensors_model.parameters(), pytorch_model.parameters()):
+            self.assertTrue(torch.allclose(p1, p2))
 
 
 @require_torch

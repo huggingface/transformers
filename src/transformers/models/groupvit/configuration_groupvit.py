@@ -162,7 +162,7 @@ class GroupViTVisionConfig(PretrainedConfig):
             The number of layers in each encoder block.
         num_group_tokens (`List[int]`, *optional*, defaults to [64, 8, 0]):
             The number of group tokens for each stage.
-        num_output_groups (`List[int]`, *optional*, defaults to [64, 8, 0]):
+        num_output_groups (`List[int]`, *optional*, defaults to [64, 8, 8]):
             The number of output groups for each stage, 0 means no group.
         num_attention_heads (`int`, *optional*, defaults to 6):
             Number of attention heads for each attention layer in the Transformer encoder.
@@ -273,7 +273,8 @@ class GroupViTConfig(PretrainedConfig):
     r"""
     [`GroupViTConfig`] is the configuration class to store the configuration of a [`GroupViTModel`]. It is used to
     instantiate a GroupViT model according to the specified arguments, defining the text model and vision model
-    configs.
+    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the GroupViT
+    [nvidia/groupvit-gcc-yfcc](https://huggingface.co/nvidia/groupvit-gcc-yfcc) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -381,11 +382,17 @@ class GroupViTOnnxConfig(OnnxConfig):
     def generate_dummy_inputs(
         self,
         processor: "ProcessorMixin",
+        batch_size: int = -1,
+        seq_length: int = -1,
         framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
 
-        text_input_dict = super().generate_dummy_inputs(processor.tokenizer, framework=framework)
-        image_input_dict = super().generate_dummy_inputs(processor.feature_extractor, framework=framework)
+        text_input_dict = super().generate_dummy_inputs(
+            processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
+        )
+        image_input_dict = super().generate_dummy_inputs(
+            processor.feature_extractor, batch_size=batch_size, framework=framework
+        )
         return {**text_input_dict, **image_input_dict}
 
     @property
