@@ -119,7 +119,7 @@ class DeiTPatchEmbeddings(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         print(pixel_values.shape)
-        batch_size, num_channels, height, width = pixel_values.shape
+        batch_size, images, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
