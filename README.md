@@ -64,7 +64,7 @@ These models can be applied on:
 * 🖼️ Images, for tasks like image classification, object detection, and segmentation.
 * 🗣️ Audio, for tasks like speech recognition and audio classification.
 
-Transformer models can also perform tasks on **several modalities combined**, such as table question answering, optical character recognition, information extraction from scanned documents, video classification, and visual question answering.
+Transformers models can also perform tasks on **several modalities combined**, such as table question answering, optical character recognition, information extraction from scanned documents, video classification, and visual question answering.
 
 🤗 Transformers provides APIs to quickly download and use those pretrained models on a given text, fine-tune them on your own datasets and then share them with the community on our [model hub](https://huggingface.co/models). At the same time, each python module defining an architecture is fully standalone and can be modified to enable quick research experiments.
 
@@ -74,7 +74,7 @@ Transformer models can also perform tasks on **several modalities combined**, su
 
 You can test most of our models directly on their pages from the [model hub](https://huggingface.co/models). We also offer [private model hosting, versioning, & an inference API](https://huggingface.co/pricing) for public and private models.
 
-Here are a few examples:
+## Here are a few examples:
 
  In Natural Language Processing:
 - [Masked word completion with BERT](https://huggingface.co/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
