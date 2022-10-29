@@ -35,7 +35,6 @@ from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFModelInputType,
     TFPreTrainedModel,
-    TFSharedEmbeddings,
     keras_serializable,
     unpack_inputs,
 )
@@ -43,6 +42,7 @@ from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
+    ContextManagers,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -1420,7 +1420,25 @@ class TFLongT5MainLayer(tf.keras.layers.Layer):
 
         if inputs_embeds is None:
             assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
-            inputs_embeds = self.embed_tokens(input_ids)
+            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
+            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
+            # is used with a name ending in `/`, that name replaces the current name scope.
+            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
+            context = []
+            if hasattr(self.embed_tokens, "load_weight_prefix"):
+                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
+            with ContextManagers(context):
+                # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+                # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+                tf.debugging.assert_less(
+                    input_ids,
+                    tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
+                    message=(
+                        "input_ids must be smaller than the embedding layer's input dimension (got"
+                        f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
+                    ),
+                )
+                inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape
 
@@ -1820,12 +1838,12 @@ class TFLongT5Model(TFLongT5PreTrainedModel):
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
-        self.encoder = TFLongT5MainLayer(encoder_config, embed_tokens, name="encoder")
+        self.encoder = TFLongT5MainLayer(encoder_config, self.shared, name="encoder")
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = TFLongT5MainLayer(decoder_config, embed_tokens, name="decoder")
+        self.decoder = TFLongT5MainLayer(decoder_config, self.shared, name="decoder")
 
     def get_encoder(self):
         return self.encoder
@@ -1969,12 +1987,12 @@ class TFLongT5ForConditionalGeneration(TFLongT5PreTrainedModel, TFCausalLanguage
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
-        self.encoder = TFLongT5MainLayer(encoder_config, embed_tokens, name="encoder")
+        self.encoder = TFLongT5MainLayer(encoder_config, self.shared, name="encoder")
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = TFLongT5MainLayer(decoder_config, embed_tokens, name="decoder")
+        self.decoder = TFLongT5MainLayer(decoder_config, self.shared, name="decoder")
 
         if not config.tie_word_embeddings:
             lm_head_initializer = tf.keras.initializers.RandomNormal(mean=0, stddev=config.initializer_factor)
@@ -2248,7 +2266,7 @@ class TFLongT5EncoderModel(TFLongT5PreTrainedModel):
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
-        self.encoder = TFLongT5MainLayer(encoder_config, embed_tokens, name="encoder")
+        self.encoder = TFLongT5MainLayer(encoder_config, self.shared, name="encoder")
 
     @property
     def dummy_inputs(self):
