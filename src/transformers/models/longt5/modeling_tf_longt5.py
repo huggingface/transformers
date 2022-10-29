@@ -2126,7 +2126,7 @@ class TFLongT5ForConditionalGeneration(TFLongT5PreTrainedModel, TFCausalLanguage
         # T5v1.1 does not tie output word embeddings and thus does not require downscaling
         if self.config.tie_word_embeddings:
             sequence_output = sequence_output * (self.model_dim**-0.5)
-            logits = self.shared(sequence_output, mode="linear")
+            logits = tf.matmul(sequence_output, self.shared.weights, transpose_b=True)
         else:
             logits = self.lm_head(sequence_output)
 
