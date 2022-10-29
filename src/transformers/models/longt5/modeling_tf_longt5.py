@@ -36,7 +36,6 @@ from ...modeling_tf_utils import (
     TFModelInputType,
     TFPreTrainedModel,
     TFSharedEmbeddings,
-    TFWrappedEmbeddings,
     keras_serializable,
     unpack_inputs,
 )
@@ -1631,7 +1630,7 @@ class TFLongT5PreTrainedModel(TFPreTrainedModel):
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass
         # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
+        embed_tokens = tf.keras.layers.Embedding(self.shared, abs_scope_name=shared_abs_scope_name)
         self.encoder.embed_tokens = embed_tokens
         if hasattr(self, "decoder"):
             self.decoder.embed_tokens = embed_tokens
@@ -1829,7 +1828,7 @@ class TFLongT5Model(TFLongT5PreTrainedModel):
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass
         # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
+        embed_tokens = tf.keras.layers.Embedding(self.shared, abs_scope_name=shared_abs_scope_name)
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
@@ -1979,7 +1978,7 @@ class TFLongT5ForConditionalGeneration(TFLongT5PreTrainedModel, TFCausalLanguage
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass
         # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
+        embed_tokens = tf.keras.layers.Embedding(self.shared, abs_scope_name=shared_abs_scope_name)
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
@@ -2259,7 +2258,7 @@ class TFLongT5EncoderModel(TFLongT5PreTrainedModel):
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass
         # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
+        embed_tokens = tf.keras.layers.Embedding(self.shared, abs_scope_name=shared_abs_scope_name)
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
