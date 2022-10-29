@@ -757,12 +757,25 @@ def build(config_class, models_to_create, output_dir):
             result["vocab_size"] = vocab_size
             config_overrides["vocab_size"] = vocab_size
 
-            # Update special token ids
+            # Get new special token ids using the new `vocab_size` in the model tester
             model_tester_kwargs = {"vocab_size": vocab_size}
             _tiny_config = get_tiny_config(config_class, **model_tester_kwargs)
             for attr in dir(_tiny_config):
                 if attr.endswith("_token_id"):
                     config_overrides[attr] = getattr(_tiny_config, attr)
+
+            # Using the values from the tokenzier
+            for k, v in config_overrides.items():
+                if k.endswith("_token_id"):
+                    token = getattr(processor, k.replace("_token_id", "_token"), None)
+                    if token is not None:
+                        if isinstance(processor, PreTrainedTokenizerFast):
+                            token_id = processor._convert_token_to_id_with_added_voc(token)
+                        else:
+                            token_id = processor._convert_token_to_id(token)
+                        # Add the token id only if the model config needs it
+                        if v is not None:
+                            config_overrides[k] = token_id
 
     # Update attributes that `vocab_size` involves
     for k, v in config_overrides.items():
