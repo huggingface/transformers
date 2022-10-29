@@ -1469,18 +1469,29 @@ class TFLongT5MainLayer(tf.keras.layers.Layer):
                 # Provided a padding mask of dimensions [batch_size, mask_seq_length]
                 # - if the model is a decoder, apply a causal mask in addition to the padding mask
                 # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, mask_seq_length, mask_seq_length]
-                if self.is_decoder:
-                    seq_ids = tf.range(mask_seq_length)
-                    causal_mask = tf.less_equal(
-                        tf.tile(seq_ids[None, None, :], (batch_size, mask_seq_length, 1)),
-                        seq_ids[None, :, None],
-                    )
-                    causal_mask = tf.cast(causal_mask, dtype=attention_mask.dtype)
-                    extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
-                    if past_key_values[0] is not None:
-                        extended_attention_mask = extended_attention_mask[:, :, -seq_length:, :]
-                else:
-                    extended_attention_mask = attention_mask[:, None, None, :]
+                seq_ids = tf.range(mask_seq_length)
+                causal_mask = tf.less_equal(
+                    tf.tile(seq_ids[None, None, :], (batch_size, mask_seq_length, 1)),
+                    seq_ids[None, :, None],
+                )
+                causal_mask = tf.cast(causal_mask, dtype=attention_mask.dtype)
+                extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
+                if past_key_values[0] is not None:
+                    extended_attention_mask = extended_attention_mask[:, :, -seq_length:, :]
+
+            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+            # masked positions, this operation will create a tensor which is 0.0 for
+            # positions we want to attend and  -1e9 for masked positions.
+            # Since we are adding it to the raw scores before the softmax, this is
+            # effectively the same as removing these entirely.
+
+            # T5 has a mask that can compare sequence ids, we can simulate this here with this transposition
+            # Cf. https://github.com/tensorflow/mesh/blob/8d2465e9bc93129b913b5ccc6a59aa97abd96ec6/mesh_tensorflow/transformer/transformer_layers.py#L270
+            # extended_attention_mask = tf.math.equal(extended_attention_mask,
+            #                                         tf.transpose(extended_attention_mask, perm=(-1, -2)))
+
+            extended_attention_mask = (1.0 - extended_attention_mask) * -1e9
+
         elif self.config.encoder_attention_type == "local":
             extended_attention_mask = _get_local_attention_mask(attention_mask, self.block_len)
         else:  # we need to use both local attention mask and standard extended mask for transient-global attention
