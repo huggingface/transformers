@@ -1922,9 +1922,7 @@ class GenerationMixin:
             logit_for_next_step = logits_processor(input_ids, logit_for_next_step)
             logit_for_next_step = logits_warper(input_ids, logit_for_next_step)
             next_probs = nn.functional.softmax(logit_for_next_step, dim=-1)
-
-            _, top_k_ids = torch.topk(logit_for_next_step, dim=-1, k=top_k)
-            top_k_probs = torch.gather(next_probs, dim=1, index=top_k_ids)
+            top_k_probs, top_k_ids = torch.topk(next_probs, dim=-1, k=top_k)
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
@@ -1944,21 +1942,14 @@ class GenerationMixin:
                 items = []
                 # item is either the key or the value matrix
                 for item in layer:
-                    bsz, num_head, seq_len, esz = item.size()
-                    item = (
-                        item.unsqueeze(1)
-                        .expand(-1, top_k, -1, -1, -1)
-                        .reshape(bsz * top_k, num_head, seq_len, esz)
-                        .contiguous()
-                    )  # [bsz*beam, num_head, seq_len, esz]
-                    items.append(item)
+                    items.append(item.repeat_interleave(top_k, dim=0))
                 new_key_values.append(items)
             past_key_values = new_key_values
 
             # build next attention mask
             if "attention_mask" in model_inputs:
                 attention_mask = model_kwargs["attention_mask"]  # [B, S]
-                attention_mask = attention_mask.unsqueeze(1).expand(-1, top_k, -1).reshape(-1, attention_mask.size(-1))
+                attention_mask = attention_mask.repeat_interleave(top_k, dim=0)
             else:
                 attention_mask = None
 
@@ -1988,9 +1979,7 @@ class GenerationMixin:
             else:
                 next_hidden = outputs.hidden_states[-1]
                 full_hidden_states = outputs.hidden_states
-            context_hidden = (
-                last_hidden_states.unsqueeze(1).expand(-1, top_k, -1, -1).reshape(bsz * top_k, seqlen, embed_dim)
-            )
+            context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
 
             # compute the degeneratin penalty and re-rank the candidates based on the degeneration penalty and the
             # model confidence
