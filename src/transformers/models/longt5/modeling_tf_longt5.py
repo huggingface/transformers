@@ -1619,21 +1619,10 @@ class TFLongT5PreTrainedModel(TFPreTrainedModel):
         return self.shared
 
     def set_input_embeddings(self, value):
-        try:
-            self.shared.weight = value
-        except AttributeError:
-            self(self.dummy_inputs)
-            self.shared.weight = value
-
-        self.shared.vocab_size = shape_list(value)[0]
-        # retrieve correct absolute scope for embed token wrapper
-        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
-            pass
-        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = tf.keras.layers.Embedding(self.shared, abs_scope_name=shared_abs_scope_name)
-        self.encoder.embed_tokens = embed_tokens
+        self.shared = value
+        self.encoder.embed_tokens = self.shared
         if hasattr(self, "decoder"):
-            self.decoder.embed_tokens = embed_tokens
+            self.decoder.embed_tokens = self.shared
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
@@ -1820,15 +1809,14 @@ num_heads))`.
 class TFLongT5Model(TFLongT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.shared = TFSharedEmbeddings(
-            config.vocab_size, config.d_model, name="shared", initializer_range=self.config.initializer_factor
+        self.shared = tf.keras.layers.Embedding(
+            input_dim=self.config.vocab_size,
+            output_dim=self.config.d_model,
+            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.initializer_factor),
+            name="model.shared",
         )
-
-        # retrieve correct absolute scope for embed token wrapper
-        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
-            pass
-        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = tf.keras.layers.Embedding(self.shared, abs_scope_name=shared_abs_scope_name)
+        # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
+        self.shared.load_weight_prefix = "shared"
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
@@ -1970,15 +1958,14 @@ class TFLongT5ForConditionalGeneration(TFLongT5PreTrainedModel, TFCausalLanguage
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.model_dim = config.d_model
-        self.shared = TFSharedEmbeddings(
-            config.vocab_size, config.d_model, name="shared", initializer_range=self.config.initializer_factor
+        self.shared = tf.keras.layers.Embedding(
+            input_dim=self.config.vocab_size,
+            output_dim=self.config.d_model,
+            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.initializer_factor),
+            name="model.shared",
         )
-
-        # retrieve correct absolute scope for embed token wrapper
-        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
-            pass
-        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = tf.keras.layers.Embedding(self.shared, abs_scope_name=shared_abs_scope_name)
+        # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
+        self.shared.load_weight_prefix = "shared"
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
@@ -2250,15 +2237,14 @@ class TFLongT5ForConditionalGeneration(TFLongT5PreTrainedModel, TFCausalLanguage
 class TFLongT5EncoderModel(TFLongT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.shared = TFSharedEmbeddings(
-            config.vocab_size, config.d_model, name="shared", initializer_range=self.config.initializer_factor
+        self.shared = tf.keras.layers.Embedding(
+            input_dim=self.config.vocab_size,
+            output_dim=self.config.d_model,
+            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.initializer_factor),
+            name="model.shared",
         )
-
-        # retrieve correct absolute scope for embed token wrapper
-        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
-            pass
-        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = tf.keras.layers.Embedding(self.shared, abs_scope_name=shared_abs_scope_name)
+        # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
+        self.shared.load_weight_prefix = "shared"
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
