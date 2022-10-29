@@ -794,7 +794,9 @@ class TFLongT5ModelIntegrationTests(unittest.TestCase):
 
         # check if encoder_outputs match
         expected_output_slice = tf.convert_to_tensor([0.0629, -0.1294, -0.0089, 0.0772, 0.0663])
-        assert tf.experimental.numpy.allclose(output.encoder_hidden_states[-1], expected_output_slice, atol=1e-4)
+        assert tf.experimental.numpy.allclose(
+            output.encoder_hidden_states[-1][0, 0, :5], expected_output_slice, atol=1e-4
+        )
 
         # check if logits match
         expected_output_slice = tf.convert_to_tensor([5.5231, 6.1058, 3.1766, 8.2391, -5.9453])
