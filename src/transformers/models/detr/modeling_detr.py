@@ -33,7 +33,6 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_scipy_available,
     is_timm_available,
-    is_vision_available,
     logging,
     replace_return_docstrings,
     requires_backends,
@@ -43,9 +42,6 @@ from .configuration_detr import DetrConfig
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
-
-if is_vision_available():
-    from .feature_extraction_detr import center_to_corners_format
 
 if is_timm_available():
     from timm import create_model
@@ -1426,16 +1422,16 @@ class DetrForObjectDetection(DetrPreTrainedModel):
 
         >>> # convert outputs (bounding boxes and class logits) to COCO API
         >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = feature_extractor.post_process_object_detection(outputs, target_sizes=target_sizes)[0]
+        >>> results = feature_extractor.post_process_object_detection(
+        ...     outputs, threshold=0.9, target_sizes=target_sizes
+        ... )[0]
 
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
-        ...     # let's only keep detections with score > 0.9
-        ...     if score > 0.9:
-        ...         print(
-        ...             f"Detected {model.config.id2label[label.item()]} with confidence "
-        ...             f"{round(score.item(), 3)} at location {box}"
-        ...         )
+        ...     print(
+        ...         f"Detected {model.config.id2label[label.item()]} with confidence "
+        ...         f"{round(score.item(), 3)} at location {box}"
+        ...     )
         Detected remote with confidence 0.998 at location [40.16, 70.81, 175.55, 117.98]
         Detected remote with confidence 0.996 at location [333.24, 72.55, 368.33, 187.66]
         Detected couch with confidence 0.995 at location [-0.02, 1.15, 639.73, 473.76]
@@ -1605,12 +1601,12 @@ class DetrForSegmentation(DetrPreTrainedModel):
 
         >>> # Use the `post_process_panoptic_segmentation` method of `DetrFeatureExtractor` to retrieve post-processed panoptic segmentation maps
         >>> # Segmentation results are returned as a list of dictionaries
-        >>> result = feature_extractor.post_process_panoptic_segmentation(outputs, processed_sizes)
+        >>> result = feature_extractor.post_process_panoptic_segmentation(outputs, target_sizes=[(300, 500)])
 
-        >>> # A tensor of shape (height, width) where each value denotes a segment id
+        >>> # A tensor of shape (height, width) where each value denotes a segment id, filled with -1 if no segment is found
         >>> panoptic_seg = result[0]["segmentation"]
-        >>> # Get mapping of segment ids to semantic class ids
-        >>> panoptic_segments_info = result[0]["segment_ids"]
+        >>> # Get prediction score and segment_id to class_id mapping of each segment
+        >>> panoptic_segments_info = result[0]["segments_info"]
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1964,16 +1960,16 @@ class DetrLoss(nn.Module):
         """
         if "logits" not in outputs:
             raise KeyError("No logits were found in the outputs")
-        src_logits = outputs["logits"]
+        source_logits = outputs["logits"]
 
-        idx = self._get_src_permutation_idx(indices)
+        idx = self._get_source_permutation_idx(indices)
         target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
         target_classes = torch.full(
-            src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
+            source_logits.shape[:2], self.num_classes, dtype=torch.int64, device=source_logits.device
         )
         target_classes[idx] = target_classes_o
 
-        loss_ce = nn.functional.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
+        loss_ce = nn.functional.cross_entropy(source_logits.transpose(1, 2), target_classes, self.empty_weight)
         losses = {"loss_ce": loss_ce}
 
         return losses
@@ -2003,17 +1999,17 @@ class DetrLoss(nn.Module):
         """
         if "pred_boxes" not in outputs:
             raise KeyError("No predicted boxes found in outputs")
-        idx = self._get_src_permutation_idx(indices)
-        src_boxes = outputs["pred_boxes"][idx]
+        idx = self._get_source_permutation_idx(indices)
+        source_boxes = outputs["pred_boxes"][idx]
         target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
 
-        loss_bbox = nn.functional.l1_loss(src_boxes, target_boxes, reduction="none")
+        loss_bbox = nn.functional.l1_loss(source_boxes, target_boxes, reduction="none")
 
         losses = {}
         losses["loss_bbox"] = loss_bbox.sum() / num_boxes
 
         loss_giou = 1 - torch.diag(
-            generalized_box_iou(center_to_corners_format(src_boxes), center_to_corners_format(target_boxes))
+            generalized_box_iou(center_to_corners_format(source_boxes), center_to_corners_format(target_boxes))
         )
         losses["loss_giou"] = loss_giou.sum() / num_boxes
         return losses
@@ -2027,41 +2023,41 @@ class DetrLoss(nn.Module):
         if "pred_masks" not in outputs:
             raise KeyError("No predicted masks found in outputs")
 
-        src_idx = self._get_src_permutation_idx(indices)
-        tgt_idx = self._get_tgt_permutation_idx(indices)
-        src_masks = outputs["pred_masks"]
-        src_masks = src_masks[src_idx]
+        source_idx = self._get_source_permutation_idx(indices)
+        target_idx = self._get_target_permutation_idx(indices)
+        source_masks = outputs["pred_masks"]
+        source_masks = source_masks[source_idx]
         masks = [t["masks"] for t in targets]
         # TODO use valid to mask invalid areas due to padding in loss
         target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
-        target_masks = target_masks.to(src_masks)
-        target_masks = target_masks[tgt_idx]
+        target_masks = target_masks.to(source_masks)
+        target_masks = target_masks[target_idx]
 
         # upsample predictions to the target size
-        src_masks = nn.functional.interpolate(
-            src_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
+        source_masks = nn.functional.interpolate(
+            source_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
         )
-        src_masks = src_masks[:, 0].flatten(1)
+        source_masks = source_masks[:, 0].flatten(1)
 
         target_masks = target_masks.flatten(1)
-        target_masks = target_masks.view(src_masks.shape)
+        target_masks = target_masks.view(source_masks.shape)
         losses = {
-            "loss_mask": sigmoid_focal_loss(src_masks, target_masks, num_boxes),
-            "loss_dice": dice_loss(src_masks, target_masks, num_boxes),
+            "loss_mask": sigmoid_focal_loss(source_masks, target_masks, num_boxes),
+            "loss_dice": dice_loss(source_masks, target_masks, num_boxes),
         }
         return losses
 
-    def _get_src_permutation_idx(self, indices):
+    def _get_source_permutation_idx(self, indices):
         # permute predictions following indices
-        batch_idx = torch.cat([torch.full_like(src, i) for i, (src, _) in enumerate(indices)])
-        src_idx = torch.cat([src for (src, _) in indices])
-        return batch_idx, src_idx
+        batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
+        source_idx = torch.cat([source for (source, _) in indices])
+        return batch_idx, source_idx
 
-    def _get_tgt_permutation_idx(self, indices):
+    def _get_target_permutation_idx(self, indices):
         # permute targets following indices
-        batch_idx = torch.cat([torch.full_like(tgt, i) for i, (_, tgt) in enumerate(indices)])
-        tgt_idx = torch.cat([tgt for (_, tgt) in indices])
-        return batch_idx, tgt_idx
+        batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
+        target_idx = torch.cat([target for (_, target) in indices])
+        return batch_idx, target_idx
 
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
@@ -2082,7 +2078,7 @@ class DetrLoss(nn.Module):
              outputs (`dict`, *optional*):
                 Dictionary of tensors, see the output specification of the model for the format.
              targets (`List[dict]`, *optional*):
-                List of dicts, such that len(targets) == batch_size. The expected keys in each dict depends on the
+                List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
                 losses applied, see each loss' doc.
         """
         outputs_without_aux = {k: v for k, v in outputs.items() if k != "auxiliary_outputs"}
@@ -2286,6 +2282,17 @@ def generalized_box_iou(boxes1, boxes2):
     area = width_height[:, :, 0] * width_height[:, :, 1]
 
     return iou - (area - union) / area
+
+
+# Copied from transformers.models.detr.feature_extraction_detr.center_to_corners_format
+def center_to_corners_format(x):
+    """
+    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
+    (x_0, y_0, x_1, y_1).
+    """
+    center_x, center_y, width, height = x.unbind(-1)
+    b = [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)]
+    return torch.stack(b, dim=-1)
 
 
 # below: taken from https://github.com/facebookresearch/detr/blob/master/util/misc.py#L306

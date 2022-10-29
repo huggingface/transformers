@@ -14,7 +14,13 @@
 # limitations under the License.
 """ Swin Transformer model configuration"""
 
+from collections import OrderedDict
+from typing import Mapping
+
+from packaging import version
+
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -81,12 +87,12 @@ class SwinConfig(PretrainedConfig):
         Example:
 
     ```python
-    >>> from transformers import SwinModel, SwinConfig
+    >>> from transformers import SwinConfig, SwinModel
 
     >>> # Initializing a Swin microsoft/swin-tiny-patch4-window7-224 style configuration
     >>> configuration = SwinConfig()
 
-    >>> # Initializing a model from the microsoft/swin-tiny-patch4-window7-224 style configuration
+    >>> # Initializing a model (with random weights) from the microsoft/swin-tiny-patch4-window7-224 style configuration
     >>> model = SwinModel(configuration)
 
     >>> # Accessing the model configuration
@@ -145,3 +151,20 @@ class SwinConfig(PretrainedConfig):
         # we set the hidden_size attribute in order to make Swin work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
+
+
+class SwinOnnxConfig(OnnxConfig):
+
+    torch_onnx_minimum_version = version.parse("1.11")
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4

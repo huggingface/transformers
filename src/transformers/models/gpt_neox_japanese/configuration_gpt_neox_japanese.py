@@ -72,12 +72,12 @@ class GPTNeoXJapaneseConfig(PretrainedConfig):
         Example:
 
     ```python
-    >>> from transformers import GPTNeoXJapaneseModel, GPTNeoXJapaneseConfig
+    >>> from transformers import GPTNeoXJapaneseConfig, GPTNeoXJapaneseModel
 
     >>> # Initializing a GPTNeoXJapanese gpt-neox-japanese-2.7b style configuration
     >>> configuration = GPTNeoXJapaneseConfig()
 
-    >>> # Initializing a model from the gpt-neox-japanese-2.7b style configuration
+    >>> # Initializing a model (with random weights) from the gpt-neox-japanese-2.7b style configuration
     >>> model = GPTNeoXJapaneseModel(configuration)
 
     >>> # Accessing the model configuration

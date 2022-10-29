@@ -14,8 +14,10 @@
 
 import collections
 import contextlib
+import functools
 import inspect
 import logging
+import multiprocessing
 import os
 import re
 import shlex
@@ -23,12 +25,13 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from collections.abc import Mapping
 from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
-from typing import Iterator, List, Union
+from typing import Iterator, List, Optional, Union
 from unittest import mock
 
 import huggingface_hub
@@ -52,6 +55,7 @@ from .utils import (
     is_flax_available,
     is_ftfy_available,
     is_ipex_available,
+    is_jumanpp_available,
     is_librosa_available,
     is_onnx_available,
     is_pandas_available,
@@ -66,6 +70,7 @@ from .utils import (
     is_sentencepiece_available,
     is_soundfile_availble,
     is_spacy_available,
+    is_sudachi_available,
     is_tensorflow_probability_available,
     is_tensorflow_text_available,
     is_tf2onnx_available,
@@ -131,7 +136,6 @@ _run_pt_tf_cross_tests = parse_flag_from_env("RUN_PT_TF_CROSS_TESTS", default=Fa
 _run_pt_flax_cross_tests = parse_flag_from_env("RUN_PT_FLAX_CROSS_TESTS", default=False)
 _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
-_run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=False)
 _run_git_lfs_tests = parse_flag_from_env("RUN_GIT_LFS_TESTS", default=False)
 _tf_gpu_memory_limit = parse_int_from_env("TF_GPU_MEMORY_LIMIT", default=None)
 
@@ -172,25 +176,6 @@ def is_pt_flax_cross_test(test_case):
             return test_case
         else:
             return pytest.mark.is_pt_flax_cross_test()(test_case)
-
-
-def is_pipeline_test(test_case):
-    """
-    Decorator marking a test as a pipeline test.
-
-    Pipeline tests are skipped by default and we can run only them by setting RUN_PIPELINE_TESTS environment variable
-    to a truthy value and selecting the is_pipeline_test pytest mark.
-
-    """
-    if not _run_pipeline_tests:
-        return unittest.skip("test is pipeline test")(test_case)
-    else:
-        try:
-            import pytest  # We don't need a hard dependency on pytest in the main library
-        except ImportError:
-            return test_case
-        else:
-            return pytest.mark.is_pipeline_test()(test_case)
 
 
 def is_staging_test(test_case):
@@ -305,6 +290,18 @@ def require_torch(test_case):
 
     """
     return unittest.skipUnless(is_torch_available(), "test requires PyTorch")(test_case)
+
+
+def require_torch_or_tf(test_case):
+    """
+    Decorator marking a test that requires PyTorch or TensorFlow.
+
+    These tests are skipped when neither PyTorch not TensorFlow is installed.
+
+    """
+    return unittest.skipUnless(is_torch_available() or is_tf_available(), "test requires PyTorch or TensorFlow")(
+        test_case
+    )
 
 
 def require_intel_extension_for_pytorch(test_case):
@@ -669,6 +666,20 @@ def require_usr_bin_time(test_case):
     Decorator marking a test that requires `/usr/bin/time`
     """
     return unittest.skipUnless(cmd_exists("/usr/bin/time"), "test requires /usr/bin/time")(test_case)
+
+
+def require_sudachi(test_case):
+    """
+    Decorator marking a test that requires sudachi
+    """
+    return unittest.skipUnless(is_sudachi_available(), "test requires sudachi")(test_case)
+
+
+def require_jumanpp(test_case):
+    """
+    Decorator marking a test that requires jumanpp
+    """
+    return unittest.skipUnless(is_jumanpp_available(), "test requires jumanpp")(test_case)
 
 
 def get_gpu_count():
@@ -1537,6 +1548,8 @@ def nested_simplify(obj, decimals=3):
 
     if isinstance(obj, list):
         return [nested_simplify(item, decimals) for item in obj]
+    if isinstance(obj, tuple):
+        return tuple([nested_simplify(item, decimals) for item in obj])
     elif isinstance(obj, np.ndarray):
         return nested_simplify(obj.tolist())
     elif isinstance(obj, Mapping):
@@ -1627,3 +1640,76 @@ class RequestCounter:
             self.other_request_count += 1
 
         return self.old_request(method=method, **kwargs)
+
+
+def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None):
+    """
+    To decorate flaky tests. They will be retried on failures.
+
+    Args:
+        max_attempts (`int`, *optional*, defaults to 5):
+            The maximum number of attempts to retry the flaky test.
+        wait_before_retry (`float`, *optional*):
+            If provided, will wait that number of seconds before retrying the test.
+    """
+
+    def decorator(test_func_ref):
+        @functools.wraps(test_func_ref)
+        def wrapper(*args, **kwargs):
+            retry_count = 1
+
+            while retry_count < max_attempts:
+                try:
+                    return test_func_ref(*args, **kwargs)
+
+                except Exception as err:
+                    print(f"Test failed with {err} at try {retry_count}/{max_attempts}.", file=sys.stderr)
+                    if wait_before_retry is not None:
+                        time.sleep(wait_before_retry)
+                    retry_count += 1
+
+            return test_func_ref(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=600):
+    """
+    To run a test in a subprocess. In particular, this can avoid (GPU) memory issue.
+
+    Args:
+        test_case (`unittest.TestCase`):
+            The test that will run `target_func`.
+        target_func (`Callable`):
+            The function implementing the actual testing logic.
+        inputs (`dict`, *optional*, defaults to `None`):
+            The inputs that will be passed to `target_func` through an (input) queue.
+        timeout (`int`, *optional*, defaults to 600):
+            The timeout (in seconds) that will be passed to the input and output queues.
+    """
+
+    start_methohd = "spawn"
+    ctx = multiprocessing.get_context(start_methohd)
+
+    input_queue = ctx.Queue(1)
+    output_queue = ctx.JoinableQueue(1)
+
+    # We can't send `unittest.TestCase` to the child, otherwise we get issues regarding pickle.
+    input_queue.put(inputs, timeout=timeout)
+
+    process = ctx.Process(target=target_func, args=(input_queue, output_queue, timeout))
+    process.start()
+    # Kill the child process if we can't get outputs from it in time: otherwise, the hanging subprocess prevents
+    # the test to exit properly.
+    try:
+        results = output_queue.get(timeout=timeout)
+        output_queue.task_done()
+    except Exception as e:
+        process.terminate()
+        test_case.fail(e)
+    process.join(timeout=timeout)
+
+    if results["error"] is not None:
+        test_case.fail(f'{results["error"]}')

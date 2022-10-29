@@ -22,15 +22,7 @@ from transformers import (
     is_vision_available,
     pipeline,
 )
-from transformers.testing_utils import (
-    is_pipeline_test,
-    nested_simplify,
-    require_tf,
-    require_timm,
-    require_torch,
-    require_vision,
-    slow,
-)
+from transformers.testing_utils import nested_simplify, require_tf, require_timm, require_torch, require_vision, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -48,17 +40,10 @@ else:
 @require_vision
 @require_timm
 @require_torch
-@is_pipeline_test
 class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        if model.__class__.__name__ == "DeformableDetrForObjectDetection":
-            self.skipTest(
-                """Deformable DETR requires a custom CUDA kernel.
-                """
-            )
-
         object_detector = ObjectDetectionPipeline(model=model, feature_extractor=feature_extractor)
         return object_detector, ["./tests/fixtures/tests_samples/COCO/000000039769.png"]
 

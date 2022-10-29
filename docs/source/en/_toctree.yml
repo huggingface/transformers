@@ -33,7 +33,9 @@
     - local: converting_tensorflow_models
       title: Converting from TensorFlow checkpoints
     - local: serialization
-      title: Export 🤗 Transformers models
+      title: Export to ONNX
+    - local: torchscript
+      title: Export to TorchScript
     - local: troubleshooting
       title: Troubleshoot
     title: General usage
@@ -245,6 +247,8 @@
         title: ERNIE
       - local: model_doc/esm
         title: ESM
+      - local: model_doc/flan-t5
+        title: FLAN-T5
       - local: model_doc/flaubert
         title: FlauBERT
       - local: model_doc/fnet
@@ -273,6 +277,8 @@
         title: LayoutLM
       - local: model_doc/led
         title: LED
+      - local: model_doc/lilt
+        title: LiLT
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
@@ -408,6 +414,8 @@
         title: Swin Transformer
       - local: model_doc/swinv2
         title: Swin Transformer V2
+      - local: model_doc/table-transformer
+        title: Table Transformer
       - local: model_doc/van
         title: VAN
       - local: model_doc/videomae
@@ -447,6 +455,8 @@
         title: Wav2Vec2Phoneme
       - local: model_doc/wavlm
         title: WavLM
+      - local: model_doc/whisper
+        title: Whisper
       - local: model_doc/xls_r
         title: XLS-R
       - local: model_doc/xlsr_wav2vec2
@@ -515,6 +525,8 @@
       title: Utilities for Trainer
     - local: internal/generation_utils
       title: Utilities for Generation
+    - local: internal/image_processing_utils
+      title: Utilities for Image Processors
     - local: internal/file_utils
       title: General Utilities
     title: Internal Helpers

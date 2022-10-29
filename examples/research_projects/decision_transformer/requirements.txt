@@ -95,7 +95,7 @@ jedi==0.18.1
 Jinja2==2.11.3
 jinja2-time==0.2.0
 jmespath==0.10.0
-joblib==1.1.0
+joblib==1.2.0
 jsonschema==4.4.0
 keras==2.8.0
 Keras-Preprocessing==1.1.2
