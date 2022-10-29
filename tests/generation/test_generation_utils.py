@@ -1696,6 +1696,30 @@ class GenerationIntegrationTests(unittest.TestCase):
             ],
         )
 
+    def test_contrastive_search_batched(self):
+        articles = ["Foo", "Bar Baz"]
+        tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+        model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(torch_device)
+
+        model.config.eos_token_id = None
+        input_ids_batched = tokenizer(articles, padding=True, return_tensors="pt").input_ids.to(torch_device)
+        input_ids = tokenizer(articles[1], return_tensors="pt").input_ids.to(torch_device)
+
+        output_sequences_batched = model.generate(
+            input_ids=input_ids_batched, penalty_alpha=0.6, top_k=4, return_dict_in_generate=True, output_scores=True
+        )
+        output_sequences = model.generate(
+            input_ids=input_ids, penalty_alpha=0.6, top_k=4, return_dict_in_generate=True, output_scores=True
+        )
+
+        batched_out = tokenizer.decode(output_sequences_batched.sequences[1], skip_special_tokens=True)
+        out = tokenizer.decode(output_sequences.sequences[0], skip_special_tokens=True)
+        self.assertEqual(batched_out, out)
+
+        # output_sequences_batched.scores[0][1] -> 1st set of logits, 2nd sequence
+        max_score_diff = (output_sequences_batched.scores[0][1] - output_sequences.scores[0][0]).abs().max()
+        self.assertTrue(max_score_diff < 1e-5)
+
     @slow
     def test_contrastive_search_bart(self):
         article = (
