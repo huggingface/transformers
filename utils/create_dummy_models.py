@@ -263,7 +263,7 @@ def build_processor(config_class, processor_class):
     return processor
 
 
-def get_tiny_config(config_class):
+def get_tiny_config(config_class, **model_tester_kwargs):
     """Retrieve a tiny configuration from `config_class` using each model's `ModelTester`.
 
     Args:
@@ -297,7 +297,7 @@ def get_tiny_config(config_class):
         raise ValueError(error)
 
     # `parent` is an instance of `unittest.TestCase`, but we don't need it here.
-    model_tester = model_tester_class(parent=None)
+    model_tester = model_tester_class(parent=None, **model_tester_kwargs)
 
     if hasattr(model_tester, "get_pipeline_config"):
         return model_tester.get_pipeline_config()
@@ -748,13 +748,23 @@ def build(config_class, models_to_create, output_dir):
         logger.error(result["error"])
         return result
 
-    # Update the config with the properties of the converted processors (smaller vocab size, image size, etc.)
+    config_overrides = {}
+
+    # Update the config with the properties of the converted processors (smaller vocab size, special token ids, etc.)
     for processor in processors:
         if isinstance(processor, PreTrainedTokenizerBase):
             vocab_size = processor.vocab_size
             result["vocab_size"] = vocab_size
-    config_overrides = {k: v for k, v in result.items() if k in ["vocab_size"] and v is not None}
-    # Update `vocab_size`
+            config_overrides["vocab_size"] = vocab_size
+
+            # Update special token ids
+            model_tester_kwargs = {"vocab_size": vocab_size}
+            _tiny_config = get_tiny_config(config_class, **model_tester_kwargs)
+            for attr in dir(_tiny_config):
+                if attr.endswith("_token_id"):
+                    config_overrides[attr] = getattr(_tiny_config, attr)
+
+    # Update attributes that `vocab_size` involves
     for k, v in config_overrides.items():
         if hasattr(tiny_config, k):
             setattr(tiny_config, k, v)
