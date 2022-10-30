@@ -572,3 +572,38 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
         duration = datetime.datetime.now() - start
         self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+    @tooslow
+    def test_contrastive_search_gptj(self):
+        article = (
+            "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and "
+            "research laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
+        model = GPTJForCausalLM.from_pretrained(
+            "EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16
+        ).to(torch_device)
+        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        outputs = model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
+        generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
+                "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, "
+                "United Kingdom with offices in Mountain View, San Francisco, New York City, Paris, Tokyo, Seoul, "
+                "Beijing, Singapore, Tel Aviv, Dublin, Sydney, and Melbourne.[1]\n\nContents\n\nIn 2010, Google's "
+                "parent company, Alphabet, announced a $500 million investment in DeepMind, with the aim of creating "
+                "a company that would apply deep learning to problems in healthcare, energy, transportation, and "
+                "other areas.[2]\n\nOn April 23, 2014, Google announced that it had acquired DeepMind for $400 "
+                "million in cash and stock.[3] The acquisition was seen as a way for Google to enter the "
+                "fast-growing field of artificial intelligence (AI), which it had so far avoided due to concerns "
+                'about ethical and social implications.[4] Google co-founder Sergey Brin said that he was "thrilled" '
+                'to have acquired DeepMind, and that it would "help us push the boundaries of AI even further."'
+                "[5]\n\nDeepMind's founders, Demis Hassabis and Mustafa Suleyman, were joined by a number of Google "
+                "employees"
+            ],
+        )

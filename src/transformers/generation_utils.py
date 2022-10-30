@@ -672,18 +672,21 @@ class GenerationMixin:
         return input_ids, model_kwargs
 
     @staticmethod
+    def _extract_past_from_model_output(outputs: ModelOutput):
+        past = None
+        if "past_key_values" in outputs:
+            past = outputs.past_key_values
+        elif "mems" in outputs:
+            past = outputs.mems
+        elif "past_buckets_states" in outputs:
+            past = outputs.past_buckets_states
+        return past
+
     def _update_model_kwargs_for_generation(
-        outputs: ModelOutput, model_kwargs: Dict[str, Any], is_encoder_decoder: bool = False
+        self, outputs: ModelOutput, model_kwargs: Dict[str, Any], is_encoder_decoder: bool = False
     ) -> Dict[str, Any]:
         # update past
-        if "past_key_values" in outputs:
-            model_kwargs["past"] = outputs.past_key_values
-        elif "mems" in outputs:
-            model_kwargs["past"] = outputs.mems
-        elif "past_buckets_states" in outputs:
-            model_kwargs["past"] = outputs.past_buckets_states
-        else:
-            model_kwargs["past"] = None
+        model_kwargs["past"] = self._extract_past_from_model_output(outputs)
 
         # update token_type_ids with last value
         if "token_type_ids" in model_kwargs:
@@ -1927,14 +1930,6 @@ class GenerationMixin:
                     **model_inputs, return_dict=True, output_hidden_states=True, output_attentions=output_attentions
                 )
 
-                # past_key_values is required for fast decoding
-                if "past_key_values" not in outputs:
-                    raise ValueError(
-                        f"{self.__class__.__name__} cannot return `past_key_values` and can therefore **not** be used "
-                        "for contrastive search."
-                    )
-                past_key_values = outputs.past_key_values
-
                 # last decoder hidden states will be used to compute the degeneration penalty (cosine similarity with
                 # previous tokens)
                 if self.config.is_encoder_decoder:
@@ -1952,6 +1947,12 @@ class GenerationMixin:
                 _, model_kwargs = self._expand_inputs_for_generation(
                     expand_size=top_k, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
                 )
+
+                if model_kwargs.get("past") is None:
+                    raise ValueError(
+                        f"{self.__class__.__name__} does not support caching and can therefore **not** be used "
+                        "for contrastive search."
+                    )
 
             # contrastive_search main logic start:
             # contrastive search decoding consists of two steps: (1) candidate tokens recall; (2) candidate re-rank by
@@ -1995,7 +1996,7 @@ class GenerationMixin:
             outputs = self(
                 **next_model_inputs, return_dict=True, output_hidden_states=True, output_attentions=output_attentions
             )
-            past_key_values = outputs.past_key_values
+            next_past_key_values = self._extract_past_from_model_output(outputs)
 
             logits = outputs.logits[:, -1, :]
             # name is different for encoder-decoder and decoder-only models
@@ -2019,44 +2020,52 @@ class GenerationMixin:
             next_hidden = next_hidden[range(batch_size), selected_idx, :]
             last_hidden_states = torch.cat([last_hidden_states, next_hidden.unsqueeze(1)], dim=1)
 
-            decoder_hidden_states = []
+            next_decoder_hidden_states = ()
             for layer in full_hidden_states:
-                layer = torch.stack(torch.split(layer.squeeze(dim=1), top_k))
-                layer = layer[range(batch_size), selected_idx, :]
-                decoder_hidden_states.append(layer)
+                layer = torch.stack(torch.split(layer, top_k))[range(batch_size), selected_idx, :]
+                next_decoder_hidden_states += (layer,)
 
             # select the past_key_value
-            new_key_values = []
-            for layer in past_key_values:
-                items = []
+            new_key_values = ()
+            for layer in next_past_key_values:
+                items = ()
                 # item is either the key or the value matrix
                 for item in layer:
                     item = torch.stack(torch.split(item, top_k, dim=0))  # [B, K, num_head, seq_len, esz]
-                    item = item[range(batch_size), selected_idx, :, :, :]  # [B, num_head, seq_len, esz]
-                    items.append(item)
-                new_key_values.append(items)
-            past_key_values = new_key_values
+                    item = item[range(batch_size), selected_idx, ...]  # [B, num_head, seq_len, esz]
+                    items += (item,)
+                new_key_values += (items,)
+            next_past_key_values = new_key_values
 
             logit_for_next_step = torch.stack(torch.split(logits, top_k))[range(batch_size), selected_idx, :]
 
             # Rebuilds the relevant parts of the model output for the selected token, for use in the next iteration
             if self.config.is_encoder_decoder:
+                next_step_cross_attentions = ()
+                next_step_decoder_attentions = ()
                 if output_attentions:
-                    cross_attentions = []
                     for layer in outputs.cross_attentions:
                         layer = torch.stack(torch.split(layer, top_k, dim=0))[range(batch_size), selected_idx, ...]
-                        cross_attentions.append(layer)
+                        next_step_cross_attentions += (layer,)
+                    for layer in outputs.decoder_attentions:
+                        layer = torch.stack(torch.split(layer, top_k, dim=0))[range(batch_size), selected_idx, ...]
+                        next_step_decoder_attentions += (layer,)
                 outputs = Seq2SeqLMOutput(
-                    past_key_values=past_key_values,
-                    decoder_hidden_states=decoder_hidden_states,
-                    decoder_attentions=model_kwargs["attention_mask"],
-                    cross_attentions=cross_attentions or None,
+                    past_key_values=next_past_key_values,
+                    decoder_hidden_states=next_decoder_hidden_states,
+                    decoder_attentions=next_step_decoder_attentions or None,
+                    cross_attentions=next_step_cross_attentions or None,
                 )
             else:
+                next_step_attentions = ()
+                if output_attentions:
+                    for layer in outputs.attentions:
+                        layer = torch.stack(torch.split(layer, top_k, dim=0))[range(batch_size), selected_idx, ...]
+                        next_step_attentions += (layer,)
                 outputs = CausalLMOutputWithPast(
-                    past_key_values=past_key_values,
-                    hidden_states=decoder_hidden_states,
-                    attentions=model_kwargs["attention_mask"],
+                    past_key_values=next_past_key_values,
+                    hidden_states=next_decoder_hidden_states,
+                    attentions=next_step_attentions or None,
                 )
             # contrastive_search main logic end
 
