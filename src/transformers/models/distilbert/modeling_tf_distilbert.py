@@ -135,7 +135,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
         return final_embeddings
 
 
-class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
+class TFDistilBertSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -241,7 +241,7 @@ class TFFFN(tf.keras.layers.Layer):
         return x
 
 
-class TFTransformerBlock(tf.keras.layers.Layer):
+class TFDistilBertLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -256,7 +256,7 @@ class TFTransformerBlock(tf.keras.layers.Layer):
             config.dim % config.n_heads == 0
         ), f"Hidden size {config.dim} not dividable by number of heads {config.n_heads}"
 
-        self.attention = TFMultiHeadSelfAttention(config, name="attention")
+        self.attention = TFDistilBertSelfAttention(config, name="attention")
         self.sa_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="sa_layer_norm")
 
         self.ffn = TFFFN(config, name="ffn")
@@ -290,14 +290,14 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         return output
 
 
-class TFTransformer(tf.keras.layers.Layer):
+class TFDistilBertEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.n_layers = config.n_layers
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
 
-        self.layer = [TFTransformerBlock(config, name=f"layer_._{i}") for i in range(config.n_layers)]
+        self.layer = [TFDistilBertLayer(config, name=f"layer_._{i}") for i in range(config.n_layers)]
 
     def call(self, x, attn_mask, head_mask, output_attentions, output_hidden_states, return_dict, training=False):
         # docstyle-ignore
@@ -359,7 +359,7 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         self.return_dict = config.use_return_dict
 
         self.embeddings = TFEmbeddings(config, name="embeddings")  # Embeddings
-        self.transformer = TFTransformer(config, name="transformer")  # Encoder
+        self.transformer = TFDistilBertEncoder(config, name="transformer")  # Encoder
 
     def get_input_embeddings(self):
         return self.embeddings

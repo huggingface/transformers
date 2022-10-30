@@ -133,7 +133,7 @@ class Embeddings(nn.Module):
         return embeddings
 
 
-class MultiHeadSelfAttention(nn.Module):
+class DistilBertSelfAttention(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
 
@@ -251,13 +251,13 @@ class FFN(nn.Module):
         return x
 
 
-class TransformerBlock(nn.Module):
+class DistilBertLayer(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
 
         assert config.dim % config.n_heads == 0
 
-        self.attention = MultiHeadSelfAttention(config)
+        self.attention = DistilBertSelfAttention(config)
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
 
         self.ffn = FFN(config)
@@ -305,11 +305,11 @@ class TransformerBlock(nn.Module):
         return output
 
 
-class Transformer(nn.Module):
+class DistilBertEncoder(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
         self.n_layers = config.n_layers
-        self.layer = nn.ModuleList([TransformerBlock(config) for _ in range(config.n_layers)])
+        self.layer = nn.ModuleList([DistilBertLayer(config) for _ in range(config.n_layers)])
 
     def forward(
         self,
@@ -455,7 +455,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         super().__init__(config)
 
         self.embeddings = Embeddings(config)  # Embeddings
-        self.transformer = Transformer(config)  # Encoder
+        self.transformer = DistilBertEncoder(config)  # Encoder
 
         # Initialize weights and apply final processing
         self.post_init()

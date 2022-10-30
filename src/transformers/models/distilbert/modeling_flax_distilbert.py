@@ -159,7 +159,7 @@ class FlaxEmbeddings(nn.Module):
         return hidden_states
 
 
-class FlaxMultiHeadSelfAttention(nn.Module):
+class FlaxDistilBertSelfAttention(nn.Module):
     config: DistilBertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -272,7 +272,7 @@ class FlaxFFN(nn.Module):
         return hidden_states
 
 
-class FlaxTransformerBlock(nn.Module):
+class FlaxDistilbertLayer(nn.Module):
     config: DistilBertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -281,7 +281,7 @@ class FlaxTransformerBlock(nn.Module):
             self.config.dim % self.config.n_heads == 0
         ), f"Hidden size {self.config.dim} not dividable by number of heads {self.config.n_heads}"
 
-        self.attention = FlaxMultiHeadSelfAttention(self.config, dtype=self.dtype)
+        self.attention = FlaxDistilBertSelfAttention(self.config, dtype=self.dtype)
         self.sa_layer_norm = nn.LayerNorm(epsilon=1e-12, dtype=self.dtype)
 
         self.ffn = FlaxFFN(self.config, dtype=self.dtype)
@@ -319,13 +319,13 @@ class FlaxTransformerBlock(nn.Module):
         return output
 
 
-class FlaxTransformer(nn.Module):
+class FlaxDistilbertEncoder(nn.Module):
     config: DistilBertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
         self.layers = [
-            FlaxTransformerBlock(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.n_layers)
+            FlaxDistilbertLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.n_layers)
         ]
 
     def __call__(
@@ -375,7 +375,7 @@ class FlaxTransformerEncoder(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.layer = FlaxTransformer(self.config, dtype=self.dtype)
+        self.layer = FlaxDistilbertEncoder(self.config, dtype=self.dtype)
 
     def __call__(
         self,
