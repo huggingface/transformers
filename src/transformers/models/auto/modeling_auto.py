@@ -348,7 +348,6 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
     [
-        ("audio-spectogram-transformer", "AudioSpectogramTransformerForMaskedImageModeling"),
         ("deit", "DeiTForMaskedImageModeling"),
         ("swin", "SwinForMaskedImageModeling"),
         ("swinv2", "Swinv2ForMaskedImageModeling"),
@@ -367,7 +366,6 @@ MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image Classification mapping
-        ("audio-spectogram-transformer", "AudioSpectogramTransformerForImageClassification"),
         ("beit", "BeitForImageClassification"),
         ("convnext", "ConvNextForImageClassification"),
         ("cvt", "CvtForImageClassification"),

@@ -17,7 +17,6 @@
 
 import argparse
 import json
-import wave
 from pathlib import Path
 
 import torch
@@ -170,21 +169,22 @@ def convert_audio_spectogram_transformer_checkpoint(
     outputs = model(input_values)
     logits = outputs.logits
 
-    print("Shape of logits:", logits.shape)
-    print("Predicted class:", model.config.id2label[logits.argmax(-1).item()])
-
     expected_slice = torch.tensor([-0.8760, -7.0042, -8.6602])
     if not torch.allclose(logits[0, :3], expected_slice, atol=1e-4):
         raise ValueError("Logits don't match")
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+        feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print("Pushing to the hub...")
+        print("Pushing model and feature extractor to the hub...")
         model.push_to_hub(model_name, organization="nielsr")
+        feature_extractor.push_to_hub(model_name, organization="nielsr")
 
 
 if __name__ == "__main__":

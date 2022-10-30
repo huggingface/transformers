@@ -47,7 +47,8 @@ _SEQ_CLASS_EXPECTED_LOSS = 0.0
 
 
 AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "MIT/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593",
+    # TODO update to appropriate organization
+    "nielsr/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593",
     # See all Audio Spectogram Transformer models at https://huggingface.co/models?filter=audio-spectogram-transformer
 ]
 
@@ -71,16 +72,21 @@ class AudioSpectogramTransformerEmbeddings(nn.Module):
         self.config = config
 
     def get_shape(self, config):
-        fstride = config.fstride
-        tstride = config.tstride
-        input_fdim = config.input_fdim
-        input_tdim = config.input_tdim
-        test_input = torch.randn(1, 1, input_fdim, input_tdim)
-        test_proj = nn.Conv2d(1, config.hidden_size, kernel_size=(16, 16), stride=(fstride, tstride))
-        test_out = test_proj(test_input)
-        f_dim = test_out.shape[2]
-        t_dim = test_out.shape[3]
-        return f_dim, t_dim
+        frequency_stride = config.frequency_stride
+        time_stride = config.time_stride
+        frequency_dimension = config.frequency_dimension
+        time_dimension = config.time_dimension
+        test_input = torch.randn(1, 1, frequency_dimension, time_dimension)
+        test_projection = nn.Conv2d(
+            1,
+            config.hidden_size,
+            kernel_size=(config.patch_size, config.patch_size),
+            stride=(frequency_stride, time_stride),
+        )
+        test_out = test_projection(test_input)
+        frequency_dimension = test_out.shape[2]
+        time_dimension = test_out.shape[3]
+        return frequency_dimension, time_dimension
 
     def forward(self, input_values: torch.Tensor) -> torch.Tensor:
         batch_size = input_values.shape[0]
@@ -104,23 +110,13 @@ class AudioSpectogramTransformerPatchEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        # image_size, patch_size = config.image_size, config.patch_size
-        # num_channels, hidden_size = config.num_channels, config.hidden_size
-
-        # image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        # patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        # num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        # self.image_size = image_size
-        # self.patch_size = patch_size
-        # self.num_channels = num_channels
-        # self.num_patches = num_patches
 
         patch_size = config.patch_size
-        fstride = config.fstride
-        tstride = config.tstride
+        frequency_stride = config.frequency_stride
+        time_stride = config.time_stride
 
         self.projection = nn.Conv2d(
-            1, config.hidden_size, kernel_size=(patch_size, patch_size), stride=(fstride, tstride)
+            1, config.hidden_size, kernel_size=(patch_size, patch_size), stride=(frequency_stride, time_stride)
         )
 
     def forward(self, input_values: torch.Tensor) -> torch.Tensor:
@@ -570,7 +566,7 @@ class AudioSpectogramTransformerForSequenceClassification(AudioSpectogramTransfo
     )
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
+        input_values: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -586,7 +582,7 @@ class AudioSpectogramTransformerForSequenceClassification(AudioSpectogramTransfo
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.audio_spectogram_transformer(
-            pixel_values,
+            input_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -622,7 +618,7 @@ class AudioSpectogramTransformerForSequenceClassification(AudioSpectogramTransfo
                 loss = loss_fct(logits, labels)
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(

@@ -44,6 +44,7 @@ from transformers import (
     logging,
 )
 from transformers.models.auto import get_values
+from transformers.models.auto.modeling_auto import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 from transformers.testing_utils import (
     TOKEN,
     USER,
@@ -223,6 +224,7 @@ class ModelTesterMixin:
                 *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING),
                 *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
                 *get_values(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING),
+                *get_values(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING),
             ]:
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device

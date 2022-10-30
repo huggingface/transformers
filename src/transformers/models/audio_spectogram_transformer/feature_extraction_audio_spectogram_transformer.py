@@ -41,7 +41,7 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
     mean and variance normalization to the extracted features.
 
     Args:
-        feature_size (:obj:`int`, defaults to 128):
+        feature_size (`int`, defaults to 1):
             The feature dimension of the extracted features.
         sampling_rate (`int`, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
@@ -63,7 +63,7 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
 
     def __init__(
         self,
-        feature_size=128,
+        feature_size=1,
         sampling_rate=16000,
         num_mel_bins=128,
         padding_value=0.0,

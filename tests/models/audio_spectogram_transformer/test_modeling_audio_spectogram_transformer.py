@@ -14,13 +14,14 @@
 # limitations under the License.
 """ Testing suite for the PyTorch AudioSpectogramTransformer model. """
 
-
 import inspect
+import tempfile
 import unittest
 
+from huggingface_hub import hf_hub_download
 from transformers import AudioSpectogramTransformerConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_torchaudio, slow, torch_device
+from transformers.utils import cached_property, is_torch_available, is_torchaudio_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -36,8 +37,8 @@ if is_torch_available():
     )
 
 
-if is_vision_available():
-    from PIL import Image
+if is_torchaudio_available():
+    import torchaudio
 
     from transformers import AudioSpectogramTransformerFeatureExtractor
 
@@ -47,9 +48,9 @@ class AudioSpectogramTransformerModelTester:
         self,
         parent,
         batch_size=13,
-        image_size=30,
         patch_size=2,
-        num_channels=3,
+        time_dimension=24,
+        frequency_dimension=16,
         is_training=True,
         use_labels=True,
         hidden_size=32,
@@ -62,13 +63,14 @@ class AudioSpectogramTransformerModelTester:
         type_sequence_label_size=10,
         initializer_range=0.02,
         scope=None,
-        encoder_stride=2,
+        frequency_stride=2,
+        time_stride=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.image_size = image_size
         self.patch_size = patch_size
-        self.num_channels = num_channels
+        self.time_dimension = time_dimension
+        self.frequency_dimension = frequency_dimension
         self.is_training = is_training
         self.use_labels = use_labels
         self.hidden_size = hidden_size
@@ -81,14 +83,25 @@ class AudioSpectogramTransformerModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
-        self.encoder_stride = encoder_stride
+        self.frequency_stride = frequency_stride
+        self.time_stride = time_stride
 
-        # in AudioSpectogramTransformer, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+        # in AudioSpectogramTransformer, the seq length equals the number of patches + 2 (we add 2 for the [CLS] and distillation tokens)
+        test_input = torch.randn(1, 1, self.frequency_dimension, self.time_dimension)
+        test_projection = nn.Conv2d(
+            1,
+            self.hidden_size,
+            kernel_size=(self.patch_size, self.patch_size),
+            stride=(self.frequency_stride, self.time_stride),
+        )
+        test_out = test_projection(test_input)
+        frequency_dimension = test_out.shape[2]
+        time_dimension = test_out.shape[3]
+        num_patches = frequency_dimension * time_dimension
+        self.seq_length = num_patches + 2
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        input_values = floats_tensor([self.batch_size, self.time_dimension, self.frequency_dimension])
 
         labels = None
         if self.use_labels:
@@ -96,13 +109,13 @@ class AudioSpectogramTransformerModelTester:
 
         config = self.get_config()
 
-        return config, pixel_values, labels
+        return config, input_values, labels
 
     def get_config(self):
         return AudioSpectogramTransformerConfig(
-            image_size=self.image_size,
             patch_size=self.patch_size,
-            num_channels=self.num_channels,
+            time_dimension=self.time_dimension,
+            frequency_dimension=self.frequency_dimension,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -112,24 +125,25 @@ class AudioSpectogramTransformerModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            encoder_stride=self.encoder_stride,
+            frequency_stride=self.frequency_stride,
+            time_stride=self.time_stride,
         )
 
-    def create_and_check_model(self, config, pixel_values, labels):
+    def create_and_check_model(self, config, input_values, labels):
         model = AudioSpectogramTransformerModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values)
+        result = model(input_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
-            pixel_values,
+            input_values,
             labels,
         ) = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
+        inputs_dict = {"input_values": input_values}
         return config, inputs_dict
 
 
@@ -149,7 +163,6 @@ class AudioSpectogramTransformerModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     fx_compatible = False
-
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
@@ -185,20 +198,12 @@ class AudioSpectogramTransformerModelTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["pixel_values"]
+            expected_arg_names = ["input_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_for_masked_image_modeling(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
-
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
@@ -206,44 +211,73 @@ class AudioSpectogramTransformerModelTest(ModelTesterMixin, unittest.TestCase):
             model = AudioSpectogramTransformerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    def test_correct_missing_keys(self):
+        if not self.test_missing_keys:
+            return
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-# We will verify our results on an image of cute cats
-def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-    return image
+        for model_class in self.all_model_classes:
+            print("Model class:", model_class)
+            model = model_class(config)
+            base_model_prefix = model.base_model_prefix
+
+            if hasattr(model, base_model_prefix):
+                with tempfile.TemporaryDirectory() as temp_dir_name:
+                    model.base_model.save_pretrained(temp_dir_name)
+                    model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
+                    with self.subTest(msg=f"Missing keys for {model.__class__.__name__}"):
+                        self.assertGreater(len(loading_info["missing_keys"]), 0)
+
+
+# We will verify our results on some audio from AudioSet
+def prepare_audio():
+    filepath = hf_hub_download(
+        repo_id="nielsr/audio-spectogram-transformer-checkpoint", filename="sample_audio.flac", repo_type="dataset"
+    )
+
+    audio, sampling_rate = torchaudio.load(filepath)
+
+    return audio, sampling_rate
 
 
 @require_torch
-@require_vision
+@require_torchaudio
 class AudioSpectogramTransformerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
+        # TODO rename nielsr to appropriate organization
         return (
             AudioSpectogramTransformerFeatureExtractor.from_pretrained(
-                "google/audio_spectogram_transformer-base-patch16-224"
+                "nielsr/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593"
             )
-            if is_vision_available()
+            if is_torchaudio_available()
             else None
         )
 
     @slow
     def test_inference_audio_classification(self):
+
+        feature_extractor = self.default_feature_extractor
+        # TODO rename nielsr to appropriate organization
         model = AudioSpectogramTransformerForSequenceClassification.from_pretrained(
-            "google/audio_spectogram_transformer-base-patch16-224"
+            "nielsr/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593"
         ).to(torch_device)
 
         feature_extractor = self.default_feature_extractor
-        image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        audio, sampling_rate = prepare_audio()
+        audio = audio.squeeze().numpy()
+        inputs = feature_extractor(audio, sampling_rate=sampling_rate, padding="max_length", return_tensors="pt").to(
+            torch_device
+        )
 
         # forward pass
         with torch.no_grad():
-            outputs = model(**inputs)
+            outputs = model(inputs.input_features)
 
         # verify the logits
-        expected_shape = torch.Size((1, 1000))
+        expected_shape = torch.Size((1, 527))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
+        expected_slice = torch.tensor([-0.8760, -7.0042, -8.6602]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
