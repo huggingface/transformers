@@ -386,7 +386,6 @@ class AudioSpectogramTransformerEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->AudioSpectogramTransformer,vit->audio_spectogram_transformer
 class AudioSpectogramTransformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -398,20 +397,20 @@ class AudioSpectogramTransformerPreTrainedModel(PreTrainedModel):
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
 
+    # Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel._init_weights
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data = nn.init.trunc_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+    # Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel._set_gradient_checkpointing
     def _set_gradient_checkpointing(self, module: AudioSpectogramTransformerEncoder, value: bool = False) -> None:
-        if isinstance(module, AudioSpectogramTransformerEncoder):
+        if isinstance(module, ViTEncoder):
             module.gradient_checkpointing = value
 
 

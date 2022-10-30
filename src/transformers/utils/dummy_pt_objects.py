@@ -350,6 +350,44 @@ def load_tf_weights_in_albert(*args, **kwargs):
     requires_backends(load_tf_weights_in_albert, ["torch"])
 
 
+AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class AudioSpectogramTransformerForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AudioSpectogramTransformerForMaskedImageModeling(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AudioSpectogramTransformerForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AudioSpectogramTransformerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AudioSpectogramTransformerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = None
 
 
@@ -5692,37 +5730,6 @@ class ViTModel(metaclass=DummyObject):
 
 
 class ViTPreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class AudioSpectogramTransformerForImageClassification(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class AudioSpectogramTransformerForMaskedImageModeling(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class AudioSpectogramTransformerModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class AudioSpectogramTransformerPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
