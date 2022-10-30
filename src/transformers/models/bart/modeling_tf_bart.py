@@ -468,11 +468,13 @@ class TFBartClassificationHead(tf.keras.layers.Layer):
         inner_dim: int,
         num_classes: int,
         pooler_dropout: float,
+        name: str,
+        **kwargs
     ):
-        super().__init__()
-        self.dense = tf.keras.layers.Dense(inner_dim, name="classification_head_dense")
+        super().__init__(name=name, **kwargs)
+        self.dense = tf.keras.layers.Dense(inner_dim, name="dense")
         self.dropout = tf.keras.layers.Dropout(pooler_dropout)
-        self.out_proj = tf.keras.layers.Dense(num_classes, name="classification_head_out")
+        self.out_proj = tf.keras.layers.Dense(num_classes, name="out_proj")
 
     def call(self, inputs):
         hidden_states = self.dropout(inputs)
@@ -1499,13 +1501,14 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
    BART_START_DOCSTRING,
 )
 class TFBartForSequenceClassification(TFBartPretrainedModel):
-    def __init__(self, config: BartConfig, **kwargs):
-        super().__init__(config, **kwargs)
-        self.model = TFBartModel(config)
+    def __init__(self, config: BartConfig, load_weight_prefix=None, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.model = TFBartMainLayer(config, load_weight_prefix=load_weight_prefix, name="model")
         self.classification_head = TFBartClassificationHead(
             config.d_model,
             config.num_labels,
             config.classifier_dropout,
+            name="classification_head" # TODO fixme
         )
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
@@ -1579,7 +1582,7 @@ class TFBartForSequenceClassification(TFBartPretrainedModel):
         # if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
             # raise ValueError("All examples must have the same number of <eos> tokens.")
 
-        sentence_representation = tf.reshape(masked, (-1, 3, 1024))[:, -1, :]
+        sentence_representation = tf.reshape(masked, (-1, masked.shape[0], masked.shape[-1]))[:, -1, :]
 
         logits = self.classification_head(sentence_representation)
 
