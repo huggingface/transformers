@@ -17,6 +17,7 @@
 
 import math
 import os
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -45,6 +46,29 @@ from ...utils import (
 )
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_gpt2 import GPT2Config
+
+
+_USE_MEMORY_EFFICIENT_ATTENTION = int(os.environ.get("USE_MEMORY_EFFICIENT_ATTENTION", 0)) == 1
+try:
+    import xformers
+    import xformers.ops
+
+    xformer_available = True
+except ImportError:
+    xformer_available = False
+
+if _USE_MEMORY_EFFICIENT_ATTENTION and not xformer_available:
+
+    warnings.warn("xformers is not available, will not use memory efficient attention")
+    _USE_MEMORY_EFFICIENT_ATTENTION = False
+_USE_FLASH_ATTENTION = int(os.environ.get("USE_FLASH_ATTENTION", 0)) == 1
+try:
+    from flash_attn.flash_attention import FlashAttention
+except ImportError:
+    FlashAttention = None
+if _USE_FLASH_ATTENTION and FlashAttention is None:
+    warnings.warn("flash_attention is not available, will not use flash attention")
+    _USE_FLASH_ATTENTION = False
 
 
 logger = logging.get_logger(__name__)
@@ -162,6 +186,16 @@ class GPT2Attention(nn.Module):
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
         self.pruned_heads = set()
+        self.config = config
+        if _USE_FLASH_ATTENTION:
+            softmax_scale = 1
+            if self.scale_attn_weights:
+                softmax_scale *= self.head_dim ** -0.5
+            if self.scale_attn_by_inverse_layer_idx:
+                softmax_scale /= float(self.layer_idx + 1)
+
+            self.flash = FlashAttention(softmax_scale=softmax_scale, attention_dropout=config.attn_pdrop)
+
 
     def prune_heads(self, heads):
         if len(heads) == 0:
@@ -177,6 +211,30 @@ class GPT2Attention(nn.Module):
         self.split_size = (self.split_size // self.num_heads) * (self.num_heads - len(heads))
         self.num_heads = self.num_heads - len(heads)
         self.pruned_heads = self.pruned_heads.union(heads)
+
+    def _attn_flash(self, query, key, value, attention_mask=None, head_mask=None):
+        if self.is_cross_attention:
+            raise NotImplementedError("Cross attention is not supported for memory efficient forward")
+        if head_mask is not None:
+            raise NotImplementedError("Head mask is not supported for memory efficient forward")
+
+        old_dtype = query.dtype
+
+        b, h, l, d = query.shape
+        q,k,v = map(lambda x: (
+            #rearrange(x, 'b h l d -> b l 1 h d')
+            x.permute(0,2,1,3).unsqueeze(2)
+        ), (query, key, value))
+        qkv = torch.cat([q,k,v], dim=-3)
+        attention_mask = attention_mask.reshape((b,l))
+        attn_output, _ = self.flash(qkv.type(torch.float16).contiguous() , causal=True, key_padding_mask=attention_mask.contiguous())
+        attn_output = attn_output.type(old_dtype)
+        #attn_output = rearrange(attn_output, 'b l h d -> b h l d')
+        attn_output = attn_output.permute(0,2,1,3)
+
+        attn_weights = None
+        warnings.warn("Memory efficient forward does not return attention weights")
+        return attn_output, attn_weights
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
@@ -275,6 +333,7 @@ class GPT2Attention(nn.Module):
         Splits hidden_size dim into attn_head_size and num_heads
         """
         new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
+        # (batch, seq_len, n_head * head_dim) -> (batch, head, seq_length, head_dim)
         tensor = tensor.view(new_shape)
         return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
 
@@ -324,10 +383,14 @@ class GPT2Attention(nn.Module):
         else:
             present = None
 
-        if self.reorder_and_upcast_attn:
-            attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
-        else:
-            attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+        if not _USE_FLASH_ATTENTION:
+            if self.reorder_and_upcast_attn:
+                attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
+            else:
+                attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+
+        if _USE_FLASH_ATTENTION:
+            attn_output, attn_weights = self._attn_flash(query, key, value, attention_mask, head_mask)
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
         attn_output = self.c_proj(attn_output)
@@ -801,15 +864,16 @@ class GPT2Model(GPT2PreTrainedModel):
             # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
             # this attention mask is more simple than the triangular masking of causal attention
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            attention_mask = attention_mask[:, None, None, :]
+            if not _USE_FLASH_ATTENTION:
+                attention_mask = attention_mask[:, None, None, :]
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
             # positions we want to attend and the dtype's smallest value for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
+                attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+                attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
