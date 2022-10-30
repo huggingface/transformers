@@ -17,13 +17,18 @@
 
 import argparse
 import json
+import wave
 from pathlib import Path
 
 import torch
 import torchaudio
 
 from huggingface_hub import hf_hub_download
-from transformers import AudioSpectogramTransformerConfig, AudioSpectogramTransformerForSequenceClassification
+from transformers import (
+    AudioSpectogramTransformerConfig,
+    AudioSpectogramTransformerFeatureExtractor,
+    AudioSpectogramTransformerForSequenceClassification,
+)
 from transformers.utils import logging
 
 
@@ -128,33 +133,6 @@ def remove_keys(state_dict):
         state_dict.pop(k, None)
 
 
-def make_features(wav_name, mel_bins, target_length=1024):
-    waveform, sr = torchaudio.load(wav_name)
-
-    fbank = torchaudio.compliance.kaldi.fbank(
-        waveform,
-        htk_compat=True,
-        sample_frequency=sr,
-        use_energy=False,
-        window_type="hanning",
-        num_mel_bins=mel_bins,
-        dither=0.0,
-        frame_shift=10,
-    )
-
-    n_frames = fbank.shape[0]
-
-    p = target_length - n_frames
-    if p > 0:
-        m = torch.nn.ZeroPad2d((0, 0, 0, p))
-        fbank = m(fbank)
-    elif p < 0:
-        fbank = fbank[0:target_length, :]
-
-    fbank = (fbank - (-4.2677393)) / (4.5689974 * 2)
-    return fbank
-
-
 @torch.no_grad()
 def convert_audio_spectogram_transformer_checkpoint(
     model_name, checkpoint_url, pytorch_dump_folder_path, push_to_hub=False
@@ -181,8 +159,12 @@ def convert_audio_spectogram_transformer_checkpoint(
     filepath = hf_hub_download(
         repo_id="nielsr/audio-spectogram-transformer-checkpoint", filename="sample_audio.flac", repo_type="dataset"
     )
-    features = make_features(filepath, mel_bins=128)  # shape(1024, 128)
-    input_values = features.expand(1, 1024, 128)  # (batch_size, time, freq)
+    feature_extractor = AudioSpectogramTransformerFeatureExtractor()
+    waveform, _ = torchaudio.load(filepath)
+    waveform = waveform.squeeze().numpy()
+
+    inputs = feature_extractor(waveform, sampling_rate=16000, padding="max_length", return_tensors="pt")
+    input_values = inputs.input_features
 
     # forward pass
     outputs = model(input_values)

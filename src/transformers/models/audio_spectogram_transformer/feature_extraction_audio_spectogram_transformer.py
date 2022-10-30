@@ -41,6 +41,8 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
     mean and variance normalization to the extracted features.
 
     Args:
+        feature_size (:obj:`int`, defaults to 128):
+            The feature dimension of the extracted features.
         sampling_rate (`int`, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
         num_mel_bins (`int`, defaults to 128):
@@ -53,19 +55,22 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
             Whether or not to zero-mean normalize the extracted features.
         std (`int`, *optional*, defaults to `True`):
             Whether or not to unit-variance normalize the extracted features.
+        return_attention_mask (`bool`, *optional*, defaults to `False`):
+            Whether or not [`~AudioSpectogramTransformerFeatureExtractor.__call__`] should return `attention_mask`.
     """
 
     model_input_names = ["input_features", "attention_mask"]
 
     def __init__(
         self,
-        feature_size=80,
+        feature_size=128,
         sampling_rate=16000,
         num_mel_bins=128,
         padding_value=0.0,
         do_normalize=True,
         mean=-4.2677393,
         std=4.5689974,
+        return_attention_mask=False,
         **kwargs
     ):
         super().__init__(feature_size=80, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -73,6 +78,7 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
         self.do_normalize = do_normalize
         self.mean = mean
         self.std = std
+        self.return_attention_mask = return_attention_mask
 
     def _extract_fbank_features(
         self,
