@@ -37,11 +37,11 @@ _CONFIG_FOR_DOC = "AudioSpectogramTransformerConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "AudioSpectogramTransformerFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "MIT/ast-10-10"
+_CHECKPOINT_FOR_DOC = "nielsr/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593"
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 # Audio classification docstring
-_SEQ_CLASS_CHECKPOINT = "MIT/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593"
+_SEQ_CLASS_CHECKPOINT = "nielsr/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593"
 _SEQ_CLASS_EXPECTED_OUTPUT = ""
 _SEQ_CLASS_EXPECTED_LOSS = 0.0
 
