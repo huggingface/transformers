@@ -119,7 +119,9 @@ class AudioSpectogramTransformerPatchEmbeddings(nn.Module):
         fstride = config.fstride
         tstride = config.tstride
 
-        self.projection = nn.Conv2d(1, config.hidden_size, kernel_size=(patch_size, patch_size), stride=(fstride, tstride))
+        self.projection = nn.Conv2d(
+            1, config.hidden_size, kernel_size=(patch_size, patch_size), stride=(fstride, tstride)
+        )
 
     def forward(self, input_values: torch.Tensor) -> torch.Tensor:
         input_values = input_values.unsqueeze(1)
@@ -408,9 +410,9 @@ class AudioSpectogramTransformerPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    # Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel._set_gradient_checkpointing
+    # Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel._set_gradient_checkpointing with ViT->AudioSpectogramTransformer
     def _set_gradient_checkpointing(self, module: AudioSpectogramTransformerEncoder, value: bool = False) -> None:
-        if isinstance(module, ViTEncoder):
+        if isinstance(module, AudioSpectogramTransformerEncoder):
             module.gradient_checkpointing = value
 
 

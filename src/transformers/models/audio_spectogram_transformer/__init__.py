@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_speech_available, is_torch_available
 
 
 _import_structure = {
@@ -29,7 +29,7 @@ _import_structure = {
 }
 
 try:
-    if not is_vision_available():
+    if not is_speech_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
@@ -46,8 +46,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_audio_spectogram_transformer"] = [
         "AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "AudioSpectogramTransformerForImageClassification",
-        "AudioSpectogramTransformerForMaskedImageModeling",
         "AudioSpectogramTransformerModel",
         "AudioSpectogramTransformerPreTrainedModel",
         "AudioSpectogramTransformerForSequenceClassification",
@@ -61,7 +59,7 @@ if TYPE_CHECKING:
     )
 
     try:
-        if not is_vision_available():
+        if not is_speech_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
@@ -76,8 +74,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_audio_spectogram_transformer import (
             AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            AudioSpectogramTransformerForImageClassification,
-            AudioSpectogramTransformerForMaskedImageModeling,
             AudioSpectogramTransformerForSequenceClassification,
             AudioSpectogramTransformerModel,
             AudioSpectogramTransformerPreTrainedModel,
