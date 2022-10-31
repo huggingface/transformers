@@ -310,7 +310,7 @@ def convert_esm_checkpoint_to_pytorch(
                 their_output = their_output["logits"]
 
         if is_folding_model:
-            max_absolute_diff = torch.max(torch.abs(our_output["positions"] - their_output['positions'])).item()
+            max_absolute_diff = torch.max(torch.abs(our_output["positions"] - their_output["positions"])).item()
             success = torch.allclose(our_output["positions"], their_output["positions"], atol=1e-5)
         else:
             max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
@@ -327,14 +327,16 @@ def convert_esm_checkpoint_to_pytorch(
         model.save_pretrained(pytorch_dump_folder_path)
 
         reloaded = model_class.from_pretrained(pytorch_dump_folder_path).cuda()
-        reloaded_output = reloaded(input_ids=hf_tokens["input_ids"].cuda(), attention_mask=hf_tokens["attention_mask"].cuda())
+        reloaded_output = reloaded(
+            input_ids=hf_tokens["input_ids"].cuda(), attention_mask=hf_tokens["attention_mask"].cuda()
+        )
 
         if is_folding_model:
-            max_absolute_diff = torch.max(torch.abs(our_output["positions"] - reloaded_output['positions'])).item()
+            max_absolute_diff = torch.max(torch.abs(our_output["positions"] - reloaded_output["positions"])).item()
             success = torch.allclose(our_output["positions"], their_output["positions"], atol=1e-6)
         else:
-            max_absolute_diff = torch.max(torch.abs(our_output - reloaded_output['logits'])).item()
-            success = torch.allclose(our_output, reloaded_output['logits'], atol=1e-6)
+            max_absolute_diff = torch.max(torch.abs(our_output - reloaded_output["logits"])).item()
+            success = torch.allclose(our_output, reloaded_output["logits"], atol=1e-6)
 
         print(f"max_absolute_diff = {max_absolute_diff}")
         print("Does the model output the same tensors after reloading?", "🔥" if success else "💩")

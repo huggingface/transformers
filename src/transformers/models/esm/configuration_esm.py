@@ -245,6 +245,25 @@ class TrunkConfig:
                 f" {self.pairwise_state_dim} and {self.pairwise_state_dim}."
             )
 
+        sequence_num_heads = self.sequence_state_dim // self.sequence_head_width
+        pairwise_num_heads = self.pairwise_state_dim // self.pairwise_head_width
+
+        if self.sequence_state_dim != sequence_num_heads * self.sequence_head_width:
+            raise ValueError(
+                "`sequence_state_dim` should be equal to `sequence_num_heads * sequence_head_width, got"
+                f" {self.sequence_state_dim} != {sequence_num_heads} * {self.sequence_head_width}."
+            )
+        if self.pairwise_state_dim != pairwise_num_heads * self.pairwise_head_width:
+            raise ValueError(
+                "`pairwise_state_dim` should be equal to `pairwise_num_heads * pairwise_head_width, got"
+                f" {self.pairwise_state_dim} != {pairwise_num_heads} * {self.pairwise_head_width}."
+            )
+        if self.pairwise_state_dim % 2 != 0:
+            raise ValueError(f"`pairwise_state_dim` should be even, got {self.pairwise_state_dim}.")
+
+        if self.dropout >= 0.4:
+            raise ValueError(f"`dropout` should not be greater than 0.4, got {self.dropout}.")
+
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
@@ -259,21 +278,55 @@ class TrunkConfig:
 
 @dataclass
 class StructureModuleConfig:
-    c_s: int = 384
-    c_z: int = 128
-    c_ipa: int = 16
-    c_resnet: int = 128
-    no_heads_ipa: int = 12
-    no_qk_points: int = 4
-    no_v_points: int = 8
+    sequence_dim: int = 384
+    pairwise_dim: int = 128
+    ipa_dim: int = 16
+    resnet_dim: int = 128
+    num_heads_ipa: int = 12
+    num_qk_points: int = 4
+    num_v_points: int = 8
     dropout_rate: float = 0.1
-    no_blocks: int = 8
-    no_transition_layers: int = 1
-    no_resnet_blocks: int = 2
-    no_angles: int = 7
+    num_blocks: int = 8
+    num_transition_layers: int = 1
+    num_resnet_blocks: int = 2
+    num_angles: int = 7
     trans_scale_factor: int = 10
     epsilon: float = 1e-8
     inf: float = 1e5
+
+    """
+    Args:
+        sequence_dim:
+            Single representation channel dimension
+        pairwise_dim:
+            Pair representation channel dimension
+        ipa_dim:
+            IPA hidden channel dimension
+        resnet_dim:
+            Angle resnet (Alg. 23 lines 11-14) hidden channel dimension
+        num_heads_ipa:
+            Number of IPA heads
+        num_qk_points:
+            Number of query/key points to generate during IPA
+        num_v_points:
+            Number of value points to generate during IPA
+        dropout_rate:
+            Dropout rate used throughout the layer
+        num_blocks:
+            Number of structure module blocks
+        num_transition_layers:
+            Number of layers in the single representation transition (Alg. 23 lines 8-9)
+        num_resnet_blocks:
+            Number of blocks in the angle resnet
+        num_angles:
+            Number of angles to generate in the angle resnet
+        trans_scale_factor:
+            Scale of single representation transition hidden dimension
+        epsilon:
+            Small number used in angle resnet normalization
+        inf:
+            Large number used for attention masking
+    """
 
     def to_dict(self):
         return asdict(self)
