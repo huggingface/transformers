@@ -21,6 +21,7 @@ from pathlib import Path
 
 import torch
 import torchaudio
+from datasets import load_dataset
 
 from huggingface_hub import hf_hub_download
 from transformers import (
@@ -38,8 +39,10 @@ logger = logging.get_logger(__name__)
 def get_audio_spectogram_transformer_config(model_name):
     config = AudioSpectogramTransformerConfig()
 
-    if "10-10" in model_name or "speech-commands" in model_name:
+    if "10-10" in model_name:
         pass
+    elif "speech-commands" in model_name:
+        config.time_dimension = 128
     elif "12-12" in model_name:
         config.time_stride = 12
         config.frequency_stride = 12
@@ -200,20 +203,28 @@ def convert_audio_spectogram_transformer_checkpoint(model_name, pytorch_dump_fol
     model.load_state_dict(new_state_dict)
 
     # verify outputs on dummy input
-    filepath = hf_hub_download(
-        repo_id="nielsr/audio-spectogram-transformer-checkpoint", filename="sample_audio.flac", repo_type="dataset"
-    )
-    feature_extractor = AudioSpectogramTransformerFeatureExtractor()
-    waveform, _ = torchaudio.load(filepath)
-    waveform = waveform.squeeze().numpy()
+    # source: https://github.com/YuanGongND/ast/blob/79e873b8a54d0a3b330dd522584ff2b9926cd581/src/run.py#L62
+    mean = -4.2677393 if "speech-commands" not in model_name else -6.845978
+    std = 4.5689974 if "speech-commands" not in model_name else 5.5654526
+    feature_extractor = AudioSpectogramTransformerFeatureExtractor(mean=mean, std=std)
 
-    inputs = feature_extractor(waveform, sampling_rate=16000, padding="max_length", return_tensors="pt")
+    if "speech-commands" in model_name:
+        dataset = load_dataset("speech_commands", "v0.02", split="validation")
+        waveform = dataset[0]["audio"]["array"]
+    else:
+        filepath = hf_hub_download(
+            repo_id="nielsr/audio-spectogram-transformer-checkpoint", filename="sample_audio.flac", repo_type="dataset"
+        )
+        
+        waveform, _ = torchaudio.load(filepath)
+        waveform = waveform.squeeze().numpy()
+
+    max_length = 1024 if "speech-commands" not in model_name else 128
+    inputs = feature_extractor(waveform, sampling_rate=16000, max_length=max_length, return_tensors="pt")
 
     # forward pass
     outputs = model(**inputs)
     logits = outputs.logits
-
-    predicted_class_idx = logits.argmax(-1).item()
 
     if model_name == "audio-spectogram-transformer-finetuned-audioset-10-10-0.4593":
         expected_slice = torch.tensor([-0.8760, -7.0042, -8.6602])
@@ -230,7 +241,7 @@ def convert_audio_spectogram_transformer_checkpoint(model_name, pytorch_dump_fol
     elif model_name == "audio-spectogram-transformer-finetuned-audioset-16-16-0.442":
         expected_slice = torch.tensor([-1.2113, -6.9101, -8.3470])
     elif model_name == "audio-spectogram-transformer-finetuned-speech-commands-v2":
-        expected_slice = torch.tensor([1, 2, 3])
+        expected_slice = torch.tensor([ 6.1589, -8.0566, -8.7984])
     else:
         raise ValueError("Unknown model name")
     if not torch.allclose(logits[0, :3], expected_slice, atol=1e-4):
