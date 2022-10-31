@@ -38,7 +38,7 @@ _FEAT_EXTRACTOR_FOR_DOC = "AudioSpectogramTransformerFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "nielsr/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593"
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+_EXPECTED_OUTPUT_SHAPE = [1, 1214, 768]
 
 # Audio classification docstring
 _SEQ_CLASS_CHECKPOINT = "nielsr/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593"

@@ -59,7 +59,7 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
             Whether or not [`~AudioSpectogramTransformerFeatureExtractor.__call__`] should return `attention_mask`.
     """
 
-    model_input_names = ["input_features", "attention_mask"]
+    model_input_names = ["input_values", "attention_mask"]
 
     def __init__(
         self,
@@ -103,15 +103,15 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
 
         return features.numpy()
 
-    def normalize(self, input_features: List[np.ndarray]) -> List[np.ndarray]:
-        return (input_features - (self.mean)) / (self.std * 2)
+    def normalize(self, input_values: List[np.ndarray]) -> List[np.ndarray]:
+        return (input_values - (self.mean)) / (self.std * 2)
 
     def __call__(
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        padding: Union[bool, str, PaddingStrategy] = False,
+        padding: Union[bool, str, PaddingStrategy] = "max_length",
         max_length: int = 1024,
-        truncation: bool = False,
+        truncation: bool = True,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
@@ -124,7 +124,7 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `max_length`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
 
@@ -136,7 +136,7 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
                   lengths).
             max_length (`int`, *optional*, defaults to 1024):
                 Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`):
+            truncation (`bool`, *optional*, defaults to `True`):
                 Activates truncation to cut input sequences longer than *max_length* to *max_length*.
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value.
@@ -190,7 +190,7 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
         features = [self._extract_fbank_features(waveform) for waveform in raw_speech]
 
         # convert into correct format for padding
-        encoded_inputs = BatchFeature({"input_features": features})
+        encoded_inputs = BatchFeature({"input_values": features})
 
         padded_inputs = self.pad(
             encoded_inputs,
@@ -202,13 +202,13 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
         )
 
         # make sure list is in array format
-        input_features = padded_inputs.get("input_features")
-        if isinstance(input_features[0], list):
-            padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
+        input_values = padded_inputs.get("input_values")
+        if isinstance(input_values[0], list):
+            padded_inputs["input_values"] = [np.asarray(feature, dtype=np.float32) for feature in input_values]
 
         # normalization
         if self.do_normalize:
-            padded_inputs["input_features"] = self.normalize(padded_inputs["input_features"])
+            padded_inputs["input_values"] = self.normalize(padded_inputs["input_values"])
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
