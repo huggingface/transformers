@@ -125,7 +125,7 @@ torch_and_tf_job = CircleCIJob(
         "git lfs install",
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
-        "pip uninstall torch torchvision torchaudio",
+        "pip uninstall -y torch torchvision torchaudio",
         "pip install -U torch==1.12.1 torchvision torchaudio",
         TORCH_SCATTER_INSTALL,
         "pip install tensorflow_probability",
