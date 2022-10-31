@@ -383,14 +383,15 @@ class OnnxConfig(ABC):
 
     def generate_dummy_inputs_onnxruntime(self, reference_model_inputs: Mapping[str, Any]) -> Mapping[str, Any]:
         """
-        Generate inputs for onnxruntime using the reference model inputs.
+        Generate inputs for ONNX Runtime using the reference model inputs. Override this to run inference with seq2seq
+        models which have the encoder and decoder exported as separate ONNX files.
 
         Args:
-            reference_model_inputs: ([`Mapping[str, Tensor]`):
+            reference_model_inputs ([`Mapping[str, Tensor]`):
                 Reference inputs for the model.
 
         Returns:
-            Mapping[str, Tensor] holding the kwargs to provide to the model's forward function
+            `Mapping[str, Tensor]`: The mapping holding the kwargs to provide to the model's forward function
         """
         return reference_model_inputs
 
