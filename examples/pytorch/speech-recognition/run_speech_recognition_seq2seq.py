@@ -503,7 +503,7 @@ def main():
         trainer.save_metrics("eval", metrics)
 
     # 14. Write Training Stats
-    kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "speech recognition"}
+    kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "automatic-speech-recognition"}
     if data_args.dataset_name is not None:
         kwargs["dataset_tags"] = data_args.dataset_name
         if data_args.dataset_config_name is not None:
