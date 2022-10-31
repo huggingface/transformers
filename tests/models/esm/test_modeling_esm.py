@@ -15,6 +15,10 @@
 """ Testing suite for the PyTorch ESM model. """
 
 
+<<<<<<< HEAD
+=======
+import copy
+>>>>>>> bac51f28018f684264b851fb1864e5dc9e7a6c92
 import unittest
 
 from transformers import EsmConfig, is_torch_available
