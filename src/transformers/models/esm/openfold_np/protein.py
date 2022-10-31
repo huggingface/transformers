@@ -22,8 +22,6 @@ from typing import Any, Mapping, Optional, Sequence
 
 import numpy as np
 
-from Bio.PDB import PDBParser
-
 from . import residue_constants
 
 
@@ -85,7 +83,7 @@ def from_pdb_string(pdb_str: str, chain_id: Optional[str] = None) -> Protein:
       A new `Protein` parsed from the pdb contents.
     """
     pdb_fh = io.StringIO(pdb_str)
-    parser = PDBParser(QUIET=True)
+    # parser = PDBParser(QUIET=True)
     structure = parser.get_structure("none", pdb_fh)
     models = list(structure.get_models())
     if len(models) != 1:

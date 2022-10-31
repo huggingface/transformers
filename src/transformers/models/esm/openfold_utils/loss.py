@@ -22,8 +22,6 @@ import torch
 import torch.nn as nn
 from torch.distributions.bernoulli import Bernoulli
 
-import ml_collections
-
 from ..openfold_np import residue_constants
 from . import feats
 from .rigid_utils import Rigid, Rotation
@@ -250,7 +248,6 @@ def sidechain_loss(
 def fape_loss(
     out: Dict[str, torch.Tensor],
     batch: Dict[str, torch.Tensor],
-    config: ml_collections.ConfigDict,
 ) -> torch.Tensor:
     bb_loss = backbone_loss(
         traj=out["sm"]["frames"],
@@ -1032,7 +1029,7 @@ def find_structural_violations(
 def find_structural_violations_np(
     batch: Dict[str, np.ndarray],
     atom14_pred_positions: np.ndarray,
-    config: ml_collections.ConfigDict,
+    config,
 ) -> Dict[str, np.ndarray]:
     to_tensor = lambda x: torch.tensor(x)
     batch = tree_map(to_tensor, batch, np.ndarray)

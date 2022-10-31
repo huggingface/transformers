@@ -191,7 +191,7 @@ class EsmFoldConfig:
     bypass_lm: bool = False
 
     lddt_head_hid_dim: int = 128
-    trunk = None
+    trunk: "TrunkConfig" = None
 
     def __post_init__(self):
         if self.trunk is None:
@@ -224,7 +224,7 @@ class TrunkConfig:
     cpu_grad_checkpoint: bool = False
     max_recycles: int = 4
     chunk_size: Optional[int] = 128
-    structure_module = None
+    structure_module: "StructureModuleConfig" = None
 
     def __post_init__(self):
         if self.structure_module is None:
