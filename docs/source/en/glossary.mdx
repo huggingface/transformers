@@ -18,7 +18,7 @@ This glossary defines general machine learning and 🤗 Hugging Face terms to he
 
 ### attention mask
  
-A tensor filled with 0's and 1's that is identical in shape to the input id tensor, and determines which tokens should be attended to (indicated by 1's) and which tokens should be ignored (indicated by 0's) by the model's attention layers. When you pass text to a [`PreTrainedTokenizer`], it'll automatically create and return the attention mask depending on the specific tokenizer used.
+A tensor filled with 0's and 1's that is identical in shape to the input id tensor. The attention mask determines which tokens should be attended to (indicated by 1's) and which tokens should be ignored (indicated by 0's) by the model's attention layers. When you pass text to a [`PreTrainedTokenizer`], it'll automatically create and return the attention mask depending on the specific tokenizer used.
 
 Used when batching sequences of different lengths together to create a rectangular tensor. Padded values are represented by 0's, meaning they shouldn't be attended to because they don't contain any meaningful information. For example:
 
@@ -37,29 +37,39 @@ Used when batching sequences of different lengths together to create a rectangul
 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]]}
 ```
 
+## B
+
+### backbone
+
+The model backbone is the network that outputs the raw hidden states or features. It is usually connected to a [head](#head) which accepts the features as its input to make a prediction. For example, [`ViTModel`] is a backbone without a specific head on top. Other models can also use [`VitModel`] as a backbone such as [DPT](model_doc/dpt).
+
 ## C
 
 ### causal language modeling
 
-A pretraining objective where a model is trained to predict the next token given the tokens it has already attended to at a certain timestep. A mask is used to prevent the model from attending to future tokens. Models pretrained on causal language modeling - also known as *autoregressive models* - are great for generative tasks; [GPT-2](model_doc/gpt2) is an example of a famous causal language model.
+A pretraining objective where a model is trained to predict the next token given the tokens it has previously attended to at a certain timestep. A mask is used to prevent the model from attending to future tokens. Models pretrained on causal language modeling - also known as *autoregressive models* - are great for generative tasks; [GPT-2](model_doc/gpt2) is an example of a famous causal language model.
 
 ### channel
 
+Color images are made up of some combination of three channels - red, green, and blue (RGB) - and grayscale images only have one channel. In 🤗 Transformers, the channel can be the first or last dimension of an image's tensor: [`n_channels`, `height`, `width`] or [`height`, `width`, `n_channels`].
+
 ### connectionist temporal classification (CTC)
 
-An algorithm which allows a model to learn without knowing exactly how the input and output are aligned; CTC simply approximates the output by maximizing the probability. CTC is commonly used in speech recognition tasks because speech doesn't always cleanly align with the transcript due to speaker's different speech rates.
+An algorithm which allows a model to learn without knowing exactly how the input and output are aligned; CTC simply approximates the output by maximizing the probability. CTC is commonly used in speech recognition tasks because speech doesn't always cleanly align with the transcript due to a variety of reasons such as speaker's different speech rates.
 
 ### convolution
+
+A type of layer in a neural network where the input matrix is multiplied element-wise by a smaller matrix (kernel or filter) and the values are summed up in a new matrix (this is known as a convolutional operation). This operation is repeated over the entire input matrix, and each operation is applied to a different segment of the input matrix. Convolutional neural networks (CNNs) are commonly used in computer vision.
 
 ## D
 
 ### deep learning
 
-A specific subset of machine learning algorithms that have multiple layers to learn increasingly complex representations of data (text, images, and video).
+A specific subset of machine learning algorithms that have multiple layers to learn increasingly complex representations of data (text, images, speech, and video).
 
 ### decoder input ids
 
-A tensor specific to encoder-decoder models (such as [BART](model_doc/bart) and [T5](model_doc/t5)) containing the input ids to be passed to the decoder. These inputs are used for sequence-to-sequence tasks such as translation or summarization. Most encoder-decoder models typically create the `decoder_input_ids` on their own from the `labels`, and it's the preferred way for training the model.
+A tensor specific to encoder-decoder models (such as [BART](model_doc/bart) and [T5](model_doc/t5)) containing the input ids to be passed to the decoder. These inputs are used for sequence-to-sequence tasks such as translation or summarization. Most encoder-decoder models typically create the `decoder_input_ids` on their own from the `labels`.
 
 ```py
 >>> from transformers import T5Tokenizer, T5ForConditionalGeneration
@@ -77,13 +87,22 @@ A tensor specific to encoder-decoder models (such as [BART](model_doc/bart) and 
 
 ### feed-forward chunking
 
-A method developed by the authors of [Reformer](https://arxiv.org/abs/2001.04451) that reduces memory use at the cost of increased computation time. In each residual attention block, the self-attention layer is usually followed by 2 feed-forward layers. The intermediate embedding size of these feed-forward layers is often quite large, and the memory required to calculate it consumes a large amount of memory. By calculating the output embeddings of the 2 feed-forward layers in parallel and then concatenating them afterward, you end up using less memory but the results are the same.
+A method developed by the authors of [Reformer](https://arxiv.org/abs/2001.04451) to reduce memory use at the cost of increased computation time. In each residual attention block, the self-attention layer is usually followed by 2 feed-forward layers. The intermediate embedding size of these feed-forward layers is often quite large, and the memory required to calculate it consumes a large amount of memory. By calculating the output embeddings of the 2 feed-forward layers in parallel and then concatenating them afterward, you end up using less memory but the results are the same.
 
 In 🤗 Transformers, you can use the [`~transformers.apply_chunking_to_forward`] function to apply feed-forward chunking. The `chunk_size` parameter defines the number of output embeddings to be computed in parallel.
 
+## H
+
+### head
+
+The model head refers to the last layer of a neural network that accepts the raw hidden states and projects them onto a different dimension. There is a different model head for each task. For example:
+  
+  * [`GPT2ForSequenceClassification`] is a sequence classification head which is a linear layer on top of the base [`GPT2Model`].
+  * [`GPT2LMHeadModel`] is a language modeling head which is a linear layer with weights tied to the input embeddings on top of the base [`GPT2Model`].
+
 ## I
 
-### image patches
+### image patch
 
 Vision based Transformers models split an image into patches which are linearly embedded, and then passed as a sequence to the model. You can find the `patch_size` - or resolution - of a vision model in it's configuration.
 
@@ -99,10 +118,6 @@ A tensor of the numerical representations of tokens that are passed to the model
 >>> tokenizer(sequence).input_ids
 [101, 138, 18696, 155, 1942, 3190, 1144, 1572, 13745, 1104, 159, 9664, 2107, 102]
 ```
-
-## K
-
-### kernel
 
 ## L
 
@@ -159,9 +174,11 @@ A tensor of the numerical representations of an image that is passed to a model.
 
 ### pooling
 
+An operation that reduces a matrix into a smaller matrix, either by taking the maximum or average of the pooled area. Pooling is similar to [convolution](#convolution) in the sense that it is repeated over the entire matrix, and each operation is applied to a different segment of the matrix.
+
 ### position ids
 
-An optional tensor passed to the model to indicate the position of each token in a sequence because a Transformer model is unaware. The position ids are automatically created as absolute positional embeddings, which are selected between `[0, config.max_position_embeddings - 1]`.
+An optional tensor passed to the model to indicate the position of each token in a sequence. The position ids are automatically created as absolute positional embeddings, which are selected between `[0, config.max_position_embeddings - 1]`.
 
   Other types fo positional embeddings include sinusoidal position embeddings and relative position embeddings.
 
@@ -179,7 +196,7 @@ A type deep learning model that uses a for-loop to iterate over a layer.
 
 ### sampling rate
 
-A measurement in hertz of the number of samples (the audio signal) taken per second. The sampling rate is a result of discretizing a continuous signal.
+A measurement in hertz of the number of samples (the audio signal) taken per second. The sampling rate is a result of discretizing a continuous signal such as speech.
 
 ### self-attention
 
@@ -191,11 +208,13 @@ An encoder-decoder model (such as [BART](model_doc/bart) or [T5](model_doc/t5)) 
 
 ### stride
 
+In [convolution](#convolution) or [pooling](#pooling), the stride refers to the distance the kernel is moved over a matrix. A stride of 1 means the kernel is moved one pixel over at a time, and a stride of 2 means the kernel is moved two pixels over at a time.
+
 ## T
 
 ### token
 
-A part of a sentence, usually a word but it can also be a subword (non-common words are often split in subwords) or a punctuation symbol. Tokens are generated by tokenizers according to specific rules, and the token is converted to [input ids](#input-ids).
+A part of a sentence, usually a word but it can also be a subword (non-common words are often split in subwords) or a punctuation symbol. Tokens are generated by tokenizers according to specific rules, and the token is converted to [input ids](#input-ids). A token can also represent other units of data besides text. For example, an [image patch](#image-patch) is a token in a vision model.
 
 ### token type ids
 
