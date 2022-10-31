@@ -1752,6 +1752,15 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
         return reordered_decoder_past
 
+    def _prune_heads(self, heads_to_prune):
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.decoder.block[layer].layer[0].SelfAttention.prune_heads(heads)
+            self.decoder.block[layer].layer[1].EncDecAttention.prune_heads(heads)
+
 
 @add_start_docstrings(
     "The bare T5 Model transformer outputting encoder's raw hidden-states without any specific head on top.",
