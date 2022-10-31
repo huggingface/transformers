@@ -1985,7 +1985,21 @@ class ErniePreTrainedModel(metaclass=DummyObject):
 ESM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class EsmFoldPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class EsmForMaskedLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class EsmForProteinFolding(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

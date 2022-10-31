@@ -407,7 +407,6 @@ class EsmAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
 class EsmIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
