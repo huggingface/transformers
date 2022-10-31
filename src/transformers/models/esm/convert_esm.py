@@ -24,7 +24,7 @@ import torch
 
 import esm as esm_module
 from esm.esmfold.v1.pretrained import esmfold_v1
-from transformers.models.esm.configuration_esm import EsmConfig, EsmFoldConfig, StructureModuleConfig, TrunkConfig
+from transformers.models.esm.configuration_esm import EsmConfig, EsmFoldConfig
 from transformers.models.esm.modeling_esm import (
     EsmForMaskedLM,
     EsmForSequenceClassification,
@@ -132,10 +132,8 @@ def convert_esm_checkpoint_to_pytorch(
     vocab_list = tuple(alphabet.all_toks)
 
     if is_folding_model:
-        original_folding_model = esm
         original_esm_model = esm.esm
     else:
-        original_folding_model = None
         original_esm_model = esm
 
     config = EsmConfig(
@@ -300,13 +298,11 @@ def convert_esm_checkpoint_to_pytorch(
             their_output = esm.cuda()(hf_tokens["input_ids"].cuda(), hf_tokens["attention_mask"].cuda())
         else:
             our_output = model(**hf_tokens, output_hidden_states=True)
-            our_hidden_states = our_output["hidden_states"]
             our_output = our_output["logits"]
             if classification_head:
                 their_output = esm.model.classification_heads["mnli"](esm.extract_features(batch_tokens))
             else:
                 their_output = esm(hf_tokens["input_ids"], repr_layers=list(range(999)))
-                their_hidden_states = their_output["representations"]
                 their_output = their_output["logits"]
 
         if is_folding_model:

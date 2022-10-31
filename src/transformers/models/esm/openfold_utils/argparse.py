@@ -1,3 +1,4 @@
+# flake8: noqa
 from argparse import HelpFormatter
 from operator import attrgetter
 

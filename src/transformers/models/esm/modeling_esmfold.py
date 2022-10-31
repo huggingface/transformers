@@ -6,7 +6,7 @@ import math
 import sys
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -167,6 +167,8 @@ def is_deepspeed_initialized():
         return False
     else:
         try:
+            import deepspeed
+
             # This is not available in all DeepSpeed versions.
             return deepspeed.utils.is_initialized()
         except Exception:
@@ -723,7 +725,6 @@ class EsmFoldTriangleMultiplicativeUpdate(nn.Module):
                 p = pair.new_zeros(out_shape)
                 for i in range(0, pair.shape[-3], inplace_chunk_size):
                     pair_chunk = pair[..., i : i + inplace_chunk_size, :, :]
-                    mask_chunk = mask[..., i : i + inplace_chunk_size, :, :]
                     pair_chunk = compute_projection_helper(
                         pair[..., i : i + inplace_chunk_size, :, :],
                         mask[..., i : i + inplace_chunk_size, :, :],
@@ -1020,7 +1021,7 @@ class EsmFoldSelfAttention(nn.Module):
         # Do not attend to padding tokens.
         if mask is not None:
             mask = mask[:, None, None]
-            a = a.masked_fill(mask == False, -np.inf)
+            a = a.masked_fill(mask == False, -np.inf)  # noqa: E712
 
         a = nn.functional.softmax(a, dim=-1)
 
@@ -1311,7 +1312,7 @@ class EsmFoldRelativePosition(nn.Module):
 
         if mask is not None:
             mask = mask[:, None, :] * mask[:, :, None]
-            diff[mask == False] = 0
+            diff[mask == False] = 0  # noqa: E712
 
         output = self.embedding(diff)
         return output

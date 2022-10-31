@@ -140,6 +140,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "EsmForProteinFolding",
     "TimeSeriesTransformerForPrediction",
     "PegasusXEncoder",
     "PegasusXDecoder",
@@ -442,7 +443,10 @@ def check_all_models_are_tested():
     test_files = get_model_test_files()
     failures = []
     for module in modules:
-        test_file = [file for file in test_files if f"test_{module.__name__.split('.')[-1]}.py" in file]
+        module_name = module.__name__
+        if "esmfold" in module_name:
+            module_name = module_name.replace("esmfold", "esm")
+        test_file = [file for file in test_files if f"test_{module_name.split('.')[-1]}.py" in file]
         if len(test_file) == 0:
             failures.append(f"{module.__name__} does not have its corresponding test file {test_file}.")
         elif len(test_file) > 1:

@@ -39,7 +39,7 @@ else:
         "EsmModel",
         "EsmPreTrainedModel",
     ]
-    _import_structure["modeling_esmfold"] = ["EsmForProteinFolding"]
+    _import_structure["modeling_esmfold"] = ["EsmForProteinFolding", "EsmFoldPreTrainedModel"]
 
 try:
     if not is_tf_available():
@@ -74,7 +74,7 @@ if TYPE_CHECKING:
             EsmModel,
             EsmPreTrainedModel,
         )
-        from .modeling_esmfold import EsmForProteinFolding
+        from .modeling_esmfold import EsmFoldPreTrainedModel, EsmForProteinFolding
 
     try:
         if not is_tf_available():
