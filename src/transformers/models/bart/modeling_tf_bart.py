@@ -1492,7 +1492,7 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         return reordered_past
 
 
-# TODO Add to global imports
+# TODO Fix global import
 @add_start_docstrings(
     """
         Bart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE
@@ -1508,7 +1508,7 @@ class TFBartForSequenceClassification(TFBartPretrainedModel):
             config.d_model,
             config.num_labels,
             config.classifier_dropout,
-            name="classification_head" # TODO fixme
+            name="classification_head"
         )
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
@@ -1604,7 +1604,6 @@ class TFBartForSequenceClassification(TFBartPretrainedModel):
                     loss = loss_fct(logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = tf.keras.losses.categorical_crossentropy()
-                # TODO Fix me
                 loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = tf.keras.losses.binary_crossentropy()
@@ -1612,13 +1611,13 @@ class TFBartForSequenceClassification(TFBartPretrainedModel):
         if not return_dict:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
+
         return TFSeq2SeqSequenceClassifierOutput(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
-            # cross_attentions=outputs.cross_attentions,  # TODO Why is this missing?
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
