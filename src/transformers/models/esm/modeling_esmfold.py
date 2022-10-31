@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 from typing import Any, Tuple, List, Optional, Union, Dict
-from .modeling_esm import EsmPreTrainedModel, EsmModel
+from .modeling_esm import EsmPreTrainedModel, EsmModel, EsmForMaskedLM
 
 import torch
 import torch.nn as nn
@@ -86,8 +86,6 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         if self.config.esmfold_config.embed_aa:
             self.embedding = nn.Embedding(self.n_tokens_embed, c_s, padding_idx=0)
 
-        # Matt: We want our config objects to be JSON serializable, which means avoiding having dataclasses
-        # as keys.
         trunk_cfg_dict = self.config.esmfold_config.trunk
 
         self.trunk = FoldingTrunk(trunk_cfg_dict)
@@ -102,7 +100,6 @@ class EsmForProteinFolding(EsmPreTrainedModel):
             nn.Linear(self.config.esmfold_config.lddt_head_hid_dim, self.config.esmfold_config.lddt_head_hid_dim),
             nn.Linear(self.config.esmfold_config.lddt_head_hid_dim, 37 * self.lddt_bins),
         )
-        # cls eos padding mask
 
     @staticmethod
     def _af2_to_esm_from_vocab_list(vocab_list: List[str]) -> torch.Tensor:
@@ -112,26 +109,26 @@ class EsmForProteinFolding(EsmPreTrainedModel):
 
     def forward(
         self,
-        input: torch.Tensor,
-        mask: torch.Tensor,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
         mask_aa: bool = False,
         residx: Optional[torch.Tensor] = None,
         masking_pattern: Optional[torch.Tensor] = None,
     ):
         cfg = self.config.esmfold_config
 
-        aa = input  # B x L
+        aa = input_ids  # B x L
         B = aa.shape[0]
         L = aa.shape[1]
-        device = input.device
+        device = input_ids.device
         if residx is None:
-            residx = torch.arange(L, device=device).expand_as(input)
+            residx = torch.arange(L, device=device).expand_as(input_ids)
 
         # === ESM ===
-        esmaa = self.af2_idx_to_esm_idx(aa, mask)
+        esmaa = self.af2_idx_to_esm_idx(aa, attention_mask)
 
         if (self.training or mask_aa) and masking_pattern is not None:
-            masked_aa, esmaa, mlm_targets = self.bert_mask(aa, esmaa, mask, masking_pattern)
+            masked_aa, esmaa, mlm_targets = self.bert_mask(aa, esmaa, attention_mask, masking_pattern)
         else:
             masked_aa = aa
             mlm_targets = None
@@ -165,12 +162,12 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         if cfg.use_esm_attn_map:
             s_z_0 = self.esm_z_mlp(esm_z)
         else:
-            s_z_0 = s_s_0.new_zeros(B, L, L, cfg.trunk_pairwise_state_dim)
+            s_z_0 = s_s_0.new_zeros(B, L, L, cfg.trunk.pairwise_state_dim)
 
         if self.config.esmfold_config.embed_aa:
             s_s_0 += self.embedding(masked_aa)
 
-        structure: dict = self.trunk(s_s_0, s_z_0, aa, residx, mask)
+        structure: dict = self.trunk(s_s_0, s_z_0, aa, residx, attention_mask)
         # Documenting what we expect:
         structure = {
             k: v
@@ -209,7 +206,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
             "atom14_atom_exists",
             "atom37_atom_exists",
         ]:
-            structure[k] *= mask.unsqueeze(-1)
+            structure[k] *= attention_mask.unsqueeze(-1)
         structure["residue_index"] = residx
 
         lddt_head = self.lddt_head(structure["states"]).reshape(
@@ -259,7 +256,8 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         # _, esm_z, esm_s = self.esm(esmaa, return_pairs=self.config.esmfold_config.use_esm_attn_map)
         # Because we do not support use_esm_attn_map in the HF port as it is not used in any public models,
         # esm_z is always None
-        esm_hidden_states = self.esm(esmaa, output_hidden_states=True)["hidden_states"]
+        esm_hidden_states = self.esm(esmaa, attention_mask=esmaa != 1, output_hidden_states=True)["hidden_states"]
+        print(esm_hidden_states[0])
         esm_s = torch.stack(esm_hidden_states, dim=2)
         esm_z = None
 

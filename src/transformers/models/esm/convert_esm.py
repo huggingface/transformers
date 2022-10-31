@@ -36,7 +36,7 @@ from transformers.models.esm.modeling_esm import (
 from transformers.models.esm.modeling_esmfold import EsmForProteinFolding
 from transformers.models.esm.tokenization_esm import EsmTokenizer
 from transformers.utils import logging
-from esm.esmfold.v1.pretrained import esmfold_3B_v1
+from esm.esmfold.v1.pretrained import esmfold_v1
 
 
 logging.set_verbosity_info()
@@ -62,8 +62,15 @@ MODEL_MAPPING = {
     "esm2_t30_150M_UR50D": esm_module.pretrained.esm2_t30_150M_UR50D,
     "esm2_t12_35M_UR50D": esm_module.pretrained.esm2_t12_35M_UR50D,
     "esm2_t6_8M_UR50D": esm_module.pretrained.esm2_t6_8M_UR50D,
-    "esmfold_v1": esmfold_3B_v1,
+    "esmfold_v1": esmfold_v1,
 }
+
+def transfer_and_check_weights(original_module, our_module):
+    status = our_module.load_state_dict(original_module.state_dict())
+    if status.missing_keys:
+        raise ValueError(f"Missing keys: {status.missing_keys}")
+    if status.unexpected_keys:
+        raise ValueError(f"Unexpected keys: {status.unexpected_keys}")
 
 
 def convert_esm_checkpoint_to_pytorch(
@@ -231,9 +238,14 @@ def convert_esm_checkpoint_to_pytorch(
         # end of layer
 
     if is_folding_model:
-        breakpoint()  # Can I just copy state dicts or something from here?
-        model.esm_s_combine.weight = esm.esm_s_combine.weight
-
+        model.esm_s_combine.data = esm.esm_s_combine.data
+        transfer_and_check_weights(esm.embedding, model.embedding)
+        transfer_and_check_weights(esm.esm_s_mlp, model.esm_s_mlp)
+        transfer_and_check_weights(esm.trunk, model.trunk)
+        transfer_and_check_weights(esm.distogram_head, model.distogram_head)
+        transfer_and_check_weights(esm.ptm_head, model.ptm_head)
+        transfer_and_check_weights(esm.lm_head, model.lm_head)
+        transfer_and_check_weights(esm.lddt_head, model.lddt_head)
 
     elif classification_head:
         model.classifier.dense.weight = esm.esm.classification_heads["mnli"].dense.weight
@@ -247,15 +259,19 @@ def convert_esm_checkpoint_to_pytorch(
         model.lm_head.layer_norm.weight = esm.lm_head.layer_norm.weight
         model.lm_head.layer_norm.bias = esm.lm_head.layer_norm.bias
         model.lm_head.decoder.weight = esm.lm_head.weight
-        model.lm_head.decoder.bias = esm.lm_head.bias
+        model.lm_head.bias = esm.lm_head.bias
 
     # Let's check that we get the same results.
     batch_converter = alphabet.get_batch_converter()
 
     # Prepare data (first 2 sequences from ESMStructuralSplitDataset superfamily / 4)
+    if is_folding_model:
+        # Folding models aren't trained on masked inputs and don't like mask tokens.
+        sample_data = SAMPLE_DATA[:2]
+    else:
+        sample_data = SAMPLE_DATA
 
-    batch_labels, batch_strs, batch_tokens = batch_converter(SAMPLE_DATA)
-
+    batch_labels, batch_strs, batch_tokens = batch_converter(sample_data)
     # Prepare tokenizer and make sure it matches
     with TemporaryDirectory() as tempdir:
         vocab = "\n".join(alphabet.all_toks)
@@ -263,29 +279,44 @@ def convert_esm_checkpoint_to_pytorch(
         vocab_file.write_text(vocab)
         hf_tokenizer = EsmTokenizer(vocab_file=str(vocab_file))
 
-    hf_tokens = hf_tokenizer([row[1] for row in SAMPLE_DATA], return_tensors="pt", padding=True)
+    hf_tokens = hf_tokenizer([row[1] for row in sample_data], return_tensors="pt", padding=True)
     success = torch.all(hf_tokens["input_ids"] == batch_tokens)
     print("Do both models tokenizers output the same tokens?", "🔥" if success else "💩")
     if not success:
         raise Exception("Tokenization does not match!")
 
     with torch.no_grad():
-        our_output = model(**hf_tokens, output_hidden_states=True)
-        our_hidden_states = our_output['hidden_states']
-        our_output = our_output["logits"]
-        if classification_head:
-            their_output = esm.model.classification_heads["mnli"](esm.extract_features(batch_tokens))
+        if is_folding_model:
+            # Let's test the model in parts
+            # ESMFold always converts the ESM stem to float16, which requires float16 ops
+            # that don't exist on CPU. Therefore, to test it we need to run it on GPU. However,
+            # ESMFold is what we in the community call a "big boy" and so we desperately avoid putting both the
+            # original and the converted model on the GPU at the same time.
+            compare_attention_layers(model, esm)
+            our_output = model.cuda()(input_ids=hf_tokens["input_ids"].cuda(), attention_mask=hf_tokens["attention_mask"].cuda())
+            their_output = esm.cuda()(hf_tokens["input_ids"].cuda(), hf_tokens["attention_mask"].cuda())
+            their_output_again = esm.cuda()(hf_tokens["input_ids"].cuda(), hf_tokens["attention_mask"].cuda())
         else:
-            their_output = esm(batch_tokens, repr_layers=list(range(999)))
-            their_hidden_states = their_output['representations']
-            their_output = their_output["logits"]
+            our_output = model(**hf_tokens, output_hidden_states=True)
+            our_hidden_states = our_output['hidden_states']
+            our_output = our_output["logits"]
+            if classification_head:
+                their_output = esm.model.classification_heads["mnli"](esm.extract_features(batch_tokens))
+            else:
+                their_output = esm(hf_tokens['input_ids'], repr_layers=list(range(999)))
+                their_hidden_states = their_output['representations']
+                their_output = their_output["logits"]
 
+    if is_folding_model:
 
-    print(our_output.shape, their_output.shape)
-    max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
-    print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-5
-    success = torch.allclose(our_output, their_output, atol=3e-4)
-    print("Do both models output the same tensors?", "🔥" if success else "💩")
+        breakpoint()
+        print()
+    else:
+        print(our_output.shape, their_output.shape)
+        max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
+        print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-5
+        success = torch.allclose(our_output, their_output, atol=3e-4)
+        print("Do both models output the same tensors?", "🔥" if success else "💩")
 
     if not success:
         raise Exception("Something went wRoNg")
@@ -293,6 +324,11 @@ def convert_esm_checkpoint_to_pytorch(
     pathlib.Path(pytorch_dump_folder_path).mkdir(parents=True, exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
+
+    test_reload = EsmForMaskedLM.from_pretrained(pytorch_dump_folder_path)
+    test_out = test_reload(**hf_tokens)
+
+    breakpoint()
 
     print(f"Saving tokenizer to {pytorch_dump_folder_path}")
     hf_tokenizer.save_pretrained(pytorch_dump_folder_path)

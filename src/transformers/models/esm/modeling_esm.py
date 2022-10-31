@@ -464,6 +464,7 @@ class EsmLayer(nn.Module):
         )
         attention_output = self_attention_outputs[0]
 
+
         # if decoder, the last output is tuple of self-attn cache
         if self.is_decoder:
             outputs = self_attention_outputs[1:-1]
@@ -505,7 +506,7 @@ class EsmLayer(nn.Module):
         # if decoder, return the attn key/values as the last output
         if self.is_decoder:
             outputs = outputs + (present_key_value,)
-
+        print(outputs)
         return outputs
 
     def feed_forward_chunk(self, attention_output):
