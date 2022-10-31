@@ -32,6 +32,7 @@ from . import __version__
 from .models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+    MODEL_FOR_CTC_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
@@ -39,6 +40,7 @@ from .models.auto.modeling_auto import (
     MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES,
     MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
 )
@@ -67,6 +69,7 @@ TASK_MAPPING = {
     "table-question-answering": MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
     "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
     "audio-classification": MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
+    "automatic-speech-recognition": {**MODEL_FOR_CTC_MAPPING_NAMES, **MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES},
 }
 
 logger = logging.get_logger(__name__)
@@ -273,6 +276,7 @@ TASK_TAG_TO_NAME_MAPPING = {
     "token-classification": "Token Classification",
     "translation": "Translation",
     "zero-shot-classification": "Zero Shot Classification",
+    "automatic-speech-recognition": "Automatic Speech Recognition",
 }
 
 
@@ -287,6 +291,7 @@ METRIC_TAGS = [
     "rouge",
     "sacrebleu",
     "spearmanr",
+    "wer",
 ]
 
 
