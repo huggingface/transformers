@@ -215,7 +215,7 @@ def convert_audio_spectogram_transformer_checkpoint(model_name, pytorch_dump_fol
         filepath = hf_hub_download(
             repo_id="nielsr/audio-spectogram-transformer-checkpoint", filename="sample_audio.flac", repo_type="dataset"
         )
-        
+
         waveform, _ = torchaudio.load(filepath)
         waveform = waveform.squeeze().numpy()
 
@@ -241,7 +241,7 @@ def convert_audio_spectogram_transformer_checkpoint(model_name, pytorch_dump_fol
     elif model_name == "audio-spectogram-transformer-finetuned-audioset-16-16-0.442":
         expected_slice = torch.tensor([-1.2113, -6.9101, -8.3470])
     elif model_name == "audio-spectogram-transformer-finetuned-speech-commands-v2":
-        expected_slice = torch.tensor([ 6.1589, -8.0566, -8.7984])
+        expected_slice = torch.tensor([6.1589, -8.0566, -8.7984])
     else:
         raise ValueError("Unknown model name")
     if not torch.allclose(logits[0, :3], expected_slice, atol=1e-4):

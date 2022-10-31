@@ -22,7 +22,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "MIT/ast-10-10": "https://huggingface.co/MIT/ast-10-10/resolve/main/config.json",
+    # TODO update to appropriate organization
+    "nielsr/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593": "https://huggingface.co/nielsr/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593/resolve/main/config.json",
 }
 
 
@@ -32,12 +33,11 @@ class AudioSpectogramTransformerConfig(PretrainedConfig):
     instantiate an AudioSpectogramTransformer model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     AudioSpectogramTransformer
-    [google/audio_spectogram_transformer-base-patch16-224](https://huggingface.co/google/audio_spectogram_transformer-base-patch16-224)
+    [nielsr/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593](https://huggingface.co/nielsr/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593)
     architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -64,13 +64,13 @@ class AudioSpectogramTransformerConfig(PretrainedConfig):
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
         frequency_stride (`int`, *optional*, defaults to 10):
-            ...
+            Frequency stride to use when patchifying the spectograms.
         time_stride (`int`, *optional*, defaults to 10):
-            ...
-        input_fdim (`int`, *optional*, defaults to 128):
-            ...
-        input_tdim (`int`, *optional*, defaults to 1024):
-            ...
+            Temporal stride to use when patchifying the spectograms.
+        time_dimension (`int`, *optional*, defaults to 1024):
+            Temporal dimension of the spectrograms.
+        frequency_dimension (`int`, *optional*, defaults to 128):
+            Frequency dimension of the spectrograms.
 
     Example:
 

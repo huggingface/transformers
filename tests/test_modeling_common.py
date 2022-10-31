@@ -44,7 +44,6 @@ from transformers import (
     logging,
 )
 from transformers.models.auto import get_values
-from transformers.models.auto.modeling_auto import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 from transformers.testing_utils import (
     TOKEN,
     USER,
@@ -92,6 +91,7 @@ if is_torch_available():
     from test_module.custom_modeling import CustomModel, NoSuperInitModel
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
         MODEL_FOR_AUDIO_XVECTOR_MAPPING,
         MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
         MODEL_FOR_CAUSAL_LM_MAPPING,
