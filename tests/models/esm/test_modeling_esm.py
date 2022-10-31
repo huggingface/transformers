@@ -210,12 +210,12 @@ class EsmFoldModelTester:
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
             is_folding_model=True,
-            esmfold_config={"trunk": {"num_blocks": 2}},
+            esmfold_config={"trunk": {"num_blocks": 2}, "fp16_esm": False},
         )
         return config
 
     def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
-        model = EsmForProteinFolding(config=config)
+        model = EsmForProteinFolding(config=config).float()
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
