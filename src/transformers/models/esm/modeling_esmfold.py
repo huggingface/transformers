@@ -95,8 +95,8 @@ class EsmForProteinFoldingOutput(ModelOutput):
         lddt_head (`torch.FloatTensor`):
             Raw outputs from the lddt head used to compute plddt.
         plddt (`torch.FloatTensor`):
-            Per-residue confidence scores. Regions of low confidence may indicate areas where the model's prediction
-            is uncertain, or where the protein structure is disordered.
+            Per-residue confidence scores. Regions of low confidence may indicate areas where the model's prediction is
+            uncertain, or where the protein structure is disordered.
         ptm_logits (`torch.FloatTensor`):
             Write a docstring Matt
         ptm (`torch.FloatTensor`):
