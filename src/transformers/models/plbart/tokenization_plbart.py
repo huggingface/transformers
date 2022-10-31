@@ -88,9 +88,10 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 FAIRSEQ_LANGUAGE_CODES = {
-    "base": ["java", "python", "en_XX"],
-    "multi": ["java", "python", "en_XX", "javascript", "php", "ruby", "go"],
+    "base": ["__java__", "__python__", "__en_XX__"],
+    "multi": ["__java__", "__python__", "__en_XX__", "__javascript__", "__php__", "__ruby__", "__go__"],
 }
+
 
 
 class PLBartTokenizer(PreTrainedTokenizer):
