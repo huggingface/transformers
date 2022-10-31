@@ -15,9 +15,10 @@ from torch.nn import LayerNorm
 # TODO remove:
 from einops import rearrange, repeat
 
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...deepspeed import is_deepspeed_available
 from ...utils import ContextManagers, is_scipy_available, logging
-from .modeling_esm import EsmModel, EsmPreTrainedModel
+from .modeling_esm import EsmModel, EsmPreTrainedModel, ESM_START_DOCSTRING
 from .openfold_data_transforms import make_atom14_masks
 from .openfold_np import residue_constants
 from .openfold_np.protein import Protein as OFProtein
@@ -33,6 +34,25 @@ from .openfold_utils.rigid_utils import Rigid, Rotation
 
 
 logger = logging.get_logger(__name__)
+
+
+ESMFOLD_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `({0})`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`EsmTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+"""
 
 
 def is_fp16_enabled():
@@ -1991,7 +2011,7 @@ class EsmFoldingTrunk(nn.Module):
         # where the chunk_size is the size of the chunks, so 128 would mean to parse 128-lengthed chunks.
         self.chunk_size = chunk_size
 
-    def forward(self, seq_feats, pair_feats, true_aa, residx, mask):
+    def forward(self, seq_feats, pair_feats, true_aa, residx, mask, no_recycles):
         """
         Inputs:
           seq_feats: B x L x C tensor of sequence features pair_feats: B x L x L x C tensor of pair features residx: B
@@ -2005,7 +2025,12 @@ class EsmFoldingTrunk(nn.Module):
         s_s_0 = seq_feats
         s_z_0 = pair_feats
 
-        no_recycles = self.config.max_recycles
+        if no_recycles is None:
+            no_recycles = self.cfg.max_recycles
+        else:
+            if no_recycles < 0:
+                raise ValueError("Number of recycles must not be negative.")
+            no_recycles += 1  # First 'recycle' is just the standard forward pass through the model.
 
         def trunk_iter(s, z, residx, mask):
             z = z + self.pairwise_positional_embedding(residx, mask=mask)
@@ -2071,7 +2096,18 @@ class EsmFoldingTrunk(nn.Module):
         bins = torch.sum(dists > boundaries, dim=-1)  # [..., L, L]
         return bins
 
+# TODO Add information to the docstring about any methods that convert to PDB format, or otherwise prepare
+#      the outputs for downstream use.
 
+@add_start_docstrings(
+    """
+    ESMForProteinFolding is the HuggingFace port of the original ESMFold model. It consists of an ESM-2 "stem" followed
+    by a protein folding "head", although unlike most other output heads, this "head" is similar in size and runtime
+    to the rest of the model combined! It outputs a dictionary containing predicted structural information about the
+    input protein(s). 
+    """,
+    ESM_START_DOCSTRING,
+)
 class EsmForProteinFolding(EsmPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2136,13 +2172,14 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         esm_reorder = [vocab_list.index("<pad>")] + [vocab_list.index(v) for v in residue_constants.restypes_with_x]
         return torch.tensor(esm_reorder)
 
+    @add_start_docstrings_to_model_forward(ESMFOLD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def forward(
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        mask_aa: bool = False,
-        residx: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
         masking_pattern: Optional[torch.Tensor] = None,
+        num_recycles: Optional[int] = None,
     ):
         cfg = self.config.esmfold_config
 
@@ -2150,13 +2187,13 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         B = aa.shape[0]
         L = aa.shape[1]
         device = input_ids.device
-        if residx is None:
-            residx = torch.arange(L, device=device).expand_as(input_ids)
+        if position_ids is None:
+            position_ids = torch.arange(L, device=device).expand_as(input_ids)
 
         # === ESM ===
         esmaa = self.af2_idx_to_esm_idx(aa, attention_mask)
 
-        if (self.training or mask_aa) and masking_pattern is not None:
+        if masking_pattern is not None:
             masked_aa, esmaa, mlm_targets = self.bert_mask(aa, esmaa, attention_mask, masking_pattern)
         else:
             masked_aa = aa
@@ -2167,36 +2204,29 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         # present. The pair embedding esm_z may be present depending on the
         # configuration of the model. If esm_z is not used by the model then it
         # is returned as None here.
-        esm_s, esm_z = self.compute_language_model_representations(esmaa)
+        esm_s = self.compute_language_model_representations(esmaa)
 
         # Convert esm_s and esm_z, if present, to the precision used by the trunk and
         # the structure module. These tensors may be a lower precision if, for example,
         # we're running the language model in fp16 precision.
         esm_s = esm_s.to(self.esm_s_combine.dtype)
-        esm_z = esm_z.to(self.esm_s_combine.dtype) if esm_z is not None else None
 
         if cfg.esm_ablate_sequence:
             esm_s = esm_s * 0
 
-        if cfg.esm_ablate_pairwise:
-            esm_z = esm_z * 0 if esm_z is not None else None
-
         esm_s = esm_s.detach()
-        esm_z = esm_z.detach() if esm_z is not None else None
 
         # === preprocessing ===
         esm_s = (self.esm_s_combine.softmax(0).unsqueeze(0) @ esm_s).squeeze(2)
         s_s_0 = self.esm_s_mlp(esm_s)
 
-        if cfg.use_esm_attn_map:
-            s_z_0 = self.esm_z_mlp(esm_z)
-        else:
-            s_z_0 = s_s_0.new_zeros(B, L, L, cfg.trunk.pairwise_state_dim)
+
+        s_z_0 = s_s_0.new_zeros(B, L, L, cfg.trunk.pairwise_state_dim)
 
         if self.config.esmfold_config.embed_aa:
             s_s_0 += self.embedding(masked_aa)
 
-        structure: dict = self.trunk(s_s_0, s_z_0, aa, residx, attention_mask)
+        structure: dict = self.trunk(s_s_0, s_z_0, aa, position_ids, attention_mask, no_recycles=num_recycles)
         # Documenting what we expect:
         structure = {
             k: v
@@ -2236,7 +2266,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
             "atom37_atom_exists",
         ]:
             structure[k] *= attention_mask.unsqueeze(-1)
-        structure["residue_index"] = residx
+        structure["residue_index"] = position_ids
 
         lddt_head = self.lddt_head(structure["states"]).reshape(structure["states"].shape[0], B, L, -1, self.lddt_bins)
         structure["lddt_head"] = lddt_head
@@ -2254,18 +2284,13 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         aa = (aa + 1).masked_fill(mask != 1, 0)
         return self.af2_to_esm[aa]
 
-    def compute_language_model_representations(self, esmaa: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def compute_language_model_representations(self, esmaa: torch.Tensor) -> torch.Tensor:
         device = next(self.parameters()).device
         B, L = esmaa.shape  # B = batch size, L = sequence length.
 
         if self.config.esmfold_config.bypass_lm:
             esm_s = torch.zeros(B, L, self.esm_s_combine.size[0], -1, self.esm_feats, device=device)
-            esm_z = (
-                torch.zeros(B, L, L, self.esm_attns, device=device)
-                if self.config.esmfold_config.use_esm_attn_map
-                else None
-            )
-            return esm_s, esm_z
+            return esm_s
 
         bosi, eosi = self.esm_dict_cls_idx, self.esm_dict_eos_idx
         bos = esmaa.new_full((B, 1), bosi)
@@ -2279,13 +2304,10 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         # esm_z is always None
         esm_hidden_states = self.esm(esmaa, attention_mask=esmaa != 1, output_hidden_states=True)["hidden_states"]
         esm_s = torch.stack(esm_hidden_states, dim=2)
-        esm_z = None
 
         esm_s = esm_s[:, 1:-1]  # B, L, nLayers, C
-        if esm_z is not None:
-            esm_z = esm_z[:, 1:-1, 1:-1, :]  # B, L, L, C
 
-        return esm_s, esm_z
+        return esm_s
 
     def bert_mask(self, aa, esmaa, mask, pattern):
         new_aa = aa.clone()
