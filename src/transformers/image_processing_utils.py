@@ -63,7 +63,7 @@ def get_size_dict(
     default_to_square: bool = True,
 ) -> dict:
     """
-    Converts the old size parameter in the config into the new dict expected in the config. This is the ensure
+    Converts the old size parameter in the config into the new dict expected in the config. This is to ensure
     backwards compatibility with the old feature extractor configs and removes ambiguity over whether the tuple is in
     (height, width) or (width, height) format.
 
