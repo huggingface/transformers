@@ -14,11 +14,9 @@
 # limitations under the License.
 """Feature extractor class for Conditional DETR."""
 
-import io
 import pathlib
 import warnings
-from collections import defaultdict
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 from PIL import Image
@@ -104,21 +102,157 @@ def rgb_to_id(color):
     return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
 
 
-# Copied from transformers.models.detr.feature_extraction_detr.id_to_rgb
-def id_to_rgb(id_map):
-    if isinstance(id_map, np.ndarray):
-        id_map_copy = id_map.copy()
-        rgb_shape = tuple(list(id_map.shape) + [3])
-        rgb_map = np.zeros(rgb_shape, dtype=np.uint8)
-        for i in range(3):
-            rgb_map[..., i] = id_map_copy % 256
-            id_map_copy //= 256
-        return rgb_map
-    color = []
-    for _ in range(3):
-        color.append(id_map % 256)
-        id_map //= 256
-    return color
+# Copied from transformers.models.detr.feature_extraction_detr.binary_mask_to_rle
+def binary_mask_to_rle(mask):
+    """
+    Args:
+    Converts given binary mask of shape (height, width) to the run-length encoding (RLE) format.
+        mask (`torch.Tensor` or `numpy.array`):
+            A binary mask tensor of shape `(height, width)` where 0 denotes background and 1 denotes the target
+            segment_id or class_id.
+    Returns:
+        `List`: Run-length encoded list of the binary mask. Refer to COCO API for more information about the RLE
+        format.
+    """
+    if is_torch_tensor(mask):
+        mask = mask.numpy()
+
+    pixels = mask.flatten()
+    pixels = np.concatenate([[0], pixels, [0]])
+    runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
+    runs[1::2] -= runs[::2]
+    return [x for x in runs]
+
+
+# Copied from transformers.models.detr.feature_extraction_detr.convert_segmentation_to_rle
+def convert_segmentation_to_rle(segmentation):
+    """
+    Converts given segmentation map of shape (height, width) to the run-length encoding (RLE) format.
+
+    Args:
+        segmentation (`torch.Tensor` or `numpy.array`):
+            A segmentation map of shape `(height, width)` where each value denotes a segment or class id.
+    Returns:
+        `List[List]`: A list of lists, where each list is the run-length encoding of a segment / class id.
+    """
+    segment_ids = torch.unique(segmentation)
+
+    run_length_encodings = []
+    for idx in segment_ids:
+        mask = torch.where(segmentation == idx, 1, 0)
+        rle = binary_mask_to_rle(mask)
+        run_length_encodings.append(rle)
+
+    return run_length_encodings
+
+
+# Copied from transformers.models.detr.feature_extraction_detr.remove_low_and_no_objects
+def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
+    """
+    Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
+    `labels`.
+
+    Args:
+        masks (`torch.Tensor`):
+            A tensor of shape `(num_queries, height, width)`.
+        scores (`torch.Tensor`):
+            A tensor of shape `(num_queries)`.
+        labels (`torch.Tensor`):
+            A tensor of shape `(num_queries)`.
+        object_mask_threshold (`float`):
+            A number between 0 and 1 used to binarize the masks.
+    Raises:
+        `ValueError`: Raised when the first dimension doesn't match in all input tensors.
+    Returns:
+        `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
+        < `object_mask_threshold`.
+    """
+    if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
+        raise ValueError("mask, scores and labels must have the same shape!")
+
+    to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
+
+    return masks[to_keep], scores[to_keep], labels[to_keep]
+
+
+# Copied from transformers.models.detr.feature_extraction_detr.check_segment_validity
+def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
+    # Get the mask associated with the k class
+    mask_k = mask_labels == k
+    mask_k_area = mask_k.sum()
+
+    # Compute the area of all the stuff in query k
+    original_area = (mask_probs[k] >= mask_threshold).sum()
+    mask_exists = mask_k_area > 0 and original_area > 0
+
+    # Eliminate disconnected tiny segments
+    if mask_exists:
+        area_ratio = mask_k_area / original_area
+        if not area_ratio.item() > overlap_mask_area_threshold:
+            mask_exists = False
+
+    return mask_exists, mask_k
+
+
+# Copied from transformers.models.detr.feature_extraction_detr.compute_segments
+def compute_segments(
+    mask_probs,
+    pred_scores,
+    pred_labels,
+    mask_threshold: float = 0.5,
+    overlap_mask_area_threshold: float = 0.8,
+    label_ids_to_fuse: Optional[Set[int]] = None,
+    target_size: Tuple[int, int] = None,
+):
+    height = mask_probs.shape[1] if target_size is None else target_size[0]
+    width = mask_probs.shape[2] if target_size is None else target_size[1]
+
+    segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
+    segments: List[Dict] = []
+
+    if target_size is not None:
+        mask_probs = nn.functional.interpolate(
+            mask_probs.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
+        )[0]
+
+    current_segment_id = 0
+
+    # Weigh each mask by its prediction score
+    mask_probs *= pred_scores.view(-1, 1, 1)
+    mask_labels = mask_probs.argmax(0)  # [height, width]
+
+    # Keep track of instances of each class
+    stuff_memory_list: Dict[str, int] = {}
+    for k in range(pred_labels.shape[0]):
+        pred_class = pred_labels[k].item()
+        should_fuse = pred_class in label_ids_to_fuse
+
+        # Check if mask exists and large enough to be a segment
+        mask_exists, mask_k = check_segment_validity(
+            mask_labels, mask_probs, k, mask_threshold, overlap_mask_area_threshold
+        )
+
+        if mask_exists:
+            if pred_class in stuff_memory_list:
+                current_segment_id = stuff_memory_list[pred_class]
+            else:
+                current_segment_id += 1
+
+            # Add current object segment to final segmentation map
+            segmentation[mask_k] = current_segment_id
+            segment_score = round(pred_scores[k].item(), 6)
+            segments.append(
+                {
+                    "id": current_segment_id,
+                    "label_id": pred_class,
+                    "was_fused": should_fuse,
+                    "score": segment_score,
+                }
+            )
+            if should_fuse:
+                stuff_memory_list[pred_class] = current_segment_id
+
+    return segmentation, segments
 
 
 class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
@@ -127,7 +261,6 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
     This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.
-
 
     Args:
         format (`str`, *optional*, defaults to `"coco_detection"`):
@@ -691,25 +824,27 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return encoded_inputs
 
-    # POSTPROCESSING METHODS
-    # inspired by https://github.com/Atten4Vis/conditionalDETR/blob/master/models/conditional_detr.py#L258
     def post_process(self, outputs, target_sizes):
         """
+        Args:
         Converts the output of [`ConditionalDetrForObjectDetection`] into the format expected by the COCO api. Only
         supports PyTorch.
-
-        Args:
             outputs ([`ConditionalDetrObjectDetectionOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
                 Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
                 image size (before any data augmentation). For visualization, this should be the image size after data
                 augment, but before padding.
-
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
+        warnings.warn(
+            "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
+            " `post_process_object_detection`",
+            FutureWarning,
+        )
+
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
         if len(out_logits) != len(target_sizes):
@@ -734,240 +869,283 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return results
 
-    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.post_process_segmentation with Detr->ConditionalDetr
-    def post_process_segmentation(self, outputs, target_sizes, threshold=0.9, mask_threshold=0.5):
+    # Copied from transformers.models.deformable_detr.feature_extraction_deformable_detr.DeformableDetrFeatureExtractor.post_process_object_detection with DeformableDetr->ConditionalDetr
+    def post_process_object_detection(
+        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None
+    ):
         """
-        Converts the output of [`ConditionalDetrForSegmentation`] into image segmentation predictions. Only supports
-        PyTorch.
-
-        Parameters:
-            outputs ([`ConditionalDetrSegmentationOutput`]):
-                Raw outputs of the model.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`):
-                Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction.
-            threshold (`float`, *optional*, defaults to 0.9):
-                Threshold to use to filter out queries.
-            mask_threshold (`float`, *optional*, defaults to 0.5):
-                Threshold to use when turning the predicted masks into binary values.
-
-        Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an image
-            in the batch as predicted by the model.
-        """
-        warnings.warn(
-            "`post_process_segmentation` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_semantic_segmentation`.",
-            FutureWarning,
-        )
-        out_logits, raw_masks = outputs.logits, outputs.pred_masks
-        preds = []
-
-        def to_tuple(tup):
-            if isinstance(tup, tuple):
-                return tup
-            return tuple(tup.cpu().tolist())
-
-        for cur_logits, cur_masks, size in zip(out_logits, raw_masks, target_sizes):
-            # we filter empty queries and detection below threshold
-            scores, labels = cur_logits.softmax(-1).max(-1)
-            keep = labels.ne(outputs.logits.shape[-1] - 1) & (scores > threshold)
-            cur_scores, cur_classes = cur_logits.softmax(-1).max(-1)
-            cur_scores = cur_scores[keep]
-            cur_classes = cur_classes[keep]
-            cur_masks = cur_masks[keep]
-            cur_masks = nn.functional.interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
-            cur_masks = (cur_masks.sigmoid() > mask_threshold) * 1
-
-            predictions = {"scores": cur_scores, "labels": cur_classes, "masks": cur_masks}
-            preds.append(predictions)
-        return preds
-
-    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.post_process_instance with Detr->ConditionalDetr
-    def post_process_instance(self, results, outputs, orig_target_sizes, max_target_sizes, threshold=0.5):
-        """
-        Converts the output of [`ConditionalDetrForSegmentation`] into actual instance segmentation predictions. Only
+        Converts the output of [`ConditionalDetrForObjectDetection`] into the format expected by the COCO api. Only
         supports PyTorch.
 
         Args:
-            results (`List[Dict]`):
-                Results list obtained by [`~ConditionalDetrFeatureExtractor.post_process`], to which "masks" results
-                will be added.
-            outputs ([`ConditionalDetrSegmentationOutput`]):
+            outputs ([`DetrObjectDetectionOutput`]):
                 Raw outputs of the model.
-            orig_target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
-                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
-                image size (before any data augmentation).
-            max_target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
-                Tensor containing the maximum size (h, w) of each image of the batch. For evaluation, this must be the
-                original image size (before any data augmentation).
-            threshold (`float`, *optional*, defaults to 0.5):
-                Threshold to use when turning the predicted masks into binary values.
+            threshold (`float`, *optional*):
+                Score threshold to keep object detection predictions.
+            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*, defaults to `None`):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+                (height, width) of each image in the batch. If left to None, predictions will not be resized.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and masks for an
-            image in the batch as predicted by the model.
+            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            in the batch as predicted by the model.
         """
-        warnings.warn(
-            "`post_process_instance` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_instance_segmentation`.",
-            FutureWarning,
-        )
+        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
-        if len(orig_target_sizes) != len(max_target_sizes):
-            raise ValueError("Make sure to pass in as many orig_target_sizes as max_target_sizes")
-        max_h, max_w = max_target_sizes.max(0)[0].tolist()
-        outputs_masks = outputs.pred_masks.squeeze(2)
-        outputs_masks = nn.functional.interpolate(
-            outputs_masks, size=(max_h, max_w), mode="bilinear", align_corners=False
-        )
-        outputs_masks = (outputs_masks.sigmoid() > threshold).cpu()
+        if target_sizes is not None:
+            if len(out_logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
 
-        for i, (cur_mask, t, tt) in enumerate(zip(outputs_masks, max_target_sizes, orig_target_sizes)):
-            img_h, img_w = t[0], t[1]
-            results[i]["masks"] = cur_mask[:, :img_h, :img_w].unsqueeze(1)
-            results[i]["masks"] = nn.functional.interpolate(
-                results[i]["masks"].float(), size=tuple(tt.tolist()), mode="nearest"
-            ).byte()
+        prob = out_logits.sigmoid()
+        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 100, dim=1)
+        scores = topk_values
+        topk_boxes = topk_indexes // out_logits.shape[2]
+        labels = topk_indexes % out_logits.shape[2]
+        boxes = center_to_corners_format(out_bbox)
+        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
+
+        # and from relative [0, 1] to absolute [0, height] coordinates
+        if isinstance(target_sizes, List):
+            img_h = torch.Tensor([i[0] for i in target_sizes])
+            img_w = torch.Tensor([i[1] for i in target_sizes])
+        else:
+            img_h, img_w = target_sizes.unbind(1)
+        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
+        boxes = boxes * scale_fct[:, None, :]
+
+        results = []
+        for s, l, b in zip(scores, labels, boxes):
+            score = s[s > threshold]
+            label = l[s > threshold]
+            box = b[s > threshold]
+            results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
 
-    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.post_process_panoptic with Detr->ConditionalDetr
-    def post_process_panoptic(self, outputs, processed_sizes, target_sizes=None, is_thing_map=None, threshold=0.85):
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.post_process_semantic_segmentation with Detr->ConditionalDetr
+    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple[int, int]] = None):
         """
-        Converts the output of [`ConditionalDetrForSegmentation`] into actual panoptic predictions. Only supports
+        Converts the output of [`ConditionalDetrForSegmentation`] into semantic segmentation maps. Only supports
         PyTorch.
 
-        Parameters:
-            outputs ([`ConditionalDetrSegmentationOutput`]):
+        Args:
+            outputs ([`ConditionalDetrForSegmentation`]):
                 Raw outputs of the model.
-            processed_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`):
-                Torch Tensor (or list) containing the size (h, w) of each image of the batch, i.e. the size after data
-                augmentation but before batching.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`, *optional*):
-                Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction. If left to
-                None, it will default to the `processed_sizes`.
-            is_thing_map (`torch.Tensor` of shape `(batch_size, 2)`, *optional*):
-                Dictionary mapping class indices to either True or False, depending on whether or not they are a thing.
-                If not set, defaults to the `is_thing_map` of COCO panoptic.
-            threshold (`float`, *optional*, defaults to 0.85):
-                Threshold to use to filter out queries.
+            target_sizes (`List[Tuple[int, int]]`, *optional*, defaults to `None`):
+                A list of tuples (`Tuple[int, int]`) containing the target size (height, width) of each image in the
+                batch. If left to None, predictions will not be resized.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing a PNG string and segments_info values for
-            an image in the batch as predicted by the model.
+            `List[torch.Tensor]`:
+                A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
+                corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
+                `torch.Tensor` correspond to a semantic class id.
         """
-        warnings.warn(
-            "`post_process_panoptic is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_panoptic_segmentation`.",
-            FutureWarning,
-        )
-        if target_sizes is None:
-            target_sizes = processed_sizes
-        if len(processed_sizes) != len(target_sizes):
-            raise ValueError("Make sure to pass in as many processed_sizes as target_sizes")
+        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
 
-        if is_thing_map is None:
-            # default to is_thing_map of COCO panoptic
-            is_thing_map = {i: i <= 90 for i in range(201)}
+        # Remove the null class `[..., :-1]`
+        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
+        masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
 
-        out_logits, raw_masks, raw_boxes = outputs.logits, outputs.pred_masks, outputs.pred_boxes
-        if not len(out_logits) == len(raw_masks) == len(target_sizes):
-            raise ValueError(
-                "Make sure that you pass in as many target sizes as the batch dimension of the logits and masks"
+        # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
+        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+        batch_size = class_queries_logits.shape[0]
+
+        # Resize logits and compute semantic segmentation maps
+        if target_sizes is not None:
+            if batch_size != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+            semantic_segmentation = []
+            for idx in range(batch_size):
+                resized_logits = nn.functional.interpolate(
+                    segmentation[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                )
+                semantic_map = resized_logits[0].argmax(dim=0)
+                semantic_segmentation.append(semantic_map)
+        else:
+            semantic_segmentation = segmentation.argmax(dim=1)
+            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+
+        return semantic_segmentation
+
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.post_process_instance_segmentation with Detr->ConditionalDetr
+    def post_process_instance_segmentation(
+        self,
+        outputs,
+        threshold: float = 0.5,
+        mask_threshold: float = 0.5,
+        overlap_mask_area_threshold: float = 0.8,
+        target_sizes: Optional[List[Tuple[int, int]]] = None,
+        return_coco_annotation: Optional[bool] = False,
+    ) -> List[Dict]:
+        """
+        Converts the output of [`ConditionalDetrForSegmentation`] into instance segmentation predictions. Only supports
+        PyTorch.
+
+        Args:
+            outputs ([`ConditionalDetrForSegmentation`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*, defaults to 0.5):
+                The probability score threshold to keep predicted instance masks.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
+            overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
+                The overlap mask area threshold to merge or discard small disconnected parts within each binary
+                instance mask.
+            target_sizes (`List[Tuple]`, *optional*):
+                List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
+                final size (height, width) of each prediction. If left to None, predictions will not be resized.
+            return_coco_annotation (`bool`, *optional*):
+                Defaults to `False`. If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE)
+                format.
+
+        Returns:
+            `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
+            - **segmentation** -- A tensor of shape `(height, width)` where each pixel represents a `segment_id` or
+              `List[List]` run-length encoding (RLE) of the segmentation map if return_coco_annotation is set to
+              `True`. Set to `None` if no mask if found above `threshold`.
+            - **segments_info** -- A dictionary that contains additional information on each segment.
+                - **id** -- An integer representing the `segment_id`.
+                - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
+                - **score** -- Prediction score of segment with `segment_id`.
+        """
+        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
+
+        batch_size = class_queries_logits.shape[0]
+        num_labels = class_queries_logits.shape[-1] - 1
+
+        mask_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+
+        # Predicted label and score of each query (batch_size, num_queries)
+        pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
+
+        # Loop over items in batch size
+        results: List[Dict[str, TensorType]] = []
+
+        for i in range(batch_size):
+            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
+                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
             )
-        preds = []
 
-        def to_tuple(tup):
-            if isinstance(tup, tuple):
-                return tup
-            return tuple(tup.cpu().tolist())
+            # No mask found
+            if mask_probs_item.shape[0] <= 0:
+                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
+                segmentation = torch.zeros((height, width)) - 1
+                results.append({"segmentation": segmentation, "segments_info": []})
+                continue
 
-        for cur_logits, cur_masks, cur_boxes, size, target_size in zip(
-            out_logits, raw_masks, raw_boxes, processed_sizes, target_sizes
-        ):
-            # we filter empty queries and detection below threshold
-            scores, labels = cur_logits.softmax(-1).max(-1)
-            keep = labels.ne(outputs.logits.shape[-1] - 1) & (scores > threshold)
-            cur_scores, cur_classes = cur_logits.softmax(-1).max(-1)
-            cur_scores = cur_scores[keep]
-            cur_classes = cur_classes[keep]
-            cur_masks = cur_masks[keep]
-            cur_masks = nn.functional.interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
-            cur_boxes = center_to_corners_format(cur_boxes[keep])
+            # Get segmentation map and segment information of batch item
+            target_size = target_sizes[i] if target_sizes is not None else None
+            segmentation, segments = compute_segments(
+                mask_probs_item,
+                pred_scores_item,
+                pred_labels_item,
+                mask_threshold,
+                overlap_mask_area_threshold,
+                target_size,
+            )
 
-            h, w = cur_masks.shape[-2:]
-            if len(cur_boxes) != len(cur_classes):
-                raise ValueError("Not as many boxes as there are classes")
+            # Return segmentation map in run-length encoding (RLE) format
+            if return_coco_annotation:
+                segmentation = convert_segmentation_to_rle(segmentation)
 
-            # It may be that we have several predicted masks for the same stuff class.
-            # In the following, we track the list of masks ids for each stuff class (they are merged later on)
-            cur_masks = cur_masks.flatten(1)
-            stuff_equiv_classes = defaultdict(lambda: [])
-            for k, label in enumerate(cur_classes):
-                if not is_thing_map[label.item()]:
-                    stuff_equiv_classes[label.item()].append(k)
+            results.append({"segmentation": segmentation, "segments_info": segments})
+        return results
 
-            def get_ids_area(masks, scores, dedup=False):
-                # This helper function creates the final panoptic segmentation image
-                # It also returns the area of the masks that appears on the image
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.post_process_panoptic_segmentation with Detr->ConditionalDetr
+    def post_process_panoptic_segmentation(
+        self,
+        outputs,
+        threshold: float = 0.5,
+        mask_threshold: float = 0.5,
+        overlap_mask_area_threshold: float = 0.8,
+        label_ids_to_fuse: Optional[Set[int]] = None,
+        target_sizes: Optional[List[Tuple[int, int]]] = None,
+    ) -> List[Dict]:
+        """
+        Converts the output of [`ConditionalDetrForSegmentation`] into image panoptic segmentation predictions. Only
+        supports PyTorch.
 
-                m_id = masks.transpose(0, 1).softmax(-1)
+        Args:
+            outputs ([`ConditionalDetrForSegmentation`]):
+                The outputs from [`ConditionalDetrForSegmentation`].
+            threshold (`float`, *optional*, defaults to 0.5):
+                The probability score threshold to keep predicted instance masks.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
+            overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
+                The overlap mask area threshold to merge or discard small disconnected parts within each binary
+                instance mask.
+            label_ids_to_fuse (`Set[int]`, *optional*):
+                The labels in this state will have all their instances be fused together. For instance we could say
+                there can only be one sky in an image, but several persons, so the label ID for sky would be in that
+                set, but not the one for person.
+            target_sizes (`List[Tuple]`, *optional*):
+                List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
+                final size (height, width) of each prediction in batch. If left to None, predictions will not be
+                resized.
 
-                if m_id.shape[-1] == 0:
-                    # We didn't detect any mask :(
-                    m_id = torch.zeros((h, w), dtype=torch.long, device=m_id.device)
-                else:
-                    m_id = m_id.argmax(-1).view(h, w)
+        Returns:
+            `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
+            - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id` or
+              `None` if no mask if found above `threshold`. If `target_sizes` is specified, segmentation is resized to
+              the corresponding `target_sizes` entry.
+            - **segments_info** -- A dictionary that contains additional information on each segment.
+                - **id** -- an integer representing the `segment_id`.
+                - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
+                - **was_fused** -- a boolean, `True` if `label_id` was in `label_ids_to_fuse`, `False` otherwise.
+                  Multiple instances of the same class / label were fused and assigned a single `segment_id`.
+                - **score** -- Prediction score of segment with `segment_id`.
+        """
 
-                if dedup:
-                    # Merge the masks corresponding to the same stuff class
-                    for equiv in stuff_equiv_classes.values():
-                        if len(equiv) > 1:
-                            for eq_id in equiv:
-                                m_id.masked_fill_(m_id.eq(eq_id), equiv[0])
+        if label_ids_to_fuse is None:
+            warnings.warn("`label_ids_to_fuse` unset. No instance will be fused.")
+            label_ids_to_fuse = set()
 
-                final_h, final_w = to_tuple(target_size)
+        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
 
-                seg_img = Image.fromarray(id_to_rgb(m_id.view(h, w).cpu().numpy()))
-                seg_img = seg_img.resize(size=(final_w, final_h), resample=Image.NEAREST)
+        batch_size = class_queries_logits.shape[0]
+        num_labels = class_queries_logits.shape[-1] - 1
 
-                np_seg_img = torch.ByteTensor(torch.ByteStorage.from_buffer(seg_img.tobytes()))
-                np_seg_img = np_seg_img.view(final_h, final_w, 3)
-                np_seg_img = np_seg_img.numpy()
+        mask_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
 
-                m_id = torch.from_numpy(rgb_to_id(np_seg_img))
+        # Predicted label and score of each query (batch_size, num_queries)
+        pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
 
-                area = []
-                for i in range(len(scores)):
-                    area.append(m_id.eq(i).sum().item())
-                return area, seg_img
+        # Loop over items in batch size
+        results: List[Dict[str, TensorType]] = []
 
-            area, seg_img = get_ids_area(cur_masks, cur_scores, dedup=True)
-            if cur_classes.numel() > 0:
-                # We know filter empty masks as long as we find some
-                while True:
-                    filtered_small = torch.as_tensor(
-                        [area[i] <= 4 for i, c in enumerate(cur_classes)], dtype=torch.bool, device=keep.device
-                    )
-                    if filtered_small.any().item():
-                        cur_scores = cur_scores[~filtered_small]
-                        cur_classes = cur_classes[~filtered_small]
-                        cur_masks = cur_masks[~filtered_small]
-                        area, seg_img = get_ids_area(cur_masks, cur_scores)
-                    else:
-                        break
+        for i in range(batch_size):
+            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
+                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
+            )
 
-            else:
-                cur_classes = torch.ones(1, dtype=torch.long, device=cur_classes.device)
+            # No mask found
+            if mask_probs_item.shape[0] <= 0:
+                height, width = target_sizes[i] if target_sizes is not None else mask_probs_item.shape[1:]
+                segmentation = torch.zeros((height, width)) - 1
+                results.append({"segmentation": segmentation, "segments_info": []})
+                continue
 
-            segments_info = []
-            for i, a in enumerate(area):
-                cat = cur_classes[i].item()
-                segments_info.append({"id": i, "isthing": is_thing_map[cat], "category_id": cat, "area": a})
-            del cur_classes
+            # Get segmentation map and segment information of batch item
+            target_size = target_sizes[i] if target_sizes is not None else None
+            segmentation, segments = compute_segments(
+                mask_probs_item,
+                pred_scores_item,
+                pred_labels_item,
+                mask_threshold,
+                overlap_mask_area_threshold,
+                label_ids_to_fuse,
+                target_size,
+            )
 
-            with io.BytesIO() as out:
-                seg_img.save(out, format="PNG")
-                predictions = {"png_string": out.getvalue(), "segments_info": segments_info}
-            preds.append(predictions)
-        return preds
+            results.append({"segmentation": segmentation, "segments_info": segments})
+        return results
