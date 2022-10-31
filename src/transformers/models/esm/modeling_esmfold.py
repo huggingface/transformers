@@ -13,9 +13,6 @@ import torch
 import torch.nn as nn
 from torch.nn import LayerNorm
 
-# TODO remove:
-from einops import rearrange, repeat
-
 from ...deepspeed import is_deepspeed_available
 from ...modeling_outputs import ModelOutput
 from ...utils import (
@@ -1002,14 +999,15 @@ class EsmFoldSelfAttention(nn.Module):
         use mask.
 
         Inputs:
-          x: batch of input sequneces (.. x L x C) mask: batch of boolean masks where 1=valid, 0=padding position (.. x
-          L_k). optional. bias: batch of scalar pairwise attention biases (.. x Lq x Lk x num_heads). optional.
+            x: batch of input sequneces (.. x L x C) mask: batch of boolean masks where 1=valid, 0=padding position (..
+            x L_k) bias: batch of scalar pairwise attention biases (.. x Lq x Lk x num_heads)
 
         Outputs:
           sequence projection (B x L x embed_dim), attention maps (B x L x L x num_heads)
         """
 
-        t = rearrange(self.proj(x), "... l (h c) -> ... h l c", h=self.num_heads)
+        t = self.proj(x).view(*x.shape[:2], self.num_heads, -1)
+        t = t.permute(0, 2, 1, 3)
         q, k, v = t.chunk(3, dim=-1)
 
         q = self.rescale_factor * q
@@ -1017,23 +1015,23 @@ class EsmFoldSelfAttention(nn.Module):
 
         # Add external attention bias.
         if bias is not None:
-            a = a + rearrange(bias, "... lq lk h -> ... h lq lk")
+            a = a + bias.permute(0, 3, 1, 2)
 
         # Do not attend to padding tokens.
         if mask is not None:
-            mask = repeat(mask, "... lk -> ... h lq lk", h=self.num_heads, lq=q.shape[-2])
+            mask = mask[:, None, None]
             a = a.masked_fill(mask == False, -np.inf)
 
         a = nn.functional.softmax(a, dim=-1)
 
         y = torch.einsum("...hqk,...hkc->...qhc", a, v)
-        y = rearrange(y, "... h c -> ... (h c)", h=self.num_heads)
+        y = y.reshape(*y.shape[:2], -1)
 
         if self.gated:
             y = self.g_proj(x).sigmoid() * y
         y = self.o_proj(y)
 
-        return y, rearrange(a, "... lq lk h -> ... h lq lk")
+        return y, a.permute(0, 3, 1, 2)
 
 
 class EsmFoldDropout(nn.Module):
