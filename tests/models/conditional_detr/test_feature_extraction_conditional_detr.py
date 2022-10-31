@@ -303,7 +303,6 @@ class ConditionalDetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, uni
         masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
 
         # encode them
-        # TODO replace by .from_pretrained microsoft/conditional-detr-resnet-50-panoptic
         feature_extractor = ConditionalDetrFeatureExtractor(format="coco_panoptic")
         encoding = feature_extractor(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
 

@@ -1699,15 +1699,15 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
 
         >>> # convert outputs (bounding boxes and class logits) to COCO API
         >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = feature_extractor.post_process(outputs, target_sizes=target_sizes)[0]
+        >>> results = feature_extractor.post_process_object_detection(
+        ...     outputs, threshold=0.5, target_sizes=target_sizes
+        ... )[0]
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
-        ...     # let's only keep detections with score > 0.5
-        ...     if score > 0.5:
-        ...         print(
-        ...             f"Detected {model.config.id2label[label.item()]} with confidence "
-        ...             f"{round(score.item(), 3)} at location {box}"
-        ...         )
+        ...     print(
+        ...         f"Detected {model.config.id2label[label.item()]} with confidence "
+        ...         f"{round(score.item(), 3)} at location {box}"
+        ...     )
         Detected remote with confidence 0.833 at location [38.31, 72.1, 177.63, 118.45]
         Detected cat with confidence 0.831 at location [9.2, 51.38, 321.13, 469.0]
         Detected cat with confidence 0.804 at location [340.3, 16.85, 642.93, 370.95]
@@ -1897,17 +1897,13 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
         >>> # forward pass
         >>> outputs = model(**inputs)
 
-        >>> # use the `post_process_panoptic` method of `ConditionalDetrFeatureExtractor` to convert to COCO format
-        >>> processed_sizes = torch.as_tensor(inputs["pixel_values"].shape[-2:]).unsqueeze(0)
-        >>> result = feature_extractor.post_process_panoptic(outputs, processed_sizes)[0]
-
-        >>> # the segmentation is stored in a special-format png
-        >>> panoptic_seg = Image.open(io.BytesIO(result["png_string"]))
-        >>> panoptic_seg = numpy.array(panoptic_seg, dtype=numpy.uint8)
-        >>> # retrieve the ids corresponding to each mask
-        >>> panoptic_seg_id = rgb_to_id(panoptic_seg)
-        >>> panoptic_seg_id.shape
-        (800, 1066)
+        >>> # Use the `post_process_panoptic_segmentation` method of `ConditionalDetrFeatureExtractor` to retrieve post-processed panoptic segmentation maps
+        >>> # Segmentation results are returned as a list of dictionaries
+        >>> result = feature_extractor.post_process_panoptic_segmentation(outputs, target_sizes=[(300, 500)])
+        >>> # A tensor of shape (height, width) where each value denotes a segment id, filled with -1 if no segment is found
+        >>> panoptic_seg = result[0]["segmentation"]
+        >>> # Get prediction score and segment_id to class_id mapping of each segment
+        >>> panoptic_segments_info = result[0]["segments_info"]
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
