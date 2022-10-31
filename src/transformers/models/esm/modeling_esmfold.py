@@ -52,6 +52,20 @@ ESMFOLD_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
+        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        masking_pattern (`torch.LongTensor` of shape `({0})`, *optional*):
+            Locations of tokens to mask during training as a form of regularization. Mask values selected in `[0, 1]`.
+        num_recycles (`int`, *optional*, defaults to `None`):
+            Number of times to recycle the input sequence. If `None`, defaults to `config.num_recycles`. "Recycling"
+            consists of passing the output of the folding trunk back in as input to the trunk. During training, the
+            number of recycles should vary with each batch, to ensure that the model learns to output valid predictions
+            after each recycle. During inference, num_recycles should be set to the highest value that the model was
+            trained with for maximum accuracy. Accordingly, when this value is set to `None`, config.max_recycles is 
+            used.
 """
 
 
