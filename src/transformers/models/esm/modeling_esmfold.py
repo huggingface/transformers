@@ -783,7 +783,6 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         # Because we do not support use_esm_attn_map in the HF port as it is not used in any public models,
         # esm_z is always None
         esm_hidden_states = self.esm(esmaa, attention_mask=esmaa != 1, output_hidden_states=True)["hidden_states"]
-        print(esm_hidden_states[0])
         esm_s = torch.stack(esm_hidden_states, dim=2)
         esm_z = None
 
