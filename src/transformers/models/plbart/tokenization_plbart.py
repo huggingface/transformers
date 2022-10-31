@@ -93,7 +93,6 @@ FAIRSEQ_LANGUAGE_CODES = {
 }
 
 
-
 class PLBartTokenizer(PreTrainedTokenizer):
     """
     Construct an PLBART tokenizer.
