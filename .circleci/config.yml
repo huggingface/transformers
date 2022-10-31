@@ -51,7 +51,6 @@ jobs:
 #                      touch test_preparation/examples_test_list.txt
 #                  fi
             - run: |
-                  mkdir test_preparation
                   echo -n "tests/models/bert/test_modeling_bert.py" > test_preparation/filtered_test_list.txt
                   touch test_preparation/test_repo_utils.txt
                   touch test_preparation/test_list.txt
