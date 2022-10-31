@@ -35,6 +35,7 @@ from transformers import (
     TOKENIZER_MAPPING,
     AutoTokenizer,
     LayoutLMv3TokenizerFast,
+    PreTrainedTokenizer,
     PreTrainedTokenizerFast,
     logging,
 )
@@ -279,21 +280,21 @@ def get_tiny_config(config_class, **model_tester_kwargs):
     # A simple way is to use `inspect.getsourcefile(config_class)`.
     config_source_file = inspect.getsourcefile(config_class)
     # The modeling file name without prefix (`modeling_`) and postfix (`.py`)
-    modeling_name = config_source_file.split("/")[-1].replace("configuration_", "").replace(".py", "")
+    modeling_name = config_source_file.split(os.path.sep)[-1].replace("configuration_", "").replace(".py", "")
 
     try:
         print("Importing", model_type_to_module_name(model_type))
         module_name = model_type_to_module_name(model_type)
-        assert modeling_name.startswith(module_name)
+        assert modeling_name.startswith(module_name), f"{modeling_name} doesn't start with {module_name}"
         module = importlib.import_module(f".models.{module_name}.test_modeling_{modeling_name}", package="tests")
         camel_case_model_name = config_class.__name__.split("Config")[0]
         model_tester_class = getattr(module, f"{camel_case_model_name}ModelTester", None)
     except ModuleNotFoundError as e:
-        error = f"Tiny config not created for {model_type} - cannot find the testing module from the model name."
-        raise ValueError(f"{error}: {str(e)}")
+        error = f"Tiny config not created for {model_type} - cannot find the testing module from the model name"
+        raise ValueError(f"{error}: {e}")
 
     if model_tester_class is None:
-        error = f"Tiny config not created for {model_type} - no model tester is found in the testing module."
+        error = f"Tiny config not created for {model_type} - no model tester is found in the testing module"
         raise ValueError(error)
 
     # `parent` is an instance of `unittest.TestCase`, but we don't need it here.
@@ -677,6 +678,59 @@ def build_composite_models(config_class, output_dir):
     return result
 
 
+def get_config_overrides(config_class, processors):
+
+    config_overrides = {}
+
+    # Check if there is any tokenizer (prefer fast version if any)
+    tokenizer = None
+    for processor in processors:
+        if isinstance(processor, PreTrainedTokenizerFast):
+            tokenizer = processor
+            break
+        elif isinstance(processor, PreTrainedTokenizer):
+            tokenizer = processor
+
+    if tokenizer is None:
+        return config_overrides
+
+    # Get some properties of the (already converted) tokenizer (smaller vocab size, special token ids, etc.)
+    vocab_size = tokenizer.vocab_size
+    config_overrides["vocab_size"] = vocab_size
+
+    # Get new special token ids by setting `vocab_size` with the new value in the model tester
+    # TODO: Make sure model tester accept `vocab_size` in `__init__` (otherwise, we need to handle errors)
+    model_tester_kwargs = {"vocab_size": vocab_size}
+    _tiny_config = get_tiny_config(config_class, **model_tester_kwargs)
+
+    # handle the possibility of `text_config` inside `_tiny_config` for clip-like models (`owlvit`, `groupvit`, etc.)
+    if hasattr(_tiny_config, "text_config"):
+        _tiny_config = _tiny_config.text_config
+
+    # Collect values of the token ids
+    for attr in dir(_tiny_config):
+        if attr.endswith("_token_id"):
+            token_id = getattr(_tiny_config, attr)
+            if token_id is not None:
+                config_overrides[attr] = token_id
+
+    # TODO: don't show download progress
+
+    # TODO: check `mask_token` not set yet
+    # Using the values from the tokenizer
+    for k, v in config_overrides.items():
+        if k.endswith("_token_id"):
+            token = getattr(tokenizer, k.replace("_token_id", "_token"), None)
+            if token is not None:
+                if isinstance(tokenizer, PreTrainedTokenizerFast):
+                    token_id = tokenizer._convert_token_to_id_with_added_voc(token)
+                else:
+                    token_id = tokenizer._convert_token_to_id(token)
+                config_overrides[k] = token_id
+
+    return config_overrides
+
+
 def build(config_class, models_to_create, output_dir):
     """Create all models for a certain model type.
 
@@ -715,9 +769,15 @@ def build(config_class, models_to_create, output_dir):
         return result
 
     for processor_class in processor_classes:
-        processor = build_processor(config_class, processor_class)
-        if processor is not None:
-            result["processor"][processor_class] = processor
+        try:
+            processor = build_processor(config_class, processor_class)
+            if processor is not None:
+                result["processor"][processor_class] = processor
+        except Exception as e:
+            error = f"Failed to build processor for {processor_class.__name__}: {e}"
+            fill_result_with_error(result, error, models_to_create)
+            logger.error(result["error"])
+            return result
 
     if len(result["processor"]) == 0:
         error = f"No processor could be built for {config_class.__name__}."
@@ -725,12 +785,12 @@ def build(config_class, models_to_create, output_dir):
         logger.error(result["error"])
         return result
 
+    result["processor"] = {type(p).__name__: p.__class__.__name__ for p in result["processor"]}
+
     try:
         tiny_config = get_tiny_config(config_class)
     except Exception as e:
-        # Let's still return the processors, so we know they could be built.
-        result["processor"] = {type(p).__name__: p.__class__.__name__ for p in result["processor"]}
-        error = str(e)
+        error = f"Failed to get tiny config for {config_class.__name__}: {e}"
         fill_result_with_error(result, error, models_to_create)
         logger.error(result["error"])
         return result
@@ -738,7 +798,12 @@ def build(config_class, models_to_create, output_dir):
     # Convert the processors (reduce vocabulary size, smaller image size, etc.)
     processors = list(result["processor"].values())
     processor_output_folder = os.path.join(output_dir, "processors")
-    processors = convert_processors(processors, tiny_config, processor_output_folder, result)
+    try:
+        processors = convert_processors(processors, tiny_config, processor_output_folder, result)
+    except Exception as e:
+        error = f"Failed to convert the processors: {e}"
+        result["warnings"].append(error)
+
     # update `result["processor"]`
     result["processor"] = {type(p).__name__: p.__class__.__name__ for p in processors}
 
@@ -748,34 +813,17 @@ def build(config_class, models_to_create, output_dir):
         logger.error(result["error"])
         return result
 
-    config_overrides = {}
+    try:
+        config_overrides = get_config_overrides(config_class, processors)
+    except Exception as e:
+        error = f"Failure occurs while calling `get_config_overrides`: {e}"
+        fill_result_with_error(result, error, models_to_create)
+        logger.error(result["error"])
+        return result
 
-    # Update the config with the properties of the converted processors (smaller vocab size, special token ids, etc.)
-    for processor in processors:
-        if isinstance(processor, PreTrainedTokenizerBase):
-            vocab_size = processor.vocab_size
-            result["vocab_size"] = vocab_size
-            config_overrides["vocab_size"] = vocab_size
-
-            # Get new special token ids using the new `vocab_size` in the model tester
-            model_tester_kwargs = {"vocab_size": vocab_size}
-            _tiny_config = get_tiny_config(config_class, **model_tester_kwargs)
-            for attr in dir(_tiny_config):
-                if attr.endswith("_token_id"):
-                    config_overrides[attr] = getattr(_tiny_config, attr)
-
-            # Using the values from the tokenzier
-            for k, v in config_overrides.items():
-                if k.endswith("_token_id"):
-                    token = getattr(processor, k.replace("_token_id", "_token"), None)
-                    if token is not None:
-                        if isinstance(processor, PreTrainedTokenizerFast):
-                            token_id = processor._convert_token_to_id_with_added_voc(token)
-                        else:
-                            token_id = processor._convert_token_to_id(token)
-                        # Add the token id only if the model config needs it
-                        if v is not None:
-                            config_overrides[k] = token_id
+    # Just for us to see this easily in the report
+    if "vocab_size" in config_overrides:
+        result["vocab_size"] = config_overrides["vocab_size"]
 
     # Update attributes that `vocab_size` involves
     for k, v in config_overrides.items():
