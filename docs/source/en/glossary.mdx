@@ -26,9 +26,9 @@ Used when batching sequences of different lengths together to create a rectangul
 >>> from transformers import AutoTokenizer
 
 >>> text = [
-...   "But what about second breakfast?",
-...   "Don't think he knows about second breakfast, Pip.",
-...   "What about elevensies?",
+...     "But what about second breakfast?",
+...     "Don't think he knows about second breakfast, Pip.",
+...     "What about elevensies?",
 ... ]
 >>> encoded_inputs = tokenizer(text, padding=True)
 >>> print(encoded_inputs)
@@ -80,6 +80,7 @@ A tensor specific to encoder-decoder models (such as [BART](model_doc/bart) and 
 >>> inputs = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="tf").input_ids
 >>> labels = tokenizer("<extra_id_0> cute dog <extra_id_1> the <extra_id_2>", return_tensors="tf").input_ids
 # the forward function automatically creates the decoder_input_ids from the labels
+
 >>> outputs = model(inputs, labels=labels)
 ```
 
