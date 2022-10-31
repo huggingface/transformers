@@ -2,29 +2,56 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from typing import Any, Dict, List, Optional, Tuple, Union
+import math
+import sys
+from functools import partial
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn import LayerNorm
 
+# TODO remove:
+from einops import rearrange, repeat
 
-from ...utils import ContextManagers
-
+from ...deepspeed import is_deepspeed_available
+from ...utils import ContextManagers, is_scipy_available, logging
 from .modeling_esm import EsmModel, EsmPreTrainedModel
 from .openfold_data_transforms import make_atom14_masks
 from .openfold_np import residue_constants
 from .openfold_np.protein import Protein as OFProtein
 from .openfold_np.protein import to_pdb
-from .openfold_utils.feats import atom14_to_atom37
+from .openfold_utils.chunk_utils import chunk_layer
+from .openfold_utils.feats import (
+    atom14_to_atom37,
+    frames_and_literature_positions_to_atom14_pos,
+    torsion_angles_to_frames,
+)
 from .openfold_utils.loss import compute_predicted_aligned_error, compute_tm
-from .openfold_triangular_attention import TriangleAttentionEndingNode, TriangleAttentionStartingNode
-from .openfold_triangular_multiplicative_update import TriangleMultiplicationIncoming, TriangleMultiplicationOutgoing
-from .openfold_structure import StructureModule
+from .openfold_utils.rigid_utils import Rigid, Rotation
 
-# TODO remove:
-from einops import rearrange, repeat
+
+logger = logging.get_logger(__name__)
+
+
+def is_fp16_enabled():
+    # Autocast world
+    fp16_enabled = torch.get_autocast_gpu_dtype() == torch.float16
+    fp16_enabled = fp16_enabled and torch.is_autocast_enabled()
+
+    return fp16_enabled
+
+
+def is_deepspeed_initialized():
+    if is_deepspeed_available():
+        return False
+    else:
+        try:
+            # This is not available in all DeepSpeed versions.
+            return deepspeed.utils.is_initialized()
+        except Exception:
+            return False
 
 
 def collate_dense_tensors(samples: List[torch.Tensor], pad_v: float = 0) -> torch.Tensor:
@@ -50,7 +77,770 @@ def collate_dense_tensors(samples: List[torch.Tensor], pad_v: float = 0) -> torc
     return result
 
 
+def flatten_final_dims(t: torch.Tensor, no_dims: int):
+    return t.reshape(t.shape[:-no_dims] + (-1,))
+
+
+def permute_final_dims(tensor: torch.Tensor, inds: List[int]):
+    zero_index = -1 * len(inds)
+    first_inds = list(range(len(tensor.shape[:zero_index])))
+    return tensor.permute(first_inds + [zero_index + i for i in inds])
+
+
+def dict_multimap(fn, dicts):
+    first = dicts[0]
+    new_dict = {}
+    for k, v in first.items():
+        all_v = [d[k] for d in dicts]
+        if type(v) is dict:
+            new_dict[k] = dict_multimap(fn, all_v)
+        else:
+            new_dict[k] = fn(all_v)
+
+    return new_dict
+
+
+def trunc_normal_init_(weights, scale=1.0, fan="fan_in"):
+    shape = weights.shape
+    scale = scale / max(1, shape[1])
+
+    if not is_scipy_available():
+        logger.warning(
+            "This init requires scipy, but scipy was not found, default to an approximation that might not be"
+            " equivalent."
+        )
+        std = math.sqrt(scale)
+        torch.nn.init.normal_(weights, std=std).clamp(min=0.0, max=2.0 * std)
+
+    else:
+        from scipy.stats import truncnorm
+
+        std = math.sqrt(scale) / truncnorm.std(a=-2, b=2, loc=0, scale=1)
+        samples = truncnorm.rvs(a=-2, b=2, loc=0, scale=std, size=weights.numel())
+        samples = np.reshape(samples, shape)
+        weights.copy_(torch.tensor(samples, device=weights.device))
+
+
+def ipa_point_weights_init_(weights):
+    with torch.no_grad():
+        softplus_inverse_1 = 0.541324854612918
+        weights.fill_(softplus_inverse_1)
+
+
+class EsmFoldLinear(nn.Linear):
+    """
+    A Linear layer with built-in nonstandard initializations. Called just like torch.nn.Linear.
+
+    Implements the initializers in 1.11.4, plus some additional ones found in the code.
+    """
+
+    def __init__(
+        self,
+        in_dim: int,
+        out_dim: int,
+        bias: bool = True,
+        init: str = "default",
+        init_fn: Optional[Callable[[torch.Tensor, torch.Tensor], None]] = None,
+    ):
+        """
+        Args:
+            in_dim:
+                The final dimension of inputs to the layer
+            out_dim:
+                The final dimension of layer outputs
+            bias:
+                Whether to learn an additive bias. True by default
+            init:
+                The initializer to use. Choose from:
+
+                "default": LeCun fan-in truncated normal initialization "relu": He initialization w/ truncated normal
+                distribution "glorot": Fan-average Glorot uniform initialization "gating": Weights=0, Bias=1 "normal":
+                Normal initialization with std=1/sqrt(fan_in) "final": Weights=0, Bias=0
+
+                Overridden by init_fn if the latter is not None.
+            init_fn:
+                A custom initializer taking weight and bias as inputs. Overrides init if not None.
+        """
+        super().__init__(in_dim, out_dim, bias=bias)
+
+        if bias:
+            with torch.no_grad():
+                self.bias.fill_(0)
+        self.init = init
+        self.init_fn = init_fn
+
+        if init not in ["default", "relu", "glorot", "gating", "normal", "final"]:
+            raise ValueError("Invalid init string.")
+
+
+class EsmFoldLayerNorm(nn.Module):
+    def __init__(self, c_in, eps=1e-5):
+        super().__init__()
+
+        self.c_in = (c_in,)
+        self.eps = eps
+
+        self.weight = nn.Parameter(torch.ones(c_in))
+        self.bias = nn.Parameter(torch.zeros(c_in))
+
+    def forward(self, x):
+        d = x.dtype
+        if d is torch.bfloat16 and not is_deepspeed_initialized():
+            with torch.cuda.amp.autocast(enabled=False):
+                out = nn.functional.layer_norm(x, self.c_in, self.weight.to(dtype=d), self.bias.to(dtype=d), self.eps)
+        else:
+            out = nn.functional.layer_norm(x, self.c_in, self.weight, self.bias, self.eps)
+
+        return out
+
+
+@torch.jit.ignore
+def softmax_no_cast(t: torch.Tensor, dim: int = -1) -> torch.Tensor:
+    """
+    Softmax, but without automatic casting to fp32 when the input is of type bfloat16
+    """
+    d = t.dtype
+    if d is torch.bfloat16 and not is_deepspeed_initialized():
+        with torch.cuda.amp.autocast(enabled=False):
+            s = torch.nn.functional.softmax(t, dim=dim)
+    else:
+        s = torch.nn.functional.softmax(t, dim=dim)
+
+    return s
+
+
 class EsmFoldAttention(nn.Module):
+    """
+    Standard multi-head attention using AlphaFold's default layer initialization. Allows multiple bias vectors.
+    """
+
+    def __init__(
+        self,
+        c_q: int,
+        c_k: int,
+        c_v: int,
+        c_hidden: int,
+        no_heads: int,
+        gating: bool = True,
+    ):
+        """
+        Args:
+            c_q:
+                Input dimension of query data
+            c_k:
+                Input dimension of key data
+            c_v:
+                Input dimension of value data
+            c_hidden:
+                Per-head hidden dimension
+            no_heads:
+                Number of attention heads
+            gating:
+                Whether the output should be gated using query data
+        """
+        super().__init__()
+
+        self.c_q = c_q
+        self.c_k = c_k
+        self.c_v = c_v
+        self.c_hidden = c_hidden
+        self.no_heads = no_heads
+        self.gating = gating
+
+        # DISCREPANCY: c_hidden is not the per-head channel dimension, as
+        # stated in the supplement, but the overall channel dimension.
+
+        self.linear_q = EsmFoldLinear(self.c_q, self.c_hidden * self.no_heads, bias=False, init="glorot")
+        self.linear_k = EsmFoldLinear(self.c_k, self.c_hidden * self.no_heads, bias=False, init="glorot")
+        self.linear_v = EsmFoldLinear(self.c_v, self.c_hidden * self.no_heads, bias=False, init="glorot")
+        self.linear_o = EsmFoldLinear(self.c_hidden * self.no_heads, self.c_q, init="final")
+
+        self.linear_g = None
+        if self.gating:
+            self.linear_g = EsmFoldLinear(self.c_q, self.c_hidden * self.no_heads, init="gating")
+
+        self.sigmoid = nn.Sigmoid()
+
+    def _prep_qkv(self, q_x: torch.Tensor, kv_x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        # [*, Q/K/V, H * C_hidden]
+        q = self.linear_q(q_x)
+        k = self.linear_k(kv_x)
+        v = self.linear_v(kv_x)
+
+        # [*, Q/K, H, C_hidden]
+        q = q.view(q.shape[:-1] + (self.no_heads, -1))
+        k = k.view(k.shape[:-1] + (self.no_heads, -1))
+        v = v.view(v.shape[:-1] + (self.no_heads, -1))
+
+        # [*, H, Q/K, C_hidden]
+        q = q.transpose(-2, -3)
+        k = k.transpose(-2, -3)
+        v = v.transpose(-2, -3)
+
+        q /= math.sqrt(self.c_hidden)
+
+        return q, k, v
+
+    def _wrap_up(self, o: torch.Tensor, q_x: torch.Tensor) -> torch.Tensor:
+        if self.linear_g is not None:
+            g = self.sigmoid(self.linear_g(q_x))
+
+            # [*, Q, H, C_hidden]
+            g = g.view(g.shape[:-1] + (self.no_heads, -1))
+            o = o * g
+
+        # [*, Q, H * C_hidden]
+        o = flatten_final_dims(o, 2)
+
+        # [*, Q, C_q]
+        o = self.linear_o(o)
+
+        return o
+
+    def forward(
+        self,
+        q_x: torch.Tensor,
+        kv_x: torch.Tensor,
+        biases: Optional[List[torch.Tensor]] = None,
+        use_memory_efficient_kernel: bool = False,
+        use_lma: bool = False,
+        lma_q_chunk_size: int = 1024,
+        lma_kv_chunk_size: int = 4096,
+        use_flash: bool = False,
+        flash_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Args:
+            q_x:
+                [*, Q, C_q] query data
+            kv_x:
+                [*, K, C_k] key data
+            biases:
+                List of biases that broadcast to [*, H, Q, K]
+            use_memory_efficient_kernel:
+                Whether to use a custom memory-efficient attention kernel. This should be the default choice for most.
+                If none of the "use_<...>" flags are True, a stock PyTorch implementation is used instead
+            use_lma:
+                Whether to use low-memory attention (Staats & Rabe 2021). If none of the "use_<...>" flags are True, a
+                stock PyTorch implementation is used instead
+            lma_q_chunk_size:
+                Query chunk size (for LMA)
+            lma_kv_chunk_size:
+                Key/Value chunk size (for LMA)
+        Returns
+            [*, Q, C_q] attention update
+        """
+        if use_lma and (lma_q_chunk_size is None or lma_kv_chunk_size is None):
+            raise ValueError("If use_lma is specified, lma_q_chunk_size and lma_kv_chunk_size must be provided")
+
+        if use_flash and biases is not None:
+            raise ValueError("use_flash is incompatible with the bias option. For masking, use flash_mask instead")
+
+        attn_options = [use_memory_efficient_kernel, use_lma, use_flash]
+        if sum(attn_options) > 1:
+            raise ValueError("Choose at most one alternative attention algorithm")
+
+        if biases is None:
+            biases = []
+
+        # [*, H, Q/K, C_hidden]
+        query, key, value = self._prep_qkv(q_x, kv_x)
+        key = permute_final_dims(key, (1, 0))
+
+        # [*, H, Q, K]
+        output = torch.matmul(query, key)
+        for b in biases:
+            output += b
+        output = softmax_no_cast(output, -1)
+
+        # [*, H, Q, C_hidden]
+        output = torch.matmul(output, value)
+        output = output.transpose(-2, -3)
+        output = self._wrap_up(output, q_x)
+
+        return output
+
+
+class EsmFoldTriangleAttention(nn.Module):
+    def __init__(self, c_in, c_hidden, no_heads, starting=True, inf=1e9):
+        """
+        Args:
+            c_in:
+                Input channel dimension
+            c_hidden:
+                Overall hidden channel dimension (not per-head)
+            no_heads:
+                Number of attention heads
+        """
+        super().__init__()
+
+        self.c_in = c_in
+        self.c_hidden = c_hidden
+        self.no_heads = no_heads
+        self.starting = starting
+        self.inf = inf
+
+        self.layer_norm = LayerNorm(self.c_in)
+
+        self.linear = EsmFoldLinear(c_in, self.no_heads, bias=False, init="normal")
+
+        self.mha = EsmFoldAttention(self.c_in, self.c_in, self.c_in, self.c_hidden, self.no_heads)
+
+    @torch.jit.ignore
+    def _chunk(
+        self,
+        x: torch.Tensor,
+        biases: List[torch.Tensor],
+        chunk_size: int,
+        use_memory_efficient_kernel: bool = False,
+        use_lma: bool = False,
+        inplace_safe: bool = False,
+    ) -> torch.Tensor:
+        "triangle! triangle!"
+        mha_inputs = {
+            "q_x": x,
+            "kv_x": x,
+            "biases": biases,
+        }
+
+        return chunk_layer(
+            partial(self.mha, use_memory_efficient_kernel=use_memory_efficient_kernel, use_lma=use_lma),
+            mha_inputs,
+            chunk_size=chunk_size,
+            no_batch_dims=len(x.shape[:-2]),
+            _out=x if inplace_safe else None,
+        )
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+        chunk_size: Optional[int] = None,
+        use_memory_efficient_kernel: bool = False,
+        use_lma: bool = False,
+        inplace_safe: bool = False,
+    ) -> torch.Tensor:
+        """
+        Args:
+            x:
+                [*, I, J, C_in] input tensor (e.g. the pair representation)
+        Returns:
+            [*, I, J, C_in] output tensor
+        """
+        if mask is None:
+            # [*, I, J]
+            mask = x.new_ones(
+                x.shape[:-1],
+            )
+
+        if not self.starting:
+            x = x.transpose(-2, -3)
+            mask = mask.transpose(-1, -2)
+
+        # [*, I, J, C_in]
+        x = self.layer_norm(x)
+
+        # [*, I, 1, 1, J]
+        mask_bias = (self.inf * (mask - 1))[..., :, None, None, :]
+
+        # [*, H, I, J]
+        triangle_bias = permute_final_dims(self.linear(x), (2, 0, 1))
+
+        # [*, 1, H, I, J]
+        triangle_bias = triangle_bias.unsqueeze(-4)
+
+        biases = [mask_bias, triangle_bias]
+
+        if chunk_size is not None:
+            x = self._chunk(
+                x,
+                biases,
+                chunk_size,
+                use_memory_efficient_kernel=use_memory_efficient_kernel,
+                use_lma=use_lma,
+                inplace_safe=inplace_safe,
+            )
+        else:
+            x = self.mha(
+                q_x=x, kv_x=x, biases=biases, use_memory_efficient_kernel=use_memory_efficient_kernel, use_lma=use_lma
+            )
+
+        if not self.starting:
+            x = x.transpose(-2, -3)
+
+        return x
+
+
+class EsmFoldTriangleMultiplicativeUpdate(nn.Module):
+    """
+    Implements Algorithms 11 and 12.
+    """
+
+    def __init__(self, c_z, c_hidden, _outgoing=True):
+        """
+        Args:
+            c_z:
+                Input channel dimension
+            c:
+                Hidden channel dimension
+        """
+        super().__init__()
+        self.c_z = c_z
+        self.c_hidden = c_hidden
+        self._outgoing = _outgoing
+
+        self.linear_a_p = EsmFoldLinear(self.c_z, self.c_hidden)
+        self.linear_a_g = EsmFoldLinear(self.c_z, self.c_hidden, init="gating")
+        self.linear_b_p = EsmFoldLinear(self.c_z, self.c_hidden)
+        self.linear_b_g = EsmFoldLinear(self.c_z, self.c_hidden, init="gating")
+        self.linear_g = EsmFoldLinear(self.c_z, self.c_z, init="gating")
+        self.linear_z = EsmFoldLinear(self.c_hidden, self.c_z, init="final")
+
+        self.layer_norm_in = LayerNorm(self.c_z)
+        self.layer_norm_out = LayerNorm(self.c_hidden)
+
+        self.sigmoid = nn.Sigmoid()
+
+    def _combine_projections(
+        self, a: torch.Tensor, b: torch.Tensor, _inplace_chunk_size: Optional[int] = None
+    ) -> torch.Tensor:
+        if self._outgoing:
+            a = permute_final_dims(a, (2, 0, 1))
+            b = permute_final_dims(b, (2, 1, 0))
+        else:
+            a = permute_final_dims(a, (2, 1, 0))
+            b = permute_final_dims(b, (2, 0, 1))
+
+        if _inplace_chunk_size is not None:
+            # To be replaced by torch vmap
+            for i in range(0, a.shape[-3], _inplace_chunk_size):
+                a_chunk = a[..., i : i + _inplace_chunk_size, :, :]
+                b_chunk = b[..., i : i + _inplace_chunk_size, :, :]
+                a[..., i : i + _inplace_chunk_size, :, :] = torch.matmul(
+                    a_chunk,
+                    b_chunk,
+                )
+
+            p = a
+        else:
+            p = torch.matmul(a, b)
+
+        return permute_final_dims(p, (1, 2, 0))
+
+    def _inference_forward(
+        self,
+        z: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+        inplace_chunk_size: Optional[int] = None,
+        with_add: bool = True,
+    ):
+        """
+        Args:
+            z:
+                A [*, N, N, C_z] pair representation
+            mask:
+                A [*, N, N] pair mask
+            inplace_chunk_size:
+                Size of chunks used in the main computation. Increase to trade memory for speed.
+            with_add:
+                If True, z is overwritten with (z + update). Otherwise, it is overwritten with (update).
+        Returns:
+            A reference to the overwritten z
+
+        More memory-efficient, inference-only version of the forward function. Uses in-place operations, fusion of the
+        addition that happens after this module in the Evoformer, a smidge of recomputation, and a cache of overwritten
+        values to lower peak memory consumption of this module from 5x the size of the input tensor z to 2.5x its size.
+        Useful for inference on extremely long sequences.
+
+        It works as follows. We will make reference to variables used in the default forward implementation below.
+        Naively, triangle multiplication attention requires the manifestation of 5 tensors the size of z: 1) z, the
+        "square" input tensor, 2) a, the first projection of z, 3) b, the second projection of b, 4) g, a z-sized mask,
+        and 5) a z-sized tensor for intermediate computations. For large N, this is prohibitively expensive; for
+        N=4000, for example, z is more than 8GB alone. To avoid this problem, we compute b, g, and all intermediate
+        tensors in small chunks, noting that the chunks required to compute a chunk of the output depend only on the
+        tensor a and corresponding vertical and horizontal chunks of z. This suggests an algorithm that loops over
+        pairs of chunks of z: hereafter "columns" and "rows" of z, even though each "column" and "row" in fact contains
+        inplace_chunk_size contiguous true columns and rows of z. Writing output chunks to a new tensor would bring
+        total memory consumption down to 3x the size of z. However, more memory can be saved by writing output chunks
+        directly to z in-place. WLOG, we choose to write output chunks vertically, overwriting the ith "column" of z at
+        the end of the ith iteration of the main loop. Despite this overwriting, the ith column is always one column
+        ahead of previously overwritten columns and can be recovered directly from z. After the first iteration,
+        however, the ith row of z is always at least partially overwritten. For this reason, we introduce the z-cache,
+        a tensor one-half the size of z. The z-cache initially contains the left half (2nd and 3rd quadrants) of z. For
+        0 < i < N/2, the missing left part of the ith row of z is recovered from this cache at the beginning of the ith
+        iteration. Once i exceeds n/2, the cache is "reoriented" to encompass the 3rd and 4th quadrants of z instead.
+        Though the 3rd quadrant of the original z is entirely overwritten at this point, it can be recovered from the
+        z-cache itself. Thereafter, the ith row of z can be recovered in its entirety from the reoriented z-cache.
+        After the final iteration, z has been completely overwritten and contains the triangular multiplicative update.
+        If with_add is True, it instead contains the sum of z and the triangular multiplicative update. In either case,
+        peak memory consumption is just 2.5x the size of z, disregarding memory used for chunks and other small
+        variables.
+        """
+        if mask is None:
+            mask = z.new_ones(z.shape[:-1])
+
+        mask = mask.unsqueeze(-1)
+
+        def compute_projection_helper(pair, mask, a=True):
+            if a:
+                linear_g = self.linear_a_g
+                linear_p = self.linear_a_p
+            else:
+                linear_g = self.linear_b_g
+                linear_p = self.linear_b_p
+
+            pair = self.layer_norm_in(pair)
+            p = linear_g(pair)
+            p.sigmoid_()
+            p *= linear_p(pair)
+            p *= mask
+            p = permute_final_dims(p, (2, 0, 1))
+            return p
+
+        def compute_projection(pair, mask, a=True, chunked=True):
+            need_transpose = self._outgoing ^ a
+            if not chunked:
+                p = compute_projection_helper(pair, mask, a)
+                if need_transpose:
+                    p = p.transpose(-1, -2)
+            else:
+                # This computation is chunked so as not to exceed our 2.5x
+                # budget with a large intermediate tensor
+                linear_g = self.linear_a_g if a else self.linear_b_g
+                c = linear_g.bias.shape[-1]
+                out_shape = pair.shape[:-3] + (c,) + pair.shape[-3:-1]
+                p = pair.new_zeros(out_shape)
+                for i in range(0, pair.shape[-3], inplace_chunk_size):
+                    pair_chunk = pair[..., i : i + inplace_chunk_size, :, :]
+                    mask_chunk = mask[..., i : i + inplace_chunk_size, :, :]
+                    pair_chunk = compute_projection_helper(
+                        pair[..., i : i + inplace_chunk_size, :, :],
+                        mask[..., i : i + inplace_chunk_size, :, :],
+                        a,
+                    )
+                    if need_transpose:
+                        pair_chunk = pair_chunk.transpose(-1, -2)
+                        p[..., i : i + inplace_chunk_size] = pair_chunk
+                    else:
+                        p[..., i : i + inplace_chunk_size, :] = pair_chunk
+
+                    del pair_chunk
+
+            return p
+
+        # We start by fully manifesting a. In addition to the input, this
+        # brings total memory consumption to 2x z (disregarding size of chunks)
+        # [*, N, N, c]
+        a = compute_projection(z, mask, True, chunked=True)
+
+        if inplace_chunk_size is not None:
+            n = a.shape[-1]
+            half_n = n // 2 + n % 2
+            row_dim = -3
+            col_dim = -2
+            b_chunk_dim = row_dim if self._outgoing else col_dim
+
+            def empty_slicer(t):
+                return [slice(None) for _ in t.shape]
+
+            def slice_tensor(t, start, end, dim):
+                # Slices start:end from the dim dimension of t
+                s = empty_slicer(t)
+                s[dim] = slice(start, end)
+                return t[s]
+
+            def flip_z_cache_(z_cache, z):
+                # "Reorient" the z_cache (see below), filling it with quadrants
+                # 3---recovered from the z_cache---and 4---recovered from z---
+                # of the input tensor z.
+                quadrant_3 = slice_tensor(z_cache, half_n, None, row_dim)
+                z_cache = z_cache.transpose(row_dim, col_dim)
+
+                # If n is odd, we need to shrink the z_cache by one row
+                z_cache = z_cache[..., : (n // 2), :, :]
+
+                # Move the 3rd quadrant of z into the
+                first_half_slicer = empty_slicer(z_cache)
+                first_half_slicer[col_dim] = slice(0, half_n)
+                z_cache[first_half_slicer] = quadrant_3
+
+                # Get the fourth quadrant of z
+                quadrant_4 = slice_tensor(z, half_n, None, row_dim)
+                quadrant_4 = slice_tensor(quadrant_4, half_n, None, col_dim)
+
+                # Insert said quadrant into the rotated z-cache
+                quadrant_3_slicer = empty_slicer(z_cache)
+                quadrant_3_slicer[col_dim] = slice(half_n, None)
+
+                z_cache[quadrant_3_slicer] = quadrant_4
+
+                return z_cache
+
+            # Initialize the z cache to the left half of z.
+            z_cache_shape = list(z.shape)
+            z_cache_shape[col_dim] = half_n
+            z_cache = z.new_zeros(z_cache_shape)
+            z_cache_slicer = empty_slicer(z_cache)
+            z_cache_slicer[col_dim] = slice(0, half_n)
+            z_cache.copy_(z[z_cache_slicer])
+            z_cache_rotated = False
+
+            # We need to reorient the z-cache at the halfway point, and we
+            # don't want a single chunk to straddle that point. We contract one
+            # of the chunks in the middle to address that problem.
+            i_range = list(range(0, half_n, inplace_chunk_size))
+            initial_offsets = [i_2 - i_1 for i_1, i_2 in zip(i_range, i_range[1:] + [half_n])]
+            after_half = list(range(half_n, n, inplace_chunk_size))
+            after_half_offsets = [inplace_chunk_size for _ in after_half]
+            combined_range_with_offsets = zip(i_range + after_half, initial_offsets + after_half_offsets)
+            for i, offset in combined_range_with_offsets:
+                if not z_cache_rotated and i >= half_n:
+                    z_cache = flip_z_cache_(z_cache, z)
+                    z_cache_rotated = True
+
+                z_chunk_b = slice_tensor(z, i, i + offset, b_chunk_dim)
+                mask_chunk = slice_tensor(mask, i, i + offset, b_chunk_dim)
+
+                z_chunk_b = z_chunk_b.clone()
+                if b_chunk_dim == col_dim:
+                    z_chunk_b = slice_tensor(z, i, i + offset, col_dim)
+                else:  # b_chunk_dim == row_dim
+                    # In this case, the b-dimension (b_chunk_dim) is partially
+                    # overwritten at the end of each iteration. We need to
+                    # restore the missing component from the z-cache.
+                    if not z_cache_rotated:
+                        z_chunk_slicer = empty_slicer(z_chunk_b)
+                        z_chunk_slicer[col_dim] = slice(0, half_n)
+                        z_chunk_b[z_chunk_slicer] = slice_tensor(z_cache, i, i + offset, row_dim)
+                    else:
+                        z_cache_offset = i - half_n
+                        z_chunk_b = slice_tensor(z_cache, z_cache_offset, z_cache_offset + offset, row_dim)
+
+                b_chunk = compute_projection(z_chunk_b, mask_chunk, a=False, chunked=False)
+                del z_chunk_b
+
+                x_chunk = torch.matmul(a, b_chunk)
+                x_chunk = permute_final_dims(x_chunk, (1, 2, 0))
+                x_chunk = self.layer_norm_out(x_chunk)
+                x_chunk = self.linear_z(x_chunk)
+
+                # The g dimension (col_dim) is parallel to and ahead of the
+                # overwrites in z. We can extract the g chunk normally.
+                z_chunk_g = slice_tensor(z, i, i + offset, col_dim)
+                g_chunk = self.linear_g(self.layer_norm_in(z_chunk_g))
+                g_chunk.sigmoid_()
+                del z_chunk_g
+
+                x_chunk *= g_chunk
+
+                # Write the columns into z in-place
+                z_slicer = empty_slicer(z)
+                z_slicer[col_dim] = slice(i, i + offset)
+                if with_add:
+                    z[z_slicer] += x_chunk
+                else:
+                    z[z_slicer] = x_chunk
+        else:
+            b = compute_projection(z, mask, False, False)
+            x = torch.matmul(a, b)
+            x = self.layer_norm_out(x)
+            x = self.linear_z(x)
+            g = self.linear_g(z)
+            g.sigmoid_()
+            x *= g
+            if with_add:
+                z += x
+            else:
+                z = x
+
+        return z
+
+    def forward(
+        self,
+        z: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+        inplace_safe: bool = False,
+        _add_with_inplace: bool = False,
+        _inplace_chunk_size: Optional[int] = 256,
+    ) -> torch.Tensor:
+        """
+        Args:
+            x:
+                [*, N_res, N_res, C_z] input tensor
+            mask:
+                [*, N_res, N_res] input mask
+        Returns:
+            [*, N_res, N_res, C_z] output tensor
+        """
+        if inplace_safe:
+            x = self._inference_forward(
+                z,
+                mask,
+                inplace_chunk_size=_inplace_chunk_size,
+                with_add=_add_with_inplace,
+            )
+            return x
+
+        if mask is None:
+            mask = z.new_ones(z.shape[:-1])
+
+        mask = mask.unsqueeze(-1)
+
+        z = self.layer_norm_in(z)
+        a = mask
+        a = a * self.sigmoid(self.linear_a_g(z))
+        a = a * self.linear_a_p(z)
+        b = mask
+        b = b * self.sigmoid(self.linear_b_g(z))
+        b = b * self.linear_b_p(z)
+
+        if is_fp16_enabled():
+            with torch.cuda.amp.autocast(enabled=False):
+                x = self._combine_projections(a.float(), b.float())
+        else:
+            x = self._combine_projections(a, b)
+
+        del a, b
+        x = self.layer_norm_out(x)
+        x = self.linear_z(x)
+        g = self.sigmoid(self.linear_g(z))
+        x = x * g
+
+        return x
+
+
+class EsmFoldPreTrainedModel(EsmPreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    # Subclass `EsMPreTrainedModel` to deal with special init
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, EsmFoldLinear):
+            with torch.no_grad():
+                if module.init_fn is not None:
+                    module.init_fn(module.weight, module.bias)
+                elif module.init == "default":
+                    trunc_normal_init_(module.weight, scale=1.0)
+                elif module.init == "relu":
+                    trunc_normal_init_(module.weight, scale=2.0)
+                elif module.init == "glorot":
+                    nn.init.xavier_uniform_(module.weight, gain=1)
+                elif module.init == "gating":
+                    module.weight.fill_(0.0)
+                    if module.bias:
+                        module.bias.fill_(1.0)
+                elif module.init == "normal":
+                    torch.nn.init.kaiming_normal_(module.weight, nonlinearity="linear")
+                elif module.init == "final":
+                    module.weight.fill_(0.0)
+        else:
+            super()._init_weights(module)
+
+
+class EsmFoldSelfAttention(nn.Module):
     def __init__(self, embed_dim, num_heads, head_width, gated=False):
         super().__init__()
         assert embed_dim == num_heads * head_width
@@ -253,27 +1043,18 @@ class EsmFoldTriangularSelfAttentionBlock(nn.Module):
         self.sequence_to_pair = EsmFoldSequenceToPair(sequence_state_dim, pairwise_state_dim // 2, pairwise_state_dim)
         self.pair_to_sequence = EsmFoldPairToSequence(pairwise_state_dim, sequence_num_heads)
 
-        self.seq_attention = EsmFoldAttention(sequence_state_dim, sequence_num_heads, sequence_head_width, gated=True)
-        self.tri_mul_out = TriangleMultiplicationOutgoing(
-            pairwise_state_dim,
-            pairwise_state_dim,
+        self.seq_attention = EsmFoldSelfAttention(
+            sequence_state_dim, sequence_num_heads, sequence_head_width, gated=True
         )
-        self.tri_mul_in = TriangleMultiplicationIncoming(
-            pairwise_state_dim,
-            pairwise_state_dim,
+        self.tri_mul_out = EsmFoldTriangleMultiplicativeUpdate(pairwise_state_dim, pairwise_state_dim, _outgoing=True)
+        self.tri_mul_in = EsmFoldTriangleMultiplicativeUpdate(pairwise_state_dim, pairwise_state_dim, _outgoing=False)
+
+        self.tri_att_start = EsmFoldTriangleAttention(
+            pairwise_state_dim, pairwise_head_width, pairwise_num_heads, inf=1e9, starting=True
         )
-        self.tri_att_start = TriangleAttentionStartingNode(
-            pairwise_state_dim,
-            pairwise_head_width,
-            pairwise_num_heads,
-            inf=1e9,
-        )  # type: ignore
-        self.tri_att_end = TriangleAttentionEndingNode(
-            pairwise_state_dim,
-            pairwise_head_width,
-            pairwise_num_heads,
-            inf=1e9,
-        )  # type: ignore
+        self.tri_att_end = EsmFoldTriangleAttention(
+            pairwise_state_dim, pairwise_head_width, pairwise_num_heads, inf=1e9, starting=False
+        )
 
         self.mlp_seq = EsmFoldResidueMLP(sequence_state_dim, 4 * sequence_state_dim, dropout=dropout)
         self.mlp_pair = EsmFoldResidueMLP(pairwise_state_dim, 4 * pairwise_state_dim, dropout=dropout)
@@ -418,7 +1199,7 @@ def get_axial_mask(mask):
     return m
 
 
-class RelativePosition(nn.Module):
+class EsmFoldRelativePosition(nn.Module):
     def __init__(self, bins, pairwise_state_dim):
         super().__init__()
         self.bins = bins
@@ -454,6 +1235,720 @@ class RelativePosition(nn.Module):
         return output
 
 
+class EsmFoldAngleResnetBlock(nn.Module):
+    def __init__(self, c_hidden):
+        """
+        Args:
+            c_hidden:
+                Hidden channel dimension
+        """
+        super().__init__()
+
+        self.c_hidden = c_hidden
+
+        self.linear_1 = EsmFoldLinear(self.c_hidden, self.c_hidden, init="relu")
+        self.linear_2 = EsmFoldLinear(self.c_hidden, self.c_hidden, init="final")
+
+        self.relu = nn.ReLU()
+
+    def forward(self, a: torch.Tensor) -> torch.Tensor:
+        s_initial = a
+
+        a = self.relu(a)
+        a = self.linear_1(a)
+        a = self.relu(a)
+        a = self.linear_2(a)
+
+        return a + s_initial
+
+
+class EsmFoldAngleResnet(nn.Module):
+    """
+    Implements Algorithm 20, lines 11-14
+    """
+
+    def __init__(self, c_in, c_hidden, no_blocks, no_angles, epsilon):
+        """
+        Args:
+            c_in:
+                Input channel dimension
+            c_hidden:
+                Hidden channel dimension
+            no_blocks:
+                Number of resnet blocks
+            no_angles:
+                Number of torsion angles to generate
+            epsilon:
+                Small constant for normalization
+        """
+        super().__init__()
+
+        self.c_in = c_in
+        self.c_hidden = c_hidden
+        self.no_blocks = no_blocks
+        self.no_angles = no_angles
+        self.eps = epsilon
+
+        self.linear_in = EsmFoldLinear(self.c_in, self.c_hidden)
+        self.linear_initial = EsmFoldLinear(self.c_in, self.c_hidden)
+
+        self.layers = nn.ModuleList()
+        for _ in range(self.no_blocks):
+            layer = EsmFoldAngleResnetBlock(c_hidden=self.c_hidden)
+            self.layers.append(layer)
+
+        self.linear_out = EsmFoldLinear(self.c_hidden, self.no_angles * 2)
+
+        self.relu = nn.ReLU()
+
+    def forward(self, s: torch.Tensor, s_initial: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Args:
+            s:
+                [*, C_hidden] single embedding
+            s_initial:
+                [*, C_hidden] single embedding as of the start of the StructureModule
+        Returns:
+            [*, no_angles, 2] predicted angles
+        """
+        # NOTE: The ReLU's applied to the inputs are absent from the supplement
+        # pseudocode but present in the source. For maximal compatibility with
+        # the pretrained weights, I'm going with the source.
+
+        # [*, C_hidden]
+        s_initial = self.relu(s_initial)
+        s_initial = self.linear_initial(s_initial)
+        s = self.relu(s)
+        s = self.linear_in(s)
+        s = s + s_initial
+
+        for l in self.layers:
+            s = l(s)
+
+        s = self.relu(s)
+
+        # [*, no_angles * 2]
+        s = self.linear_out(s)
+
+        # [*, no_angles, 2]
+        s = s.view(s.shape[:-1] + (-1, 2))
+
+        unnormalized_s = s
+        norm_denom = torch.sqrt(
+            torch.clamp(
+                torch.sum(s**2, dim=-1, keepdim=True),
+                min=self.eps,
+            )
+        )
+        s = s / norm_denom
+
+        return unnormalized_s, s
+
+
+class EsmFoldInvariantPointAttention(nn.Module):
+    """
+    Implements Algorithm 22.
+    """
+
+    def __init__(
+        self,
+        c_s: int,
+        c_z: int,
+        c_hidden: int,
+        no_heads: int,
+        no_qk_points: int,
+        no_v_points: int,
+        inf: float = 1e5,
+        eps: float = 1e-8,
+    ):
+        """
+        Args:
+            c_s:
+                Single representation channel dimension
+            c_z:
+                Pair representation channel dimension
+            c_hidden:
+                Hidden channel dimension
+            no_heads:
+                Number of attention heads
+            no_qk_points:
+                Number of query/key points to generate
+            no_v_points:
+                Number of value points to generate
+        """
+        super().__init__()
+
+        self.c_s = c_s
+        self.c_z = c_z
+        self.c_hidden = c_hidden
+        self.no_heads = no_heads
+        self.no_qk_points = no_qk_points
+        self.no_v_points = no_v_points
+        self.inf = inf
+        self.eps = eps
+
+        # These linear layers differ from their specifications in the
+        # supplement. There, they lack bias and use Glorot initialization.
+        # Here as in the official source, they have bias and use the default
+        # Lecun initialization.
+        hc = self.c_hidden * self.no_heads
+        self.linear_q = EsmFoldLinear(self.c_s, hc)
+        self.linear_kv = EsmFoldLinear(self.c_s, 2 * hc)
+
+        hpq = self.no_heads * self.no_qk_points * 3
+        self.linear_q_points = EsmFoldLinear(self.c_s, hpq)
+
+        hpkv = self.no_heads * (self.no_qk_points + self.no_v_points) * 3
+        self.linear_kv_points = EsmFoldLinear(self.c_s, hpkv)
+
+        hpv = self.no_heads * self.no_v_points * 3
+
+        self.linear_b = EsmFoldLinear(self.c_z, self.no_heads)
+
+        self.head_weights = nn.Parameter(torch.zeros((no_heads)))
+        ipa_point_weights_init_(self.head_weights)
+
+        concat_out_dim = self.no_heads * (self.c_z + self.c_hidden + self.no_v_points * 4)
+        self.linear_out = EsmFoldLinear(concat_out_dim, self.c_s, init="final")
+
+        self.softmax = nn.Softmax(dim=-1)
+        self.softplus = nn.Softplus()
+
+    def forward(
+        self,
+        s: torch.Tensor,
+        z: Optional[torch.Tensor],
+        r: Rigid,
+        mask: torch.Tensor,
+        _offload_inference: bool = False,
+        _z_reference_list: Optional[Sequence[torch.Tensor]] = None,
+    ) -> torch.Tensor:
+        """
+        Args:
+            s:
+                [*, N_res, C_s] single representation
+            z:
+                [*, N_res, N_res, C_z] pair representation
+            r:
+                [*, N_res] transformation object
+            mask:
+                [*, N_res] mask
+        Returns:
+            [*, N_res, C_s] single representation update
+        """
+        z = [z]
+
+        #######################################
+        # Generate scalar and point activations
+        #######################################
+        # [*, N_res, H * C_hidden]
+        q = self.linear_q(s)
+        kv = self.linear_kv(s)
+
+        # [*, N_res, H, C_hidden]
+        q = q.view(q.shape[:-1] + (self.no_heads, -1))
+
+        # [*, N_res, H, 2 * C_hidden]
+        kv = kv.view(kv.shape[:-1] + (self.no_heads, -1))
+
+        # [*, N_res, H, C_hidden]
+        k, v = torch.split(kv, self.c_hidden, dim=-1)
+
+        # [*, N_res, H * P_q * 3]
+        q_pts = self.linear_q_points(s)
+
+        # This is kind of clunky, but it's how the original does it
+        # [*, N_res, H * P_q, 3]
+        q_pts = torch.split(q_pts, q_pts.shape[-1] // 3, dim=-1)
+        q_pts = torch.stack(q_pts, dim=-1)
+        q_pts = r[..., None].apply(q_pts)
+
+        # [*, N_res, H, P_q, 3]
+        q_pts = q_pts.view(q_pts.shape[:-2] + (self.no_heads, self.no_qk_points, 3))
+
+        # [*, N_res, H * (P_q + P_v) * 3]
+        kv_pts = self.linear_kv_points(s)
+
+        # [*, N_res, H * (P_q + P_v), 3]
+        kv_pts = torch.split(kv_pts, kv_pts.shape[-1] // 3, dim=-1)
+        kv_pts = torch.stack(kv_pts, dim=-1)
+        kv_pts = r[..., None].apply(kv_pts)
+
+        # [*, N_res, H, (P_q + P_v), 3]
+        kv_pts = kv_pts.view(kv_pts.shape[:-2] + (self.no_heads, -1, 3))
+
+        # [*, N_res, H, P_q/P_v, 3]
+        k_pts, v_pts = torch.split(kv_pts, [self.no_qk_points, self.no_v_points], dim=-2)
+
+        ##########################
+        # Compute attention scores
+        ##########################
+        # [*, N_res, N_res, H]
+        b = self.linear_b(z[0])
+
+        if _offload_inference:
+            assert sys.getrefcount(z[0]) == 2
+            z[0] = z[0].cpu()
+
+        # [*, H, N_res, N_res]
+        if is_fp16_enabled():
+            with torch.cuda.amp.autocast(enabled=False):
+                a = torch.matmul(
+                    permute_final_dims(q.float(), (1, 0, 2)),  # [*, H, N_res, C_hidden]
+                    permute_final_dims(k.float(), (1, 2, 0)),  # [*, H, C_hidden, N_res]
+                )
+        else:
+            a = torch.matmul(
+                permute_final_dims(q, (1, 0, 2)),  # [*, H, N_res, C_hidden]
+                permute_final_dims(k, (1, 2, 0)),  # [*, H, C_hidden, N_res]
+            )
+
+        a *= math.sqrt(1.0 / (3 * self.c_hidden))
+        a += math.sqrt(1.0 / 3) * permute_final_dims(b, (2, 0, 1))
+
+        # [*, N_res, N_res, H, P_q, 3]
+        pt_att = q_pts.unsqueeze(-4) - k_pts.unsqueeze(-5)
+        pt_att = pt_att**2
+
+        # [*, N_res, N_res, H, P_q]
+        pt_att = sum(torch.unbind(pt_att, dim=-1))
+        head_weights = self.softplus(self.head_weights).view(*((1,) * len(pt_att.shape[:-2]) + (-1, 1)))
+        head_weights = head_weights * math.sqrt(1.0 / (3 * (self.no_qk_points * 9.0 / 2)))
+        pt_att = pt_att * head_weights
+
+        # [*, N_res, N_res, H]
+        pt_att = torch.sum(pt_att, dim=-1) * (-0.5)
+        # [*, N_res, N_res]
+        square_mask = mask.unsqueeze(-1) * mask.unsqueeze(-2)
+        square_mask = self.inf * (square_mask - 1)
+
+        # [*, H, N_res, N_res]
+        pt_att = permute_final_dims(pt_att, (2, 0, 1))
+
+        a = a + pt_att
+        a = a + square_mask.unsqueeze(-3)
+        a = self.softmax(a)
+
+        ################
+        # Compute output
+        ################
+        # [*, N_res, H, C_hidden]
+        o = torch.matmul(a, v.transpose(-2, -3).to(dtype=a.dtype)).transpose(-2, -3)
+
+        # [*, N_res, H * C_hidden]
+        o = flatten_final_dims(o, 2)
+
+        # [*, H, 3, N_res, P_v]
+        o_pt = torch.sum(
+            (a[..., None, :, :, None] * permute_final_dims(v_pts, (1, 3, 0, 2))[..., None, :, :]),
+            dim=-2,
+        )
+
+        # [*, N_res, H, P_v, 3]
+        o_pt = permute_final_dims(o_pt, (2, 0, 3, 1))
+        o_pt = r[..., None, None].invert_apply(o_pt)
+
+        # [*, N_res, H * P_v]
+        o_pt_norm = flatten_final_dims(torch.sqrt(torch.sum(o_pt**2, dim=-1) + self.eps), 2)
+
+        # [*, N_res, H * P_v, 3]
+        o_pt = o_pt.reshape(*o_pt.shape[:-3], -1, 3)
+
+        if _offload_inference:
+            z[0] = z[0].to(o_pt.device)
+
+        # [*, N_res, H, C_z]
+        o_pair = torch.matmul(a.transpose(-2, -3), z[0].to(dtype=a.dtype))
+
+        # [*, N_res, H * C_z]
+        o_pair = flatten_final_dims(o_pair, 2)
+
+        # [*, N_res, C_s]
+        s = self.linear_out(
+            torch.cat((o, *torch.unbind(o_pt, dim=-1), o_pt_norm, o_pair), dim=-1).to(dtype=z[0].dtype)
+        )
+
+        return s
+
+
+class EsmFoldBackboneUpdate(nn.Module):
+    """
+    Implements part of Algorithm 23.
+    """
+
+    def __init__(self, c_s):
+        """
+        Args:
+            c_s:
+                Single representation channel dimension
+        """
+        super().__init__()
+
+        self.c_s = c_s
+
+        self.linear = EsmFoldLinear(self.c_s, 6, init="final")
+
+    def forward(self, s: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Args:
+            [*, N_res, C_s] single representation
+        Returns:
+            [*, N_res, 6] update vector
+        """
+        # [*, 6]
+        update = self.linear(s)
+
+        return update
+
+
+class EsmFoldStructureModuleTransitionLayer(nn.Module):
+    def __init__(self, c):
+        super().__init__()
+
+        self.c = c
+
+        self.linear_1 = EsmFoldLinear(self.c, self.c, init="relu")
+        self.linear_2 = EsmFoldLinear(self.c, self.c, init="relu")
+        self.linear_3 = EsmFoldLinear(self.c, self.c, init="final")
+
+        self.relu = nn.ReLU()
+
+    def forward(self, s):
+        s_initial = s
+        s = self.linear_1(s)
+        s = self.relu(s)
+        s = self.linear_2(s)
+        s = self.relu(s)
+        s = self.linear_3(s)
+
+        s = s + s_initial
+
+        return s
+
+
+class EsmFoldStructureModuleTransition(nn.Module):
+    def __init__(self, c, num_layers, dropout_rate):
+        super().__init__()
+
+        self.c = c
+        self.num_layers = num_layers
+        self.dropout_rate = dropout_rate
+
+        self.layers = nn.ModuleList()
+        for _ in range(self.num_layers):
+            l = EsmFoldStructureModuleTransitionLayer(self.c)
+            self.layers.append(l)
+
+        self.dropout = nn.Dropout(self.dropout_rate)
+        self.layer_norm = LayerNorm(self.c)
+
+    def forward(self, s):
+        for l in self.layers:
+            s = l(s)
+
+        s = self.dropout(s)
+        s = self.layer_norm(s)
+
+        return s
+
+
+class EsmFoldStructureModule(nn.Module):
+    def __init__(
+        self,
+        c_s,
+        c_z,
+        c_ipa,
+        c_resnet,
+        no_heads_ipa,
+        no_qk_points,
+        no_v_points,
+        dropout_rate,
+        no_blocks,
+        no_transition_layers,
+        no_resnet_blocks,
+        no_angles,
+        trans_scale_factor,
+        epsilon,
+        inf,
+        **kwargs,
+    ):
+        """
+        Args:
+            c_s:
+                Single representation channel dimension
+            c_z:
+                Pair representation channel dimension
+            c_ipa:
+                IPA hidden channel dimension
+            c_resnet:
+                Angle resnet (Alg. 23 lines 11-14) hidden channel dimension
+            no_heads_ipa:
+                Number of IPA heads
+            no_qk_points:
+                Number of query/key points to generate during IPA
+            no_v_points:
+                Number of value points to generate during IPA
+            dropout_rate:
+                Dropout rate used throughout the layer
+            no_blocks:
+                Number of structure module blocks
+            no_transition_layers:
+                Number of layers in the single representation transition (Alg. 23 lines 8-9)
+            no_resnet_blocks:
+                Number of blocks in the angle resnet
+            no_angles:
+                Number of angles to generate in the angle resnet
+            trans_scale_factor:
+                Scale of single representation transition hidden dimension
+            epsilon:
+                Small number used in angle resnet normalization
+            inf:
+                Large number used for attention masking
+        """
+        super().__init__()
+
+        self.c_s = c_s
+        self.c_z = c_z
+        self.c_ipa = c_ipa
+        self.c_resnet = c_resnet
+        self.no_heads_ipa = no_heads_ipa
+        self.no_qk_points = no_qk_points
+        self.no_v_points = no_v_points
+        self.dropout_rate = dropout_rate
+        self.no_blocks = no_blocks
+        self.no_transition_layers = no_transition_layers
+        self.no_resnet_blocks = no_resnet_blocks
+        self.no_angles = no_angles
+        self.trans_scale_factor = trans_scale_factor
+        self.epsilon = epsilon
+        self.inf = inf
+
+        # Buffers to be lazily initialized later
+        # self.default_frames
+        # self.group_idx
+        # self.atom_mask
+        # self.lit_positions
+
+        self.layer_norm_s = LayerNorm(self.c_s)
+        self.layer_norm_z = LayerNorm(self.c_z)
+
+        self.linear_in = EsmFoldLinear(self.c_s, self.c_s)
+
+        self.ipa = EsmFoldInvariantPointAttention(
+            self.c_s,
+            self.c_z,
+            self.c_ipa,
+            self.no_heads_ipa,
+            self.no_qk_points,
+            self.no_v_points,
+            inf=self.inf,
+            eps=self.epsilon,
+        )
+
+        self.ipa_dropout = nn.Dropout(self.dropout_rate)
+        self.layer_norm_ipa = LayerNorm(self.c_s)
+
+        self.transition = EsmFoldStructureModuleTransition(
+            self.c_s,
+            self.no_transition_layers,
+            self.dropout_rate,
+        )
+
+        self.bb_update = EsmFoldBackboneUpdate(self.c_s)
+
+        self.angle_resnet = EsmFoldAngleResnet(
+            self.c_s,
+            self.c_resnet,
+            self.no_resnet_blocks,
+            self.no_angles,
+            self.epsilon,
+        )
+
+    def forward(
+        self,
+        evoformer_output_dict,
+        aatype,
+        mask=None,
+        inplace_safe=False,
+        _offload_inference=False,
+    ):
+        """
+        Args:
+            evoformer_output_dict:
+                Dictionary containing:
+                    "single":
+                        [*, N_res, C_s] single representation
+                    "pair":
+                        [*, N_res, N_res, C_z] pair representation
+            aatype:
+                [*, N_res] amino acid indices
+            mask:
+                Optional [*, N_res] sequence mask
+        Returns:
+            A dictionary of outputs
+        """
+        s = evoformer_output_dict["single"]
+
+        if mask is None:
+            # [*, N]
+            mask = s.new_ones(s.shape[:-1])
+
+        # [*, N, C_s]
+        s = self.layer_norm_s(s)
+
+        # [*, N, N, C_z]
+        z = self.layer_norm_z(evoformer_output_dict["pair"])
+
+        z_reference_list = None
+        if _offload_inference:
+            assert sys.getrefcount(evoformer_output_dict["pair"]) == 2
+            evoformer_output_dict["pair"] = evoformer_output_dict["pair"].cpu()
+            z_reference_list = [z]
+            z = None
+
+        # [*, N, C_s]
+        s_initial = s
+        s = self.linear_in(s)
+
+        # [*, N]
+        rigids = Rigid.identity(
+            s.shape[:-1],
+            s.dtype,
+            s.device,
+            self.training,
+            fmt="quat",
+        )
+        outputs = []
+        for i in range(self.no_blocks):
+            # [*, N, C_s]
+            s = s + self.ipa(
+                s,
+                z,
+                rigids,
+                mask,
+                _offload_inference=_offload_inference,
+                _z_reference_list=z_reference_list,
+            )
+            s = self.ipa_dropout(s)
+            s = self.layer_norm_ipa(s)
+            s = self.transition(s)
+
+            # [*, N]
+            rigids = rigids.compose_q_update_vec(self.bb_update(s))
+
+            # To hew as closely as possible to AlphaFold, we convert our
+            # quaternion-based transformations to rotation-matrix ones
+            # here
+            backb_to_global = Rigid(
+                Rotation(rot_mats=rigids.get_rots().get_rot_mats(), quats=None),
+                rigids.get_trans(),
+            )
+
+            backb_to_global = backb_to_global.scale_translation(self.trans_scale_factor)
+
+            # [*, N, 7, 2]
+            unnormalized_angles, angles = self.angle_resnet(s, s_initial)
+
+            all_frames_to_global = self.torsion_angles_to_frames(
+                backb_to_global,
+                angles,
+                aatype,
+            )
+
+            pred_xyz = self.frames_and_literature_positions_to_atom14_pos(
+                all_frames_to_global,
+                aatype,
+            )
+
+            scaled_rigids = rigids.scale_translation(self.trans_scale_factor)
+
+            preds = {
+                "frames": scaled_rigids.to_tensor_7(),
+                "sidechain_frames": all_frames_to_global.to_tensor_4x4(),
+                "unnormalized_angles": unnormalized_angles,
+                "angles": angles,
+                "positions": pred_xyz,
+                "states": s,
+            }
+
+            outputs.append(preds)
+
+            rigids = rigids.stop_rot_gradient()
+
+        del z, z_reference_list
+
+        if _offload_inference:
+            evoformer_output_dict["pair"] = evoformer_output_dict["pair"].to(s.device)
+
+        outputs = dict_multimap(torch.stack, outputs)
+        outputs["single"] = s
+
+        return outputs
+
+    def _init_residue_constants(self, float_dtype, device):
+        if not hasattr(self, "default_frames"):
+            self.register_buffer(
+                "default_frames",
+                torch.tensor(
+                    residue_constants.restype_rigid_group_default_frame,
+                    dtype=float_dtype,
+                    device=device,
+                    requires_grad=False,
+                ),
+                persistent=False,
+            )
+        if not hasattr(self, "group_idx"):
+            self.register_buffer(
+                "group_idx",
+                torch.tensor(
+                    residue_constants.restype_atom14_to_rigid_group,
+                    device=device,
+                    requires_grad=False,
+                ),
+                persistent=False,
+            )
+        if not hasattr(self, "atom_mask"):
+            self.register_buffer(
+                "atom_mask",
+                torch.tensor(
+                    residue_constants.restype_atom14_mask,
+                    dtype=float_dtype,
+                    device=device,
+                    requires_grad=False,
+                ),
+                persistent=False,
+            )
+        if not hasattr(self, "lit_positions"):
+            self.register_buffer(
+                "lit_positions",
+                torch.tensor(
+                    residue_constants.restype_atom14_rigid_group_positions,
+                    dtype=float_dtype,
+                    device=device,
+                    requires_grad=False,
+                ),
+                persistent=False,
+            )
+
+    def torsion_angles_to_frames(self, r, alpha, f):
+        # Lazily initialize the residue constants on the correct device
+        self._init_residue_constants(alpha.dtype, alpha.device)
+        # Separated purely to make testing less annoying
+        return torsion_angles_to_frames(r, alpha, f, self.default_frames)
+
+    def frames_and_literature_positions_to_atom14_pos(self, r, f):  # [*, N, 8]  # [*, N]
+        # Lazily initialize the residue constants on the correct device
+        self._init_residue_constants(r.get_rots().dtype, r.get_rots().device)
+        return frames_and_literature_positions_to_atom14_pos(
+            r,
+            f,
+            self.default_frames,
+            self.group_idx,
+            self.atom_mask,
+            self.lit_positions,
+        )
+
+
 class EsmFoldingTrunk(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -462,7 +1957,7 @@ class EsmFoldingTrunk(nn.Module):
         c_s = self.config.sequence_state_dim
         c_z = self.config.pairwise_state_dim
 
-        self.pairwise_positional_embedding = RelativePosition(self.config.position_bins, c_z)
+        self.pairwise_positional_embedding = EsmFoldRelativePosition(self.config.position_bins, c_z)
 
         self.blocks = nn.ModuleList(
             [
@@ -483,7 +1978,7 @@ class EsmFoldingTrunk(nn.Module):
         self.recycle_disto = nn.Embedding(self.recycle_bins, c_z)
         self.recycle_disto.weight[0].detach().zero_()
 
-        self.structure_module = StructureModule(**config.structure_module.to_dict())
+        self.structure_module = EsmFoldStructureModule(**config.structure_module.to_dict())
         self.trunk2sm_s = nn.Linear(c_s, self.structure_module.c_s)
         self.trunk2sm_z = nn.Linear(c_z, self.structure_module.c_z)
 

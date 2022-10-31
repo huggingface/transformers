@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch ESM model."""
 
+import math
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -21,7 +22,6 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-import math
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -64,6 +64,7 @@ def apply_rotary_pos_emb(x, cos, sin):
     sin = sin[:, :, : x.shape[-2], :]
 
     return (x * cos) + (rotate_half(x) * sin)
+
 
 def gelu(x):
     """
