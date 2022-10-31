@@ -99,7 +99,7 @@ class DebertaConfig(PretrainedConfig):
     >>> # Initializing a DeBERTa microsoft/deberta-base style configuration
     >>> configuration = DebertaConfig()
 
-    >>> # Initializing a model (with random weights) from the DeBERTa microsoft/deberta-base style configuration
+    >>> # Initializing a model (with random weights) from the microsoft/deberta-base style configuration
     >>> model = DebertaModel(configuration)
 
     >>> # Accessing the model configuration
