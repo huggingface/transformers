@@ -14,8 +14,6 @@ ray start --head
 # A sample finetuning run, you need to specify data_dir, output_dir and model_name_or_path
 # run ./examples/rag/finetune_rag_ray.sh --help to see all the possible options
 
-
-
 python finetune_rag.py \
     --data_dir  /DIR/squad-training-data \
     --output_dir /DIR/model_checkpoints \
@@ -53,11 +51,10 @@ python finetune_rag.py \
     --context_encoder_name facebook/dpr-ctx_encoder-multiset-base \
     --csv_path /DIR/SQUAD-KB/squad-kb.csv \
     --index_gpus 1 \
-    --gpu_order [5,6,7,8,9,0,1,2,3,4] \
+    --gpu_order "[5,6,7,8,9,0,1,2,3,4]" \
     --shard_dir ./test_dir/kb-shards \
     --indexing_freq 500
    
-    
 
 # Stop the Ray cluster.
 ray stop

@@ -25,7 +25,7 @@ if [ ! -d "src/transformers" ]; then
     exit 1
 fi
 
-mkdir data
+mkdir data || exit
 
 # get data (run once)
 
@@ -50,11 +50,20 @@ cd -
 
 # run conversions and uploads
 
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/trans_ende-dist_12-1_0.2/checkpoint_top5_average.pt --pytorch_dump_folder_path data/wmt16-en-de-dist-12-1
+PYTHONPATH="src" python \
+    src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py \
+    --fsmt_checkpoint_path data/trans_ende-dist_12-1_0.2/checkpoint_top5_average.pt \
+    --pytorch_dump_folder_path data/wmt16-en-de-dist-12-1
 
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/trans_ende-dist_6-1_0.2/checkpoint_top5_average.pt --pytorch_dump_folder_path data/wmt16-en-de-dist-6-1
+PYTHONPATH="src" python \
+    src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py \
+    --fsmt_checkpoint_path data/trans_ende-dist_6-1_0.2/checkpoint_top5_average.pt \
+    --pytorch_dump_folder_path data/wmt16-en-de-dist-6-1
 
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/trans_ende_12-1_0.2/checkpoint_top5_average.pt --pytorch_dump_folder_path data/wmt16-en-de-12-1
+PYTHONPATH="src" python \
+    src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py \
+    --fsmt_checkpoint_path data/trans_ende_12-1_0.2/checkpoint_top5_average.pt \
+    --pytorch_dump_folder_path data/wmt16-en-de-12-1
 
 
 # upload
@@ -68,4 +77,3 @@ cd -
 # if updating just small files and not the large models, here is a script to generate the right commands:
 perl -le 'for $f (@ARGV) { print qq[transformers-cli upload -y $_/$f --filename $_/$f] for ("wmt16-en-de-dist-12-1", "wmt16-en-de-dist-6-1", "wmt16-en-de-12-1")}' vocab-src.json vocab-tgt.json tokenizer_config.json config.json
 # add/remove files as needed
-

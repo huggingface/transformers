@@ -1,7 +1,7 @@
 # Add parent directory to python path to access lightning_base.py
 export PYTHONPATH="../":"${PYTHONPATH}"
 
-#creates the custom knowlegebase
+# Creates the custom knowlegebase
 python use_own_knowledge_dataset.py
 
 
@@ -10,8 +10,6 @@ ray start --head
 
 # A sample finetuning run, you need to specify data_dir, output_dir and model_name_or_path
 # run ./examples/rag/finetune_rag_ray.sh --help to see all the possible options
-
-
 
 python finetune_rag.py \
     --model_name_or_path facebook/rag-token-base \
@@ -45,13 +43,11 @@ python finetune_rag.py \
     --index_name custom \
     --context_encoder_name facebook/dpr-ctx_encoder-multiset-base \
     --index_gpus 2 \
-    --gpu_order [2,3,4,5,6,7,8,9,0,1] \
+    --gpu_order "[2,3,4,5,6,7,8,9,0,1]" \
     --indexing_freq 5
-   
-    
 
 # Stop the Ray cluster.
 ray stop
 
 #CUDA_VISIBLE_DEVICES=2,3,4,5,6,7,8,9,0,1 sh ./test_run/test_finetune.sh
-#Make sure --gpu_order is same. 
+# Make sure --gpu_order is same.

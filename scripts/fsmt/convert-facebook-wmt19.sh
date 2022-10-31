@@ -26,15 +26,18 @@ if [ ! -d "src/transformers" ]; then
     exit 1
 fi
 
-mkdir data
+mkdir data || exit
 
 # get data (run once)
 
 cd data
-wget https://dl.fbaipublicfiles.com/fairseq/models/wmt19.en-de.joined-dict.ensemble.tar.gz
-wget https://dl.fbaipublicfiles.com/fairseq/models/wmt19.de-en.joined-dict.ensemble.tar.gz
-wget https://dl.fbaipublicfiles.com/fairseq/models/wmt19.en-ru.ensemble.tar.gz
-wget https://dl.fbaipublicfiles.com/fairseq/models/wmt19.ru-en.ensemble.tar.gz
+wfetch () {
+    wget https://dl.fbaipublicfiles.com/fairseq/models/"$1"
+}
+wfetch wmt19.en-de.joined-dict.ensemble.tar.gz
+wfetch wmt19.de-en.joined-dict.ensemble.tar.gz
+wfetch wmt19.en-ru.ensemble.tar.gz
+wfetch wmt19.ru-en.ensemble.tar.gz
 tar -xvzf wmt19.en-de.joined-dict.ensemble.tar.gz
 tar -xvzf wmt19.de-en.joined-dict.ensemble.tar.gz
 tar -xvzf wmt19.en-ru.ensemble.tar.gz
@@ -44,16 +47,28 @@ cd -
 # run conversions and uploads
 
 export PAIR=ru-en
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.ensemble/model4.pt --pytorch_dump_folder_path data/wmt19-$PAIR
+PYTHONPATH="src" python \
+    src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py \
+    --fsmt_checkpoint_path "data/wmt19.$PAIR.ensemble/model4.pt" \
+    --pytorch_dump_folder_path "data/wmt19-$PAIR"
 
 export PAIR=en-ru
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.ensemble/model4.pt --pytorch_dump_folder_path data/wmt19-$PAIR
+PYTHONPATH="src" python \
+    src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py \
+    --fsmt_checkpoint_path "data/wmt19.$PAIR.ensemble/model4.pt" \
+    --pytorch_dump_folder_path "data/wmt19-$PAIR"
 
 export PAIR=de-en
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.joined-dict.ensemble/model4.pt --pytorch_dump_folder_path data/wmt19-$PAIR
+PYTHONPATH="src" python \
+    src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py \
+    --fsmt_checkpoint_path "data/wmt19.$PAIR.joined-dict.ensemble/model4.pt" \
+    --pytorch_dump_folder_path "data/wmt19-$PAIR"
 
 export PAIR=en-de
-PYTHONPATH="src" python src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py --fsmt_checkpoint_path data/wmt19.$PAIR.joined-dict.ensemble/model4.pt --pytorch_dump_folder_path data/wmt19-$PAIR
+PYTHONPATH="src" python \
+    src/transformers/convert_fsmt_original_pytorch_checkpoint_to_pytorch.py \
+    --fsmt_checkpoint_path "data/wmt19.$PAIR.joined-dict.ensemble/model4.pt" \
+    --pytorch_dump_folder_path "data/wmt19-$PAIR"
 
 
 # upload
@@ -67,4 +82,3 @@ cd -
 # if updating just small files and not the large models, here is a script to generate the right commands:
 perl -le 'for $f (@ARGV) { print qq[transformers-cli upload -y $_/$f --filename $_/$f] for map { "wmt19-$_" } ("en-ru", "ru-en", "de-en", "en-de")}' vocab-src.json vocab-tgt.json tokenizer_config.json config.json
 # add/remove files as needed
-

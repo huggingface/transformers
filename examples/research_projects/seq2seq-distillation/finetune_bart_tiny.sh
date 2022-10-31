@@ -10,7 +10,7 @@ export CURRENT_DIR=${PWD}
 export OUTPUT_DIR=${CURRENT_DIR}/${OUTPUT_DIR_NAME}
 
 # Make output directory if it doesn't exist
-mkdir -p $OUTPUT_DIR
+mkdir -p "$OUTPUT_DIR"
 
 # Add parent directory to python path to access lightning_base.py and testing_utils.py
 export PYTHONPATH="../":"${PYTHONPATH}"
@@ -20,13 +20,10 @@ python finetune.py \
 --learning_rate=3e-5 \
 --train_batch_size=2 \
 --eval_batch_size=2 \
---output_dir=$OUTPUT_DIR \
+--output_dir="$OUTPUT_DIR" \
 --num_train_epochs=1  \
 --gpus=0 \
 --do_train "$@"
 
 rm -rf cnn_tiny
-rm -rf $OUTPUT_DIR
-
-
-
+rm -rf "$OUTPUT_DIR"

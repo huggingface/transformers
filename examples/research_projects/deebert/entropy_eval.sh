@@ -26,7 +26,7 @@ for ENTROPY in $ENTROPIES; do
     --output_dir ./saved_models/${MODEL_TYPE}-${MODEL_SIZE}/$DATASET/two_stage \
     --plot_data_dir ./results/ \
     --max_seq_length 128 \
-    --early_exit_entropy $ENTROPY \
+    --early_exit_entropy "$ENTROPY" \
     --eval_highway \
     --overwrite_cache \
     --per_gpu_eval_batch_size=1

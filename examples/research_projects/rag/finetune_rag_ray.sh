@@ -10,9 +10,9 @@ ray start --head
 # run ./examples/rag/finetune_rag_ray.sh --help to see all the possible options
 
 python examples/rag/finetune_rag.py \
-    --data_dir $DATA_DIR \
-    --output_dir $OUTPUT_DIR \
-    --model_name_or_path $MODEL_NAME_OR_PATH \
+    --data_dir "$DATA_DIR" \
+    --output_dir "$OUTPUT_DIR" \
+    --model_name_or_path "$MODEL_NAME_OR_PATH" \
     --model_type rag_sequence \
     --fp16 \
     --gpus 8 \

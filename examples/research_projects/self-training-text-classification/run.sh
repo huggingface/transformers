@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Copyright 2022 The Google Research Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#!/bin/bash
 
 # Create a virtual environment
 conda deactivate
@@ -40,7 +41,6 @@ rm -rf "${OUTPUT_DIR}" && mkdir -p "${OUTPUT_DIR}"
 MODEL_NAME_OR_PATH="bert-base-uncased"
 NUM_NODES=1
 NUM_TRAINERS=4
-LAUNCH_SCRIPT="torchrun --nnodes='${NUM_NODES}' --nproc_per_node='${NUM_TRAINERS}' python -c"
 MAX_SELFTRAIN_ITERATIONS=100
 TRAIN_FILE="train.csv"
 INFER_FILE="infer.csv"
@@ -48,7 +48,7 @@ EVAL_FILE="eval_256.csv"
 MAX_STEPS=100000
 
 # Start self-training
-${LAUNCH_SCRIPT} "
+torchrun --nnodes="$NUM_NODES" --nproc_per_node="$NUM_TRAINERS" python -c "
 import os
 from selftraining import selftrain
 

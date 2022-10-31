@@ -36,13 +36,13 @@ export b="s3://models.huggingface.co/bert"
 stas_to_fb () {
 	src=$1
 	shift
-	aws s3 sync $b/stas/$src $b/facebook/$src $@
+	aws s3 sync "$b/stas/$src" "$b/facebook/$src" "$@"
 }
 
 stas_to_allenai () {
 	src=$1
 	shift
-	aws s3 sync $b/stas/$src $b/allenai/$src $@
+	aws s3 sync "$b/stas/$src" "$b/allenai/$src" "$@"
 }
 
 stas_to_fb wmt19-en-ru

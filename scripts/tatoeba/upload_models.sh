@@ -1,11 +1,11 @@
 #!/bin/bash
 
 for FILE in converted/*; do 
-  model_name=`basename $FILE`
-  huggingface-cli repo create $model_name -y
-  git clone https://huggingface.co/Helsinki-NLP/$model_name
-  mv $FILE/* $model_name/
-  cd $model_name
+  model_name=$(basename "$FILE")
+  huggingface-cli repo create "$model_name" -y
+  git clone https://huggingface.co/Helsinki-NLP/"$model_name"
+  mv "$FILE"/* "$model_name"/
+  cd "$model_name" || exit
   git add . && git commit -m "initial commit" 
   git push
   cd ..
