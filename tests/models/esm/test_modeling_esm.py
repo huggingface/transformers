@@ -424,6 +424,17 @@ class EsmFoldModelTest(ModelTesterMixin, unittest.TestCase):
     def test_initialization(self):
         pass
 
+    @unittest.skip("ESMFold doesn't support torchscript compilation.")
+    def test_torchscript_output_attentions(self):
+        pass
+
+    @unittest.skip("ESMFold doesn't support torchscript compilation.")
+    def test_torchscript_output_hidden_state(self):
+        pass
+
+    @unittest.skip("ESMFold doesn't support torchscript compilation.")
+    def test_torchscript_simple(self):
+        pass
 
 @require_torch
 class EsmModelIntegrationTest(TestCasePlus):
