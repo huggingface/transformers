@@ -262,7 +262,7 @@ class LevitImageProcessor(BaseImageProcessor):
                 Mean to normalize the image pixel values by.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Standard deviation to normalize the image pixel values by.
-            return_tensors (`str`, *optional*):
+            return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
                     - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.

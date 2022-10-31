@@ -356,14 +356,14 @@ class SegformerImageProcessor(BaseImageProcessor):
                 Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
                 is used for background, and background itself is not included in all classes of a dataset (e.g.
                 ADE20k). The background label will be replaced by 255.
-            return_tensors (`str`, *optional*):
+            return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
                     - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
                     - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            data_format (`ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
+            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.

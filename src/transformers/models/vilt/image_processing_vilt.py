@@ -345,7 +345,7 @@ class ViltImageProcessor(BaseImageProcessor):
         Args:
             images (`List[np.ndarray]`):
                 Batch of images to pad.
-            return_tensors (`str`, *optional*):
+            return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
                     - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
@@ -413,14 +413,14 @@ class ViltImageProcessor(BaseImageProcessor):
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
                 Whether to pad the image to the (max_height, max_width) in the batch. If `True`, a pixel mask is also
                 created and returned.
-            return_tensors (`str`, *optional*):
+            return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
                     - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
                     - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            data_format (`ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
+            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.

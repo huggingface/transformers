@@ -109,7 +109,7 @@ class ViTImageProcessor(BaseImageProcessor):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample:
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
-            data_format (`ChannelDimension`, *optional*):
+            data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
                 image is used. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -212,14 +212,14 @@ class ViTImageProcessor(BaseImageProcessor):
                 Image mean to use if `do_normalize` is set to `True`.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use if `do_normalize` is set to `True`.
-            return_tensors (`str`, *optional*):
+            return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
                 - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
                 - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            data_format (`ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
+            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.

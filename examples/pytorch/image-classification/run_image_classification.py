@@ -299,7 +299,6 @@ def main():
     _train_transforms = Compose(
         [
             RandomResizedCrop(size),
-            Resize(size),
             RandomHorizontalFlip(),
             ToTensor(),
             normalize,

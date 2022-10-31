@@ -50,6 +50,7 @@ class BaseImageProcessor(ImageProcessorMixin):
         super().__init__(**kwargs)
 
     def __call__(self, images, **kwargs) -> BatchFeature:
+        """Preprocess an image or a batch of images."""
         return self.preprocess(images, **kwargs)
 
     def preprocess(self, images, **kwargs) -> BatchFeature:
@@ -63,9 +64,9 @@ def get_size_dict(
     default_to_square: bool = True,
 ) -> dict:
     """
-    Converts the old size parameter in the config into the new dict expected in the config. This is to ensure
-    backwards compatibility with the old feature extractor configs and removes ambiguity over whether the tuple is in
-    (height, width) or (width, height) format.
+    Converts the old size parameter in the config into the new dict expected in the config. This is to ensure backwards
+    compatibility with the old feature extractor configs and removes ambiguity over whether the tuple is in (height,
+    width) or (width, height) format.
 
     - If `size` is tuple, it is converted to `{"height": size[0], "width": size[1]}` or `{"height": size[1], "width":
     size[0]}` if `height_width_order` is `False`.

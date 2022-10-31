@@ -73,10 +73,11 @@ class BeitImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Set the class default for `do_normalize`. Controls whether to normalize the image.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Set the class default for `image_mean`. This is a float or list of floats of length of the number of
-            channels for
+            Set the class default for `image_mean`. The mean to use if normalizing the image. This is a float or list
+            of floats of length of the number of channels of the image.
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Image standard deviation.
+            Set the class default for `image_std`. The standard deviation to use if normalizing the image. This is a
+            float or list of floats of length of the number of channels of the image.
         do_reduce_labels (`bool`, *optional*, defaults to `False`):
             Set the class default for `do_reduce_labels`. Controls whether or not to reduce all label values of
             segmentation maps by 1. Usually used for datasets where 0 is used for background, and background itself is
@@ -328,11 +329,8 @@ class BeitImageProcessor(BaseImageProcessor):
         return segmentation_map
 
     def __call__(self, images, segmentation_maps=None, **kwargs):
-        """Preprocesses a batch of images and segmentation maps.
-
-        Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
-        be passed in as positional arguments.
-        """
+        # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
+        # be passed in as positional arguments.
         return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
 
     def preprocess(
@@ -385,14 +383,14 @@ class BeitImageProcessor(BaseImageProcessor):
                 Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
                 is used for background, and background itself is not included in all classes of a dataset (e.g.
                 ADE20k). The background label will be replaced by 255.
-            return_tensors (`str`, *optional*):
+            return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
                     - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
                     - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            data_format (`ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
+            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
