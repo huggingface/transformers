@@ -132,7 +132,7 @@ image_transforms = Compose(
 )
 
 
-def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path):
+def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_hub):
     config = get_clipseg_config()
     model = CLIPSegForImageSegmentation(config)
     model.eval()
@@ -180,6 +180,10 @@ def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path):
         # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
         # feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
+    if push_to_hub:
+        print("Pushing model to the hub")
+        model.push_to_hub("nielsr/clipseg-test")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -193,6 +197,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
+    parser.add_argument(
+        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+    )
 
     args = parser.parse_args()
-    convert_clipseg_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path)
+    convert_clipseg_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
