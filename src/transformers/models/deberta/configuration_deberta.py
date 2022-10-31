@@ -96,10 +96,10 @@ class DebertaConfig(PretrainedConfig):
     ```python
     >>> from transformers import DebertaConfig, DebertaModel
 
-    >>> # Initializing a DeBERTa style configuration
+    >>> # Initializing a DeBERTa microsoft/deberta-base style configuration
     >>> configuration = DebertaConfig()
 
-    >>> # Initializing a model (with random weights) from the DeBERTa style configuration
+    >>> # Initializing a model (with random weights) from the DeBERTa microsoft/deberta-base style configuration
     >>> model = DebertaModel(configuration)
 
     >>> # Accessing the model configuration
