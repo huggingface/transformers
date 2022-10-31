@@ -73,7 +73,7 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask=False,
         **kwargs
     ):
-        super().__init__(feature_size=80, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
+        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.num_mel_bins = num_mel_bins
         self.do_normalize = do_normalize
         self.mean = mean

@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch AudioSpectogramTransformer model. """
 
 import inspect
-import tempfile
 import unittest
 
 from huggingface_hub import hf_hub_download
@@ -211,23 +210,6 @@ class AudioSpectogramTransformerModelTest(ModelTesterMixin, unittest.TestCase):
             model = AudioSpectogramTransformerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    def test_correct_missing_keys(self):
-        if not self.test_missing_keys:
-            return
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            print("Model class:", model_class)
-            model = model_class(config)
-            base_model_prefix = model.base_model_prefix
-
-            if hasattr(model, base_model_prefix):
-                with tempfile.TemporaryDirectory() as temp_dir_name:
-                    model.base_model.save_pretrained(temp_dir_name)
-                    model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
-                    with self.subTest(msg=f"Missing keys for {model.__class__.__name__}"):
-                        self.assertGreater(len(loading_info["missing_keys"]), 0)
-
 
 # We will verify our results on some audio from AudioSet
 def prepare_audio():
@@ -266,13 +248,11 @@ class AudioSpectogramTransformerModelIntegrationTest(unittest.TestCase):
         feature_extractor = self.default_feature_extractor
         audio, sampling_rate = prepare_audio()
         audio = audio.squeeze().numpy()
-        inputs = feature_extractor(audio, sampling_rate=sampling_rate, padding="max_length", return_tensors="pt").to(
-            torch_device
-        )
+        inputs = feature_extractor(audio, sampling_rate=sampling_rate, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
-            outputs = model(inputs.input_features)
+            outputs = model(**inputs)
 
         # verify the logits
         expected_shape = torch.Size((1, 527))

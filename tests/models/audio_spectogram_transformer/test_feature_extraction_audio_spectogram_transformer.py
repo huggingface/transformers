@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 HuggingFace Inc.
+# Copyright 2021 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,23 +14,37 @@
 # limitations under the License.
 
 
+import itertools
+import random
 import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers import (
+    AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+    AudioSpectogramTransformerConfig,
+    AudioSpectogramTransformerFeatureExtractor,
+)
+from transformers.testing_utils import require_torch, slow
 
-from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_image_inputs
+from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
-if is_torch_available():
-    import torch
+global_rng = random.Random()
 
-if is_vision_available():
-    from PIL import Image
 
-    from transformers import AudioSpectogramTransformerFeatureExtractor
+def floats_list(shape, scale=1.0, rng=None, name=None):
+    """Creates a random float32 tensor"""
+    if rng is None:
+        rng = global_rng
+
+    values = []
+    for batch_idx in range(shape[0]):
+        values.append([])
+        for _ in range(shape[1]):
+            values[-1].append(rng.random() * scale)
+
+    return values
 
 
 class AudioSpectogramTransformerFeatureExtractionTester(unittest.TestCase):
@@ -38,154 +52,88 @@ class AudioSpectogramTransformerFeatureExtractionTester(unittest.TestCase):
         self,
         parent,
         batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=18,
+        min_seq_length=400,
+        max_seq_length=2000,
+        feature_size=1,
+        padding_value=0.0,
+        sampling_rate=16000,
+        return_attention_mask=True,
         do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
+        self.min_seq_length = min_seq_length
+        self.max_seq_length = max_seq_length
+        self.seq_length_diff = (self.max_seq_length - self.min_seq_length) // (self.batch_size - 1)
+        self.feature_size = feature_size
+        self.padding_value = padding_value
+        self.sampling_rate = sampling_rate
+        self.return_attention_mask = return_attention_mask
         self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
 
     def prepare_feat_extract_dict(self):
         return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
+            "feature_size": self.feature_size,
+            "padding_value": self.padding_value,
+            "sampling_rate": self.sampling_rate,
+            "return_attention_mask": self.return_attention_mask,
             "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "size": self.size,
         }
 
+    def prepare_inputs_for_common(self, equal_length=False, numpify=False):
+        def _flatten(list_of_lists):
+            return list(itertools.chain(*list_of_lists))
 
-@require_torch
-@require_vision
-class AudioSpectogramTransformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+        if equal_length:
+            speech_inputs = floats_list((self.batch_size, self.max_seq_length))
+        else:
+            # make sure that inputs increase in size
+            speech_inputs = [
+                _flatten(floats_list((x, self.feature_size)))
+                for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
+            ]
 
-    feature_extraction_class = AudioSpectogramTransformerFeatureExtractor if is_vision_available() else None
+        if numpify:
+            speech_inputs = [np.asarray(x) for x in speech_inputs]
+
+        return speech_inputs
+
+
+class AudioSpectogramTransformerFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+
+    feature_extraction_class = AudioSpectogramTransformerFeatureExtractor
 
     def setUp(self):
-        self.feature_extract_tester = AudioSpectogramTransformerFeatureExtractionTester(self)
+        self.feat_extract_tester = AudioSpectogramTransformerFeatureExtractionTester(self)
 
-    @property
-    def feat_extract_dict(self):
-        return self.feature_extract_tester.prepare_feat_extract_dict()
-
-    def test_feat_extract_properties(self):
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        self.assertTrue(hasattr(feature_extractor, "image_mean"))
-        self.assertTrue(hasattr(feature_extractor, "image_std"))
-        self.assertTrue(hasattr(feature_extractor, "do_normalize"))
-        self.assertTrue(hasattr(feature_extractor, "do_resize"))
-        self.assertTrue(hasattr(feature_extractor, "size"))
-
-    def test_batch_feature(self):
-        pass
-
-    def test_call_pil(self):
-        # Initialize feature_extractor
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        # create random PIL images
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False)
-        for image in image_inputs:
-            self.assertIsInstance(image, Image.Image)
+    def test_call(self):
+        # Tests that all call wrap to encode_plus and batch_encode_plus
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
 
         # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                1,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
-            ),
-        )
+        encoded_sequences_1 = feat_extract(speech_inputs[0], return_tensors="np").input_values
+        encoded_sequences_2 = feat_extract(np_speech_inputs[0], return_tensors="np").input_values
+        self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
 
         # Test batched
-        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                self.feature_extract_tester.batch_size,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
-            ),
-        )
+        encoded_sequences_1 = feat_extract(speech_inputs, padding=True, return_tensors="np").input_values
+        encoded_sequences_2 = feat_extract(np_speech_inputs, padding=True, return_tensors="np").input_values
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
-    def test_call_numpy(self):
-        # Initialize feature_extractor
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        # create random numpy tensors
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, numpify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, np.ndarray)
+    @require_torch
+    def test_double_precision_pad(self):
+        import torch
 
-        # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                1,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
-            ),
-        )
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        np_speech_inputs = np.random.rand(100).astype(np.float64)
+        py_speech_inputs = np_speech_inputs.tolist()
 
-        # Test batched
-        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                self.feature_extract_tester.batch_size,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
-            ),
-        )
-
-    def test_call_pytorch(self):
-        # Initialize feature_extractor
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        # create random PyTorch tensors
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, torch.Tensor)
-
-        # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                1,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
-            ),
-        )
-
-        # Test batched
-        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                self.feature_extract_tester.batch_size,
-                self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
-            ),
-        )
+        for inputs in [py_speech_inputs, np_speech_inputs]:
+            np_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="np")
+            self.assertTrue(np_processed.input_values.dtype == np.float32)
+            pt_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="pt")
+            self.assertTrue(pt_processed.input_values.dtype == torch.float32)
