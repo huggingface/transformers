@@ -34,6 +34,7 @@ if is_torch_available():
         EsmEmbeddings,
         create_position_ids_from_input_ids,
     )
+    from transformers.models.esm.modeling_esmfold import EsmForProteinFolding
 
 
 # copied from tests.test_modeling_roberta
@@ -253,28 +254,41 @@ class EsmModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 class EsmModelIntegrationTest(TestCasePlus):
     @slow
     def test_inference_masked_lm(self):
-        model = EsmForMaskedLM.from_pretrained("Rocketknight1/esm2_t6_8M_UR50D")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
+        with torch.no_grad():
+            model = EsmForMaskedLM.from_pretrained("Rocketknight1/esm2_t6_8M_UR50D")
+            model.eval()
+            input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
+            output = model(input_ids)[0]
 
-        vocab_size = 33
+            vocab_size = 33
 
-        expected_shape = torch.Size((1, 6, vocab_size))
-        self.assertEqual(output.shape, expected_shape)
+            expected_shape = torch.Size((1, 6, vocab_size))
+            self.assertEqual(output.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [[[15.0973, -6.6406, -1.1351], [-0.2209, -9.9622, 4.2109], [-1.6055, -10.0023, 1.5914]]]
-        )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+            expected_slice = torch.tensor(
+                [[[15.0973, -6.6406, -1.1351], [-0.2209, -9.9622, 4.2109], [-1.6055, -10.0023, 1.5914]]]
+            )
+            self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
 
     @slow
     def test_inference_no_head(self):
-        model = EsmModel.from_pretrained("Rocketknight1/esm2_t6_8M_UR50D")
+        with torch.no_grad():
+            model = EsmModel.from_pretrained("Rocketknight1/esm2_t6_8M_UR50D")
+            model.eval()
 
+            input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
+            output = model(input_ids)[0]
+            # compare the actual values for a slice.
+            expected_slice = torch.tensor(
+                [[[0.1444, 0.5413, 0.3248], [0.3034, 0.0053, 0.3108], [0.3228, -0.2499, 0.3415]]]
+            )
+            self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_protein_folding(self):
+        model = EsmForProteinFolding.from_pretrained("Rocketknight1/esmfold_v1").float()
+        model.eval()
         input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
-        output = model(input_ids)[0]
-        # compare the actual values for a slice.
-        expected_slice = torch.tensor(
-            [[[0.1444, 0.5413, 0.3248], [0.3034, 0.0053, 0.3108], [0.3228, -0.2499, 0.3415]]]
-        )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        position_outputs = model(input_ids)["positions"]
+        expected_slice = torch.tensor([2.5828, 0.7993, -10.9334], dtype=torch.float32)
+        self.assertTrue(torch.allclose(position_outputs[0, 0, 0, 0], expected_slice, atol=1e-4))
