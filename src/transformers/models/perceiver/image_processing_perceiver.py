@@ -120,7 +120,7 @@ class PerceiverImageProcessor(BaseImageProcessor):
         Center crop an image to `(size["height"] / crop_size["height"] * min_dim, size["width"] / crop_size["width"] *
         min_dim)`. Where `min_dim = min(size["height"], size["width"])`.
 
-        If the input size if smaller than `crop_size` along any edge, the image will be padded with zeros and then
+        If the input size is smaller than `crop_size` along any edge, the image will be padded with zeros and then
         center cropped.
 
         Args:
