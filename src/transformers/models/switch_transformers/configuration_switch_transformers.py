@@ -40,8 +40,7 @@ class SwitchTransformersConfig(PretrainedConfig):
     Arguments:
         vocab_size (`int`, *optional*, defaults to 32128):
             Vocabulary size of the SwitchTransformers model. Defines the number of different tokens that can be
-            represented by the `inputs_ids` passed when calling [`SwitchTransformersModel`] or
-            [`FlaxSwitchTransformersModel`].
+            represented by the `inputs_ids` passed when calling [`SwitchTransformersModel`].
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):

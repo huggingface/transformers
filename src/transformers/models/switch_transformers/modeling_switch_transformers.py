@@ -322,7 +322,6 @@ class SwitchTransformersSparseMLP(nn.Module):
         For now two types of Router are supported:
             - Masked Routers
             - Scatter Routers
-        In total the list of supported Routers are the following:
 
         """
         if config.router_type.lower() == "tokens_masked":
@@ -342,7 +341,8 @@ class SwitchTransformersSparseMLP(nn.Module):
         hidden states since the probabilities will be broadcasted to the hidden states values (they can be interpreted
         as a scaling factor).
 
-        2- Dispatch the tokens to the experts.
+        2- Dispatch the tokens to the experts. We do a classic for loop over the experts and assign for each expert
+        the corresponding hidden state
 
         """
         # Step 1: Get the router_mask from the router as wel as the probabilities
@@ -1170,10 +1170,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
 SWITCH_TRANSFORMERS_START_DOCSTRING = r"""
 
-    The SWITCH_TRANSFORMERS model was proposed in [Exploring the Limits of Transfer Learning with a Unified
-    Text-to-Text Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine
-    Lee, Sharan Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer
-    pre-trained in a text-to-text denoising generative setting.
+    The SWITCH_TRANSFORMERS model was proposed in [Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity](https://arxiv.org/abs/2101.03961) by [William Fedus](https://arxiv.org/search/cs?searchtype=author&query=Fedus%2C+W), [Barret Zoph](https://arxiv.org/search/cs?searchtype=author&query=Zoph%2C+B), and [Noam Shazeer](https://arxiv.org/search/cs?searchtype=author&query=Shazeer%2C+N). It's an encoder-decoder T5-like model with sparse Feed Forward that stands for Mixture of Experts (MoE) architecture.
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1422,8 +1419,8 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, SwitchTransformersModel
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("ybelkada/switch_transformers-base")
-        >>> model = SwitchTransformersModel.from_pretrained("ybelkada/switch_transformers-base")
+        >>> tokenizer = T5Tokenizer.from_pretrained("google/switch-base-8")
+        >>> model = SwitchTransformersModel.from_pretrained("google/switch-base-8")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
@@ -1609,8 +1606,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         ```python
         >>> from transformers import T5Tokenizer, SwitchTransformersForConditionalGeneration
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("ybelkada/switch_transformers-base")
-        >>> model = SwitchTransformersForConditionalGeneration.from_pretrained("ybelkada/switch_transformers-base")
+        >>> tokenizer = T5Tokenizer.from_pretrained("google/switch-base-8")
+        >>> model = SwitchTransformersForConditionalGeneration.from_pretrained("google/switch-base-8")
 
         >>> # training
         >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
@@ -1885,8 +1882,8 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, SwitchTransformersEncoderModel
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("ybelkada/switch_transformers-base")
-        >>> model = SwitchTransformersEncoderModel.from_pretrained("ybelkada/switch_transformers-base")
+        >>> tokenizer = T5Tokenizer.from_pretrained("google/switch-base-8")
+        >>> model = SwitchTransformersEncoderModel.from_pretrained("google/switch-base-8")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1
