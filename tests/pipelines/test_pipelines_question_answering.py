@@ -93,7 +93,7 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             question_answerer(question="In what field is HuggingFace working ?", context=None)
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris.", topk=20
+            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris.", top_k=20
         )
         self.assertEqual(
             outputs, [{"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)} for i in range(20)]

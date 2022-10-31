@@ -131,7 +131,7 @@ class XLNetConfig(PretrainedConfig):
     >>> # Initializing a XLNet configuration
     >>> configuration = XLNetConfig()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = XLNetModel(configuration)
 
     >>> # Accessing the model configuration

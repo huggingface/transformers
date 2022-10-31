@@ -22,11 +22,20 @@ from transformers import (
     TF_MODEL_MAPPING,
     FeatureExtractionPipeline,
     LxmertConfig,
+    is_tf_available,
+    is_torch_available,
     pipeline,
 )
 from transformers.testing_utils import nested_simplify, require_tf, require_torch
 
 from .test_pipelines_common import PipelineTestCaseMeta
+
+
+if is_torch_available():
+    import torch
+
+if is_tf_available():
+    import tensorflow as tf
 
 
 class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
@@ -132,6 +141,22 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 truncation=True,
                 tokenize_kwargs=tokenize_kwargs,
             )
+
+    @require_torch
+    def test_return_tensors_pt(self):
+        feature_extractor = pipeline(
+            task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
+        )
+        outputs = feature_extractor("This is a test", return_tensors=True)
+        self.assertTrue(torch.is_tensor(outputs))
+
+    @require_tf
+    def test_return_tensors_tf(self):
+        feature_extractor = pipeline(
+            task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert", framework="tf"
+        )
+        outputs = feature_extractor("This is a test", return_tensors=True)
+        self.assertTrue(tf.is_tensor(outputs))
 
     def get_shape(self, input_, shape=None):
         if shape is None:

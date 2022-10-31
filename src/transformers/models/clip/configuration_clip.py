@@ -80,12 +80,12 @@ class CLIPTextConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CLIPTextModel, CLIPTextConfig
+    >>> from transformers import CLIPTextConfig, CLIPTextModel
 
-    >>> # Initializing a CLIPTextModel with openai/clip-vit-base-patch32 style configuration
+    >>> # Initializing a CLIPTextConfig with openai/clip-vit-base-patch32 style configuration
     >>> configuration = CLIPTextConfig()
 
-    >>> # Initializing a CLIPTextConfig from the openai/clip-vit-base-patch32 style configuration
+    >>> # Initializing a CLIPTextModel (with random weights) from the openai/clip-vit-base-patch32 style configuration
     >>> model = CLIPTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -186,12 +186,12 @@ class CLIPVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CLIPVisionModel, CLIPVisionConfig
+    >>> from transformers import CLIPVisionConfig, CLIPVisionModel
 
-    >>> # Initializing a CLIPVisionModel with openai/clip-vit-base-patch32 style configuration
+    >>> # Initializing a CLIPVisionConfig with openai/clip-vit-base-patch32 style configuration
     >>> configuration = CLIPVisionConfig()
 
-    >>> # Initializing a CLIPVisionModel model from the openai/clip-vit-base-patch32 style configuration
+    >>> # Initializing a CLIPVisionModel (with random weights) from the openai/clip-vit-base-patch32 style configuration
     >>> model = CLIPVisionModel(configuration)
 
     >>> # Accessing the model configuration
@@ -254,7 +254,9 @@ class CLIPVisionConfig(PretrainedConfig):
 class CLIPConfig(PretrainedConfig):
     r"""
     [`CLIPConfig`] is the configuration class to store the configuration of a [`CLIPModel`]. It is used to instantiate
-    CLIP model according to the specified arguments, defining the text model and vision model configs.
+    CLIP model according to the specified arguments, defining the text model and vision model configs. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the CLIP
+    [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -270,7 +272,29 @@ class CLIPConfig(PretrainedConfig):
             The inital value of the *logit_scale* paramter. Default is used as per the original CLIP implementation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
-    """
+
+    Example:
+
+    ```python
+    >>> from transformers import CLIPConfig, CLIPModel
+
+    >>> # Initializing a CLIPConfig with openai/clip-vit-base-patch32 style configuration
+    >>> configuration = CLIPConfig()
+
+    >>> # Initializing a CLIPModel (with random weights) from the openai/clip-vit-base-patch32 style configuration
+    >>> model = CLIPModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+
+    >>> # We can also initialize a CLIPConfig from a CLIPTextConfig and a CLIPVisionConfig
+
+    >>> # Initializing a CLIPText and CLIPVision configuration
+    >>> config_text = CLIPTextConfig()
+    >>> config_vision = CLIPVisionConfig()
+
+    >>> config = CLIPConfig.from_text_vision_configs(config_text, config_vision)
+    ```"""
 
     model_type = "clip"
     is_composition = True

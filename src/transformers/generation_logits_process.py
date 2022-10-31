@@ -735,10 +735,11 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
 
 
 class ForceTokensLogitsProcessor(LogitsProcessor):
-    r"""This processor can be used to force a list of tokens. The processor will set their log probs to `inf` so that they
-    are sampled at their corresponding index."""
+    r"""This processor takes a list of pairs of integers which indicates a mapping from generation indices to token
+    indices that will be forced before sampling. The processor will set their log probs to `inf` so that they are
+    sampled at their corresponding index."""
 
-    def __init__(self, force_token_map):
+    def __init__(self, force_token_map: List[List[int]]):
         self.force_token_map = dict(force_token_map)
 
     def __call__(self, input_ids, scores):

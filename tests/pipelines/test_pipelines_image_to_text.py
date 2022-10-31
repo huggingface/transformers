@@ -56,7 +56,7 @@ class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
 
     @require_tf
     def test_small_model_tf(self):
-        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2")
+        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2", framework="tf")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
 
         outputs = pipe(image)
@@ -84,6 +84,12 @@ class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
                     }
                 ],
             ],
+        )
+
+        outputs = pipe(image, max_new_tokens=1)
+        self.assertEqual(
+            outputs,
+            [{"generated_text": "growth"}],
         )
 
     @require_torch
@@ -139,7 +145,7 @@ class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
     @slow
     @require_tf
     def test_large_model_tf(self):
-        pipe = pipeline("image-to-text", model="ydshieh/vit-gpt2-coco-en")
+        pipe = pipeline("image-to-text", model="ydshieh/vit-gpt2-coco-en", framework="tf")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
 
         outputs = pipe(image)

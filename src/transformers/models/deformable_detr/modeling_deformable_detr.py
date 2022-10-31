@@ -35,7 +35,6 @@ from ...file_utils import (
     is_scipy_available,
     is_timm_available,
     is_torch_cuda_available,
-    is_vision_available,
     replace_return_docstrings,
     requires_backends,
 )
@@ -111,9 +110,6 @@ class MultiScaleDeformableAttentionFunction(Function):
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
-if is_vision_available():
-    from transformers.models.detr.feature_extraction_detr import center_to_corners_format
-
 if is_timm_available():
     from timm import create_model
 
@@ -139,9 +135,9 @@ class DeformableDetrDecoderOutput(ModelOutput):
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
             Stacked intermediate hidden states (output of each layer of the decoder).
-        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
             Stacked intermediate reference points (reference points of each layer of the decoder).
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
@@ -175,9 +171,9 @@ class DeformableDetrModelOutput(ModelOutput):
             Initial reference points sent through the Transformer decoder.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
-        intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`):
+        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
             Stacked intermediate hidden states (output of each layer of the decoder).
-        intermediate_reference_points (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, 4)`):
+        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
             Stacked intermediate reference points (reference points of each layer of the decoder).
         decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
@@ -240,8 +236,8 @@ class DeformableDetrObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~AutoFeatureExtractor.post_process`] to retrieve the unnormalized bounding
-            boxes.
+            possible padding). You can use [`~AutoFeatureExtractor.post_process_object_detection`] to retrieve the
+            unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
@@ -270,9 +266,9 @@ class DeformableDetrObjectDetectionOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_heads, 4,
             4)`. Attentions weights of the encoder, after the attention softmax, used to compute the weighted average
             in the self-attention heads.
-        intermediate_hidden_states (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, hidden_size)`):
+        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
             Stacked intermediate hidden states (output of each layer of the decoder).
-        intermediate_reference_points (`torch.FloatTensor` of shape `(config.decoder_layers, batch_size, num_queries, 4)`):
+        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
             Stacked intermediate reference points (reference points of each layer of the decoder).
         init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
             Initial reference points sent through the Transformer decoder.
@@ -1394,8 +1390,9 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
 
-        intermediate = torch.stack(intermediate)
-        intermediate_reference_points = torch.stack(intermediate_reference_points)
+        # Keep batch_size as first dimension
+        intermediate = torch.stack(intermediate, dim=1)
+        intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -1881,15 +1878,15 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
 
         >>> # convert outputs (bounding boxes and class logits) to COCO API
         >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = feature_extractor.post_process(outputs, target_sizes=target_sizes)[0]
+        >>> results = feature_extractor.post_process_object_detection(
+        ...     outputs, threshold=0.5, target_sizes=target_sizes
+        ... )[0]
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
-        ...     # let's only keep detections with score > 0.5
-        ...     if score > 0.5:
-        ...         print(
-        ...             f"Detected {model.config.id2label[label.item()]} with confidence "
-        ...             f"{round(score.item(), 3)} at location {box}"
-        ...         )
+        ...     print(
+        ...         f"Detected {model.config.id2label[label.item()]} with confidence "
+        ...         f"{round(score.item(), 3)} at location {box}"
+        ...     )
         Detected cat with confidence 0.8 at location [16.5, 52.84, 318.25, 470.78]
         Detected cat with confidence 0.789 at location [342.19, 24.3, 640.02, 372.25]
         Detected remote with confidence 0.633 at location [40.79, 72.78, 176.76, 117.25]
@@ -1917,14 +1914,14 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         outputs_classes = []
         outputs_coords = []
 
-        for level in range(hidden_states.shape[0]):
+        for level in range(hidden_states.shape[1]):
             if level == 0:
                 reference = init_reference
             else:
-                reference = inter_references[level - 1]
+                reference = inter_references[:, level - 1]
             reference = inverse_sigmoid(reference)
-            outputs_class = self.class_embed[level](hidden_states[level])
-            delta_bbox = self.bbox_embed[level](hidden_states[level])
+            outputs_class = self.class_embed[level](hidden_states[:, level])
+            delta_bbox = self.bbox_embed[level](hidden_states[:, level])
             if reference.shape[-1] == 4:
                 outputs_coord_logits = delta_bbox + reference
             elif reference.shape[-1] == 2:
@@ -1935,11 +1932,12 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             outputs_coord = outputs_coord_logits.sigmoid()
             outputs_classes.append(outputs_class)
             outputs_coords.append(outputs_coord)
-        outputs_class = torch.stack(outputs_classes)
-        outputs_coord = torch.stack(outputs_coords)
+        # Keep batch_size as first dimension
+        outputs_class = torch.stack(outputs_classes, dim=1)
+        outputs_coord = torch.stack(outputs_coords, dim=1)
 
-        logits = outputs_class[-1]
-        pred_boxes = outputs_coord[-1]
+        logits = outputs_class[:, -1]
+        pred_boxes = outputs_coord[:, -1]
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
@@ -1952,7 +1950,7 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             criterion = DeformableDetrLoss(
                 matcher=matcher,
                 num_classes=self.config.num_labels,
-                eos_coef=self.config.eos_coefficient,
+                focal_alpha=self.config.focal_alpha,
                 losses=losses,
             )
             criterion.to(self.device)
@@ -2004,8 +2002,8 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
             intermediate_hidden_states=outputs.intermediate_hidden_states,
-            init_reference_points=outputs.init_reference_points,
             intermediate_reference_points=outputs.intermediate_reference_points,
+            init_reference_points=outputs.init_reference_points,
             enc_outputs_class=outputs.enc_outputs_class,
             enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
         )
@@ -2065,46 +2063,38 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
     return loss.mean(1).sum() / num_boxes
 
 
-# taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 class DeformableDetrLoss(nn.Module):
     """
-    This class computes the losses for DeformableDetrForObjectDetection. The process happens in two steps: 1) we
+    This class computes the losses for `DeformableDetrForObjectDetection`. The process happens in two steps: 1) we
     compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair of
-    matched ground-truth / prediction (supervise class and box)
+    matched ground-truth / prediction (supervise class and box).
+
+    Args:
+        matcher (`DeformableDetrHungarianMatcher`):
+            Module able to compute a matching between targets and proposals.
+        num_classes (`int`):
+            Number of object categories, omitting the special no-object category.
+        focal_alpha (`float`):
+            Alpha parameter in focal loss.
+        losses (`List[str]`):
+            List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
-    def __init__(self, matcher, num_classes, eos_coef, losses, focal_alpha=0.25):
-        """
-        Create the criterion.
-
-        A note on the num_classes parameter (copied from original repo in detr.py): "the naming of the `num_classes`
-        parameter of the criterion is somewhat misleading. it indeed corresponds to `max_obj_id + 1`, where max_obj_id
-        is the maximum id for a class in your dataset. For example, COCO has a max_obj_id of 90, so we pass
-        `num_classes` to be 91. As another example, for a dataset that has a single class with id 1, you should pass
-        `num_classes` to be 2 (max_obj_id + 1). For more details on this, check the following discussion
-        https://github.com/facebookresearch/detr/issues/108#issuecomment-650269223"
-
-        Parameters:
-            matcher: module able to compute a matching between targets and proposals.
-            num_classes: number of object categories, omitting the special no-object category.
-            eos_coef: relative classification weight applied to the no-object category.
-            losses: list of all the losses to be applied. See get_loss for list of available losses.
-            focal_alpha: alpha in Focal Loss.
-        """
+    def __init__(self, matcher, num_classes, focal_alpha, losses):
         super().__init__()
-
         self.matcher = matcher
         self.num_classes = num_classes
-        self.losses = losses
         self.focal_alpha = focal_alpha
+        self.losses = losses
 
-    def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
-        """Classification loss (NLL)
-        targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
+    # removed logging parameter, which was part of the original implementation
+    def loss_labels(self, outputs, targets, indices, num_boxes):
+        """
+        Classification loss (Binary focal loss) targets dicts must contain the key "class_labels" containing a tensor
+        of dim [nb_target_boxes]
         """
         if "logits" not in outputs:
-            raise ValueError("No logits were found in the outputs")
-
+            raise KeyError("No logits were found in the outputs")
         source_logits = outputs["logits"]
 
         idx = self._get_source_permutation_idx(indices)
@@ -2132,6 +2122,7 @@ class DeformableDetrLoss(nn.Module):
         return losses
 
     @torch.no_grad()
+    # Copied from transformers.models.detr.modeling_detr.DetrLoss.loss_cardinality
     def loss_cardinality(self, outputs, targets, indices, num_boxes):
         """
         Compute the cardinality error, i.e. the absolute error in the number of predicted non-empty boxes.
@@ -2147,6 +2138,7 @@ class DeformableDetrLoss(nn.Module):
         losses = {"cardinality_error": card_err}
         return losses
 
+    # Copied from transformers.models.detr.modeling_detr.DetrLoss.loss_boxes
     def loss_boxes(self, outputs, targets, indices, num_boxes):
         """
         Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss.
@@ -2155,8 +2147,7 @@ class DeformableDetrLoss(nn.Module):
         are expected in format (center_x, center_y, w, h), normalized by the image size.
         """
         if "pred_boxes" not in outputs:
-            raise ValueError("No predicted boxes found in outputs")
-
+            raise KeyError("No predicted boxes found in outputs")
         idx = self._get_source_permutation_idx(indices)
         source_boxes = outputs["pred_boxes"][idx]
         target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
@@ -2172,12 +2163,14 @@ class DeformableDetrLoss(nn.Module):
         losses["loss_giou"] = loss_giou.sum() / num_boxes
         return losses
 
+    # Copied from transformers.models.detr.modeling_detr.DetrLoss._get_source_permutation_idx
     def _get_source_permutation_idx(self, indices):
         # permute predictions following indices
         batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
         source_idx = torch.cat([source for (source, _) in indices])
         return batch_idx, source_idx
 
+    # Copied from transformers.models.detr.modeling_detr.DetrLoss._get_target_permutation_idx
     def _get_target_permutation_idx(self, indices):
         # permute targets following indices
         batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
@@ -2192,17 +2185,18 @@ class DeformableDetrLoss(nn.Module):
         }
         if loss not in loss_map:
             raise ValueError(f"Loss {loss} not supported")
-
         return loss_map[loss](outputs, targets, indices, num_boxes)
 
     def forward(self, outputs, targets):
         """
         This performs the loss computation.
 
-        Parameters:
-             outputs: dict of tensors, see the output specification of the model for the format
-             targets: list of dicts, such that len(targets) == batch_size.
-                      The expected keys in each dict depends on the losses applied, see each loss' doc
+        Args:
+             outputs (`dict`, *optional*):
+                Dictionary of tensors, see the output specification of the model for the format.
+             targets (`List[dict]`, *optional*):
+                List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
+                losses applied, see each loss' doc.
         """
         outputs_without_aux = {k: v for k, v in outputs.items() if k != "auxiliary_outputs"}
 
@@ -2272,7 +2266,6 @@ class DeformableDetrMLPPredictionHead(nn.Module):
         return x
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrHungarianMatcher
 class DeformableDetrHungarianMatcher(nn.Module):
     """
     This class computes an assignment between the targets and the predictions of the network.
@@ -2324,17 +2317,19 @@ class DeformableDetrHungarianMatcher(nn.Module):
         batch_size, num_queries = outputs["logits"].shape[:2]
 
         # We flatten to compute the cost matrices in a batch
-        out_prob = outputs["logits"].flatten(0, 1).softmax(-1)  # [batch_size * num_queries, num_classes]
+        out_prob = outputs["logits"].flatten(0, 1).sigmoid()  # [batch_size * num_queries, num_classes]
         out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
 
         # Also concat the target labels and boxes
         target_ids = torch.cat([v["class_labels"] for v in targets])
         target_bbox = torch.cat([v["boxes"] for v in targets])
 
-        # Compute the classification cost. Contrary to the loss, we don't use the NLL,
-        # but approximate it in 1 - proba[target class].
-        # The 1 is a constant that doesn't change the matching, it can be ommitted.
-        class_cost = -out_prob[:, target_ids]
+        # Compute the classification cost.
+        alpha = 0.25
+        gamma = 2.0
+        neg_cost_class = (1 - alpha) * (out_prob**gamma) * (-(1 - out_prob + 1e-8).log())
+        pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
+        class_cost = pos_cost_class[:, target_ids] - neg_cost_class[:, target_ids]
 
         # Compute the L1 cost between boxes
         bbox_cost = torch.cdist(out_bbox, target_bbox, p=1)
@@ -2417,6 +2412,17 @@ def generalized_box_iou(boxes1, boxes2):
     area = width_height[:, :, 0] * width_height[:, :, 1]
 
     return iou - (area - union) / area
+
+
+# Copied from transformers.models.detr.modeling_detr.center_to_corners_format
+def center_to_corners_format(x):
+    """
+    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
+    (x_0, y_0, x_1, y_1).
+    """
+    center_x, center_y, width, height = x.unbind(-1)
+    b = [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)]
+    return torch.stack(b, dim=-1)
 
 
 # Copied from transformers.models.detr.modeling_detr._max_by_axis

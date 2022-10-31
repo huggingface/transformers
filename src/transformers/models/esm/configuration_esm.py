@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 ESM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/esm1b": "https://huggingface.co/facebook/esm1b/resolve/main/config.json",
+    "facebook/esm-1b": "https://huggingface.co/facebook/esm-1b/resolve/main/config.json",
     # See all ESM models at https://huggingface.co/models?filter=esm
 }
 
@@ -31,7 +31,7 @@ class EsmConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`ESMModel`]. It is used to instantiate a ESM model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the ESM
-    [esm-base-uncased](https://huggingface.co/esm-base-uncased) architecture.
+    [facebook/esm-1b](https://huggingface.co/facebook/esm-1b) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -90,7 +90,7 @@ class EsmConfig(PretrainedConfig):
     ```python
     >>> from transformers import EsmModel, EsmConfig
 
-    >>> # Initializing a ESM esm-base-uncased style configuration >>> configuration = EsmConfig()
+    >>> # Initializing a ESM facebook/esm-1b style configuration >>> configuration = EsmConfig()
 
     >>> # Initializing a model from the configuration >>> model = ESMModel(configuration)
 

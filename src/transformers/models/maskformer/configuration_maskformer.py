@@ -87,7 +87,7 @@ class MaskFormerConfig(PretrainedConfig):
     >>> # Initializing a MaskFormer facebook/maskformer-swin-base-ade configuration
     >>> configuration = MaskFormerConfig()
 
-    >>> # Initializing a model from the facebook/maskformer-swin-base-ade style configuration
+    >>> # Initializing a model (with random weights) from the facebook/maskformer-swin-base-ade style configuration
     >>> model = MaskFormerModel(configuration)
 
     >>> # Accessing the model configuration

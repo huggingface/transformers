@@ -138,7 +138,7 @@ class FillMaskPipeline(Pipeline):
                 # For multi masks though, the other [MASK] would be removed otherwise
                 # making the output look odd, so we add them back
                 sequence = self.tokenizer.decode(tokens, skip_special_tokens=single_mask)
-                proposition = {"score": v, "token": p, "token_str": self.tokenizer.decode(p), "sequence": sequence}
+                proposition = {"score": v, "token": p, "token_str": self.tokenizer.decode([p]), "sequence": sequence}
                 row.append(proposition)
             result.append(row)
         if single_mask:

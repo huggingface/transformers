@@ -14,8 +14,10 @@
 
 import hashlib
 import unittest
+from typing import Dict
 
 import datasets
+import numpy as np
 from datasets import load_dataset
 
 from transformers import (
@@ -48,7 +50,14 @@ else:
 
 def hashimage(image: Image) -> str:
     m = hashlib.md5(image.tobytes())
-    return m.hexdigest()
+    return m.hexdigest()[:10]
+
+
+def mask_to_test_readable(mask: Image) -> Dict:
+    npimg = np.array(mask)
+    white_pixels = (npimg == 255).sum()
+    shape = npimg.shape
+    return {"hash": hashimage(mask), "white_pixels": white_pixels, "shape": shape}
 
 
 @require_vision
@@ -72,11 +81,16 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         ]
 
     def run_pipeline_test(self, image_segmenter, examples):
-        outputs = image_segmenter("./tests/fixtures/tests_samples/COCO/000000039769.png", threshold=0.0)
+        outputs = image_segmenter(
+            "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            threshold=0.0,
+            mask_threshold=0,
+            overlap_mask_area_threshold=0,
+        )
         self.assertIsInstance(outputs, list)
         n = len(outputs)
-        if isinstance(image_segmenter.model, (MaskFormerForInstanceSegmentation)):
-            # Instance segmentation (maskformer) have a slot for null class
+        if isinstance(image_segmenter.model, (MaskFormerForInstanceSegmentation, DetrForSegmentation)):
+            # Instance segmentation (maskformer, and detr) have a slot for null class
             # and can output nothing even with a low threshold
             self.assertGreaterEqual(n, 0)
         else:
@@ -88,15 +102,15 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
 
         # RGBA
-        outputs = image_segmenter(dataset[0]["file"])
+        outputs = image_segmenter(dataset[0]["file"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0)
         m = len(outputs)
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
         # LA
-        outputs = image_segmenter(dataset[1]["file"])
+        outputs = image_segmenter(dataset[1]["file"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0)
         m = len(outputs)
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
         # L
-        outputs = image_segmenter(dataset[2]["file"])
+        outputs = image_segmenter(dataset[2]["file"], threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0)
         m = len(outputs)
         self.assertEqual([{"score": ANY(float, type(None)), "label": ANY(str), "mask": ANY(Image.Image)}] * m, outputs)
 
@@ -117,7 +131,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
         ]
-        outputs = image_segmenter(batch, threshold=0.0, batch_size=batch_size)
+        outputs = image_segmenter(
+            batch, threshold=0.0, mask_threshold=0, overlap_mask_area_threshold=0, batch_size=batch_size
+        )
         self.assertEqual(len(batch), len(outputs))
         self.assertEqual(len(outputs[0]), n)
         self.assertEqual(
@@ -138,37 +154,59 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         pass
 
     @require_torch
-    @unittest.skip("No weights found for hf-internal-testing/tiny-detr-mobilenetsv3-panoptic")
+    def test_small_model_pt_no_panoptic(self):
+        model_id = "hf-internal-testing/tiny-random-mobilevit"
+        # The default task is `image-classification` we need to override
+        pipe = pipeline(task="image-segmentation", model=model_id)
+
+        # This model does NOT support neither `instance` nor  `panoptic`
+        # We should error out
+        with self.assertRaises(ValueError) as e:
+            pipe("http://images.cocodataset.org/val2017/000000039769.jpg", subtask="panoptic")
+        self.assertEqual(
+            str(e.exception),
+            "Subtask panoptic is not supported for model <class"
+            " 'transformers.models.mobilevit.modeling_mobilevit.MobileViTForSemanticSegmentation'>",
+        )
+        with self.assertRaises(ValueError) as e:
+            pipe("http://images.cocodataset.org/val2017/000000039769.jpg", subtask="instance")
+        self.assertEqual(
+            str(e.exception),
+            "Subtask instance is not supported for model <class"
+            " 'transformers.models.mobilevit.modeling_mobilevit.MobileViTForSemanticSegmentation'>",
+        )
+
+    @require_torch
     def test_small_model_pt(self):
         model_id = "hf-internal-testing/tiny-detr-mobilenetsv3-panoptic"
 
         model = AutoModelForImageSegmentation.from_pretrained(model_id)
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-        image_segmenter = ImageSegmentationPipeline(model=model, feature_extractor=feature_extractor)
+        image_segmenter = ImageSegmentationPipeline(
+            model=model,
+            feature_extractor=feature_extractor,
+            subtask="panoptic",
+            threshold=0.0,
+            mask_threshold=0.0,
+            overlap_mask_area_threshold=0.0,
+        )
 
         outputs = image_segmenter(
             "http://images.cocodataset.org/val2017/000000039769.jpg",
-            task="panoptic",
-            threshold=0.0,
-            overlap_mask_area_threshold=0.0,
         )
 
         # Shortening by hashing
         for o in outputs:
-            o["mask"] = hashimage(o["mask"])
+            o["mask"] = mask_to_test_readable(o["mask"])
 
+        # This is extremely brittle, and those values are made specific for the CI.
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
                 {
                     "score": 0.004,
                     "label": "LABEL_215",
-                    "mask": "34eecd16bbfb0f476083ef947d81bf66",
-                },
-                {
-                    "score": 0.004,
-                    "label": "LABEL_215",
-                    "mask": "34eecd16bbfb0f476083ef947d81bf66",
+                    "mask": {"hash": "a01498ca7c", "shape": (480, 640), "white_pixels": 307200},
                 },
             ],
         )
@@ -178,11 +216,10 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 "http://images.cocodataset.org/val2017/000000039769.jpg",
                 "http://images.cocodataset.org/val2017/000000039769.jpg",
             ],
-            threshold=0.0,
         )
         for output in outputs:
             for o in output:
-                o["mask"] = hashimage(o["mask"])
+                o["mask"] = mask_to_test_readable(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
@@ -191,26 +228,58 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                     {
                         "score": 0.004,
                         "label": "LABEL_215",
-                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
-                    },
-                    {
-                        "score": 0.004,
-                        "label": "LABEL_215",
-                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
+                        "mask": {"hash": "a01498ca7c", "shape": (480, 640), "white_pixels": 307200},
                     },
                 ],
                 [
                     {
                         "score": 0.004,
                         "label": "LABEL_215",
-                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
-                    },
-                    {
-                        "score": 0.004,
-                        "label": "LABEL_215",
-                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
+                        "mask": {"hash": "a01498ca7c", "shape": (480, 640), "white_pixels": 307200},
                     },
                 ],
+            ],
+        )
+
+        output = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", subtask="instance")
+        for o in output:
+            o["mask"] = mask_to_test_readable(o["mask"])
+        self.assertEqual(
+            nested_simplify(output, decimals=4),
+            [
+                {
+                    "score": 0.004,
+                    "label": "LABEL_215",
+                    "mask": {"hash": "a01498ca7c", "shape": (480, 640), "white_pixels": 307200},
+                },
+            ],
+        )
+
+        # This must be surprising to the reader.
+        # The `panoptic` returns only LABEL_215, and this returns 3 labels.
+        #
+        output = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", subtask="semantic")
+        for o in output:
+            o["mask"] = mask_to_test_readable(o["mask"])
+        self.maxDiff = None
+        self.assertEqual(
+            nested_simplify(output, decimals=4),
+            [
+                {
+                    "label": "LABEL_88",
+                    "mask": {"hash": "7f0bf661a4", "shape": (480, 640), "white_pixels": 3},
+                    "score": None,
+                },
+                {
+                    "label": "LABEL_101",
+                    "mask": {"hash": "10ab738dc9", "shape": (480, 640), "white_pixels": 8948},
+                    "score": None,
+                },
+                {
+                    "label": "LABEL_215",
+                    "mask": {"hash": "b431e0946c", "shape": (480, 640), "white_pixels": 298249},
+                    "score": None,
+                },
             ],
         )
 
@@ -221,16 +290,20 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg")
         for o in outputs:
             # shortening by hashing
-            o["mask"] = hashimage(o["mask"])
+            o["mask"] = mask_to_test_readable(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": None, "label": "LABEL_0", "mask": "42d09072282a32da2ac77375a4c1280f"},
+                {
+                    "score": None,
+                    "label": "LABEL_0",
+                    "mask": {"hash": "42d0907228", "shape": (480, 640), "white_pixels": 10714},
+                },
                 {
                     "score": None,
                     "label": "LABEL_1",
-                    "mask": "46b8cc3976732873b219f77a1213c1a5",
+                    "mask": {"hash": "46b8cc3976", "shape": (480, 640), "white_pixels": 296486},
                 },
             ],
         )
@@ -239,28 +312,54 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
     @slow
     def test_integration_torch_image_segmentation(self):
         model_id = "facebook/detr-resnet-50-panoptic"
-        image_segmenter = pipeline("image-segmentation", model=model_id)
+        image_segmenter = pipeline(
+            "image-segmentation",
+            model=model_id,
+            threshold=0.0,
+            overlap_mask_area_threshold=0.0,
+        )
 
         outputs = image_segmenter(
             "http://images.cocodataset.org/val2017/000000039769.jpg",
-            task="panoptic",
-            threshold=0,
-            overlap_mask_area_threshold=0.0,
         )
 
         # Shortening by hashing
         for o in outputs:
-            o["mask"] = hashimage(o["mask"])
+            o["mask"] = mask_to_test_readable(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9094, "label": "blanket", "mask": "dcff19a97abd8bd555e21186ae7c066a"},
-                {"score": 0.9941, "label": "cat", "mask": "9c0af87bd00f9d3a4e0c8888e34e70e2"},
-                {"score": 0.9987, "label": "remote", "mask": "c7870600d6c02a1f6d96470fc7220e8e"},
-                {"score": 0.9995, "label": "remote", "mask": "ef899a25fd44ec056c653f0ca2954fdd"},
-                {"score": 0.9722, "label": "couch", "mask": "37b8446ac578a17108aa2b7fccc33114"},
-                {"score": 0.9994, "label": "cat", "mask": "6a09d3655efd8a388ab4511e4cbbb797"},
+                {
+                    "score": 0.9094,
+                    "label": "blanket",
+                    "mask": {"hash": "dcff19a97a", "shape": (480, 640), "white_pixels": 16617},
+                },
+                {
+                    "score": 0.9941,
+                    "label": "cat",
+                    "mask": {"hash": "9c0af87bd0", "shape": (480, 640), "white_pixels": 59185},
+                },
+                {
+                    "score": 0.9987,
+                    "label": "remote",
+                    "mask": {"hash": "c7870600d6", "shape": (480, 640), "white_pixels": 4182},
+                },
+                {
+                    "score": 0.9995,
+                    "label": "remote",
+                    "mask": {"hash": "ef899a25fd", "shape": (480, 640), "white_pixels": 2275},
+                },
+                {
+                    "score": 0.9722,
+                    "label": "couch",
+                    "mask": {"hash": "37b8446ac5", "shape": (480, 640), "white_pixels": 172380},
+                },
+                {
+                    "score": 0.9994,
+                    "label": "cat",
+                    "mask": {"hash": "6a09d3655e", "shape": (480, 640), "white_pixels": 52561},
+                },
             ],
         )
 
@@ -269,34 +368,79 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 "http://images.cocodataset.org/val2017/000000039769.jpg",
                 "http://images.cocodataset.org/val2017/000000039769.jpg",
             ],
-            task="panoptic",
-            threshold=0.0,
-            overlap_mask_area_threshold=0.0,
         )
 
         # Shortening by hashing
         for output in outputs:
             for o in output:
-                o["mask"] = hashimage(o["mask"])
+                o["mask"] = mask_to_test_readable(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
                 [
-                    {"score": 0.9094, "label": "blanket", "mask": "dcff19a97abd8bd555e21186ae7c066a"},
-                    {"score": 0.9941, "label": "cat", "mask": "9c0af87bd00f9d3a4e0c8888e34e70e2"},
-                    {"score": 0.9987, "label": "remote", "mask": "c7870600d6c02a1f6d96470fc7220e8e"},
-                    {"score": 0.9995, "label": "remote", "mask": "ef899a25fd44ec056c653f0ca2954fdd"},
-                    {"score": 0.9722, "label": "couch", "mask": "37b8446ac578a17108aa2b7fccc33114"},
-                    {"score": 0.9994, "label": "cat", "mask": "6a09d3655efd8a388ab4511e4cbbb797"},
+                    {
+                        "score": 0.9094,
+                        "label": "blanket",
+                        "mask": {"hash": "dcff19a97a", "shape": (480, 640), "white_pixels": 16617},
+                    },
+                    {
+                        "score": 0.9941,
+                        "label": "cat",
+                        "mask": {"hash": "9c0af87bd0", "shape": (480, 640), "white_pixels": 59185},
+                    },
+                    {
+                        "score": 0.9987,
+                        "label": "remote",
+                        "mask": {"hash": "c7870600d6", "shape": (480, 640), "white_pixels": 4182},
+                    },
+                    {
+                        "score": 0.9995,
+                        "label": "remote",
+                        "mask": {"hash": "ef899a25fd", "shape": (480, 640), "white_pixels": 2275},
+                    },
+                    {
+                        "score": 0.9722,
+                        "label": "couch",
+                        "mask": {"hash": "37b8446ac5", "shape": (480, 640), "white_pixels": 172380},
+                    },
+                    {
+                        "score": 0.9994,
+                        "label": "cat",
+                        "mask": {"hash": "6a09d3655e", "shape": (480, 640), "white_pixels": 52561},
+                    },
                 ],
                 [
-                    {"score": 0.9094, "label": "blanket", "mask": "dcff19a97abd8bd555e21186ae7c066a"},
-                    {"score": 0.9941, "label": "cat", "mask": "9c0af87bd00f9d3a4e0c8888e34e70e2"},
-                    {"score": 0.9987, "label": "remote", "mask": "c7870600d6c02a1f6d96470fc7220e8e"},
-                    {"score": 0.9995, "label": "remote", "mask": "ef899a25fd44ec056c653f0ca2954fdd"},
-                    {"score": 0.9722, "label": "couch", "mask": "37b8446ac578a17108aa2b7fccc33114"},
-                    {"score": 0.9994, "label": "cat", "mask": "6a09d3655efd8a388ab4511e4cbbb797"},
+                    {
+                        "score": 0.9094,
+                        "label": "blanket",
+                        "mask": {"hash": "dcff19a97a", "shape": (480, 640), "white_pixels": 16617},
+                    },
+                    {
+                        "score": 0.9941,
+                        "label": "cat",
+                        "mask": {"hash": "9c0af87bd0", "shape": (480, 640), "white_pixels": 59185},
+                    },
+                    {
+                        "score": 0.9987,
+                        "label": "remote",
+                        "mask": {"hash": "c7870600d6", "shape": (480, 640), "white_pixels": 4182},
+                    },
+                    {
+                        "score": 0.9995,
+                        "label": "remote",
+                        "mask": {"hash": "ef899a25fd", "shape": (480, 640), "white_pixels": 2275},
+                    },
+                    {
+                        "score": 0.9722,
+                        "label": "couch",
+                        "mask": {"hash": "37b8446ac5", "shape": (480, 640), "white_pixels": 172380},
+                    },
+                    {
+                        "score": 0.9994,
+                        "label": "cat",
+                        "mask": {"hash": "6a09d3655e", "shape": (480, 640), "white_pixels": 52561},
+                    },
                 ],
             ],
         )
@@ -307,36 +451,60 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         model_id = "facebook/detr-resnet-50-panoptic"
         image_segmenter = pipeline("image-segmentation", model=model_id)
 
-        outputs = image_segmenter(
-            "http://images.cocodataset.org/val2017/000000039769.jpg", task="panoptic", threshold=0.999
-        )
+        outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", threshold=0.999)
         # Shortening by hashing
         for o in outputs:
-            o["mask"] = hashimage(o["mask"])
+            o["mask"] = mask_to_test_readable(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9995, "label": "remote", "mask": "d02404f5789f075e3b3174adbc3fd5b8"},
-                {"score": 0.9994, "label": "cat", "mask": "eaa115b40c96d3a6f4fe498963a7e470"},
+                {
+                    "score": 0.9995,
+                    "label": "remote",
+                    "mask": {"hash": "d02404f578", "shape": (480, 640), "white_pixels": 2789},
+                },
+                {
+                    "score": 0.9994,
+                    "label": "cat",
+                    "mask": {"hash": "eaa115b40c", "shape": (480, 640), "white_pixels": 304411},
+                },
             ],
         )
 
-        outputs = image_segmenter(
-            "http://images.cocodataset.org/val2017/000000039769.jpg", task="panoptic", threshold=0.5
-        )
+        outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", threshold=0.5)
 
         for o in outputs:
-            o["mask"] = hashimage(o["mask"])
+            o["mask"] = mask_to_test_readable(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9941, "label": "cat", "mask": "9c0af87bd00f9d3a4e0c8888e34e70e2"},
-                {"score": 0.9987, "label": "remote", "mask": "c7870600d6c02a1f6d96470fc7220e8e"},
-                {"score": 0.9995, "label": "remote", "mask": "ef899a25fd44ec056c653f0ca2954fdd"},
-                {"score": 0.9722, "label": "couch", "mask": "37b8446ac578a17108aa2b7fccc33114"},
-                {"score": 0.9994, "label": "cat", "mask": "6a09d3655efd8a388ab4511e4cbbb797"},
+                {
+                    "score": 0.9941,
+                    "label": "cat",
+                    "mask": {"hash": "9c0af87bd0", "shape": (480, 640), "white_pixels": 59185},
+                },
+                {
+                    "score": 0.9987,
+                    "label": "remote",
+                    "mask": {"hash": "c7870600d6", "shape": (480, 640), "white_pixels": 4182},
+                },
+                {
+                    "score": 0.9995,
+                    "label": "remote",
+                    "mask": {"hash": "ef899a25fd", "shape": (480, 640), "white_pixels": 2275},
+                },
+                {
+                    "score": 0.9722,
+                    "label": "couch",
+                    "mask": {"hash": "37b8446ac5", "shape": (480, 640), "white_pixels": 172380},
+                },
+                {
+                    "score": 0.9994,
+                    "label": "cat",
+                    "mask": {"hash": "6a09d3655e", "shape": (480, 640), "white_pixels": 52561},
+                },
             ],
         )
 
@@ -353,21 +521,49 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
 
         image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
         file = image[0]["file"]
-        outputs = image_segmenter(file, task="panoptic", threshold=threshold)
+        outputs = image_segmenter(file, threshold=threshold)
 
         # Shortening by hashing
         for o in outputs:
-            o["mask"] = hashimage(o["mask"])
+            o["mask"] = mask_to_test_readable(o["mask"])
 
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9974, "label": "wall", "mask": "a547b7c062917f4f3e36501827ad3cd6"},
-                {"score": 0.949, "label": "house", "mask": "0da9b7b38feac47bd2528a63e5ea7b19"},
-                {"score": 0.9995, "label": "grass", "mask": "1d07ea0a263dcf38ca8ae1a15fdceda1"},
-                {"score": 0.9976, "label": "tree", "mask": "6cdc97c7daf1dc596fa181f461ddd2ba"},
-                {"score": 0.8239, "label": "plant", "mask": "1ab4ce378f6ceff57d428055cfbd742f"},
-                {"score": 0.9942, "label": "road, route", "mask": "39c5d17be53b2d1b0f46aad8ebb15813"},
-                {"score": 1.0, "label": "sky", "mask": "a3756324a692981510c39b1a59510a36"},
+                {
+                    "score": 0.9974,
+                    "label": "wall",
+                    "mask": {"hash": "a547b7c062", "shape": (512, 683), "white_pixels": 14252},
+                },
+                {
+                    "score": 0.949,
+                    "label": "house",
+                    "mask": {"hash": "0da9b7b38f", "shape": (512, 683), "white_pixels": 132177},
+                },
+                {
+                    "score": 0.9995,
+                    "label": "grass",
+                    "mask": {"hash": "1d07ea0a26", "shape": (512, 683), "white_pixels": 53444},
+                },
+                {
+                    "score": 0.9976,
+                    "label": "tree",
+                    "mask": {"hash": "6cdc97c7da", "shape": (512, 683), "white_pixels": 7944},
+                },
+                {
+                    "score": 0.8239,
+                    "label": "plant",
+                    "mask": {"hash": "1ab4ce378f", "shape": (512, 683), "white_pixels": 4136},
+                },
+                {
+                    "score": 0.9942,
+                    "label": "road, route",
+                    "mask": {"hash": "39c5d17be5", "shape": (512, 683), "white_pixels": 1941},
+                },
+                {
+                    "score": 1.0,
+                    "label": "sky",
+                    "mask": {"hash": "a3756324a6", "shape": (512, 683), "white_pixels": 135802},
+                },
             ],
         )
