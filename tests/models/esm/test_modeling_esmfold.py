@@ -217,10 +217,6 @@ class EsmFoldModelTest(ModelTesterMixin, unittest.TestCase):
     def test_torchscript_simple(self):
         pass
 
-    @unittest.skip("ESMFold doesn't support torchscript compilation.")
-    def test_torchscript_simple(self):
-        pass
-
     @unittest.skip("ESMFold doesn't support data parallel.")
     def test_multi_gpu_data_parallel_forward(self):
         pass

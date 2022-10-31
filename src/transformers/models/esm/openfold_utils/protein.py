@@ -1,4 +1,3 @@
-# flake8: noqa
 # Copyright 2021 AlQuraishi Laboratory
 # Copyright 2021 DeepMind Technologies Limited
 #
@@ -16,7 +15,6 @@
 
 """Protein data type."""
 import dataclasses
-import io
 import re
 import string
 from typing import Any, Mapping, Optional, Sequence
@@ -67,95 +65,6 @@ class Protein:
 
     # Chain corresponding to each parent
     parents_chain_index: Optional[Sequence[int]] = None
-
-
-def from_pdb_string(pdb_str: str, chain_id: Optional[str] = None) -> Protein:
-    """Takes a PDB string and constructs a Protein object.
-
-    WARNING: All non-standard residue types will be converted into UNK. All
-      non-standard atoms will be ignored.
-
-    Args:
-      pdb_str: The contents of the pdb file
-      chain_id: If None, then the pdb file must contain a single chain (which
-        will be parsed). If chain_id is specified (e.g. A), then only that chain is parsed.
-
-    Returns:
-      A new `Protein` parsed from the pdb contents.
-    """
-    pdb_fh = io.StringIO(pdb_str)
-    # parser = PDBParser(QUIET=True)
-    structure = parser.get_structure("none", pdb_fh)
-    models = list(structure.get_models())
-    if len(models) != 1:
-        raise ValueError(f"Only single model PDBs are supported. Found {len(models)} models.")
-    model = models[0]
-
-    atom_positions = []
-    aatype = []
-    atom_mask = []
-    residue_index = []
-    chain_ids = []
-    b_factors = []
-
-    for chain in model:
-        if chain_id is not None and chain.id != chain_id:
-            continue
-        for res in chain:
-            if res.id[2] != " ":
-                raise ValueError(
-                    f"PDB contains an insertion code at chain {chain.id} and residue "
-                    f"index {res.id[1]}. These are not supported."
-                )
-            res_shortname = residue_constants.restype_3to1.get(res.resname, "X")
-            restype_idx = residue_constants.restype_order.get(res_shortname, residue_constants.restype_num)
-            pos = np.zeros((residue_constants.atom_type_num, 3))
-            mask = np.zeros((residue_constants.atom_type_num,))
-            res_b_factors = np.zeros((residue_constants.atom_type_num,))
-            for atom in res:
-                if atom.name not in residue_constants.atom_types:
-                    continue
-                pos[residue_constants.atom_order[atom.name]] = atom.coord
-                mask[residue_constants.atom_order[atom.name]] = 1.0
-                res_b_factors[residue_constants.atom_order[atom.name]] = atom.bfactor
-            if np.sum(mask) < 0.5:
-                # If no known atom positions are reported for the residue then skip it.
-                continue
-            aatype.append(restype_idx)
-            atom_positions.append(pos)
-            atom_mask.append(mask)
-            residue_index.append(res.id[1])
-            chain_ids.append(chain.id)
-            b_factors.append(res_b_factors)
-
-    parents = None
-    parents_chain_index = None
-    if "PARENT" in pdb_str:
-        parents = []
-        parents_chain_index = []
-        chain_id = 0
-        for l in pdb_str.split("\n"):
-            if "PARENT" in l:
-                if not "N/A" in l:
-                    parent_names = l.split()[1:]
-                    parents.extend(parent_names)
-                    parents_chain_index.extend([chain_id for _ in parent_names])
-                chain_id += 1
-
-    unique_chain_ids = np.unique(chain_ids)
-    chain_id_mapping = {cid: n for n, cid in enumerate(string.ascii_uppercase)}
-    chain_index = np.array([chain_id_mapping[cid] for cid in chain_ids])
-
-    return Protein(
-        atom_positions=np.array(atom_positions),
-        atom_mask=np.array(atom_mask),
-        aatype=np.array(aatype),
-        residue_index=np.array(residue_index),
-        chain_index=chain_index,
-        b_factors=np.array(b_factors),
-        parents=parents,
-        parents_chain_index=parents_chain_index,
-    )
 
 
 def from_proteinnet_string(proteinnet_str: str) -> Protein:
@@ -241,7 +150,6 @@ def add_pdb_headers(prot: Protein, pdb_str: str) -> str:
     if prot.parents is not None and len(prot.parents) > 0:
         parents_per_chain = []
         if prot.parents_chain_index is not None:
-            cur_chain = prot.parents_chain_index[0]
             parent_dict = {}
             for p, i in zip(prot.parents, prot.parents_chain_index):
                 parent_dict.setdefault(str(i), [])
@@ -256,7 +164,8 @@ def add_pdb_headers(prot: Protein, pdb_str: str) -> str:
     else:
         parents_per_chain = [["N/A"]]
 
-    make_parent_line = lambda p: f"PARENT {' '.join(p)}"
+    def make_parent_line(p):
+        return f"PARENT {' '.join(p)}"
 
     out_pdb_lines.append(make_parent_line(parents_per_chain[0]))
 
@@ -264,7 +173,7 @@ def add_pdb_headers(prot: Protein, pdb_str: str) -> str:
     for i, l in enumerate(lines):
         if "PARENT" not in l and "REMARK" not in l:
             out_pdb_lines.append(l)
-        if "TER" in l and not "END" in lines[i + 1]:
+        if "TER" in l and "END" not in lines[i + 1]:
             chain_counter += 1
             if not chain_counter >= len(parents_per_chain):
                 chain_parents = parents_per_chain[chain_counter]
@@ -286,7 +195,10 @@ def to_pdb(prot: Protein) -> str:
       PDB string.
     """
     restypes = residue_constants.restypes + ["X"]
-    res_1to3 = lambda r: residue_constants.restype_1to3.get(restypes[r], "UNK")
+
+    def res_1to3(r):
+        return residue_constants.restype_1to3.get(restypes[r], "UNK")
+
     atom_types = residue_constants.atom_types
 
     pdb_lines = []

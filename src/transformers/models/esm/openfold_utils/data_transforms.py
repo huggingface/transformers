@@ -1,4 +1,3 @@
-# flake8: noqa
 # Copyright 2021 AlQuraishi Laboratory
 # Copyright 2021 DeepMind Technologies Limited
 #

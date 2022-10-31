@@ -1,4 +1,3 @@
-# flake8: noqa
 # Copyright 2021 AlQuraishi Laboratory
 # Copyright 2021 DeepMind Technologies Limited
 #
@@ -1202,8 +1201,7 @@ class Rigid:
         Returns:
             A transformation object with a scaled translation.
         """
-        fn = lambda t: t * trans_scale_factor
-        return self.apply_trans_fn(fn)
+        return self.apply_trans_fn(lambda t: t * trans_scale_factor)
 
     def stop_rot_gradient(self) -> Rigid:
         """
@@ -1212,8 +1210,7 @@ class Rigid:
         Returns:
             A transformation object with detached rotations
         """
-        fn = lambda r: r.detach()
-        return self.apply_rot_fn(fn)
+        return self.apply_rot_fn(lambda r: r.detach())
 
     @staticmethod
     def make_transform_from_reference(n_xyz, ca_xyz, c_xyz, eps=1e-20):
@@ -1240,8 +1237,6 @@ class Rigid:
         norm = torch.sqrt(eps + c_x**2 + c_y**2)
         sin_c1 = -c_y / norm
         cos_c1 = c_x / norm
-        zeros = sin_c1.new_zeros(sin_c1.shape)
-        ones = sin_c1.new_ones(sin_c1.shape)
 
         c1_rots = sin_c1.new_zeros((*sin_c1.shape, 3, 3))
         c1_rots[..., 0, 0] = cos_c1

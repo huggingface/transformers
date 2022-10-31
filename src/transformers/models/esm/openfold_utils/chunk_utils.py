@@ -1,4 +1,3 @@
-# flake8: noqa
 # Copyright 2021 AlQuraishi Laboratory
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 import logging
 import math
 from functools import partial
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Optional, Sequence, Tuple
 
 import torch
 
@@ -245,8 +244,7 @@ def chunk_layer(
     prepped_inputs = tensor_tree_map(_prep_inputs, inputs)
     prepped_outputs = None
     if _out is not None:
-        reshape_fn = lambda t: t.view([-1] + list(t.shape[no_batch_dims:]))
-        prepped_outputs = tensor_tree_map(reshape_fn, _out)
+        prepped_outputs = tensor_tree_map(lambda t: t.view([-1] + list(t.shape[no_batch_dims:])), _out)
 
     flat_batch_dim = 1
     for d in orig_batch_dims:
@@ -254,12 +252,15 @@ def chunk_layer(
 
     no_chunks = flat_batch_dim // chunk_size + (flat_batch_dim % chunk_size != 0)
 
+    def _select_chunk(t):
+        return t[i : i + chunk_size] if t.shape[0] != 1 else t
+
     i = 0
     out = prepped_outputs
     for _ in range(no_chunks):
         # Chunk the input
         if not low_mem:
-            select_chunk = lambda t: t[i : i + chunk_size] if t.shape[0] != 1 else t
+            select_chunk = _select_chunk
         else:
             select_chunk = partial(
                 _chunk_slice,
@@ -275,8 +276,7 @@ def chunk_layer(
 
         # Allocate space for the output
         if out is None:
-            allocate = lambda t: t.new_zeros((flat_batch_dim,) + t.shape[1:])
-            out = tensor_tree_map(allocate, output_chunk)
+            out = tensor_tree_map(lambda t: t.new_zeros((flat_batch_dim,) + t.shape[1:]), output_chunk)
 
         # Put the chunk in its pre-allocated space
         out_type = type(output_chunk)
@@ -309,8 +309,7 @@ def chunk_layer(
 
         i += chunk_size
 
-    reshape = lambda t: t.view(orig_batch_dims + t.shape[1:])
-    out = tensor_tree_map(reshape, out)
+    out = tensor_tree_map(lambda t: t.view(orig_batch_dims + t.shape[1:]), out)
 
     return out
 
@@ -379,8 +378,7 @@ class ChunkSizeTuner:
         min_chunk_size: int,
     ) -> int:
         consistent = True
-        remove_tensors = lambda a: a.shape if type(a) is torch.Tensor else a
-        arg_data = tree_map(remove_tensors, args, object)
+        arg_data = tree_map(lambda a: a.shape if type(a) is torch.Tensor else a, args, object)
         if self.cached_arg_data is not None:
             # If args have changed shape/value, we need to re-tune
             assert len(self.cached_arg_data) == len(arg_data)

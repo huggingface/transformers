@@ -1,4 +1,3 @@
-# flake8: noqa
 # Copyright 2021 AlQuraishi Laboratory
 # Copyright 2021 DeepMind Technologies Limited
 #
@@ -19,7 +18,7 @@ import torch.nn as nn
 
 from . import residue_constants as rc
 from .rigid_utils import Rigid, Rotation
-from .tensor_utils import batched_gather, one_hot, tensor_tree_map, tree_map
+from .tensor_utils import batched_gather
 
 
 def pseudo_beta_fn(aatype, all_atom_positions, all_atom_masks):
@@ -209,9 +208,6 @@ def frames_and_literature_positions_to_atom14_pos(
     atom_mask,
     lit_positions,
 ):
-    # [*, N, 14, 4, 4]
-    default_4x4 = default_frames[aatype, ...]
-
     # [*, N, 14]
     group_mask = group_idx[aatype, ...]
 

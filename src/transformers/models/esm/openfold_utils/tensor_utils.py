@@ -1,4 +1,3 @@
-# flake8: noqa
 # Copyright 2021 AlQuraishi Laboratory
 # Copyright 2021 DeepMind Technologies Limited
 #
@@ -14,9 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 from functools import partial
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import List
 
 import torch
 import torch.nn as nn
