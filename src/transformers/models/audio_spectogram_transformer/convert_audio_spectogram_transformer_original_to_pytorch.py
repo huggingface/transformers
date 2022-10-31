@@ -38,9 +38,28 @@ logger = logging.get_logger(__name__)
 def get_audio_spectogram_transformer_config(model_name):
     config = AudioSpectogramTransformerConfig()
 
-    config.num_labels = 527
+    if "10-10" in model_name or "speech-commands" in model_name:
+        pass
+    elif "12-12" in model_name:
+        config.time_stride = 12
+        config.frequency_stride = 12
+    elif "14-14" in model_name:
+        config.time_stride = 14
+        config.frequency_stride = 14
+    elif "16-16" in model_name:
+        config.time_stride = 16
+        config.frequency_stride = 16
+    else:
+        raise ValueError("Model not supported")
+
     repo_id = "huggingface/label-files"
-    filename = "audioset-id2label.json"
+    if "speech-commands" in model_name:
+        config.num_labels = 35
+        filename = "speech-commands-v2-id2label.json"
+    else:
+        config.num_labels = 527
+        filename = "audioset-id2label.json"
+
     id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
@@ -133,15 +152,41 @@ def remove_keys(state_dict):
 
 
 @torch.no_grad()
-def convert_audio_spectogram_transformer_checkpoint(
-    model_name, checkpoint_url, pytorch_dump_folder_path, push_to_hub=False
-):
+def convert_audio_spectogram_transformer_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
     """
-    Copy/paste/tweak model's weights to our YOLOS structure.
+    Copy/paste/tweak model's weights to our Audio Spectogram Transformer structure.
     """
     config = get_audio_spectogram_transformer_config(model_name)
 
+    model_name_to_url = {
+        "audio-spectogram-transformer-finetuned-audioset-10-10-0.4593": (
+            "https://www.dropbox.com/s/ca0b1v2nlxzyeb4/audioset_10_10_0.4593.pth?dl=1"
+        ),
+        "audio-spectogram-transformer-finetuned-audioset-10-10-0.450": (
+            "https://www.dropbox.com/s/1tv0hovue1bxupk/audioset_10_10_0.4495.pth?dl=1"
+        ),
+        "audio-spectogram-transformer-finetuned-audioset-10-10-0.448": (
+            "https://www.dropbox.com/s/6u5sikl4b9wo4u5/audioset_10_10_0.4483.pth?dl=1"
+        ),
+        "audio-spectogram-transformer-finetuned-audioset-10-10-0.448-v2": (
+            "https://www.dropbox.com/s/kt6i0v9fvfm1mbq/audioset_10_10_0.4475.pth?dl=1"
+        ),
+        "audio-spectogram-transformer-finetuned-audioset-12-12-0.447": (
+            "https://www.dropbox.com/s/snfhx3tizr4nuc8/audioset_12_12_0.4467.pth?dl=1"
+        ),
+        "audio-spectogram-transformer-finetuned-audioset-14-14-0.443": (
+            "https://www.dropbox.com/s/z18s6pemtnxm4k7/audioset_14_14_0.4431.pth?dl=1"
+        ),
+        "audio-spectogram-transformer-finetuned-audioset-16-16-0.442": (
+            "https://www.dropbox.com/s/mdsa4t1xmcimia6/audioset_16_16_0.4422.pth?dl=1"
+        ),
+        "audio-spectogram-transformer-finetuned-speech-commands-v2": (
+            "https://www.dropbox.com/s/q0tbqpwv44pquwy/speechcommands_10_10_0.9812.pth?dl=1"
+        ),
+    }
+
     # load original state_dict
+    checkpoint_url = model_name_to_url[model_name]
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
     # remove some keys
     remove_keys(state_dict)
@@ -168,7 +213,26 @@ def convert_audio_spectogram_transformer_checkpoint(
     outputs = model(**inputs)
     logits = outputs.logits
 
-    expected_slice = torch.tensor([-0.8760, -7.0042, -8.6602])
+    predicted_class_idx = logits.argmax(-1).item()
+
+    if model_name == "audio-spectogram-transformer-finetuned-audioset-10-10-0.4593":
+        expected_slice = torch.tensor([-0.8760, -7.0042, -8.6602])
+    elif model_name == "audio-spectogram-transformer-finetuned-audioset-10-10-0.450":
+        expected_slice = torch.tensor([-1.1986, -7.0903, -8.2718])
+    elif model_name == "audio-spectogram-transformer-finetuned-audioset-10-10-0.448":
+        expected_slice = torch.tensor([-2.6128, -8.0080, -9.4344])
+    elif model_name == "audio-spectogram-transformer-finetuned-audioset-10-10-0.448-v2":
+        expected_slice = torch.tensor([-1.5080, -7.4534, -8.8917])
+    elif model_name == "audio-spectogram-transformer-finetuned-audioset-12-12-0.447":
+        expected_slice = torch.tensor([-0.5050, -6.5833, -8.0843])
+    elif model_name == "audio-spectogram-transformer-finetuned-audioset-14-14-0.443":
+        expected_slice = torch.tensor([-0.3826, -7.0336, -8.2413])
+    elif model_name == "audio-spectogram-transformer-finetuned-audioset-16-16-0.442":
+        expected_slice = torch.tensor([-1.2113, -6.9101, -8.3470])
+    elif model_name == "audio-spectogram-transformer-finetuned-speech-commands-v2":
+        expected_slice = torch.tensor([1, 2, 3])
+    else:
+        raise ValueError("Unknown model name")
     if not torch.allclose(logits[0, :3], expected_slice, atol=1e-4):
         raise ValueError("Logits don't match")
     print("Looks ok!")
@@ -196,12 +260,6 @@ if __name__ == "__main__":
         help="Name of the Audio Spectogram Transformer model you'd like to convert.",
     )
     parser.add_argument(
-        "--checkpoint_url",
-        default="https://www.dropbox.com/s/ca0b1v2nlxzyeb4/audioset_10_10_0.4593.pth?dl=1",
-        type=str,
-        help="URL of the original state dict (.pth file).",
-    )
-    parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
@@ -209,6 +267,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_audio_spectogram_transformer_checkpoint(
-        args.model_name, args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub
-    )
+    convert_audio_spectogram_transformer_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)

@@ -50,9 +50,11 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to apply utterance-level cepstral mean and variance normalization to extracted features.
         mean (`int`, *optional*, defaults to -4.2677393):
-            Whether or not to zero-mean normalize the extracted features.
-        std (`int`, *optional*, defaults to `True`):
-            Whether or not to unit-variance normalize the extracted features.
+            Whether or not to normalize the extracted features to a mean of 0. Uses the AudioSet mean by default,
+            obtained by the authors.
+        std (`int`, *optional*, defaults to 4.5689974):
+            Whether or not to normalize the extracted features to a std of 05. Uses the AudioSet std by default,
+            obtained by the authors.
         return_attention_mask (`bool`, *optional*, defaults to `False`):
             Whether or not [`~AudioSpectogramTransformerFeatureExtractor.__call__`] should return `attention_mask`.
     """
