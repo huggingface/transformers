@@ -65,23 +65,23 @@ class EsmForProteinFoldingOutput(ModelOutput):
         sidechain_frames (`torch.FloatTensor`):
             Write a docstring Matt
         unnormalized_angles (`torch.FloatTensor`):
-            Write a docstring Matt
+            Predicted unnormalized backbone torsion angles.
         angles (`torch.FloatTensor`):
-            Write a docstring Matt
+            Predicted backbone torsion angles.
         positions (`torch.FloatTensor`):
-            Write a docstring Matt
+            Predicted positions of the backbone atoms.
         states (`torch.FloatTensor`):
             Write a docstring Matt
         s_s (`torch.FloatTensor`):
-            Write a docstring Matt
+            Per-residue embeddings derived by concatenating the hidden states of each layer of the ESM-2 LM stem.
         s_z (`torch.FloatTensor`):
-            Write a docstring Matt
+            Pairwise residue embeddings.
         distogram_logits (`torch.FloatTensor`):
             Write a docstring Matt
         lm_logits (`torch.FloatTensor`):
-            Write a docstring Matt
+            Logits output by the ESM-2 protein language model stem.
         aatype (`torch.FloatTensor`):
-            Write a docstring Matt
+            Input amino acids (AlphaFold2 indices).
         atom14_atom_exists (`torch.FloatTensor`):
             Write a docstring Matt
         residx_atom14_to_atom37 (`torch.FloatTensor`):
@@ -93,9 +93,10 @@ class EsmForProteinFoldingOutput(ModelOutput):
         residue_index (`torch.FloatTensor`):
             Write a docstring Matt
         lddt_head (`torch.FloatTensor`):
-            Write a docstring Matt
+            Raw outputs from the lddt head used to compute plddt.
         plddt (`torch.FloatTensor`):
-            Write a docstring Matt
+            Per-residue confidence scores. Regions of low confidence may indicate areas where the model's prediction
+            is uncertain, or where the protein structure is disordered.
         ptm_logits (`torch.FloatTensor`):
             Write a docstring Matt
         ptm (`torch.FloatTensor`):
