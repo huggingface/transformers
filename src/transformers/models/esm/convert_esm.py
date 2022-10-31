@@ -162,11 +162,12 @@ def convert_esm_checkpoint_to_pytorch(
     print("Our ESM config:", config)
 
     if model.startswith("esmfold"):
-        model = EsmForProteinFolding(config)
+        model_class = EsmForProteinFolding
     elif classification_head:
-        model = EsmForSequenceClassification(config)
+        model_class = EsmForSequenceClassification
     else:
-        model = EsmForMaskedLM(config)
+        model_class = EsmForMaskedLM
+    model = model_class(config)
     model.eval()
 
     # Now let's copy all the weights.
@@ -293,12 +294,10 @@ def convert_esm_checkpoint_to_pytorch(
             # that don't exist on CPU. Therefore, to test it we need to run it on GPU. However,
             # ESMFold is what we in the community call a "big boy" and so we desperately avoid putting both the
             # original and the converted model on the GPU at the same time.
-            compare_attention_layers(model, esm)
             our_output = model.cuda()(
                 input_ids=hf_tokens["input_ids"].cuda(), attention_mask=hf_tokens["attention_mask"].cuda()
             )
             their_output = esm.cuda()(hf_tokens["input_ids"].cuda(), hf_tokens["attention_mask"].cuda())
-            their_output_again = esm.cuda()(hf_tokens["input_ids"].cuda(), hf_tokens["attention_mask"].cuda())
         else:
             our_output = model(**hf_tokens, output_hidden_states=True)
             our_hidden_states = our_output["hidden_states"]
@@ -310,28 +309,38 @@ def convert_esm_checkpoint_to_pytorch(
                 their_hidden_states = their_output["representations"]
                 their_output = their_output["logits"]
 
-    if is_folding_model:
+        if is_folding_model:
+            max_absolute_diff = torch.max(torch.abs(our_output["positions"] - their_output['positions'])).item()
+            success = torch.allclose(our_output["positions"], their_output["positions"], atol=1e-5)
+        else:
+            max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
+            success = torch.allclose(our_output, their_output, atol=1e-5)
 
-        breakpoint()
-        print()
-    else:
-        print(our_output.shape, their_output.shape)
-        max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
         print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-5
-        success = torch.allclose(our_output, their_output, atol=3e-4)
         print("Do both models output the same tensors?", "🔥" if success else "💩")
 
-    if not success:
-        raise Exception("Something went wRoNg")
+        if not success:
+            raise Exception("Something went wRoNg")
 
-    pathlib.Path(pytorch_dump_folder_path).mkdir(parents=True, exist_ok=True)
-    print(f"Saving model to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
+        pathlib.Path(pytorch_dump_folder_path).mkdir(parents=True, exist_ok=True)
+        print(f"Saving model to {pytorch_dump_folder_path}")
+        model.save_pretrained(pytorch_dump_folder_path)
 
-    test_reload = EsmForMaskedLM.from_pretrained(pytorch_dump_folder_path)
-    test_out = test_reload(**hf_tokens)
+        reloaded = model_class.from_pretrained(pytorch_dump_folder_path).cuda()
+        reloaded_output = reloaded(input_ids=hf_tokens["input_ids"].cuda(), attention_mask=hf_tokens["attention_mask"].cuda())
 
-    breakpoint()
+        if is_folding_model:
+            max_absolute_diff = torch.max(torch.abs(our_output["positions"] - reloaded_output['positions'])).item()
+            success = torch.allclose(our_output["positions"], their_output["positions"], atol=1e-6)
+        else:
+            max_absolute_diff = torch.max(torch.abs(our_output - reloaded_output['logits'])).item()
+            success = torch.allclose(our_output, reloaded_output['logits'], atol=1e-6)
+
+        print(f"max_absolute_diff = {max_absolute_diff}")
+        print("Does the model output the same tensors after reloading?", "🔥" if success else "💩")
+
+        if not success:
+            raise Exception("Something went wRoNg")
 
     print(f"Saving tokenizer to {pytorch_dump_folder_path}")
     hf_tokenizer.save_pretrained(pytorch_dump_folder_path)
