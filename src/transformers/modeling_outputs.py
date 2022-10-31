@@ -488,7 +488,8 @@ class Seq2SeqMoEModelOutput(ModelOutput):
         encoder_router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed or when `config.add_router_probs=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
-            Router logits of the encoder model, useful to compute the auxiliary loss and the z_loss for the sparse modules.
+            Router logits of the encoder model, useful to compute the auxiliary loss and the z_loss for the sparse
+            modules.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -791,7 +792,8 @@ class Seq2SeqMoEOutput(ModelOutput):
         encoder_router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed or when `config.add_router_probs=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
-            Router logits of the encoder model, useful to compute the auxiliary loss and z_loss for Mixture of Experts models.
+            Router logits of the encoder model, useful to compute the auxiliary loss and z_loss for Mixture of Experts
+            models.
     """
 
     loss: Optional[torch.FloatTensor] = None

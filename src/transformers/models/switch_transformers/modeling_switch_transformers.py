@@ -50,14 +50,14 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "SwitchTransformersConfig"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"
-_CHECKPOINT_FOR_DOC = "google/switch-base-8"
+_CHECKPOINT_FOR_DOC = "HFLAY/switch_base_8"
 
 ####################################################
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
 SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/switch-base-8",
+    "HFLAY/switch_base_8",
     "google/switch-base-16",
     "google/switch-base-32",
     "google/switch-base-64",
@@ -341,8 +341,8 @@ class SwitchTransformersSparseMLP(nn.Module):
         hidden states since the probabilities will be broadcasted to the hidden states values (they can be interpreted
         as a scaling factor).
 
-        2- Dispatch the tokens to the experts. We do a classic for loop over the experts and assign for each expert
-        the corresponding hidden state
+        2- Dispatch the tokens to the experts. We do a classic for loop over the experts and assign for each expert the
+        corresponding hidden state
 
         """
         # Step 1: Get the router_mask from the router as wel as the probabilities
@@ -1170,7 +1170,12 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
 SWITCH_TRANSFORMERS_START_DOCSTRING = r"""
 
-    The SWITCH_TRANSFORMERS model was proposed in [Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity](https://arxiv.org/abs/2101.03961) by [William Fedus](https://arxiv.org/search/cs?searchtype=author&query=Fedus%2C+W), [Barret Zoph](https://arxiv.org/search/cs?searchtype=author&query=Zoph%2C+B), and [Noam Shazeer](https://arxiv.org/search/cs?searchtype=author&query=Shazeer%2C+N). It's an encoder-decoder T5-like model with sparse Feed Forward that stands for Mixture of Experts (MoE) architecture.
+    The SWITCH_TRANSFORMERS model was proposed in [Switch Transformers: Scaling to Trillion Parameter Models with
+    Simple and Efficient Sparsity](https://arxiv.org/abs/2101.03961) by [William
+    Fedus](https://arxiv.org/search/cs?searchtype=author&query=Fedus%2C+W), [Barret
+    Zoph](https://arxiv.org/search/cs?searchtype=author&query=Zoph%2C+B), and [Noam
+    Shazeer](https://arxiv.org/search/cs?searchtype=author&query=Shazeer%2C+N). It's an encoder-decoder T5-like model
+    with sparse Feed Forward that stands for Mixture of Experts (MoE) architecture.
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -1419,8 +1424,8 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, SwitchTransformersModel
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("google/switch-base-8")
-        >>> model = SwitchTransformersModel.from_pretrained("google/switch-base-8")
+        >>> tokenizer = T5Tokenizer.from_pretrained("HFLAY/switch_base_8")
+        >>> model = SwitchTransformersModel.from_pretrained("HFLAY/switch_base_8")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
@@ -1606,8 +1611,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         ```python
         >>> from transformers import T5Tokenizer, SwitchTransformersForConditionalGeneration
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("google/switch-base-8")
-        >>> model = SwitchTransformersForConditionalGeneration.from_pretrained("google/switch-base-8")
+        >>> tokenizer = T5Tokenizer.from_pretrained("HFLAY/switch_base_8")
+        >>> model = SwitchTransformersForConditionalGeneration.from_pretrained("HFLAY/switch_base_8")
 
         >>> # training
         >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
@@ -1621,8 +1626,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         ...     "summarize: studies have shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1
         >>> outputs = model.generate(input_ids)
-        >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-        >>> # studies have shown that owning a dog is good for you.
+        >>> # . To, let’s say you have a dog. To summarize:
+        >>> # Since the model has been trained on MLM, this will output gibberish
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1882,8 +1887,8 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, SwitchTransformersEncoderModel
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("google/switch-base-8")
-        >>> model = SwitchTransformersEncoderModel.from_pretrained("google/switch-base-8")
+        >>> tokenizer = T5Tokenizer.from_pretrained("HFLAY/switch_base_8")
+        >>> model = SwitchTransformersEncoderModel.from_pretrained("HFLAY/switch_base_8")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1
