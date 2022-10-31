@@ -14,15 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
-from typing import Dict
-
-import numpy as np
 import torch
 import torch.nn as nn
 
-from ..openfold_np import protein
-from ..openfold_np import residue_constants as rc
+from . import residue_constants as rc
 from .rigid_utils import Rigid, Rotation
 from .tensor_utils import batched_gather, one_hot, tensor_tree_map, tree_map
 

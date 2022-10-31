@@ -16,12 +16,10 @@
 
 
 import unittest
-import copy
 
 from transformers import EsmConfig, is_torch_available
 from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
 
-from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
@@ -145,6 +143,7 @@ class EsmModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
+
 class EsmFoldModelTester:
     def __init__(
         self,
@@ -207,7 +206,7 @@ class EsmFoldModelTester:
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
             is_folding_model=True,
-            esmfold_config={"trunk": {"num_blocks": 2}}
+            esmfold_config={"trunk": {"num_blocks": 2}},
         )
         return config
 
@@ -346,13 +345,7 @@ class EsmFoldModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_mismatched_shapes = False
 
-    all_model_classes = (
-        (
-            EsmForProteinFolding,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (EsmForProteinFolding,) if is_torch_available() else ()
     all_generative_model_classes = ()
     test_sequence_classification_problem_types = False
 
@@ -430,6 +423,7 @@ class EsmFoldModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip("ESMFold doesn't respect you and it certainly doesn't respect your initialization arguments.")
     def test_initialization(self):
         pass
+
 
 @require_torch
 class EsmModelIntegrationTest(TestCasePlus):

@@ -14,15 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import itertools
-from functools import reduce, wraps
-from operator import add
-
 import numpy as np
 import torch
 
-from .openfold_np import residue_constants as rc
-from .openfold_utils.tensor_utils import tensor_tree_map, tree_map
+from . import residue_constants as rc
+from .tensor_utils import tensor_tree_map, tree_map
 
 
 def make_atom14_masks(protein):

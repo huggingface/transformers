@@ -23,10 +23,9 @@ import torch
 import torch.nn as nn
 from torch.distributions.bernoulli import Bernoulli
 
-from ..openfold_np import residue_constants
-from . import feats
+from . import residue_constants
 from .rigid_utils import Rigid, Rotation
-from .tensor_utils import batched_gather, masked_mean, permute_final_dims, tensor_tree_map, tree_map
+from .tensor_utils import masked_mean, permute_final_dims, tensor_tree_map, tree_map
 
 
 def softmax_cross_entropy(logits, labels):

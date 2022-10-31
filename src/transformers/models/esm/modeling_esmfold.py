@@ -25,18 +25,20 @@ from ...utils import (
 )
 from .configuration_esm import EsmConfig
 from .modeling_esm import ESM_START_DOCSTRING, EsmModel, EsmPreTrainedModel
-from .openfold_data_transforms import make_atom14_masks
-from .openfold_np import residue_constants
-from .openfold_np.protein import Protein as OFProtein
-from .openfold_np.protein import to_pdb
-from .openfold_utils.chunk_utils import chunk_layer
-from .openfold_utils.feats import (
+from .openfold_utils import (
+    OFProtein,
+    Rigid,
+    Rotation,
     atom14_to_atom37,
+    chunk_layer,
+    compute_predicted_aligned_error,
+    compute_tm,
     frames_and_literature_positions_to_atom14_pos,
+    make_atom14_masks,
+    residue_constants,
+    to_pdb,
     torsion_angles_to_frames,
 )
-from .openfold_utils.loss import compute_predicted_aligned_error, compute_tm
-from .openfold_utils.rigid_utils import Rigid, Rotation
 
 
 logger = logging.get_logger(__name__)
