@@ -53,7 +53,6 @@ class IBertModelTester:
     def __init__(
         self,
         parent,
-        parent=parent,
         batch_size=13,
         seq_length=7,
         is_training=True,
