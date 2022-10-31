@@ -87,6 +87,8 @@ class Mask2FormerConfig(PretrainedConfig):
             feature strides corresponding to features generated from backbone network
         mask2former_num_feature_levels (`int`, *optional*, defaults to 3):
             Number of feature levels for Mask2former model
+        num_classes (`int`, *optional*, defaults to 81):
+            Number of segmentation labels / classes
     Raises:
         `ValueError`:
             Raised if the backbone model type selected is not in `["swin"]` or the decoder model type selected is not
@@ -135,6 +137,7 @@ class Mask2FormerConfig(PretrainedConfig):
         common_stride: Optional[int] = 4,
         feature_strides: Optional[List[int]] = [4, 8, 16, 32],
         mask2former_num_feature_levels: Optional[int] = 3,
+        num_classes: int = 80,
         **kwargs,
     ):
         if backbone_config is None:
@@ -200,7 +203,8 @@ class Mask2FormerConfig(PretrainedConfig):
         self.train_num_points = train_num_points
         self.importance_sample_ratio = importance_sample_ratio
         self.oversample_ratio = oversample_ratio
-        ##Pixel Decoder Config
+        self.num_classes = num_classes
+        # Pixel Decoder Config
         self.pixel_decoder_config = pixel_decoder_config
         self.pixel_decoder_config.feature_strides = feature_strides
         self.pixel_decoder_config.common_stride = common_stride

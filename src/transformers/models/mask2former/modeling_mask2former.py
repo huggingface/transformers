@@ -69,7 +69,7 @@ if is_torch_cuda_available() and is_ninja_available():
 else:
     MultiScaleDeformableAttention = None
 
-#copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.MultiScaleDeformableAttentionFunction
 class MultiScaleDeformableAttentionFunction(Function):
     @staticmethod
     def forward(
@@ -1940,10 +1940,10 @@ class Mask2FormerLoss(nn.Module):
 
         super().__init__()
         requires_backends(self, ["scipy"])
-        self.num_labels = config.num_labels
+        self.num_labels = config.num_classes
         self.weight_dict = weight_dict
 
-        #Weight to apply to the null class
+        # Weight to apply to the null class
         self.eos_coef = config.no_object_weight
         empty_weight = torch.ones(self.num_labels + 1)
         empty_weight[-1] = self.eos_coef
@@ -2047,12 +2047,12 @@ class Mask2FormerLoss(nn.Module):
         target_masks, _ = self._pad_images_to_max_in_batch(mask_labels)
         target_masks = target_masks[tgt_idx]
         
-        ##No need to upsample predictions as we are using normalized coordinates 
+        # No need to upsample predictions as we are using normalized coordinates 
         pred_masks = pred_masks[:, None]
         target_masks = target_masks[:, None]
 
         with torch.no_grad():
-            #sample point coordinates
+            # Sample point coordinates
             point_coordinates = self.sample_points_using_uncertainty(
                 pred_masks,
                 lambda logits: calculate_uncertainty(logits),
@@ -2107,7 +2107,7 @@ class Mask2FormerLoss(nn.Module):
             A tensor of shape (R, 1, ...) that contains uncertainty scores with the most uncertain locations having the highest uncertainty score.
         """
         assert logits.shape[1] == 1
-        #get uncertainty scores with the most uncertain locations having the highest uncertainty score
+        # Get uncertainty scores with the most uncertain locations having the highest uncertainty score
         uncertainty_scores = -(torch.abs(logits))
         return uncertainty_scores
 
@@ -3340,7 +3340,7 @@ class Mask2FormerForInstanceSegmentation(Mask2FormerPreTrainedModel):
         self.model = Mask2FormerModel(config)
         hidden_size = config.decoder_config.hidden_size
         # + 1 because we add the "null" class
-        self.class_predictor = nn.Linear(hidden_size, config.num_labels + 1)
+        self.class_predictor = nn.Linear(hidden_size, config.num_classes + 1)
 
         self.weight_dict = {
             "loss_cross_entropy": config.cross_entropy_weight,
@@ -3348,7 +3348,7 @@ class Mask2FormerForInstanceSegmentation(Mask2FormerPreTrainedModel):
             "loss_dice": config.dice_weight,
         }
         
-        #SetCriterion add-> num_points, oversample_ratio, importance_sample_ratio
+        # SetCriterion add-> num_points, oversample_ratio, importance_sample_ratio
         self.criterion = Mask2FormerLoss(config, weight_dict=self.weight_dict)
 
         self.post_init()
