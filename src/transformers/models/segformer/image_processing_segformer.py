@@ -53,28 +53,34 @@ class SegformerImageProcessor(BaseImageProcessor):
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
-            dimensions to the specified `size`.
+            Whether to resize the image's (height, width) dimensions to the specified `(size["height"],
+            size["width"])`. Can be overridden by the `do_resize` parameter in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 512, "width": 512}`):
-            Set the class default for the `size` parameter. Size of the image after resizing.
+            Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
+            method.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-            Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
+            Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
+            `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
-            specified scale `rescale_factor`.
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
+            parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Set the class default for `rescale_factor`. Defines the scale factor to use if rescaling the image.
+            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
+            method.
         do_normalize (`bool`, *optional*, defaults to `True`):
-            Set the class default for `do_normalize`. Controls whether to normalize the image.
+            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
+            method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Set the class default for `image_mean`. This is a float or list of floats of length of the number of
-            channels for
+            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
+            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Image standard deviation.
+            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_reduce_labels (`bool`, *optional*, defaults to `False`):
-            Set the class default for `do_reduce_labels`. Controls whether or not to reduce all label values of
-            segmentation maps by 1. Usually used for datasets where 0 is used for background, and background itself is
-            not included in all classes of a dataset (e.g. ADE20k). The background label will be replaced by 255.
+            Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0 is
+            used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k). The
+            background label will be replaced by 255. Can be overridden by the `do_reduce_labels` parameter in the
+            `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]

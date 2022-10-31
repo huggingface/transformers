@@ -94,30 +94,31 @@ class DPTImageProcessor(BaseImageProcessor):
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
-            dimensions to the specified `size`.
+            Whether to resize the image's (height, width) dimensions. Can be overidden by `do_resize` in `preprocess`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 384, "width": 384}`):
-            Set the class default for the `size` parameter. Controls the size of the image after resizing.
+            Size of the image after resizing. Can be overidden by `size` in `preprocess`.
         keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
-            Set the class default for the `keep_aspect_ratio` parameter. If `True`, the image is resized to the largest
-            possible size such that the aspect ratio is preserved.
+            If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
+            be overidden by `keep_aspect_ratio` in `preprocess`.
         ensure_multiple_of (`int`, *optional*, defaults to `1`):
-            Set the class default for the `ensure_multiple_of` parameter. If `do_resize` is `True`, the image is
-            resized to a size that is a multiple of this value.
+            If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
+            by `ensure_multiple_of` in `preprocess`.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-            Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
+            Defines the resampling filter to use if resizing the image. Can be overidden by `resample` in `preprocess`.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
-            specified scale `rescale_factor`.
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overidden by `do_rescale` in
+            `preprocess`.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Set the class default for `rescale_factor`. Defines the scale factor to use if rescaling the image.
+            Scale factor to use if rescaling the image. Can be overidden by `rescale_factor` in `preprocess`.
         do_normalize (`bool`, *optional*, defaults to `True`):
-            Set the class default for `do_normalize`. Controls whether to normalize the image.
+            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
+            method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Set the class default for `image_mean`. This is a float or list of floats of length of the number of
-            channels for
+            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
+            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Image standard deviation.
+            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]

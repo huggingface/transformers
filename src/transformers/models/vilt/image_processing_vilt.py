@@ -157,33 +157,38 @@ class ViltImageProcessor(BaseImageProcessor):
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
-            dimensions to the specified `size`.
+            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
+            `do_resize` parameter in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 384}`):
-            Set the class default for the `size` parameter. Resize the shorter side of the input to
-            `size["shortest_edge"]`. The longer side will be limited to under `int((1333 / 800) *
-            size["shortest_edge"])` while preserving the aspect ratio. Only has an effect if `do_resize` is set to
-            `True`.
+            Resize the shorter side of the input to `size["shortest_edge"]`. The longer side will be limited to under
+            `int((1333 / 800) * size["shortest_edge"])` while preserving the aspect ratio. Only has an effect if
+            `do_resize` is set to `True`. Can be overridden by the `size` parameter in the `preprocess` method.
         size_divisor (`int`, *optional*, defaults to 32):
-            Set the class default for `size_divisor`. The size by which to make sure both the height and width can be
-            divided. Only has an effect if `do_resize` is set to `True`.
+            The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
+            is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-            Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
+            Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
+            overridden by the `resample` parameter in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
-            specified scale `rescale_factor`.
+            Wwhether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
+            `do_rescale` parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Set the class default for `rescale_factor`. Defines the scale factor to use if rescaling the image.
+            Scale factor to use if rescaling the image. Only has an effect if `do_rescale` is set to `True`. Can be
+            overridden by the `rescale_factor` parameter in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `True`):
-            Set the class default for `do_normalize`. Controls whether to normalize the image.
+            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
+            method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Set the class default for `image_mean`. This is a float or list of floats of length of the number of
-            channels for
+            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
+            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
+            overridden by the `image_mean` parameter in the `preprocess` method.
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Set the class default for `image_std`. Image standard deviation.
+            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+            Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `True`):
-            Set the class default for `do_pad`. Controls whether to pad the image to the `(max_height, max_width)` of
-            the images.
+            Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
+            the `do_pad` parameter in the `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]

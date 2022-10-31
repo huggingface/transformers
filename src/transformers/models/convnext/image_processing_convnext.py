@@ -56,31 +56,34 @@ class ConvNextImageProcessor(BaseImageProcessor):
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
-            dimensions to the specified `size`.
+            Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overriden
+            by `do_resize` in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 384}`):
-            Set the class default for the `size` parameter. Controls the resolution of the output image after `resize`
-            is applied. If `size["shortest_edge"]` >= 384, the image is resized to `(size["shortest_edge"],
-            size["shortest_edge"])`. Otherwise, the smaller edge of the image will be matched to
-            `int(size["shortest_edge"]/crop_pct)`, after which the image is cropped to `(size["shortest_edge"],
-            size["shortest_edge"])`. Only has an effect if `do_resize` is set to `True`.
+            Resolution of the output image after `resize` is applied. If `size["shortest_edge"]` >= 384, the image is
+            resized to `(size["shortest_edge"], size["shortest_edge"])`. Otherwise, the smaller edge of the image will
+            be matched to `int(size["shortest_edge"]/crop_pct)`, after which the image is cropped to
+            `(size["shortest_edge"], size["shortest_edge"])`. Only has an effect if `do_resize` is set to `True`. Can
+            be overriden by `size` in the `preprocess` method.
         crop_pct (`float` *optional*, defaults to 244 / 256):
-            Set the class default for the `crop_pct` parameter. The percentage of the image to crop. Only has an effect
-            if `do_resize` is `True` and size < 384.
+            Percentage of the image to crop. Only has an effect if `do_resize` is `True` and size < 384. Can be
+            overriden by `crop_pct` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-            Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
+            Resampling filter to use if resizing the image. Can be overriden by `resample` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
-            specified scale `rescale_factor`.
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overriden by `do_rescale` in
+            the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Set the class default for `rescale_factor`. Defines the scale factor to use if rescaling the image.
+            Scale factor to use if rescaling the image. Can be overriden by `rescale_factor` in the `preprocess`
+            method.
         do_normalize (`bool`, *optional*, defaults to `True`):
-            Set the class default for `do_normalize`. Controls whether to normalize the image.
+            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
+            method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Set the class default for `image_mean`. This is a float or list of floats of length of the number of
-            channels for
+            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
+            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Image standard deviation.
+            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]

@@ -51,31 +51,38 @@ class LevitImageProcessor(BaseImageProcessor):
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_resize` parameter. Controls whether to resize the shortest edge of the
-            input to int(256/224 *`size`).
+            Wwhether to resize the shortest edge of the input to int(256/224 *`size`). Can be overridden by the
+            `do_resize` parameter in the `preprocess` method.
         size (`Dict[str, int]`, *optional*, defaults to `{"shortest_edge": 224}`):
-            Set the class default for the `size` parameter. Controls the size of the output image after resizing. If
-            size is a dict with keys "width" and "height", the image will be resized to `(size["height"],
-            size["width"])`. If size is a dict with key "shortest_edge", the shortest edge value `c` is rescaled to
-            `int(c * (256/224))`. The smaller edge of the image will be matched to this value i.e, if height > width,
-            then image will be rescaled to `(size["shortest_egde"] * height / width, size["shortest_egde"])`.
+            Size of the output image after resizing. If size is a dict with keys "width" and "height", the image will
+            be resized to `(size["height"], size["width"])`. If size is a dict with key "shortest_edge", the shortest
+            edge value `c` is rescaled to `int(c * (256/224))`. The smaller edge of the image will be matched to this
+            value i.e, if height > width, then image will be rescaled to `(size["shortest_egde"] * height / width,
+            size["shortest_egde"])`. Can be overridden by the `size` parameter in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-            Set the class default for the `resample` parameter. Controls the interpolation method used when resizing.
+            Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
+            `preprocess` method.
         do_center_crop (`bool`, *optional*, defaults to `True`):
-            Whether or not to center crop the input to `size`.
+            Whether or not to center crop the input to `(crop_size["height"], crop_size["width"])`. Can be overridden
+            by the `do_center_crop` parameter in the `preprocess` method.
         crop_size (`Dict`, *optional*, defaults to `{"height": 224, "width": 224}`):
-            Desired image size after `center_crop`.
+            Desired image size after `center_crop`. Can be overridden by the `crop_size` parameter in the `preprocess`
+            method.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
-            specified scale `rescale_factor`.
+            Controls whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
+            `do_rescale` parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Set the class default for `rescale_factor`. Defines the scale factor to use if rescaling the image.
+            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
+            `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether or not to normalize the input with mean and standard deviation.
+            Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
+            `preprocess` method.
         image_mean (`List[int]`, defaults to `[0.229, 0.224, 0.225]`):
-            The sequence of means for each channel, to be used when normalizing images.
+            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
+            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
         image_std (`List[int]`, defaults to `[0.485, 0.456, 0.406]`):
-            The sequence of standard deviations for each channel, to be used when normalizing images.
+            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]

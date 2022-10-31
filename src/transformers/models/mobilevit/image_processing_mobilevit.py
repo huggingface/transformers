@@ -79,24 +79,30 @@ class MobileViTImageProcessor(BaseImageProcessor):
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
-            dimensions to the specified `size`.
+            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
+            `do_resize` parameter in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
-            Set the class default for the `size` parameter. Size of the image after applying `resize`.
+            Controls the size of the output image after resizing. Can be overridden by the `size` parameter in the
+            `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-            Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
+            Defines the resampling filter to use if resizing the image. Can be overridden by the `resample` parameter
+            in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
-            specified scale `rescale_factor`.
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
+            parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Set the class default for `rescale_factor`. Defines the scale factor to use if rescaling the image.
+            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
+            `preprocess` method.
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to crop the input at the center. If the input size is smaller than `crop_size` along any edge, the
-            image is padded with 0's and then center cropped.
+            image is padded with 0's and then center cropped. Can be overridden by the `do_center_crop` parameter in
+            the `preprocess` method.
         crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 256, "width": 256}`):
-            Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to `True`.
+            Desired output size `(size["height"], size["width"])` when applying center-cropping. Can be overridden by
+            the `crop_size` parameter in the `preprocess` method.
         do_flip_channel_order (`bool`, *optional*, defaults to `True`):
-            Whether to flip the color channels from RGB to BGR.
+            Whether to flip the color channels from RGB to BGR. Can be overridden by the `do_flip_channel_order`
+            parameter in the `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]

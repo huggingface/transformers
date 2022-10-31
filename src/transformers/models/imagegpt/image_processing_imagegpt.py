@@ -57,18 +57,20 @@ class ImageGPTImageProcessor(BaseImageProcessor):
 
     Args:
         clusters (`np.ndarray`, *optional*):
-            The color clusters to use, as a `np.ndarray` of shape `(n_clusters, 3)`.
+            The color clusters to use, as a `np.ndarray` of shape `(n_clusters, 3)` when color quantizing. Can be
+            overriden by `clusters` in `preprocess`.
         do_resize (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_resize` parameter. Controls whether to resize the image's dimensions to
-            `(size["height"], size["width"])`.
+            Whether to resize the image's dimensions to `(size["height"], size["width"])`. Can be overridden by
+            `do_resize` in `preprocess`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 256, "width": 256}`):
-            Set the class default for the `size` parameter. Size of the image after resizing.
+            Size of the image after resizing. Can be overridden by `size` in `preprocess`.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-            Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
+            Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
         do_normalize (`bool`, *optional*, defaults to `True`):
-            Set the class default for `do_normalize`. Controls whether to normalize the image.
+            Whether to normalize the image pixel value to between [-1, 1]. Can be overridden by `do_normalize` in
+            `preprocess`.
         do_color_quantize (`bool`, *optional*, defaults to `True`):
-            Set the class default for `do_color_quantize`. Controls whether to color quantize the image.
+            Whether to color quantize the image. Can be overridden by `do_color_quantize` in `preprocess`.
     """
 
     model_input_names = ["pixel_values"]

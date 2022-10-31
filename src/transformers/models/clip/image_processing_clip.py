@@ -61,32 +61,36 @@ class CLIPImageProcessor(BaseImageProcessor):
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
-            dimensions to the specified `size`.
-        size (`Dict[str, int]` *optional*, defaults to 224):
-            Set the class default for the `size` parameter. Size of the image after resizing.
+            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
+            `do_resize` in the `preprocess` method.
+        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
+            Size of the image after resizing. The shortest edge of the image is resized to size["shortest_edge"], with
+            the longest edge resized to keep the input aspect ratio. Can be overridden by `size` in the `preprocess`
+            method.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-            Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
+            Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_center_crop (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_center_crop` parameter. Controls whether to center crop the image to the
-            specified `crop_size`.
+            Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
+            `preprocess` method.
         crop_size (`Dict[str, int]` *optional*, defaults to 224):
-            Set the class default for the `crop_size` parameter. Controls the size of the output image after applying
-            `center_crop`.
+            Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
+            method.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
-            specified scale `rescale_factor`.
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
+            the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Set the class default for `rescale_factor`. Defines the scale factor to use if rescaling the image.
+            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
+            method.
         do_normalize:
-            Set the class default for `do_normalize`. Controls whether to normalize the image.
+            Whether to normalize the image. Can be overridden by `do_normalize` in the `preprocess` method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Set the class default for `image_mean`. This is a float or list of floats of length of the number of
-            channels for
+            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
+            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Image standard deviation.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Set the class default for `convert_rgb`. Controls whether to convert the image to RGB.
+            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]

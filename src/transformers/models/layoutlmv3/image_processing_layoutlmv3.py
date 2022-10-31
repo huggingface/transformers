@@ -109,33 +109,37 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
-            dimensions to the specified `size`.
+            Whether to resize the image's (height, width) dimensions to `(size["height"], size["width"])`. Can be
+            overridden by `do_resize` in `preprocess`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
-            Set the class default for the `size` parameter. Controls the size of the image after resizing.
+            Size of the image after resizing. Can be overridden by `size` in `preprocess`.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-            Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
+            Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_rescale` parameter. Controls whether to rescale the image's pixel values
-            by the specified `rescale_value`.
+            Whether to rescale the image's pixel values by the specified `rescale_value`. Can be overridden by
+            `do_rescale` in `preprocess`.
         rescale_factor (`float`, *optional*, defaults to 1 / 255):
-            Set the class default for the `rescale_value` parameter. Controls the value by which the image's pixel
-            values are rescaled.
+            Value by which the image's pixel values are rescaled. Can be overridden by `rescale_factor` in
+            `preprocess`.
         do_normalize (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_normalize` parameter. Controls whether to normalize the image.
+            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
+            method.
         image_mean (`Iterable[float]` or `float`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Set the class default for the `image_mean` parameter. Mean values to be used for normalization.
+            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
+            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
         image_std (`Iterable[float]` or `float`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Set the class default for the `image_std` parameter. Standard deviation values to be used for
-            normalization.
+            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
         apply_ocr (`bool`, *optional*, defaults to `True`):
-            Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes.
+            Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes. Can be overridden by
+            the `apply_ocr` parameter in the `preprocess` method.
         ocr_lang (`str`, *optional*):
             The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
-            used.
+            used. Can be overridden by the `ocr_lang` parameter in the `preprocess` method.
         tesseract_config (`str`, *optional*):
             Any additional custom configuration flags that are forwarded to the `config` parameter when calling
-            Tesseract. For example: '--psm 6'.
+            Tesseract. For example: '--psm 6'. Can be overridden by the `tesseract_config` parameter in the
+            `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]

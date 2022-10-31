@@ -130,75 +130,86 @@ class FlavaImageProcessor(BaseImageProcessor):
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
-            dimensions to the specified `size`.
+            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
+            `do_resize` parameter in `preprocess`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
-            Set the class default for the `size` parameter. Controls the size of the image after resizing.
+            Size of the image after resizing. Can be overridden by the `size` parameter in `preprocess`.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-            Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
+            Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in
+            `preprocess`.
         do_center_crop (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_center_crop` parameter. Controls whether to center crop the images
+            Whether to center crop the images. Can be overridden by the `do_center_crop` parameter in `preprocess`.
         crop_size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
-            Set the class default for the `crop_size` parameter. Size of image after the center crop.
+            Size of image after the center crop `(crop_size["height"], crop_size["width"])`. Can be overridden by the
+            `crop_size` parameter in `preprocess`.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_rescale` parameter. Controls whether to rescale the image by the
-            specified scale `rescale_factor`.
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
+            parameter in `preprocess`.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Set the class default for `rescale_factor`. Defines the scale factor to use if rescaling the image.
+            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in
+            `preprocess`.
         do_normalize (`bool`, *optional*, defaults to `True`):
-            Set the class default for `do_normalize`. Controls whether to normalize the image.
+            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in `preprocess`.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Set the class default for `image_mean`. Image mean to use if normalizing the image.
+            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
+            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Set the class default for `image_std`. Image standard deviation to use for normalization.
+            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
         return_image_mask (`bool`, *optional*, defaults to `False`):
-            Set the class default for `return_image_mask`. Controls whether to return the image mask.
+            Whether to return the image mask. Can be overridden by the `return_image_mask` parameter in `preprocess`.
         input_size_patches (`int`, *optional*, defaults to 14):
-            Set the class default for `input_size_patches`. Number of patches in the image in height and width
-            direction. 14x14 = 196 total patches.
+            Number of patches in the image in height and width direction. 14x14 = 196 total patches. Can be overridden
+            by the `input_size_patches` parameter in `preprocess`.
         total_mask_patches (`int`, *optional*, defaults to 75):
-            Set the class default for `total_mask_patches`. Total number of patches that should be masked.
+            Total number of patches that should be masked. Can be overridden by the `total_mask_patches` parameter in
+            `preprocess`.
         mask_group_min_patches (`int`, *optional*, defaults to 16):
-            Set the class default for `mask_group_min_patches`. Minimum number of patches that should be masked.
+            Minimum number of patches that should be masked. Can be overridden by the `mask_group_min_patches`
+            parameter in `preprocess`.
         mask_group_max_patches (`int`, *optional*):
-            Set the class default for `mask_group_max_patches`. Maximum number of patches that should be masked.
+            Maximum number of patches that should be masked. Can be overridden by the `mask_group_max_patches`
+            parameter in `preprocess`.
         mask_group_min_aspect_ratio (`float`, *optional*, defaults to 0.3):
-            Set the class default for `mask_group_min_aspect_ratio`. Minimum aspect ratio of the mask window.
+            Minimum aspect ratio of the mask window. Can be overridden by the `mask_group_min_aspect_ratio` parameter
+            in `preprocess`.
         mask_group_max_aspect_ratio (`float`, *optional*):
-            Set the class default for `mask_group_max_aspect_ratio`. Maximum aspect ratio of the mask window
+            Maximum aspect ratio of the mask window. Can be overridden by the `mask_group_max_aspect_ratio` parameter
+            in `preprocess`.
         codebook_do_resize (`bool`, *optional*, defaults to `True`):
-            Set the class default for `codebook_do_resize`. Whether to resize the input for codebook to a certain
-            `codebook_size`.
+            Whether to resize the input for codebook to a certain. Can be overridden by the `codebook_do_resize`
+            parameter in `preprocess`. `codebook_size`.
         codebook_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
-            Set the class default for `codebook_size`. Resize the input for codebook to the given size.
+            Resize the input for codebook to the given size. Can be overridden by the `codebook_size` parameter in
+            `preprocess`.
         codebook_resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
-            Set the class default for `codebook_resample`. Defines the resampling filter to use if resizing the
-            codebook image.
+            Resampling filter to use if resizing the codebook image. Can be overridden by the `codebook_resample`
+            parameter in `preprocess`.
         codebook_do_center_crop (`bool`, *optional*, defaults to `True`):
-            Set the class default for `codebook_do_center_crop`. Whether to crop the input for codebook at the center.
-            If the input size is smaller than `codebook_crop_size` along any edge, the image is padded with 0's and
-            then center cropped.
+            Whether to crop the input for codebook at the center. If the input size is smaller than
+            `codebook_crop_size` along any edge, the image is padded with 0's and then center cropped. Can be
+            overridden by the `codebook_do_center_crop` parameter in `preprocess`.
         codebook_crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
-            Set the class default for `codebook_crop_size`. Desired output size for codebook input when applying
-            center-cropping.
+            Desired output size for codebook input when applying center-cropping. Can be overridden by the
+            `codebook_crop_size` parameter in `preprocess`.
         codebook_do_rescale (`bool`, *optional*, defaults to `True`):
-            Set the class default for `codebook_do_rescale`. Whether to rescale the input for codebook by the specified
-            scale `codebook_rescale_factor`.
+            Whether to rescale the input for codebook by the specified scale `codebook_rescale_factor`. Can be
+            overridden by the `codebook_do_rescale` parameter in `preprocess`.
         codebook_rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Set the class default for `codebook_rescale_factor`. Defines the scale factor to use if rescaling the
-            codebook image.
+            Defines the scale factor to use if rescaling the codebook image. Can be overridden by the
+            `codebook_rescale_factor` parameter in `preprocess`.
         codebook_do_map_pixels (`bool`, *optional*, defaults to `True`):
-            Set the class default for `codebook_do_map_pixels`. Whether to map the pixel values of the codebook input
-            to (1 - 2e)x + e.
+            Whether to map the pixel values of the codebook input to (1 - 2e)x + e. Can be overridden by the
+            `codebook_do_map_pixels` parameter in `preprocess`.
         codebook_do_normalize (`bool`, *optional*, defaults to `True`):
-            Set the class default for `codebook_do_normalize`. Whether or not to normalize the input for codebook with
-            `codebook_image_mean` and `codebook_image_std`.
+            Whether or not to normalize the input for codebook with `codebook_image_mean` and `codebook_image_std`. Can
+            be overridden by the `codebook_do_normalize` parameter in `preprocess`.
         codebook_image_mean (`Optional[Union[float, Iterable[float]]]`, *optional*, defaults to `[0, 0, 0]`):
-            Set the class default for `codebook_image_mean`. The sequence of means for each channel, to be used when
-            normalizing images for codebook.
+            The sequence of means for each channel, to be used when normalizing images for codebook. Can be overridden
+            by the `codebook_image_mean` parameter in `preprocess`.
         codebook_image_std (`Optional[Union[float, Iterable[float]]]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-            Set the class default for `codebook_image_std`. The sequence of standard deviations for each channel, to be
-            used when normalizing images for codebook.
+            The sequence of standard deviations for each channel, to be used when normalizing images for codebook. Can
+            be overridden by the `codebook_image_std` parameter in `preprocess`.
     """
 
     model_input_names = ["pixel_values"]

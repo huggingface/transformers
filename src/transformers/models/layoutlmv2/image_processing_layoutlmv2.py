@@ -108,20 +108,22 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Set the class default for the `do_resize` parameter. Controls whether to resize the image's (height, width)
-            dimensions to the specified `size`.
+            Whether to resize the image's (height, width) dimensions to `(size["height"], size["width"])`. Can be
+            overridden by `do_resize` in `preprocess`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
-            Set the class default for the `size` parameter. Size of the image after resizing.
+            Size of the image after resizing. Can be overridden by `size` in `preprocess`.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-            Set the class default for `resample`. Defines the resampling filter to use if resizing the image.
+            Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
+            `preprocess` method.
         apply_ocr (`bool`, *optional*, defaults to `True`):
-            Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes.
+            Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes. Can be overridden by
+            `apply_ocr` in `preprocess`.
         ocr_lang (`str`, *optional*):
             The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
-            used.
+            used. Can be overridden by `ocr_lang` in `preprocess`.
         tesseract_config (`str`, *optional*):
             Any additional custom configuration flags that are forwarded to the `config` parameter when calling
-            Tesseract. For example: '--psm 6'.
+            Tesseract. For example: '--psm 6'. Can be overridden by `tesseract_config` in `preprocess`.
     """
 
     model_input_names = ["pixel_values"]
