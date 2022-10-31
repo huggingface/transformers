@@ -124,6 +124,10 @@ class GPTJAttention(nn.Module):
         if config.rotary_dim is not None:
             self.rotary_dim = config.rotary_dim
 
+        sin, cos = fixed_pos_embedding(x=torch.zeros(1, 1, self.rotary_dim), seq_len=max_positions)
+        self.register_buffer("sin", sin)
+        self.register_buffer("cos", cos)
+
     def _split_heads(self, tensor, num_attention_heads, attn_head_size, rotary):
         """
         Splits hidden dim into attn_head_size and num_attention_heads
@@ -229,15 +233,15 @@ class GPTJAttention(nn.Module):
 
             q_rot = query[:, :, :, : self.rotary_dim]
             q_pass = query[:, :, :, self.rotary_dim :]
-
-            sincos = fixed_pos_embedding(k_rot, 1, seq_len=seq_len)
+            
+            sincos = (self.sin, self.cos)
             k_rot = apply_rotary_pos_emb(k_rot, sincos, offset=offset)
             q_rot = apply_rotary_pos_emb(q_rot, sincos, offset=offset)
 
             key = torch.cat([k_rot, k_pass], dim=-1)
             query = torch.cat([q_rot, q_pass], dim=-1)
         else:
-            sincos = fixed_pos_embedding(key, 1, seq_len=seq_len)
+            sincos = (self.sin, self.cos)
             key = apply_rotary_pos_emb(key, sincos, offset=offset)
             query = apply_rotary_pos_emb(query, sincos, offset=offset)
 
