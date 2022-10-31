@@ -49,7 +49,7 @@ logger = logging.get_logger(__name__)
 
 class BeitImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a DeiT image processor.
+    Constructs a BEiT image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
