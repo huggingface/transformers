@@ -37,13 +37,15 @@ _CONFIG_FOR_DOC = "AudioSpectogramTransformerConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "AudioSpectogramTransformerFeatureExtractor"
 
 # Base docstring
+# TODO update to appropriate organization
 _CHECKPOINT_FOR_DOC = "nielsr/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593"
 _EXPECTED_OUTPUT_SHAPE = [1, 1214, 768]
 
 # Audio classification docstring
+# TODO update to appropriate organization
 _SEQ_CLASS_CHECKPOINT = "nielsr/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593"
-_SEQ_CLASS_EXPECTED_OUTPUT = ""
-_SEQ_CLASS_EXPECTED_LOSS = 0.0
+_SEQ_CLASS_EXPECTED_OUTPUT = "'Speech'"
+_SEQ_CLASS_EXPECTED_LOSS = 0.17
 
 
 AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
