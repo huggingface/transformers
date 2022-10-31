@@ -1253,18 +1253,31 @@ class Trainer:
                 return model
             jit_inputs = []
             example_batch = next(iter(dataloader))
+            example_batch = self._prepare_inputs(example_batch)
             for key in example_batch:
                 example_tensor = torch.ones_like(example_batch[key])
                 jit_inputs.append(example_tensor)
             jit_inputs = tuple(jit_inputs)
             try:
                 jit_model = model.eval()
-                with ContextManagers([self.autocast_smart_context_manager(), torch.no_grad()]):
+                with ContextManagers(
+                    [
+                        torch.cuda.amp.autocast(cache_enabled=False, dtype=self.amp_dtype)
+                        if self.use_cuda_amp
+                        else torch.cpu.amp.autocast(cache_enabled=False, dtype=self.amp_dtype)
+                        if self.use_cpu_amp
+                        else contextlib.nullcontext(),
+                        torch.no_grad(),
+                    ]
+                ):
                     jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
                 jit_model = torch.jit.freeze(jit_model)
                 jit_model(**example_batch)
+                jit_model(**example_batch)
                 model = jit_model
-            except (RuntimeError, TypeError) as e:
+                self.use_cpu_amp = False
+                self.use_cuda_amp = False
+            except (RuntimeError, TypeError, ValueError) as e:
                 logger.warning(f"failed to use PyTorch jit mode due to: {e}.")
 
         return model
@@ -1295,9 +1308,6 @@ class Trainer:
             dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
             model = self.ipex_optimize_model(model, training, dtype=dtype)
 
-        if self.args.jit_mode_eval:
-            model = self.torch_jit_model_eval(model, dataloader, training)
-
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.
             if isinstance(self.model_wrapped, smp.model.DistributedModel):
@@ -1319,6 +1329,9 @@ class Trainer:
         # Multi-gpu training (should be after apex fp16 initialization)
         if self.args.n_gpu > 1:
             model = nn.DataParallel(model)
+
+        if self.args.jit_mode_eval:
+            model = self.torch_jit_model_eval(model, dataloader, training)
 
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.

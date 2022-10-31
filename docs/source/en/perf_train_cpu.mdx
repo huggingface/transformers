@@ -19,7 +19,7 @@ IPEX is optimized for CPUs with AVX-512 or above, and functionally works for CPU
 
 Low precision data type BFloat16 has been natively supported on the 3rd Generation Xeon® Scalable Processors (aka Cooper Lake) with AVX512 instruction set and will be supported on the next generation of Intel® Xeon® Scalable Processors with Intel® Advanced Matrix Extensions (Intel® AMX) instruction set with further boosted performance. The Auto Mixed Precision for CPU backend has been enabled since PyTorch-1.10. At the same time, the support of Auto Mixed Precision with BFloat16 for CPU and BFloat16 optimization of operators has been massively enabled in Intel® Extension for PyTorch, and partially upstreamed to PyTorch master branch. Users can get better performance and user experience with IPEX Auto Mixed Precision.
 
-Check more detailed information for [Auto Mixed Precision](https://intel.github.io/intel-extension-for-pytorch/1.11.200/tutorials/features/amp.html).
+Check more detailed information for [Auto Mixed Precision](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/features/amp.html).
 
 ### IPEX installation:
 
@@ -37,7 +37,13 @@ For PyTorch-1.11:
 pip install intel_extension_for_pytorch==1.11.200+cpu -f https://software.intel.com/ipex-whl-stable
 ```
 
-Check more approaches for [IPEX installation](https://intel.github.io/intel-extension-for-pytorch/1.11.200/tutorials/installation.html).
+For PyTorch-1.12:
+
+```
+pip install intel_extension_for_pytorch==1.12.300+cpu -f https://software.intel.com/ipex-whl-stable
+```
+
+Check more approaches for [IPEX installation](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/installation.html).
 
 ### Usage in Trainer
 To enable auto mixed precision with IPEX in Trainer, users should add `use_ipex`, `bf16` and `no_cuda` in training command arguments.
