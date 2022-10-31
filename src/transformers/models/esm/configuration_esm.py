@@ -278,22 +278,6 @@ class TrunkConfig:
 
 @dataclass
 class StructureModuleConfig:
-    sequence_dim: int = 384
-    pairwise_dim: int = 128
-    ipa_dim: int = 16
-    resnet_dim: int = 128
-    num_heads_ipa: int = 12
-    num_qk_points: int = 4
-    num_v_points: int = 8
-    dropout_rate: float = 0.1
-    num_blocks: int = 8
-    num_transition_layers: int = 1
-    num_resnet_blocks: int = 2
-    num_angles: int = 7
-    trans_scale_factor: int = 10
-    epsilon: float = 1e-8
-    inf: float = 1e5
-
     """
     Args:
         sequence_dim:
@@ -327,6 +311,22 @@ class StructureModuleConfig:
         inf:
             Large number used for attention masking
     """
+
+    sequence_dim: int = 384
+    pairwise_dim: int = 128
+    ipa_dim: int = 16
+    resnet_dim: int = 128
+    num_heads_ipa: int = 12
+    num_qk_points: int = 4
+    num_v_points: int = 8
+    dropout_rate: float = 0.1
+    num_blocks: int = 8
+    num_transition_layers: int = 1
+    num_resnet_blocks: int = 2
+    num_angles: int = 7
+    trans_scale_factor: int = 10
+    epsilon: float = 1e-8
+    inf: float = 1e5
 
     def to_dict(self):
         return asdict(self)

@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import math
 import sys
+from dataclasses import dataclass
 from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
@@ -16,8 +17,16 @@ from torch.nn import LayerNorm
 from einops import rearrange, repeat
 
 from ...deepspeed import is_deepspeed_available
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
-from ...utils import ContextManagers, is_scipy_available, logging
+from ...modeling_outputs import ModelOutput
+from ...utils import (
+    ContextManagers,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_scipy_available,
+    logging,
+    replace_return_docstrings,
+)
+from .configuration_esm import EsmConfig
 from .modeling_esm import ESM_START_DOCSTRING, EsmModel, EsmPreTrainedModel
 from .openfold_data_transforms import make_atom14_masks
 from .openfold_np import residue_constants
@@ -34,6 +43,85 @@ from .openfold_utils.rigid_utils import Rigid, Rotation
 
 
 logger = logging.get_logger(__name__)
+
+
+@dataclass
+class EsmForProteinFoldingOutput(ModelOutput):
+    """
+    Output type of [`EsmForProteinFoldingOutput`].
+
+    Args:
+        frames (`torch.FloatTensor`):
+            Write a docstring Matt
+        sidechain_frames (`torch.FloatTensor`):
+            Write a docstring Matt
+        unnormalized_angles (`torch.FloatTensor`):
+            Write a docstring Matt
+        angles (`torch.FloatTensor`):
+            Write a docstring Matt
+        positions (`torch.FloatTensor`):
+            Write a docstring Matt
+        states (`torch.FloatTensor`):
+            Write a docstring Matt
+        s_s (`torch.FloatTensor`):
+            Write a docstring Matt
+        s_z (`torch.FloatTensor`):
+            Write a docstring Matt
+        distogram_logits (`torch.FloatTensor`):
+            Write a docstring Matt
+        lm_logits (`torch.FloatTensor`):
+            Write a docstring Matt
+        aatype (`torch.FloatTensor`):
+            Write a docstring Matt
+        atom14_atom_exists (`torch.FloatTensor`):
+            Write a docstring Matt
+        residx_atom14_to_atom37 (`torch.FloatTensor`):
+            Write a docstring Matt
+        residx_atom37_to_atom14 (`torch.FloatTensor`):
+            Write a docstring Matt
+        atom37_atom_exists (`torch.FloatTensor`):
+            Write a docstring Matt
+        residue_index (`torch.FloatTensor`):
+            Write a docstring Matt
+        lddt_head (`torch.FloatTensor`):
+            Write a docstring Matt
+        plddt (`torch.FloatTensor`):
+            Write a docstring Matt
+        ptm_logits (`torch.FloatTensor`):
+            Write a docstring Matt
+        ptm (`torch.FloatTensor`):
+            Write a docstring Matt
+        aligned_confidence_probs (`torch.FloatTensor`):
+            Write a docstring Matt
+        predicted_aligned_error (`torch.FloatTensor`):
+            Write a docstring Matt
+        max_predicted_aligned_error (`torch.FloatTensor`):
+            Write a docstring Matt
+    """
+
+    frames: torch.FloatTensor = None
+    sidechain_frames: torch.FloatTensor = None
+    unnormalized_angles: torch.FloatTensor = None
+    angles: torch.FloatTensor = None
+    positions: torch.FloatTensor = None
+    states: torch.FloatTensor = None
+    s_s: torch.FloatTensor = None
+    s_z: torch.FloatTensor = None
+    distogram_logits: torch.FloatTensor = None
+    lm_logits: torch.FloatTensor = None
+    aatype: torch.FloatTensor = None
+    atom14_atom_exists: torch.FloatTensor = None
+    residx_atom14_to_atom37: torch.FloatTensor = None
+    residx_atom37_to_atom14: torch.FloatTensor = None
+    atom37_atom_exists: torch.FloatTensor = None
+    residue_index: torch.FloatTensor = None
+    lddt_head: torch.FloatTensor = None
+    plddt: torch.FloatTensor = None
+    ptm_logits: torch.FloatTensor = None
+    ptm: torch.FloatTensor = None
+    aligned_confidence_probs: torch.FloatTensor = None
+    predicted_aligned_error: torch.FloatTensor = None
+    max_predicted_aligned_error: torch.FloatTensor = None
 
 
 ESMFOLD_INPUTS_DOCSTRING = r"""
@@ -1612,7 +1700,6 @@ class EsmFoldStructureModule(nn.Module):
         evoformer_output_dict,
         aatype,
         mask=None,
-        inplace_safe=False,
         _offload_inference=False,
     ):
         """
@@ -1978,6 +2065,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         return torch.tensor(esm_reorder)
 
     @add_start_docstrings_to_model_forward(ESMFOLD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=EsmForProteinFoldingOutput, config_class=EsmConfig)
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -1986,6 +2074,25 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         masking_pattern: Optional[torch.Tensor] = None,
         num_recycles: Optional[int] = None,
     ):
+        r"""
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import BertTokenizer, BertForPreTraining
+        >>> import torch
+
+        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        >>> model = BertForPreTraining.from_pretrained("bert-base-uncased")
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> prediction_logits = outputs.prediction_logits
+        >>> seq_relationship_logits = outputs.seq_relationship_logits
+        ```
+        """
         cfg = self.config.esmfold_config
 
         aa = input_ids  # B x L
@@ -2084,7 +2191,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         structure["ptm"] = compute_tm(ptm_logits, max_bin=31, no_bins=self.distogram_bins)
         structure.update(compute_predicted_aligned_error(ptm_logits, max_bin=31, no_bins=self.distogram_bins))
 
-        return structure
+        return EsmForProteinFoldingOutput(**structure)
 
     def af2_idx_to_esm_idx(self, aa, mask):
         aa = (aa + 1).masked_fill(mask != 1, 0)
