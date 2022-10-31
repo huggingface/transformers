@@ -24,32 +24,38 @@ jobs:
             - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
             - store_artifacts:
                   path: ~/transformers/tests_fetched_summary.txt
+#            - run: |
+#                if [ -f test_list.txt ]; then
+#                    cp test_list.txt test_preparation/test_list.txt
+#                else
+#                    touch test_preparation/test_list.txt
+#                fi
+#            - run: |
+#                if [ -f test_repo_utils.txt ]; then
+#                    mv test_repo_utils.txt test_preparation/test_repo_utils.txt
+#                else
+#                    touch test_preparation/test_repo_utils.txt
+#                fi
+#            - run: python utils/tests_fetcher.py --filter_tests
+#            - run: |
+#                if [ -f test_list.txt ]; then
+#                    mv test_list.txt test_preparation/filtered_test_list.txt
+#                else
+#                    touch test_preparation/filtered_test_list.txt
+#                fi
+#            - run: python utils/tests_fetcher.py --filters tests examples | tee examples_tests_fetched_summary.txt
+#            - run: |
+#                  if [ -f test_list.txt ]; then
+#                      mv test_list.txt test_preparation/examples_test_list.txt
+#                  else
+#                      touch test_preparation/examples_test_list.txt
+#                  fi
             - run: |
-                if [ -f test_list.txt ]; then
-                    cp test_list.txt test_preparation/test_list.txt
-                else
-                    touch test_preparation/test_list.txt
-                fi
-            - run: |
-                if [ -f test_repo_utils.txt ]; then
-                    mv test_repo_utils.txt test_preparation/test_repo_utils.txt
-                else
-                    touch test_preparation/test_repo_utils.txt
-                fi
-            - run: python utils/tests_fetcher.py --filter_tests
-            - run: |
-                if [ -f test_list.txt ]; then
-                    mv test_list.txt test_preparation/filtered_test_list.txt
-                else
-                    touch test_preparation/filtered_test_list.txt
-                fi
-            - run: python utils/tests_fetcher.py --filters tests examples | tee examples_tests_fetched_summary.txt
-            - run: |
-                  if [ -f test_list.txt ]; then
-                      mv test_list.txt test_preparation/examples_test_list.txt
-                  else
-                      touch test_preparation/examples_test_list.txt
-                  fi
+                  mkdir test_preparation
+                  echo -n "tests/models/bert/test_modeling_bert.py" > test_preparation/filtered_test_list.txt
+                  touch test_preparation/test_repo_utils.txt
+                  touch test_preparation/test_list.txt
+                  touch test_preparation/examples_test_list.txt
             - store_artifacts:
                   path: test_preparation/test_list.txt
             - store_artifacts:
@@ -161,13 +167,13 @@ workflows:
         when:
             not: <<pipeline.parameters.nightly>>
         jobs:
-            - check_code_quality
-            - check_repository_consistency
+#            - check_code_quality
+#            - check_repository_consistency
             - fetch_tests
 
     nightly:
         when: <<pipeline.parameters.nightly>>
         jobs:
-            - check_code_quality
-            - check_repository_consistency
+#            - check_code_quality
+#            - check_repository_consistency
             - fetch_all_tests
