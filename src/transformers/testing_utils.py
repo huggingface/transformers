@@ -39,12 +39,12 @@ from transformers import logging as transformers_logging
 
 from .deepspeed import is_deepspeed_available
 from .integrations import (
+    is_clearml_available,
     is_fairscale_available,
     is_optuna_available,
     is_ray_available,
     is_sigopt_available,
     is_wandb_available,
-    is_clearml_available
 )
 from .utils import (
     is_accelerate_available,
@@ -598,6 +598,7 @@ def require_wandb(test_case):
     """
     return unittest.skipUnless(is_wandb_available(), "test requires wandb")(test_case)
 
+
 def require_clearml(test_case):
     """
     Decorator marking a test requires clearml.
@@ -606,6 +607,7 @@ def require_clearml(test_case):
 
     """
     return unittest.skipUnless(is_clearml_available(), "test requires clearml")(test_case)
+
 
 def require_soundfile(test_case):
     """

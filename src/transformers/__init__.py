@@ -107,7 +107,7 @@ _import_structure = {
         "is_sigopt_available",
         "is_tensorboard_available",
         "is_wandb_available",
-        "is_clearml_available"
+        "is_clearml_available",
     ],
     "modelcard": ["ModelCard"],
     "modeling_tf_pytorch_utils": [
@@ -3156,6 +3156,7 @@ if TYPE_CHECKING:
 
     # Integrations
     from .integrations import (
+        is_clearml_available,
         is_comet_available,
         is_neptune_available,
         is_optuna_available,
@@ -3164,7 +3165,6 @@ if TYPE_CHECKING:
         is_sigopt_available,
         is_tensorboard_available,
         is_wandb_available,
-        is_clearml_available
     )
 
     # Model Cards
