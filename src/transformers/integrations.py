@@ -1337,7 +1337,7 @@ class ClearMLCallback(TrainerCallback):
                 'Automatic ClearML logging enabled.'
             )
             if self._clearml_task is None:
-                self._clearml_task = self._clearml.Task.init(project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),task_name=os.getenv("CLEARML_TASK", "Trainer"), auto_connect_frameworks={'tensorboard': False, 'pytorch': False})
+                self._clearml_task = self._clearml.Task.init(project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),task_name=os.getenv("CLEARML_TASK", "Trainer"), auto_connect_frameworks={'tensorboard': False, 'pytorch': False}, output_uri=True)
                 self._initialized = True
                 logger.info(
                     'ClearML Task has been initialized.'
@@ -1416,4 +1416,5 @@ def get_reporting_integration_callbacks(report_to):
             raise ValueError(
                 f"{integration} is not supported, only {', '.join(INTEGRATION_TO_CALLBACK.keys())} are supported."
             )
+
     return [INTEGRATION_TO_CALLBACK[integration] for integration in report_to]
