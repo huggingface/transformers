@@ -163,7 +163,7 @@ class VideoMAEImageProcessor(BaseImageProcessor):
         elif "height" in size and "width" in size:
             output_size = (size["height"], size["width"])
         else:
-            raise ValueError(f"Invalid size {size}")
+            raise ValueError(f"Size must have 'height' and 'width' or 'shortest_edge' as keys. Got {size.keys()}")
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
     def center_crop(

@@ -151,6 +151,8 @@ class CLIPImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         size = get_size_dict(size, default_to_square=False)
+        if "shortest_edge" not in size:
+            raise ValueError(f"The `size` parameter must contain the key `shortest_edge`. Got {size.keys()}")
         output_size = get_resize_output_image_size(image, size=size["shortest_edge"], default_to_square=False)
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 

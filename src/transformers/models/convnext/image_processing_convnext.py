@@ -144,6 +144,8 @@ class ConvNextImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         size = get_size_dict(size, default_to_square=False)
+        if "shortest_edge" not in size:
+            raise ValueError(f"Size dictionary must contain 'shortest_edge' key. Got {size.keys()}")
         shortest_edge = size["shortest_edge"]
 
         if shortest_edge < 384:

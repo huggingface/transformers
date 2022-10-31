@@ -254,6 +254,8 @@ class ViltImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         size = get_size_dict(size, default_to_square=False)
+        if "shortest_edge" not in size:
+            raise ValueError(f"The `size` dictionary must contain the key `shortest_edge`. Got {size.keys()}")
         shorter = size["shortest_edge"]
         longer = int(1333 / 800 * shorter)
         output_size = get_resize_output_image_size(image, shorter=shorter, longer=longer, size_divisor=size_divisor)

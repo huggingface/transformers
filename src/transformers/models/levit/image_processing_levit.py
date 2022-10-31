@@ -155,6 +155,8 @@ class LevitImageProcessor(BaseImageProcessor):
             shortest_edge = int((256 / 224) * size["shortest_edge"])
             output_size = get_resize_output_image_size(image, size=shortest_edge, default_to_square=False)
             size_dict = {"height": output_size[0], "width": output_size[1]}
+        if "height" not in size or "width" not in size:
+            raise ValueError(f"Size dict must have keys 'height' and 'width' or 'shortest_edge'. Got {size.keys()}")
         return resize(
             image, size=(size_dict["height"], size_dict["width"]), resample=resample, data_format=data_format, **kwargs
         )

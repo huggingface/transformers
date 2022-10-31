@@ -175,6 +175,8 @@ class PoolFormerImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         size = get_size_dict(size, default_to_square=False)
+        if "shortest_edge" not in size and ("height" not in size or "width" not in size):
+            raise ValueError(f"size must contain 'height' and 'width' or 'shortest_edge' as keys. Got {size.keys()}")
         if crop_pct is not None:
             if "shortest_edge" in size:
                 scale_size = int(math.floor(size["shortest_edge"] / crop_pct))

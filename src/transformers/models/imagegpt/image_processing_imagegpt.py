@@ -118,6 +118,8 @@ class ImageGPTImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         size = get_size_dict(size)
+        if "height" not in size or "width" not in size:
+            raise ValueError(f"Size dictionary must contain both height and width keys. Got {size.keys()}")
         return resize(
             image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
         )
