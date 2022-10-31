@@ -17,12 +17,13 @@
 """Constants used in AlphaFold."""
 
 import collections
+import copy
 import functools
 from importlib import resources
 from typing import List, Mapping, Tuple
-import copy
 
 import numpy as np
+
 
 # Internal import (35fd).
 
@@ -432,6 +433,7 @@ BondAngle = collections.namedtuple(
     "BondAngle",
     ["atom1_name", "atom2_name", "atom3name", "angle_rad", "stddev"],
 )
+
 
 def map_structure_with_atom_order(in_list: List, first_call: bool = True):
     # Maps strings in a nested list structure to their corresponding index in atom_order
