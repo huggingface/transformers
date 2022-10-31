@@ -20,12 +20,8 @@ import unittest
 
 import numpy as np
 
-from transformers import (
-    AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-    AudioSpectogramTransformerConfig,
-    AudioSpectogramTransformerFeatureExtractor,
-)
-from transformers.testing_utils import require_torch, slow
+from transformers import AudioSpectogramTransformerFeatureExtractor
+from transformers.testing_utils import require_torch
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 

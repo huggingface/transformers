@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team.
+# Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import torchaudio.compliance.kaldi as ta_kaldi
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import PaddingStrategy, TensorType, logging
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
@@ -47,8 +47,6 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
             The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
         num_mel_bins (`int`, defaults to 128):
             Number of Mel-frequency bins.
-        padding_value (`float`, defaults to 0.0):
-            The value that is used to fill the padding vectors.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to apply utterance-level cepstral mean and variance normalization to extracted features.
         mean (`int`, *optional*, defaults to -4.2677393):
@@ -83,6 +81,7 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
     def _extract_fbank_features(
         self,
         waveform: np.ndarray,
+        max_length: int,
     ) -> np.ndarray:
         """
         Get mel-filter bank features using TorchAudio. Note that TorchAudio requires 16-bit signed integers as inputs
@@ -90,7 +89,7 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
         """
         # waveform = waveform * (2**15)  # Kaldi compliance: 16-bit signed integers
         waveform = torch.from_numpy(waveform).unsqueeze(0)
-        features = ta_kaldi.fbank(
+        fbank = ta_kaldi.fbank(
             waveform,
             htk_compat=True,
             sample_frequency=self.sampling_rate,
@@ -101,20 +100,29 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
             frame_shift=10,
         )
 
-        return features.numpy()
+        n_frames = fbank.shape[0]
+        difference = max_length - n_frames
 
-    def normalize(self, input_values: List[np.ndarray]) -> List[np.ndarray]:
+        # pad or truncate, depending on difference
+        if difference > 0:
+            m = torch.nn.ZeroPad2d((0, 0, 0, difference))
+            fbank = m(fbank)
+        elif difference < 0:
+            fbank = fbank[0:max_length, :]
+
+        fbank = fbank.numpy()
+
+        return fbank
+
+    def normalize(self, input_values: np.ndarray) -> np.ndarray:
         return (input_values - (self.mean)) / (self.std * 2)
 
     def __call__(
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        padding: Union[bool, str, PaddingStrategy] = "max_length",
         max_length: int = 1024,
-        truncation: bool = True,
-        pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs
     ) -> BatchFeature:
         """
@@ -124,37 +132,17 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `max_length`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
             max_length (`int`, *optional*, defaults to 1024):
                 Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`, *optional*, defaults to `True`):
-                Activates truncation to cut input sequences longer than *max_length* to *max_length*.
-            pad_to_multiple_of (`int`, *optional*):
-                If set will pad the sequence to a multiple of the provided value.
-
-                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
-
+            sampling_rate (`int`, *optional*):
+                The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
+                `sampling_rate` at the forward call to prevent silent errors.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
-            sampling_rate (`int`, *optional*):
-                The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
-                `sampling_rate` at the forward call to prevent silent errors.
-            padding_value (`float`, defaults to 0.0):
-                The value that is used to fill the padding values / vectors.
         """
 
         if sampling_rate is not None:
@@ -186,20 +174,11 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched:
             raw_speech = [raw_speech]
 
-        # extract fbank features
-        features = [self._extract_fbank_features(waveform) for waveform in raw_speech]
+        # extract fbank features (padded/truncated to max_length)
+        features = [self._extract_fbank_features(waveform, max_length=max_length) for waveform in raw_speech]
 
-        # convert into correct format for padding
-        encoded_inputs = BatchFeature({"input_values": features})
-
-        padded_inputs = self.pad(
-            encoded_inputs,
-            padding=padding,
-            max_length=max_length,
-            truncation=truncation,
-            pad_to_multiple_of=pad_to_multiple_of,
-            **kwargs,
-        )
+        # convert into BatchFeature
+        padded_inputs = BatchFeature({"input_values": features})
 
         # make sure list is in array format
         input_values = padded_inputs.get("input_values")
@@ -208,7 +187,7 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
 
         # normalization
         if self.do_normalize:
-            padded_inputs["input_values"] = self.normalize(padded_inputs["input_values"])
+            padded_inputs["input_values"] = [self.normalize(feature) for feature in input_values]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)

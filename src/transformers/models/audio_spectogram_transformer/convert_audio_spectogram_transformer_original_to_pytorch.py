@@ -163,10 +163,9 @@ def convert_audio_spectogram_transformer_checkpoint(
     waveform = waveform.squeeze().numpy()
 
     inputs = feature_extractor(waveform, sampling_rate=16000, padding="max_length", return_tensors="pt")
-    input_values = inputs.input_features
 
     # forward pass
-    outputs = model(input_values)
+    outputs = model(**inputs)
     logits = outputs.logits
 
     expected_slice = torch.tensor([-0.8760, -7.0042, -8.6602])
