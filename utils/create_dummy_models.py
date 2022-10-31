@@ -785,8 +785,6 @@ def build(config_class, models_to_create, output_dir):
         logger.error(result["error"])
         return result
 
-    result["processor"] = {type(p).__name__: p.__class__.__name__ for p in result["processor"]}
-
     try:
         tiny_config = get_tiny_config(config_class)
     except Exception as e:
