@@ -23,7 +23,8 @@ from tempfile import TemporaryDirectory
 import torch
 
 import esm as esm_module
-from transformers.models.esm.configuration_esm import EsmConfig, EsmFoldConfig, TrunkConfig, StructureModuleConfig
+from esm.esmfold.v1.pretrained import esmfold_v1
+from transformers.models.esm.configuration_esm import EsmConfig, EsmFoldConfig, StructureModuleConfig, TrunkConfig
 from transformers.models.esm.modeling_esm import (
     EsmForMaskedLM,
     EsmForSequenceClassification,
@@ -36,7 +37,6 @@ from transformers.models.esm.modeling_esm import (
 from transformers.models.esm.modeling_esmfold import EsmForProteinFolding
 from transformers.models.esm.tokenization_esm import EsmTokenizer
 from transformers.utils import logging
-from esm.esmfold.v1.pretrained import esmfold_v1
 
 
 logging.set_verbosity_info()
@@ -64,6 +64,7 @@ MODEL_MAPPING = {
     "esm2_t6_8M_UR50D": esm_module.pretrained.esm2_t6_8M_UR50D,
     "esmfold_v1": esmfold_v1,
 }
+
 
 def transfer_and_check_weights(original_module, our_module):
     status = our_module.load_state_dict(original_module.state_dict())
@@ -154,7 +155,7 @@ def convert_esm_checkpoint_to_pytorch(
         position_embedding_type=position_embedding_type,
         is_folding_model=is_folding_model,
         esmfold_config=esmfold_config,
-        vocab_list=vocab_list
+        vocab_list=vocab_list,
     )
     if classification_head:
         config.num_labels = esm.classification_heads["mnli"].out_proj.weight.shape[0]
@@ -293,18 +294,20 @@ def convert_esm_checkpoint_to_pytorch(
             # ESMFold is what we in the community call a "big boy" and so we desperately avoid putting both the
             # original and the converted model on the GPU at the same time.
             compare_attention_layers(model, esm)
-            our_output = model.cuda()(input_ids=hf_tokens["input_ids"].cuda(), attention_mask=hf_tokens["attention_mask"].cuda())
+            our_output = model.cuda()(
+                input_ids=hf_tokens["input_ids"].cuda(), attention_mask=hf_tokens["attention_mask"].cuda()
+            )
             their_output = esm.cuda()(hf_tokens["input_ids"].cuda(), hf_tokens["attention_mask"].cuda())
             their_output_again = esm.cuda()(hf_tokens["input_ids"].cuda(), hf_tokens["attention_mask"].cuda())
         else:
             our_output = model(**hf_tokens, output_hidden_states=True)
-            our_hidden_states = our_output['hidden_states']
+            our_hidden_states = our_output["hidden_states"]
             our_output = our_output["logits"]
             if classification_head:
                 their_output = esm.model.classification_heads["mnli"](esm.extract_features(batch_tokens))
             else:
-                their_output = esm(hf_tokens['input_ids'], repr_layers=list(range(999)))
-                their_hidden_states = their_output['representations']
+                their_output = esm(hf_tokens["input_ids"], repr_layers=list(range(999)))
+                their_hidden_states = their_output["representations"]
                 their_output = their_output["logits"]
 
     if is_folding_model:

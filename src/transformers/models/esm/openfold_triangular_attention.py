@@ -13,25 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from functools import partialmethod, partial
 import math
-from typing import Optional, List
+from functools import partial, partialmethod
+from typing import List, Optional
 
 import torch
 import torch.nn as nn
 
-from .openfold_primitives import Linear, LayerNorm, Attention
+from .openfold_primitives import Attention, LayerNorm, Linear
 from .openfold_utils.chunk_utils import chunk_layer
-from .openfold_utils.tensor_utils import (
-    permute_final_dims,
-    flatten_final_dims,
-)
+from .openfold_utils.tensor_utils import flatten_final_dims, permute_final_dims
 
 
 class TriangleAttention(nn.Module):
-    def __init__(
-        self, c_in, c_hidden, no_heads, starting=True, inf=1e9
-    ):
+    def __init__(self, c_in, c_hidden, no_heads, starting=True, inf=1e9):
         """
         Args:
             c_in:
@@ -53,12 +48,11 @@ class TriangleAttention(nn.Module):
 
         self.linear = Linear(c_in, self.no_heads, bias=False, init="normal")
 
-        self.mha = Attention(
-            self.c_in, self.c_in, self.c_in, self.c_hidden, self.no_heads
-        )
+        self.mha = Attention(self.c_in, self.c_in, self.c_in, self.c_hidden, self.no_heads)
 
     @torch.jit.ignore
-    def _chunk(self,
+    def _chunk(
+        self,
         x: torch.Tensor,
         biases: List[torch.Tensor],
         chunk_size: int,
@@ -74,19 +68,16 @@ class TriangleAttention(nn.Module):
         }
 
         return chunk_layer(
-            partial(
-                self.mha, 
-                use_memory_efficient_kernel=use_memory_efficient_kernel,
-                use_lma=use_lma
-            ),
+            partial(self.mha, use_memory_efficient_kernel=use_memory_efficient_kernel, use_lma=use_lma),
             mha_inputs,
             chunk_size=chunk_size,
             no_batch_dims=len(x.shape[:-2]),
             _out=x if inplace_safe else None,
         )
 
-    def forward(self, 
-        x: torch.Tensor, 
+    def forward(
+        self,
+        x: torch.Tensor,
         mask: Optional[torch.Tensor] = None,
         chunk_size: Optional[int] = None,
         use_memory_efficient_kernel: bool = False,
@@ -99,14 +90,14 @@ class TriangleAttention(nn.Module):
                 [*, I, J, C_in] input tensor (e.g. the pair representation)
         Returns:
             [*, I, J, C_in] output tensor
-        """ 
+        """
         if mask is None:
             # [*, I, J]
             mask = x.new_ones(
                 x.shape[:-1],
             )
 
-        if(not self.starting):
+        if not self.starting:
             x = x.transpose(-2, -3)
             mask = mask.transpose(-1, -2)
 
@@ -126,23 +117,19 @@ class TriangleAttention(nn.Module):
 
         if chunk_size is not None:
             x = self._chunk(
-                x, 
-                biases, 
-                chunk_size, 
+                x,
+                biases,
+                chunk_size,
                 use_memory_efficient_kernel=use_memory_efficient_kernel,
                 use_lma=use_lma,
                 inplace_safe=inplace_safe,
             )
         else:
             x = self.mha(
-                q_x=x, 
-                kv_x=x, 
-                biases=biases, 
-                use_memory_efficient_kernel=use_memory_efficient_kernel,
-                use_lma=use_lma
+                q_x=x, kv_x=x, biases=biases, use_memory_efficient_kernel=use_memory_efficient_kernel, use_lma=use_lma
             )
 
-        if(not self.starting):
+        if not self.starting:
             x = x.transpose(-2, -3)
 
         return x
@@ -156,4 +143,5 @@ class TriangleAttentionEndingNode(TriangleAttention):
     """
     Implements Algorithm 14.
     """
+
     __init__ = partialmethod(TriangleAttention.__init__, starting=False)

@@ -1,5 +1,6 @@
-from collections import OrderedDict
 import copy
+from collections import OrderedDict
+
 import torch
 import torch.nn as nn
 
@@ -10,8 +11,7 @@ class ExponentialMovingAverage:
     """
     Maintains moving averages of parameters with exponential decay
 
-    At each step, the stored copy `copy` of each parameter `param` is
-    updated as follows:
+    At each step, the stored copy `copy` of each parameter `param` is updated as follows:
 
         `copy = decay * copy + (1 - decay) * param`
 
@@ -24,8 +24,7 @@ class ExponentialMovingAverage:
             model:
                 A torch.nn.Module whose parameters are to be tracked
             decay:
-                A value (usually close to 1.) by which updates are
-                weighted as part of the above formula
+                A value (usually close to 1.) by which updates are weighted as part of the above formula
         """
         super(ExponentialMovingAverage, self).__init__()
 
@@ -51,9 +50,8 @@ class ExponentialMovingAverage:
 
     def update(self, model: torch.nn.Module) -> None:
         """
-        Updates the stored parameters using the state dict of the provided
-        module. The module should have the same structure as that used to
-        initialize the ExponentialMovingAverage object.
+        Updates the stored parameters using the state dict of the provided module. The module should have the same
+        structure as that used to initialize the ExponentialMovingAverage object.
         """
         self._update_state_dict_(model.state_dict(), self.params)
 

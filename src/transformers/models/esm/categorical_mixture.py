@@ -4,34 +4,22 @@
 # LICENSE file in the root directory of this source tree.
 import torch
 
+
 # TODO Matt: This module does not receive any config objects and does not need to be changed
+
 
 class CategoricalMixture:
     def __init__(self, param, bins=50, start=0, end=1):
         # All tensors are of shape ..., bins.
         self.logits = param
-        bins = torch.linspace(
-            start, end, bins + 1, device=self.logits.device, dtype=self.logits.dtype
-        )
+        bins = torch.linspace(start, end, bins + 1, device=self.logits.device, dtype=self.logits.dtype)
         self.v_bins = (bins[:-1] + bins[1:]) / 2
 
     def log_prob(self, true):
         # Shapes are:
         #     self.probs: ... x bins
         #     true      : ...
-        true_index = (
-            (
-                true.unsqueeze(-1)
-                - self.v_bins[
-                    [
-                        None,
-                    ]
-                    * true.ndim
-                ]
-            )
-            .abs()
-            .argmin(-1)
-        )
+        true_index = (true.unsqueeze(-1) - self.v_bins[[None] * true.ndim]).abs().argmin(-1)
         nll = self.logits.log_softmax(-1)
         return torch.take_along_dim(nll, true_index.unsqueeze(-1), dim=-1).squeeze(-1)
 

@@ -21,10 +21,7 @@ import numpy as np
 import torch
 
 from .openfold_np import residue_constants as rc
-from .openfold_utils.tensor_utils import (
-    tree_map,
-    tensor_tree_map,
-)
+from .openfold_utils.tensor_utils import tensor_tree_map, tree_map
 
 
 def make_atom14_masks(protein):
@@ -35,20 +32,13 @@ def make_atom14_masks(protein):
 
     for rt in rc.restypes:
         atom_names = rc.restype_name_to_atom14_names[rc.restype_1to3[rt]]
-        restype_atom14_to_atom37.append(
-            [(rc.atom_order[name] if name else 0) for name in atom_names]
-        )
+        restype_atom14_to_atom37.append([(rc.atom_order[name] if name else 0) for name in atom_names])
         atom_name_to_idx14 = {name: i for i, name in enumerate(atom_names)}
         restype_atom37_to_atom14.append(
-            [
-                (atom_name_to_idx14[name] if name in atom_name_to_idx14 else 0)
-                for name in rc.atom_types
-            ]
+            [(atom_name_to_idx14[name] if name in atom_name_to_idx14 else 0) for name in rc.atom_types]
         )
 
-        restype_atom14_mask.append(
-            [(1.0 if name else 0.0) for name in atom_names]
-        )
+        restype_atom14_mask.append([(1.0 if name else 0.0) for name in atom_names])
 
     # Add dummy mapping for restype 'UNK'
     restype_atom14_to_atom37.append([0] * 14)
@@ -70,7 +60,7 @@ def make_atom14_masks(protein):
         dtype=torch.float32,
         device=protein["aatype"].device,
     )
-    protein_aatype = protein['aatype'].to(torch.long)
+    protein_aatype = protein["aatype"].to(torch.long)
 
     # create the mapping for (residx, atom14) --> atom37, i.e. an array
     # with shape (num_res, 14) containing the atom37 indices for this protein
@@ -85,9 +75,7 @@ def make_atom14_masks(protein):
     protein["residx_atom37_to_atom14"] = residx_atom37_to_atom14.long()
 
     # create the corresponding mask
-    restype_atom37_mask = torch.zeros(
-        [21, 37], dtype=torch.float32, device=protein["aatype"].device
-    )
+    restype_atom37_mask = torch.zeros([21, 37], dtype=torch.float32, device=protein["aatype"].device)
     for restype, restype_letter in enumerate(rc.restypes):
         restype_name = rc.restype_1to3[restype_letter]
         atom_names = rc.residue_atoms[restype_name]
@@ -102,11 +90,7 @@ def make_atom14_masks(protein):
 
 
 def make_atom14_masks_np(batch):
-    batch = tree_map(
-        lambda n: torch.tensor(n, device=batch["aatype"].device), 
-        batch, 
-        np.ndarray
-    )
+    batch = tree_map(lambda n: torch.tensor(n, device=batch["aatype"].device), batch, np.ndarray)
     out = make_atom14_masks(batch)
     out = tensor_tree_map(lambda t: np.array(t), out)
     return out

@@ -163,7 +163,9 @@ class EsmEmbeddings(nn.Module):
             mask_ratio_train = 0.15 * 0.8  # Hardcoded as the ratio used in all ESM model training runs
             src_lengths = attention_mask.sum(-1)
             mask_ratio_observed = (input_ids == self.mask_token_id).sum(-1).float() / src_lengths
-            embeddings = (embeddings * (1 - mask_ratio_train) / (1 - mask_ratio_observed)[:, None, None]).to(embeddings.dtype)
+            embeddings = (embeddings * (1 - mask_ratio_train) / (1 - mask_ratio_observed)[:, None, None]).to(
+                embeddings.dtype
+            )
 
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
@@ -463,7 +465,6 @@ class EsmLayer(nn.Module):
             past_key_value=self_attn_past_key_value,
         )
         attention_output = self_attention_outputs[0]
-
 
         # if decoder, the last output is tuple of self-attn cache
         if self.is_decoder:

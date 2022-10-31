@@ -1,9 +1,10 @@
 from argparse import HelpFormatter
 from operator import attrgetter
 
+
 class ArgparseAlphabetizer(HelpFormatter):
     """
-        Sorts the optional arguments of an argparse parser alphabetically
+    Sorts the optional arguments of an argparse parser alphabetically
     """
 
     @staticmethod
@@ -26,5 +27,5 @@ def remove_arguments(parser, args):
     for arg in args:
         for action in parser._actions:
             opts = vars(action)["option_strings"]
-            if(arg in opts):
+            if arg in opts:
                 parser._handle_conflict_resolve(None, [(arg, action)])

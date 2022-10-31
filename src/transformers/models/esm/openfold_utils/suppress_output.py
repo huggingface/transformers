@@ -12,7 +12,7 @@ class SuppressStdout:
         fp = sys.stdout
         sys.stdout = self.stdout
         fp.close()
-        
+
 
 class SuppressLogging:
     def __init__(self, level):
@@ -23,4 +23,3 @@ class SuppressLogging:
 
     def __exit__(self, typ, value, traceback):
         logging.disable(logging.NOTSET)
-

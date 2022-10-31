@@ -2,31 +2,29 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from typing import Any, Tuple, List, Optional, Union, Dict
-from .modeling_esm import EsmPreTrainedModel, EsmModel, EsmForMaskedLM
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
+from torch.nn import LayerNorm
+
+from .categorical_mixture import categorical_lddt
+from .configuration_esm import EsmConfig
+from .esmfold_trunk import FoldingTrunk
+from .modeling_esm import EsmForMaskedLM, EsmModel, EsmPreTrainedModel
 from .openfold_data_transforms import make_atom14_masks
 from .openfold_np import residue_constants
 from .openfold_np.protein import Protein as OFProtein
 from .openfold_np.protein import to_pdb
 from .openfold_utils.feats import atom14_to_atom37
 from .openfold_utils.loss import compute_predicted_aligned_error, compute_tm
-from torch.nn import LayerNorm
-
-from .configuration_esm import EsmConfig
-from .esmfold_trunk import FoldingTrunk
-from .categorical_mixture import categorical_lddt
 
 
 def collate_dense_tensors(samples: List[torch.Tensor], pad_v: float = 0) -> torch.Tensor:
     """
     Takes a list of tensors with the following dimensions:
-        [(d_11,       ...,           d_1K),
-         (d_21,       ...,           d_2K),
-         ...,
-         (d_N1,       ...,           d_NK)]
+        [(d_11, ..., d_1K),
+         (d_21, ..., d_2K), ..., (d_N1, ..., d_NK)]
     and stack + pads them into a single tensor of:
     (N, max_i=1,N { d_i1 }, ..., max_i=1,N {diK})
     """
@@ -96,7 +94,9 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         self.lddt_bins = 50
         self.lddt_head = nn.Sequential(
             nn.LayerNorm(self.config.esmfold_config.trunk.structure_module.c_s),
-            nn.Linear(self.config.esmfold_config.trunk.structure_module.c_s, self.config.esmfold_config.lddt_head_hid_dim),
+            nn.Linear(
+                self.config.esmfold_config.trunk.structure_module.c_s, self.config.esmfold_config.lddt_head_hid_dim
+            ),
             nn.Linear(self.config.esmfold_config.lddt_head_hid_dim, self.config.esmfold_config.lddt_head_hid_dim),
             nn.Linear(self.config.esmfold_config.lddt_head_hid_dim, 37 * self.lddt_bins),
         )
@@ -209,9 +209,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
             structure[k] *= attention_mask.unsqueeze(-1)
         structure["residue_index"] = residx
 
-        lddt_head = self.lddt_head(structure["states"]).reshape(
-            structure["states"].shape[0], B, L, -1, self.lddt_bins
-        )
+        lddt_head = self.lddt_head(structure["states"]).reshape(structure["states"].shape[0], B, L, -1, self.lddt_bins)
         structure["lddt_head"] = lddt_head
         plddt = categorical_lddt(lddt_head[-1], bins=self.lddt_bins)
         structure["plddt"] = plddt
@@ -219,9 +217,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         ptm_logits = self.ptm_head(structure["s_z"])
         structure["ptm_logits"] = ptm_logits
         structure["ptm"] = compute_tm(ptm_logits, max_bin=31, no_bins=self.distogram_bins)
-        structure.update(
-            compute_predicted_aligned_error(ptm_logits, max_bin=31, no_bins=self.distogram_bins)
-        )
+        structure.update(compute_predicted_aligned_error(ptm_logits, max_bin=31, no_bins=self.distogram_bins))
 
         return structure
 
@@ -229,16 +225,12 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         aa = (aa + 1).masked_fill(mask != 1, 0)
         return self.af2_to_esm[aa]
 
-    def compute_language_model_representations(
-        self, esmaa: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def compute_language_model_representations(self, esmaa: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         device = next(self.parameters()).device
         B, L = esmaa.shape  # B = batch size, L = sequence length.
 
         if self.config.esmfold_config.bypass_lm:
-            esm_s = torch.zeros(
-                B, L, self.esm_s_combine.size[0], -1, self.esm_feats, device=device
-            )
+            esm_s = torch.zeros(B, L, self.esm_s_combine.size[0], -1, self.esm_feats, device=device)
             esm_z = (
                 torch.zeros(B, L, L, self.esm_attns, device=device)
                 if self.config.esmfold_config.use_esm_attn_map
@@ -305,9 +297,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         )  # B=1 x L
         mask = collate_dense_tensors([aatype.new_ones(len(seq)) for seq in lst])
         residx = (
-            torch.arange(aatype.shape[1], device=device).expand(len(lst), -1)
-            if residx is None
-            else residx.to(device)
+            torch.arange(aatype.shape[1], device=device).expand(len(lst), -1) if residx is None else residx.to(device)
         )
         if residx.ndim == 1:
             residx = residx.unsqueeze(0)
@@ -351,6 +341,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         """Returns the pdb (file) string from the model given an input sequence."""
         output = self.infer(seqs, *args, **kwargs)
         return self.output_to_pdb(output)
+
 
 #
 # # TODO(@ebetica): Once v0.3b is done training, let's figure out how to disseminate and release it.

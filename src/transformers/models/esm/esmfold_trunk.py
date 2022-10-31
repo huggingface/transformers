@@ -6,15 +6,14 @@ from contextlib import ExitStack
 
 import torch
 import torch.nn as nn
-from .openfold_structure import StructureModule
 
 from .esmfold_triselfattention import TriangularSelfAttentionBlock
+from .openfold_structure import StructureModule
 
 
 def get_axial_mask(mask):
     """
-    Helper to convert B x L mask of valid positions to axial mask used
-    in row column attentions.
+    Helper to convert B x L mask of valid positions to axial mask used in row column attentions.
 
     Input:
       mask: B x L tensor of booleans
@@ -25,7 +24,9 @@ def get_axial_mask(mask):
 
     if mask is None:
         return None
-    assert len(mask.shape) == 2
+
+    if len(mask.shape) != 2:
+        raise ValueError(f"`mask` should be a 2d-tensor, got {len(mask.shape)} dims.")
     batch_dim, seq_dim = mask.shape
     m = mask.unsqueeze(1).expand(batch_dim, seq_dim, seq_dim)
     m = m.reshape(batch_dim * seq_dim, seq_dim)
@@ -44,16 +45,17 @@ class RelativePosition(nn.Module):
     def forward(self, residue_index, mask=None):
         """
         Input:
-          residue_index: B x L tensor of indices (dytpe=torch.long)
-          mask: B x L tensor of booleans
+          residue_index: B x L tensor of indices (dytpe=torch.long) mask: B x L tensor of booleans
 
         Output:
           pairwise_state: B x L x L x pairwise_state_dim tensor of embeddings
         """
-
-        assert residue_index.dtype == torch.long
-        if mask is not None:
-            assert residue_index.shape == mask.shape
+        if residue_index.dtype != torch.long:
+            raise ValueError(f"`residue_index` has dtype {residue_index.dtype}, it should be `torch.long`.")
+        if mask is not None and residue_index.shape != mask.shape:
+            raise ValueError(
+                f"`residue_index` and `mask` have inconsistent shapes: {residue_index.shape} != {mask.shape}."
+            )
 
         diff = residue_index[:, None, :] - residue_index[:, :, None]
         diff = diff.clamp(-self.bins, self.bins)
@@ -71,20 +73,15 @@ class FoldingTrunk(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        assert self.config.max_recycles > 0
 
         c_s = self.config.sequence_state_dim
         c_z = self.config.pairwise_state_dim
-
-        assert c_s % self.config.sequence_head_width == 0
-        assert c_z % self.config.pairwise_head_width == 0
-        block = TriangularSelfAttentionBlock
 
         self.pairwise_positional_embedding = RelativePosition(self.config.position_bins, c_z)
 
         self.blocks = nn.ModuleList(
             [
-                block(
+                TriangularSelfAttentionBlock(
                     sequence_state_dim=c_s,
                     pairwise_state_dim=c_z,
                     sequence_head_width=self.config.sequence_head_width,
@@ -101,7 +98,7 @@ class FoldingTrunk(nn.Module):
         self.recycle_disto = nn.Embedding(self.recycle_bins, c_z)
         self.recycle_disto.weight[0].detach().zero_()
 
-        self.structure_module = StructureModule(**config.structure_module.to_dict())  # type: ignore
+        self.structure_module = StructureModule(**config.structure_module.to_dict())
         self.trunk2sm_s = nn.Linear(c_s, self.structure_module.c_s)
         self.trunk2sm_z = nn.Linear(c_z, self.structure_module.c_z)
 
@@ -117,10 +114,8 @@ class FoldingTrunk(nn.Module):
     def forward(self, seq_feats, pair_feats, true_aa, residx, mask):
         """
         Inputs:
-          seq_feats:     B x L x C            tensor of sequence features
-          pair_feats:    B x L x L x C        tensor of pair features
-          residx:        B x L                long tensor giving the position in the sequence
-          mask:          B x L                boolean tensor indicating valid residues
+          seq_feats: B x L x C tensor of sequence features pair_feats: B x L x L x C tensor of pair features residx: B
+          x L long tensor giving the position in the sequence mask: B x L boolean tensor indicating valid residues
 
         Output:
           predicted_structure: B x L x (num_atoms_per_residue * 3) tensor wrapped in a Coordinates object
@@ -145,7 +140,6 @@ class FoldingTrunk(nn.Module):
         recycle_z = torch.zeros_like(s_z)
         recycle_bins = torch.zeros(*s_z.shape[:-1], device=device, dtype=torch.int64)
 
-        assert no_recycles > 0
         for recycle_idx in range(no_recycles):
             with ExitStack() if recycle_idx == no_recycles - 1 else torch.no_grad():
                 # === Recycling ===
@@ -172,7 +166,6 @@ class FoldingTrunk(nn.Module):
                     self.recycle_bins,
                 )
 
-        assert isinstance(structure, dict)  # type: ignore
         structure["s_s"] = s_s
         structure["s_z"] = s_z
 

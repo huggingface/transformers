@@ -15,6 +15,7 @@ import importlib
 
 import torch
 
+
 def is_fp16_enabled():
     # Autocast world
     fp16_enabled = torch.get_autocast_gpu_dtype() == torch.float16

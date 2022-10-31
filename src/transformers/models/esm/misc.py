@@ -7,10 +7,13 @@ from typing import List, Union
 import numpy as np
 import torch
 import torch.nn.functional as F
-from einops import rearrange, repeat
 from torch import nn
 
+from einops import rearrange, repeat
+
+
 # TODO Matt: This module can be left unchanged except for einops removal and does not receive any config objects
+
 
 class Attention(nn.Module):
     def __init__(self, embed_dim, num_heads, head_width, gated=False):
@@ -35,13 +38,12 @@ class Attention(nn.Module):
 
     def forward(self, x, mask=None, bias=None, indices=None):
         """
-        Basic self attention with optional mask and external pairwise bias.
-        To handle sequences of different lengths, use mask.
+        Basic self attention with optional mask and external pairwise bias. To handle sequences of different lengths,
+        use mask.
 
         Inputs:
-          x: batch of input sequneces (.. x L x C)
-          mask: batch of boolean masks where 1=valid, 0=padding position (.. x L_k). optional.
-          bias: batch of scalar pairwise attention biases (.. x Lq x Lk x num_heads). optional.
+          x: batch of input sequneces (.. x L x C) mask: batch of boolean masks where 1=valid, 0=padding position (.. x
+          L_k). optional. bias: batch of scalar pairwise attention biases (.. x Lq x Lk x num_heads). optional.
 
         Outputs:
           sequence projection (B x L x embed_dim), attention maps (B x L x L x num_heads)
@@ -76,8 +78,7 @@ class Attention(nn.Module):
 
 class Dropout(nn.Module):
     """
-    Implementation of dropout with the ability to share the dropout mask
-    along a particular dimension.
+    Implementation of dropout with the ability to share the dropout mask along a particular dimension.
     """
 
     def __init__(self, r: float, batch_dim: Union[int, List[int]]):

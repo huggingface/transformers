@@ -14,11 +14,12 @@
 # limitations under the License.
 """ ESM model configuration"""
 
+import copy
+from dataclasses import asdict, dataclass
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from dataclasses import dataclass, asdict
-from typing import Optional
-import copy
 
 
 logger = logging.get_logger(__name__)
@@ -208,7 +209,7 @@ class EsmFoldConfig:
         output = asdict(self)
         output["trunk"] = self.trunk.to_dict()
         return output
-    
+
 
 @dataclass
 class TrunkConfig:
@@ -231,6 +232,19 @@ class TrunkConfig:
         elif isinstance(self.structure_module, dict):
             self.structure_module = StructureModuleConfig(**self.structure_module)
 
+        if self.max_recycles <= 0:
+            raise ValueError(f"`max_recycles` should be positive, got {self.max_recycles}.")
+        if self.sequence_state_dim % self.sequence_state_dim != 0:
+            raise ValueError(
+                "`sequence_state_dim` should be a round multiple of `sequence_state_dim`, got"
+                f" {self.sequence_state_dim} and {self.sequence_state_dim}."
+            )
+        if self.pairwise_state_dim % self.pairwise_state_dim != 0:
+            raise ValueError(
+                "`pairwise_state_dim` should be a round multiple of `pairwise_state_dim`, got"
+                f" {self.pairwise_state_dim} and {self.pairwise_state_dim}."
+            )
+
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
@@ -241,6 +255,7 @@ class TrunkConfig:
         output = asdict(self)
         output["structure_module"] = self.structure_module.to_dict()
         return output
+
 
 @dataclass
 class StructureModuleConfig:
@@ -263,7 +278,40 @@ class StructureModuleConfig:
     def to_dict(self):
         return asdict(self)
 
+
 def get_default_vocab_list():
-    return ('<cls>', '<pad>', '<eos>', '<unk>', 'L', 'A', 'G', 'V', 'S', 'E', 'R', 'T', 'I', 'D',
-     'P', 'K', 'Q', 'N', 'F', 'Y', 'M', 'H', 'W', 'C', 'X', 'B', 'U', 'Z', 'O', '.', '-',
-     '<null_1>', '<mask>')
+    return (
+        "<cls>",
+        "<pad>",
+        "<eos>",
+        "<unk>",
+        "L",
+        "A",
+        "G",
+        "V",
+        "S",
+        "E",
+        "R",
+        "T",
+        "I",
+        "D",
+        "P",
+        "K",
+        "Q",
+        "N",
+        "F",
+        "Y",
+        "M",
+        "H",
+        "W",
+        "C",
+        "X",
+        "B",
+        "U",
+        "Z",
+        "O",
+        ".",
+        "-",
+        "<null_1>",
+        "<mask>",
+    )
