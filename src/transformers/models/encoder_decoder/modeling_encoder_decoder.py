@@ -175,6 +175,8 @@ class EncoderDecoderModel(PreTrainedModel):
     """
     config_class = EncoderDecoderConfig
     base_model_prefix = "encoder_decoder"
+    main_input_name = "input_ids"
+    supports_gradient_checkpointing = True
 
     def __init__(
         self,
@@ -254,6 +256,11 @@ class EncoderDecoderModel(PreTrainedModel):
             self._tie_encoder_decoder_weights(
                 self.encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
             )
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        # call both encoder and decoder function on gradient checkpointing
+        self.encoder._set_gradient_checkpointing(module, value=value)
+        self.decoder._set_gradient_checkpointing(module, value=value)
 
     def get_encoder(self):
         return self.encoder
