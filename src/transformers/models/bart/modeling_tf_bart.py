@@ -1501,6 +1501,17 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
    BART_START_DOCSTRING,
 )
 class TFBartForSequenceClassification(TFBartPretrainedModel):
+
+    @property
+    def dummy_inputs(self):
+        pad_token = self.config.pad_token_id
+        input_ids = tf.constant([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]])
+        dummy_inputs = {
+            "attention_mask": tf.cast(tf.math.not_equal(input_ids,(pad_token)), dtype=tf.int32),
+            "input_ids": input_ids,
+        }
+        return dummy_inputs
+
     def __init__(self, config: BartConfig, load_weight_prefix=None, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.model = TFBartMainLayer(config, load_weight_prefix=load_weight_prefix, name="model")
@@ -1578,9 +1589,9 @@ class TFBartForSequenceClassification(TFBartPretrainedModel):
 
         eos_mask = tf.equal(self.config.eos_token_id, input_ids)
         masked = tf.boolean_mask(last_hidden_state, eos_mask)
-        # TODO Port this to TF
-        # if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
-            # raise ValueError("All examples must have the same number of <eos> tokens.")
+
+        if len(tf.unique(tf.reduce_sum(tf.cast(eos_mask, dtype=tf.int32), axis=1)).y.numpy()) > 1:
+            raise ValueError("All examples must have the same number of <eos> tokens.")
 
         sentence_representation = tf.reshape(masked, (-1, masked.shape[0], masked.shape[-1]))[:, -1, :]
 
