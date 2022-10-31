@@ -240,7 +240,7 @@ class TokenClassificationPipeline(Pipeline):
 
         if self.framework == "tf":
             input_ids = input_ids.numpy()
-            offset_mapping = offset_mapping.numpy()
+            offset_mapping = offset_mapping.numpy() if offset_mapping is not None else None
 
         pre_entities = self.gather_pre_entities(
             sentence, input_ids, scores, offset_mapping, special_tokens_mask, aggregation_strategy
