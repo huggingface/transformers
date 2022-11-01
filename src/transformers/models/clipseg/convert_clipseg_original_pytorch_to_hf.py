@@ -185,13 +185,19 @@ def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_t
         outputs = model(input_ids, pixel_values)
 
     # verify values
-    expected_masks_slice = torch.tensor(
-        [[-4.1992, -4.1912, -4.1523], [-4.1509, -4.1442, -4.1091], [-4.0581, -4.0355, -4.0107]]
-    )
-    assert torch.allclose(outputs.predicted_masks[0, 0, :3, :3], expected_masks_slice, atol=1e-3)
     expected_cond = torch.tensor([0.0548, 0.0067, -0.1543])
-    assert torch.allclose(outputs.conditional_embeddings[0, :3], expected_cond, atol=1e-3)
     expected_pooled_output = torch.tensor([0.2208, -0.7577, -0.1391])
+    if "refined" in checkpoint_path:
+        expected_masks_slice = torch.tensor(
+            [[0.0095, 0.2114, -0.0486], [0.0019, -0.0304, 0.0527], [0.1598, 0.0943, 0.0699]]
+        )
+    else:
+        expected_masks_slice = torch.tensor(
+            [[-4.1992, -4.1912, -4.1523], [-4.1509, -4.1442, -4.1091], [-4.0581, -4.0355, -4.0107]]
+        )
+
+    assert torch.allclose(outputs.predicted_masks[0, 0, :3, :3], expected_masks_slice, atol=1e-3)
+    assert torch.allclose(outputs.conditional_embeddings[0, :3], expected_cond, atol=1e-3)
     assert torch.allclose(outputs.pooled_output[0, :3], expected_pooled_output, atol=1e-3)
     print("Looks ok!")
 
@@ -212,7 +218,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint_path",
-        default="/Users/nielsrogge/Documents/CLIPSeg/test.pth",
+        default="/Users/nielsrogge/Documents/CLIPSeg/clip_plus_rd64-uni.pth",
         type=str,
         help="Path to the original checkpoint.",
     )
