@@ -120,7 +120,6 @@ _import_structure = {
     ],
     "models": [],
     # Models
-    "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RocBertConfig", "RocBertTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -316,6 +315,7 @@ _import_structure = {
     "models.resnet": ["RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ResNetConfig"],
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
+    "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RocBertConfig", "RocBertTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
@@ -562,7 +562,6 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
-    _import_structure["models.roc_bert"].append("RocBertTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -3197,7 +3196,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.roc_bert import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RocBertConfig, RocBertTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -3376,6 +3374,7 @@ if TYPE_CHECKING:
     from .models.resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
+    from .models.roc_bert import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RocBertConfig, RocBertTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
@@ -3596,7 +3595,6 @@ if TYPE_CHECKING:
         from .utils.dummy_tokenizers_objects import *
     else:
         # Fast tokenizers imports
-        from .models.roc_bert import RocBertTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -3823,22 +3821,6 @@ if TYPE_CHECKING:
         )
         from .generation_utils import top_k_top_p_filtering
         from .modeling_utils import PreTrainedModel
-
-        # PyTorch model imports
-
-        from .models.roc_bert import (
-            ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            RocBertForMaskedLM,
-            RocBertForCausalLM,
-            RocBertForMultipleChoice,
-            RocBertForQuestionAnswering,
-            RocBertForSequenceClassification,
-            RocBertForTokenClassification,
-            RocBertLayer,
-            RocBertModel,
-            RocBertPreTrainedModel,
-            load_tf_weights_in_roc_bert,
-        )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -4653,6 +4635,21 @@ if TYPE_CHECKING:
             RobertaForTokenClassification,
             RobertaModel,
             RobertaPreTrainedModel,
+        )
+
+        # PyTorch model imports
+        from .models.roc_bert import (
+            ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RocBertForCausalLM,
+            RocBertForMaskedLM,
+            RocBertForMultipleChoice,
+            RocBertForQuestionAnswering,
+            RocBertForSequenceClassification,
+            RocBertForTokenClassification,
+            RocBertLayer,
+            RocBertModel,
+            RocBertPreTrainedModel,
+            load_tf_weights_in_roc_bert,
         )
         from .models.roformer import (
             ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
