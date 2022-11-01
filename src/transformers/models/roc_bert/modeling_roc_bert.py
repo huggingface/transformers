@@ -53,7 +53,7 @@ _CONFIG_FOR_DOC = "RocBertConfig"
 _TOKENIZER_FOR_DOC = "RocBertTokenizer"
 
 ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "roc-bert-base-cased",
+    "weiweishi/roc-bert-base-zh",
     # See all RocBert models at https://huggingface.co/models?filter=roc_bert
 ]
 
