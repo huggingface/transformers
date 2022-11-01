@@ -52,6 +52,9 @@ from .openfold_utils import (
 
 
 logger = logging.get_logger(__name__)
+_CHECKPOINT_FOR_DOC = "Rocketknight1/esmfold_v1"
+_CONFIG_FOR_DOC = "EsmConfig"
+_TOKENIZER_FOR_DOC = "EsmTokenizer"
 
 
 @dataclass
@@ -2092,7 +2095,16 @@ class EsmForProteinFolding(EsmPreTrainedModel):
 
         Example:
 
-        TODO Matt
+        ```python
+        >>> from transformers import AutoTokenizer, EsmForProteinFolding
+
+        >>> model = EsmForProteinFolding.from_pretrained("facebook/esmfold_v1")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/esmfold_v1")
+        >>> inputs = tokenizer(["MLKNVQVQLV"], return_tensors="pt")  # A tiny random peptide
+        >>> outputs = model(**inputs)
+        >>> folded_positions = outputs.positions
+        ```
+
         """
         cfg = self.config.esmfold_config
 
