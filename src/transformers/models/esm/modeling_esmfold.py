@@ -24,7 +24,6 @@ import torch.nn as nn
 from torch.nn import LayerNorm
 
 from ...deepspeed import is_deepspeed_available
-from ...file_utils import add_code_sample_docstrings
 from ...modeling_outputs import ModelOutput
 from ...utils import (
     ContextManagers,
@@ -2094,13 +2093,11 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         r"""
         Returns: EsmForProteinFoldingOutput
 
-        Example:
-        >>> from transformers import AutoTokenizer, EsmForProteinFolding
-        >>> model = EsmForProteinFolding.from_pretrained("facebook/esmfold_v1")
-        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/esmfold_v1")
-        >>> inputs = tokenizer(["MLKNVQVQLV"], return_tensors='pt')  # A tiny random peptide
-        >>> outputs = model(**inputs)
-        >>> folded_positions = outputs.positions
+        Example: >>> from transformers import AutoTokenizer, EsmForProteinFolding >>> model =
+        EsmForProteinFolding.from_pretrained("facebook/esmfold_v1") >>> tokenizer =
+        AutoTokenizer.from_pretrained("facebook/esmfold_v1") >>> inputs = tokenizer(["MLKNVQVQLV"],
+        return_tensors='pt') # A tiny random peptide >>> outputs = model(**inputs) >>> folded_positions =
+        outputs.positions
 
         """
         cfg = self.config.esmfold_config
