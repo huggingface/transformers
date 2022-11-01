@@ -568,7 +568,7 @@ class EncoderDecoderModel(PreTrainedModel):
 
         >>> input_ids = tokenizer("This is a really long text", return_tensors="pt").input_ids
         >>> labels = tokenizer("This is the corresponding summary", return_tensors="pt").input_ids
-        >>> outputs = model(input_ids=input_ids, labels=input_ids)
+        >>> outputs = model(input_ids=input_ids, labels=labels)
         >>> loss, logits = outputs.loss, outputs.logits
 
         >>> # save and load from pretrained
