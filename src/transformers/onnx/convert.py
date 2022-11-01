@@ -145,7 +145,21 @@ def export_pytorch(
             device = torch.device(device)
             if device.type == "cuda" and torch.cuda.is_available():
                 model.to(device)
-                model_inputs = dict((k, v.to(device)) for k, v in model_inputs.items())
+                model_inputs_device = dict()
+                for k, v in model_inputs.items():
+                    if isinstance(v, Tuple):
+                        model_inputs_device[k] = tuple(
+                            x.to(device) if isinstance(x, torch.Tensor) else None for x in v
+                        )
+                    elif isinstance(v, List):
+                        model_inputs_device[k] = [
+                            tuple(x.to(device) if isinstance(x, torch.Tensor) else None for x in t) for t in v
+                        ]
+                    else:
+                        model_inputs_device[k] = v.to(device)
+
+                model_inputs = model_inputs_device
+
             inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
             onnx_outputs = list(config.outputs.keys())
 
@@ -404,9 +418,12 @@ def validate_model_outputs(
         else:
             ref_outputs_dict[name] = value
 
+    # Create onnxruntime inputs from the reference model inputs
+    reference_model_inputs_onnxruntime = config.generate_dummy_inputs_onnxruntime(reference_model_inputs)
+
     # We flatten potential collection of inputs (i.e. past_keys)
     onnx_inputs = {}
-    for name, value in reference_model_inputs.items():
+    for name, value in reference_model_inputs_onnxruntime.items():
         if isinstance(value, (list, tuple)):
             value = config.flatten_output_collection_property(name, value)
             onnx_inputs.update({tensor_name: pt_tensor.numpy() for tensor_name, pt_tensor in value.items()})

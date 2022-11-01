@@ -699,53 +699,6 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
         return results
 
-    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.post_process_segmentation
-    def post_process_segmentation(self, outputs, target_sizes, threshold=0.9, mask_threshold=0.5):
-        """
-        Converts the output of [`DetrForSegmentation`] into image segmentation predictions. Only supports PyTorch.
-
-        Parameters:
-            outputs ([`DetrSegmentationOutput`]):
-                Raw outputs of the model.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`):
-                Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction.
-            threshold (`float`, *optional*, defaults to 0.9):
-                Threshold to use to filter out queries.
-            mask_threshold (`float`, *optional*, defaults to 0.5):
-                Threshold to use when turning the predicted masks into binary values.
-
-        Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an image
-            in the batch as predicted by the model.
-        """
-        warnings.warn(
-            "`post_process_segmentation` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_semantic_segmentation`.",
-            FutureWarning,
-        )
-        out_logits, raw_masks = outputs.logits, outputs.pred_masks
-        preds = []
-
-        def to_tuple(tup):
-            if isinstance(tup, tuple):
-                return tup
-            return tuple(tup.cpu().tolist())
-
-        for cur_logits, cur_masks, size in zip(out_logits, raw_masks, target_sizes):
-            # we filter empty queries and detection below threshold
-            scores, labels = cur_logits.softmax(-1).max(-1)
-            keep = labels.ne(outputs.logits.shape[-1] - 1) & (scores > threshold)
-            cur_scores, cur_classes = cur_logits.softmax(-1).max(-1)
-            cur_scores = cur_scores[keep]
-            cur_classes = cur_classes[keep]
-            cur_masks = cur_masks[keep]
-            cur_masks = nn.functional.interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
-            cur_masks = (cur_masks.sigmoid() > mask_threshold) * 1
-
-            predictions = {"scores": cur_scores, "labels": cur_classes, "masks": cur_masks}
-            preds.append(predictions)
-        return preds
-
     # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.post_process_object_detection with Detr->Yolos
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None
