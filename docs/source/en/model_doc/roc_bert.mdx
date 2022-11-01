@@ -14,21 +14,27 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The RocBert model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>)  by <INSERT AUTHORS HERE>. <INSERT SHORT SUMMARY HERE>
+The RocBert model was proposed in [RoCBert: Robust Chinese Bert with Multimodal Contrastive Pretraining](https://aclanthology.org/2022.acl-long.65.pdf)  by HuiSu, WeiweiShi, XiaoyuShen, XiaoZhou, TuoJi, JiaruiFang, JieZhou.
+It's a pretrained Chinese language model that is robust under various forms of adversarial attacks.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*Large-scale pretrained language models have achieved SOTA results on NLP tasks. However, they have been shown
+vulnerable to adversarial attacks especially for logographic languages like Chinese. In this work, we propose
+ROCBERT: a pretrained Chinese Bert that is robust to various forms of adversarial attacks like word perturbation,
+synonyms, typos, etc. It is pretrained with the contrastive learning objective which maximizes the label consistency
+under different synthesized adversarial examples. The model takes as input multimodal information including the
+semantic, phonetic and visual features. We show all these features are important to the model robustness since the
+attack can be performed in all the three forms. Across 5 Chinese NLU tasks, ROCBERT outperforms strong baselines under
+three blackbox adversarial algorithms without sacrificing the performance on clean testset. It also performs the best
+in the toxic content detection task under human-made attacks.*
 
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>). The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [weiweishi](https://huggingface.co/weiweishi).
 
 ## RocBertConfig
 
 [[autodoc]] RocBertConfig
+    - all
 
 
 ## RocBertTokenizer
@@ -38,11 +44,6 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingfac
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
     - save_vocabulary
-
-
-## RocBertTokenizerFast
-
-[[autodoc]] RocBertTokenizerFast
 
 
 ## RocBertModel
