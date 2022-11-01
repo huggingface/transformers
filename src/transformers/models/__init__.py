@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    roc_bert,
     albert,
     auto,
     bart,

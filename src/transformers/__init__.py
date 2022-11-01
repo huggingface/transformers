@@ -120,6 +120,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RocBertConfig", "RocBertTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -561,6 +562,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
+    _import_structure["models.roc_bert"].append("RocBertTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -840,6 +842,22 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.roc_bert"].extend(
+        [
+            "ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RocBertForMaskedLM",
+            "RocBertForCausalLM",
+            "RocBertForMultipleChoice",
+            "RocBertForQuestionAnswering",
+            "RocBertForSequenceClassification",
+            "RocBertForTokenClassification",
+            "RocBertLayer",
+            "RocBertModel",
+            "RocBertPreTrainedModel",
+            "load_tf_weights_in_roc_bert",
+        ]
+    )
 
     _import_structure["models.time_series_transformer"].extend(
         [
@@ -3179,6 +3197,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.roc_bert import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RocBertConfig, RocBertTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -3577,6 +3596,7 @@ if TYPE_CHECKING:
         from .utils.dummy_tokenizers_objects import *
     else:
         # Fast tokenizers imports
+        from .models.roc_bert import RocBertTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -3805,6 +3825,20 @@ if TYPE_CHECKING:
         from .modeling_utils import PreTrainedModel
 
         # PyTorch model imports
+
+        from .models.roc_bert import (
+            ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RocBertForMaskedLM,
+            RocBertForCausalLM,
+            RocBertForMultipleChoice,
+            RocBertForQuestionAnswering,
+            RocBertForSequenceClassification,
+            RocBertForTokenClassification,
+            RocBertLayer,
+            RocBertModel,
+            RocBertPreTrainedModel,
+            load_tf_weights_in_roc_bert,
+        )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
