@@ -49,17 +49,25 @@ VOCAB_FILES_NAMES = {
 
 # todo: change the path
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"roc-bert-base-uncased": "/data/git_code/wit/tmp/vocab.txt"},
-    "word_shape_file": {"roc-bert-base-uncased": "/data/git_code/wit/tmp/word_shape.json"},
-    "word_pronunciation_file": {"roc-bert-base-uncased": "/data/git_code/wit/tmp/word_shape.json"},
+    "vocab_file": {
+        "weiweishi/roc-bert-base-zh": "https://huggingface.co/weiweishi/roc-bert-base-zh/resolve/main/vocab.txt"
+    },
+    "word_shape_file": {
+        "weiweishi/roc-bert-base-zh": "https://huggingface.co/weiweishi/roc-bert-base-zh/resolve/main/word_shape.json"
+    },
+    "word_pronunciation_file": {
+        "weiweishi/roc-bert-base-zh": (
+            "https://huggingface.co/weiweishi/roc-bert-base-zh/resolve/main/word_pronunciation.json"
+        )
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "roc-bert-base-uncased": 512,
+    "weiweishi/roc-bert-base-zh": 512,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "roc-bert-base-uncased": {"do_lower_case": True},
+    "weiweishi/roc-bert-base-zh": {"do_lower_case": True},
 }
 
 
@@ -96,7 +104,7 @@ class RocBertTokenizer(PreTrainedTokenizer):
         word_shape_file (`str`):
             File containing the word => shape info.
         word_pronunciation_file (`str`):
-            File containing the word => shape info.
+            File containing the word => pronunciation info.
         do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
         do_basic_tokenize (`bool`, *optional*, defaults to `True`):
@@ -131,9 +139,6 @@ class RocBertTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-
-    # model_input_names: List[str] = ["input_ids", "input_shape_ids", "input_pronunciation_ids",
-    #                                 "token_type_ids", "attention_mask"]
 
     def __init__(
         self,
@@ -606,7 +611,7 @@ class RocBertTokenizer(PreTrainedTokenizer):
                     tokens_proun_ids = self.convert_tokens_to_pronunciation_ids(text)
                     return tokens_ids, tokens_shape_ids, tokens_proun_ids
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
-                return text
+                return text, [0] * len(text), [0] * len(text)  # shape and proun id is pad_value
             else:
                 raise ValueError(
                     "Input is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."

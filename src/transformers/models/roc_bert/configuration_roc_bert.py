@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "roc-bert-base-cased": "https://huggingface.co/roc-bert-base-cased/resolve/main/config.json",
+    "roc-bert-base-cased": "https://huggingface.co/weiweishi/roc-bert-base-zh/resolve/main/config.json",
     # See all RocBert models at https://huggingface.co/models?filter=roc_bert
 }
 
@@ -31,7 +31,7 @@ class RocBertConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`~RocBertModel`]. It is used to instantiate an
     RocBert model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the RocBert
-    [roc-bert-base-cased](https://huggingface.co/roc-bert-base-cased) architecture.
+    [roc-bert-base-cased](https://huggingface.co/weiweishi/roc-bert-base-zh) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -68,15 +68,31 @@ class RocBertConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        enable_cls (`bool`, *optional*, defaults to `True`):
+            Whether or not the model use cls loss when pretrained.
+        enable_pronunciation (`bool`, *optional*, defaults to `True`):
+            Whether or not the model use pronunciation embed when training.
+        enable_shape (`bool`, *optional*, defaults to `True`):
+            Whether or not the model use shape embed when training.
+        pronunciation_embed_dim (`int`, *optional*, defaults to 768):
+            Dimension of the pronunciation_embed.
+        pronunciation_vocab_size (`int`, *optional*, defaults to 910):
+            Pronunciation Vocabulary size of the RocBert model. Defines the number of different tokens that can be
+            represented by the `input_pronunciation_ids` passed when calling [`~RocBertModel`].
+        shape_embed_dim (`int`, *optional*, defaults to 512):
+            Dimension of the shape_embed.
+        shape_vocab_size (`int`, *optional*, defaults to 24858):
+            Shape Vocabulary size of the RocBert model. Defines the number of different tokens that can be represented
+            by the `input_shape_ids` passed when calling [`~RocBertModel`].
         Example:
 
     ```python
     >>> from transformers import RocBertModel, RocBertConfig
 
-    >>> # Initializing a RocBert roc-bert-base-cased style configuration
+    >>> # Initializing a RocBert weiweishi/roc-bert-base-zh style configuration
     >>> configuration = RocBertConfig()
 
-    >>> # Initializing a model from the roc-bert-base-cased style configuration
+    >>> # Initializing a model from the weiweishi/roc-bert-base-zh style configuration
     >>> model = RocBertModel(configuration)
 
     >>> # Accessing the model configuration

@@ -58,6 +58,7 @@ ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# Copied from transformers.models.bert.modeling_bert.load_tf_weights_in_bert with bert->roc_bert
 def load_tf_weights_in_roc_bert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
@@ -734,6 +735,7 @@ class RocBertOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel with Bert->RocBert
 class RocBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -793,14 +795,14 @@ ROC_BERT_INPUTS_DOCSTRING = r"""
             Indices can be obtained using [`RocBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
-            [What are input IDs?](../glossary#input-ids)
+            [What are input IDs?](../glossary#input_shape_ids)
         input_pronunciation_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the pronunciation vocabulary.
 
             Indices can be obtained using [`RocBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
-            [What are input IDs?](../glossary#input-ids)
+            [What are input IDs?](../glossary#input_pronunciation_ids)
         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1249,12 +1251,12 @@ class RocBertForCausalLM(RocBertPreTrainedModel):
         >>> from transformers import RocBertTokenizer, RocBertForCausalLM, RocBertConfig
         >>> import torch
 
-        >>> tokenizer = RocBertTokenizer.from_pretrained("roc-bert-base-cased")
-        >>> config = RocBertConfig.from_pretrained("roc-bert-base-cased")
+        >>> tokenizer = RocBertTokenizer.from_pretrained("weiweishi/roc-bert-base-zh")
+        >>> config = RocBertConfig.from_pretrained("weiweishi/roc-bert-base-zh")
         >>> config.is_decoder = True
-        >>> model = RocBertForCausalLM.from_pretrained("roc-bert-base-cased", config=config)
+        >>> model = RocBertForCausalLM.from_pretrained("weiweishi/roc-bert-base-zh", config=config)
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> inputs = tokenizer("你好，很高兴认识你", return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> prediction_logits = outputs.logits
