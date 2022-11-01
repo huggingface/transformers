@@ -1409,8 +1409,8 @@ class GenerationTesterMixin:
         # check `generate()` and `contrastive_search()` are equal
         for model_class in self.all_generative_model_classes:
 
-            # TODO: fix me. Bloom fails because `past` has a different shape, while FSMT and reformer have a different
-            # cache variable type (and format).
+            # TODO: Fix Bloom. Bloom fails because `past` has a different shape.
+            # won't fix: FSMT and Reformer have a different cache variable type (and format).
             if any(model_name in model_class.__name__.lower() for model_name in ["bloom", "fsmt", "reformer"]):
                 return
 
@@ -1432,8 +1432,8 @@ class GenerationTesterMixin:
     def test_contrastive_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
 
-            # TODO: fix me. Bloom fails because `past` has a different shape, while FSMT and reformer have a different
-            # cache variable type (and format).
+            # TODO: Fix Bloom. Bloom fails because `past` has a different shape.
+            # won't fix: FSMT and Reformer have a different cache variable type (and format).
             if any(model_name in model_class.__name__.lower() for model_name in ["bloom", "fsmt", "reformer"]):
                 return
 
