@@ -283,6 +283,9 @@ class CLIPSegConfig(PretrainedConfig):
             Dimensionality of the "intermediate" (i.e., feed-forward) layers in the Transformer decoder.
         conditional_layer (`int`, *optional*, defaults to 0):
             ...
+        use_complex_transposed_convolution (`bool`, *optional*, defaults to `False`):
+            Whether to use a more complex transposed convolution in the decoder, enabling more fine-grained
+            segmentation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -325,6 +328,7 @@ class CLIPSegConfig(PretrainedConfig):
         decoder_hidden_act="quick_gelu",
         decoder_intermediate_size=2048,
         conditional_layer=0,
+        use_complex_transposed_convolution=False,
         **kwargs
     ):
         super().__init__(text_config_dict=text_config_dict, vision_config_dict=vision_config_dict, **kwargs)
@@ -350,6 +354,7 @@ class CLIPSegConfig(PretrainedConfig):
         self.decoder_intermediate_size = decoder_intermediate_size
         self.conditional_layer = conditional_layer
         self.initializer_factor = 1.0
+        self.use_complex_transposed_convolution = use_complex_transposed_convolution
 
     @classmethod
     def from_text_vision_configs(cls, text_config: CLIPSegTextConfig, vision_config: CLIPSegVisionConfig, **kwargs):

@@ -24,10 +24,15 @@ from torchvision.transforms import Compose, Resize, ToTensor
 from transformers import CLIPSegConfig, CLIPSegForImageSegmentation, CLIPSegTextConfig, CLIPSegVisionConfig
 
 
-def get_clipseg_config():
+def get_clipseg_config(checkpoint_path):
     text_config = CLIPSegTextConfig()
     vision_config = CLIPSegVisionConfig(patch_size=16)
-    config = CLIPSegConfig.from_text_vision_configs(text_config, vision_config)
+
+    use_complex_transposed_convolution = True if "refined" in checkpoint_path else False
+
+    config = CLIPSegConfig.from_text_vision_configs(
+        text_config, vision_config, use_complex_transposed_convolution=use_complex_transposed_convolution
+    )
     return config
 
 
@@ -151,7 +156,7 @@ image_transforms = Compose(
 
 
 def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_hub):
-    config = get_clipseg_config()
+    config = get_clipseg_config(checkpoint_path)
     model = CLIPSegForImageSegmentation(config)
     model.eval()
 
@@ -184,12 +189,14 @@ def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_t
     with torch.no_grad():
         outputs = model(input_ids, pixel_values)
 
+    print(outputs.predicted_masks[0, 0, :3, :3])
+
     # verify values
     expected_cond = torch.tensor([0.0548, 0.0067, -0.1543])
     expected_pooled_output = torch.tensor([0.2208, -0.7577, -0.1391])
     if "refined" in checkpoint_path:
         expected_masks_slice = torch.tensor(
-            [[0.0095, 0.2114, -0.0486], [0.0019, -0.0304, 0.0527], [0.1598, 0.0943, 0.0699]]
+            [[-6.8533, -6.8308, -6.6634], [-6.7272, -6.4926, -6.4597], [-6.4338, -6.2161, -6.2296]]
         )
     else:
         expected_masks_slice = torch.tensor(

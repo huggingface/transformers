@@ -1210,9 +1210,27 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         # TODO remove, this is probably not used
         self.reduce = nn.Linear(config.vision_config.hidden_size, config.reduce_dim)
 
-        self.transposed_convolution = nn.ConvTranspose2d(
-            config.reduce_dim, 1, config.vision_config.patch_size, stride=config.vision_config.patch_size
-        )
+        if config.use_complex_transposed_convolution:
+            transposed_kernels = (config.vision_config.patch_size // 4, config.vision_config.patch_size // 4)
+
+            self.transposed_convolution = nn.Sequential(
+                nn.Conv2d(config.reduce_dim, config.reduce_dim, kernel_size=3, padding=1),
+                nn.ReLU(),
+                nn.ConvTranspose2d(
+                    config.reduce_dim,
+                    config.reduce_dim // 2,
+                    kernel_size=transposed_kernels[0],
+                    stride=transposed_kernels[0],
+                ),
+                nn.ReLU(),
+                nn.ConvTranspose2d(
+                    config.reduce_dim // 2, 1, kernel_size=transposed_kernels[1], stride=transposed_kernels[1]
+                ),
+            )
+        else:
+            self.transposed_convolution = nn.ConvTranspose2d(
+                config.reduce_dim, 1, config.vision_config.patch_size, stride=config.vision_config.patch_size
+            )
 
         depth = len(config.extract_layers)
         self.reduces = nn.ModuleList(
