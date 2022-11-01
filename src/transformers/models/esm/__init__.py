@@ -39,6 +39,7 @@ else:
         "EsmModel",
         "EsmPreTrainedModel",
     ]
+    _import_structure["modeling_esmfold"] = ["EsmForProteinFolding", "EsmFoldPreTrainedModel"]
 
 try:
     if not is_tf_available():
@@ -54,7 +55,6 @@ else:
         "TFEsmModel",
         "TFEsmPreTrainedModel",
     ]
-
 
 if TYPE_CHECKING:
     from .configuration_esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig
@@ -74,6 +74,7 @@ if TYPE_CHECKING:
             EsmModel,
             EsmPreTrainedModel,
         )
+        from .modeling_esmfold import EsmFoldPreTrainedModel, EsmForProteinFolding
 
     try:
         if not is_tf_available():
