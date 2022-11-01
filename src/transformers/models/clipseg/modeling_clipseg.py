@@ -161,14 +161,20 @@ class CLIPSegVisionEmbeddings(nn.Module):
         if len(new_size) != 2:
             raise ValueError("new_size should consist of 2 values")
 
-        a = self.position_embedding.weight[1:].T.view(1, self.config.hidden_size, self.num_patches)
+        num_patches_one_direction = int(self.num_patches**0.5)
+        # we interpolate the position embeddings in 2D
+        a = self.position_embedding.weight[1:].T.view(
+            1, self.config.hidden_size, num_patches_one_direction, num_patches_one_direction
+        )
         b = (
             nn.functional.interpolate(a, new_size, mode="bicubic", align_corners=False)
             .squeeze(0)
-            .view(768, new_size[0] * new_size[1])
+            .view(self.config.hidden_size, new_size[0] * new_size[1])
             .T
         )
-        return torch.cat([self.model.positional_embedding[:1], b])
+        result = torch.cat([self.position_embedding.weight[:1], b])
+
+        return result
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
@@ -181,7 +187,7 @@ class CLIPSegVisionEmbeddings(nn.Module):
         if embeddings.shape[1] != self.num_positions:
             new_shape = int(math.sqrt(embeddings.shape[1] - 1))
             embeddings = embeddings + self.interpolate_position_embeddings((new_shape, new_shape))
-            embeddings = embeddings.to(embeddings.dtype)[None, :, :]
+            embeddings = embeddings.to(embeddings.dtype)
         else:
             embeddings = embeddings + self.position_embedding(self.position_ids)
 

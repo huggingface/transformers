@@ -1,3 +1,20 @@
+# coding=utf-8
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Convert CLIPSeg checkpoints from the original repository. URL: https://github.com/timojl/clipseg."""
+
 import argparse
 
 import torch
@@ -128,7 +145,7 @@ def convert_state_dict(orig_state_dict, config):
 image_transforms = Compose(
     [
         ToTensor(),
-        Resize((224, 224)),
+        Resize((352, 352)),
     ]
 )
 
@@ -149,8 +166,10 @@ def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_t
     state_dict = convert_state_dict(state_dict, config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
 
-    print("Missing keys:", missing_keys)
-    print("Unexpected keys:", unexpected_keys)
+    if missing_keys != ["clipseg.text_model.embeddings.position_ids", "clipseg.vision_model.embeddings.position_ids"]:
+        raise ValueError("Missing keys that are not expected: {}".format(missing_keys))
+    if len(unexpected_keys) > 0:
+        raise ValueError(f"Unexpected keys: {unexpected_keys}")
 
     # TODO create feature extractor
     # feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/{}".format(model_name.replace("_", "-")))
@@ -167,12 +186,12 @@ def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_t
 
     # verify values
     expected_masks_slice = torch.tensor(
-        [[-4.2436, -4.2398, -4.2027], [-4.1997, -4.1958, -4.1688], [-4.1144, -4.0943, -4.0736]]
+        [[-4.1992, -4.1912, -4.1523], [-4.1509, -4.1442, -4.1091], [-4.0581, -4.0355, -4.0107]]
     )
     assert torch.allclose(outputs.predicted_masks[0, 0, :3, :3], expected_masks_slice, atol=1e-3)
     expected_cond = torch.tensor([0.0548, 0.0067, -0.1543])
     assert torch.allclose(outputs.conditional_embeddings[0, :3], expected_cond, atol=1e-3)
-    expected_pooled_output = torch.tensor([0.2551, -0.8039, -0.1766])
+    expected_pooled_output = torch.tensor([0.2208, -0.7577, -0.1391])
     assert torch.allclose(outputs.pooled_output[0, :3], expected_pooled_output, atol=1e-3)
     print("Looks ok!")
 
