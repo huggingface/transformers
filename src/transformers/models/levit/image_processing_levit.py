@@ -156,7 +156,9 @@ class LevitImageProcessor(BaseImageProcessor):
             output_size = get_resize_output_image_size(image, size=shortest_edge, default_to_square=False)
             size_dict = {"height": output_size[0], "width": output_size[1]}
         if "height" not in size_dict or "width" not in size_dict:
-            raise ValueError(f"Size dict must have keys 'height' and 'width' or 'shortest_edge'. Got {size_dict.keys()}")
+            raise ValueError(
+                f"Size dict must have keys 'height' and 'width' or 'shortest_edge'. Got {size_dict.keys()}"
+            )
         return resize(
             image, size=(size_dict["height"], size_dict["width"]), resample=resample, data_format=data_format, **kwargs
         )
