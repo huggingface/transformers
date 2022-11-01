@@ -14,7 +14,6 @@
 # limitations under the License.
 """ ESM model configuration"""
 
-import copy
 from dataclasses import asdict, dataclass
 from typing import Optional
 
@@ -172,7 +171,7 @@ class EsmConfig(PretrainedConfig):
         Returns:
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
-        output = copy.deepcopy(self.__dict__)
+        output = super().to_dict()
         if isinstance(self.esmfold_config, EsmFoldConfig):
             output["esmfold_config"] = self.esmfold_config.to_dict()
         return output
