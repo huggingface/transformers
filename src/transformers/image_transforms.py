@@ -40,10 +40,8 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
-
 if is_tf_available():
     import tensorflow as tf
-
 if is_flax_available():
     import jax.numpy as jnp
 
@@ -434,18 +432,30 @@ def center_crop(
 
 
 def _center_to_corners_format_torch(bboxes_center: "torch.Tensor") -> "torch.Tensor":
+    """
+    Converts bounding boxes from center format (center_x, center_y, width, height) to corners format (x_0, y_1, x_1,
+    y_1).
+    """
     x_c, y_c, w, h = bboxes_center.unbind(-1)
     b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
     return torch.stack(b, dim=-1)
 
 
 def _center_to_corners_format_numpy(bboxes_center: np.ndarray) -> np.ndarray:
+    """
+    Converts bounding boxes from center format (center_x, center_y, width, height) to corners format (x_0, y_1, x_1,
+    y_1).
+    """
     x_c, y_c, w, h = bboxes_center.T
     bboxes_corners = np.stack([x_c - 0.5 * w, y_c - 0.5 * h, x_c + 0.5 * w, y_c + 0.5 * h], axis=-1)
     return bboxes_corners
 
 
 def _center_to_corners_format_tf(bboxes_center: "tf.Tensor") -> "tf.Tensor":
+    """
+    Converts bounding boxes from center format (center_x, center_y, width, height) to corners format (x_0, y_1, x_1,
+    y_1).
+    """
     x_c, y_c, w, h = tf.unstack(bboxes_center, axis=-1)
     bboxes_corners = tf.stack([x_c - 0.5 * w, y_c - 0.5 * h, x_c + 0.5 * w, y_c + 0.5 * h], axis=-1)
     return bboxes_corners
@@ -470,18 +480,30 @@ def center_to_corners_format(bboxes_center: TensorType) -> TensorType:
 
 
 def _corners_to_center_format_torch(bboxes_corners: "torch.Tensor") -> "torch.Tensor":
+    """
+    Converts bounding boxes from corners format (x_0, y_1, x_1, y_1) to center format (center_x, center_y, width,
+    height).
+    """
     x_0, y_0, x_1, y_1 = bboxes_corners.unbind(-1)
     b = [(x_0 + x_1) / 2, (y_0 + y_1) / 2, (x_1 - x_0), (y_1 - y_0)]
     return torch.stack(b, dim=-1)
 
 
 def _corners_to_center_format_numpy(bboxes_corners: np.ndarray) -> np.ndarray:
+    """
+    Converts bounding boxes from corners format (x_0, y_1, x_1, y_1) to center format (center_x, center_y, width,
+    height).
+    """
     x_0, y_0, x_1, y_1 = bboxes_corners.T
     bboxes_center = np.stack([(x_0 + x_1) / 2, (y_0 + y_1) / 2, (x_1 - x_0), (y_1 - y_0)], axis=-1)
     return bboxes_center
 
 
 def _corners_to_center_format_tf(bboxes_corners: "tf.Tensor") -> "tf.Tensor":
+    """
+    Converts bounding boxes from corners format (x_0, y_1, x_1, y_1) to center format (center_x, center_y, width,
+    height).
+    """
     x_0, y_0, x_1, y_1 = tf.unstack(bboxes_corners, axis=-1)
     bboxes_center = tf.stack([(x_0 + x_1) / 2, (y_0 + y_1) / 2, (x_1 - x_0), (y_1 - y_0)], axis=-1)
     return bboxes_center

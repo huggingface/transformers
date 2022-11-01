@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import os
-from typing import TYPE_CHECKING, List, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Iterable, List, Tuple, Union
 
 import numpy as np
 from packaging import version
@@ -46,6 +46,7 @@ if is_vision_available():
         PILImageResampling = PIL.Image.Resampling
     else:
         PILImageResampling = PIL.Image
+
 
 if TYPE_CHECKING:
     if is_torch_available():
@@ -163,6 +164,47 @@ def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> T
         raise ValueError(f"Unsupported data format: {channel_dim}")
 
 
+def is_valid_annotation_coco_detection(annotation: Dict[str, Union[List, Tuple]]) -> bool:
+    if (
+        isinstance(annotation, dict)
+        and "image_id" in annotation
+        and "annotations" in annotation
+        and isinstance(annotation["annotations"], (list, tuple))
+        and (
+            # an image can have no annotations
+            len(annotation["annotations"]) == 0
+            or isinstance(annotation["annotations"][0], dict)
+        )
+    ):
+        return True
+    return False
+
+
+def is_valid_annotation_coco_panoptic(annotation: Dict[str, Union[List, Tuple]]) -> bool:
+    if (
+        isinstance(annotation, dict)
+        and "image_id" in annotation
+        and "segments_info" in annotation
+        and "file_name" in annotation
+        and isinstance(annotation["segments_info"], (list, tuple))
+        and (
+            # an image can have no segments FIXME - check with Niels
+            len(annotation["segments_info"]) == 0
+            or isinstance(annotation["segments_info"][0], dict)
+        )
+    ):
+        return True
+    return False
+
+
+def valid_coco_detection_annotations(annotations: Iterable[Dict[str, Union[List, Tuple]]]) -> bool:
+    return all(is_valid_annotation_coco_detection(ann) for ann in annotations)
+
+
+def valid_coco_panoptic_annotations(annotations: Iterable[Dict[str, Union[List, Tuple]]]) -> bool:
+    return all(is_valid_annotation_coco_panoptic(ann) for ann in annotations)
+
+
 def load_image(image: Union[str, "PIL.Image.Image"]) -> "PIL.Image.Image":
     """
     Loads `image` to a PIL Image.
@@ -253,13 +295,6 @@ class ImageFeatureExtractionMixin:
 
         return image.convert("RGB")
 
-    def rescale(self, image: np.ndarray, scale: Union[float, int]) -> np.ndarray:
-        """
-        Rescale a numpy image by scale amount
-        """
-        self._ensure_format_supported(image)
-        return image * scale
-
     def to_numpy_array(self, image, rescale=None, channel_first=True):
         """
         Converts `image` to a numpy array. Optionally rescales it and puts the channel dimension as the first
@@ -282,10 +317,11 @@ class ImageFeatureExtractionMixin:
         if is_torch_tensor(image):
             image = image.numpy()
 
-        rescale = isinstance(image.flat[0], np.integer) if rescale is None else rescale
+        if rescale is None:
+            rescale = isinstance(image.flat[0], np.integer)
 
         if rescale:
-            image = self.rescale(image.astype(np.float32), 1 / 255.0)
+            image = image.astype(np.float32) / 255.0
 
         if channel_first and image.ndim == 3:
             image = image.transpose(2, 0, 1)
@@ -312,7 +348,7 @@ class ImageFeatureExtractionMixin:
             image = np.expand_dims(image, axis=0)
         return image
 
-    def normalize(self, image, mean, std, rescale=False):
+    def normalize(self, image, mean, std):
         """
         Normalizes `image` with `mean` and `std`. Note that this will trigger a conversion of `image` to a NumPy array
         if it's a PIL Image.
@@ -324,21 +360,11 @@ class ImageFeatureExtractionMixin:
                 The mean (per channel) to use for normalization.
             std (`List[float]` or `np.ndarray` or `torch.Tensor`):
                 The standard deviation (per channel) to use for normalization.
-            rescale (`bool`, *optional*, defaults to `False`):
-                Whether or not to rescale the image to be between 0 and 1. If a PIL image is provided, scaling will
-                happen automatically.
         """
         self._ensure_format_supported(image)
 
         if isinstance(image, PIL.Image.Image):
-            image = self.to_numpy_array(image, rescale=True)
-        # If the input image is a PIL image, it automatically gets rescaled. If it's another
-        # type it may need rescaling.
-        elif rescale:
-            if isinstance(image, np.ndarray):
-                image = self.rescale(image.astype(np.float32), 1 / 255.0)
-            elif is_torch_tensor(image):
-                image = self.rescale(image.float(), 1 / 255.0)
+            image = self.to_numpy_array(image)
 
         if isinstance(image, np.ndarray):
             if not isinstance(mean, np.ndarray):
@@ -372,7 +398,7 @@ class ImageFeatureExtractionMixin:
                 If `size` is an int and `default_to_square` is `True`, then image will be resized to (size, size). If
                 `size` is an int and `default_to_square` is `False`, then smaller edge of the image will be matched to
                 this number. i.e, if height > width, then image will be rescaled to (size * height / width, size).
-            resample (`int`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+            resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
                 The filter to user for resampling.
             default_to_square (`bool`, *optional*, defaults to `True`):
                 How to convert `size` when it is a single int. If set to `True`, the `size` will be converted to a
@@ -388,7 +414,7 @@ class ImageFeatureExtractionMixin:
         Returns:
             image: A resized `PIL.Image.Image`.
         """
-        resample = resample if resample is not None else PILImageResampling.BILINEAR
+        resample = resample if resample is not None else PIL.Image.BILINEAR
 
         self._ensure_format_supported(image)
 

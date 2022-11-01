@@ -44,12 +44,13 @@ class YolosFeatureExtractionTester(unittest.TestCase):
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        size=18,
-        max_size=1333,  # by setting max_size > max_resolution we're effectively not testing this :p
+        size=None,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
+        # by setting size["longest_edge"] > max_resolution we're effectively not testing this :p
+        size = size if size is not None else {"shortest_edge": 18, "longest_edge": 1333}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -57,7 +58,6 @@ class YolosFeatureExtractionTester(unittest.TestCase):
         self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
-        self.max_size = max_size
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -66,7 +66,6 @@ class YolosFeatureExtractionTester(unittest.TestCase):
         return {
             "do_resize": self.do_resize,
             "size": self.size,
-            "max_size": self.max_size,
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
@@ -84,14 +83,14 @@ class YolosFeatureExtractionTester(unittest.TestCase):
             else:
                 h, w = image.shape[1], image.shape[2]
             if w < h:
-                expected_height = int(self.size * h / w)
-                expected_width = self.size
+                expected_height = int(self.size["shortest_edge"] * h / w)
+                expected_width = self.size["shortest_edge"]
             elif w > h:
-                expected_height = self.size
-                expected_width = int(self.size * w / h)
+                expected_height = self.size["shortest_edge"]
+                expected_width = int(self.size["shortest_edge"] * w / h)
             else:
-                expected_height = self.size
-                expected_width = self.size
+                expected_height = self.size["shortest_edge"]
+                expected_width = self.size["shortest_edge"]
 
         else:
             expected_values = []
@@ -124,7 +123,6 @@ class YolosFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
         self.assertTrue(hasattr(feature_extractor, "do_normalize"))
         self.assertTrue(hasattr(feature_extractor, "do_resize"))
         self.assertTrue(hasattr(feature_extractor, "size"))
-        self.assertTrue(hasattr(feature_extractor, "max_size"))
 
     def test_batch_feature(self):
         pass

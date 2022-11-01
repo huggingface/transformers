@@ -37,7 +37,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.detr.feature_extraction_detr.binary_mask_to_rle
+# Copied from transformers.models.detr.image_processing_detr.binary_mask_to_rle
 def binary_mask_to_rle(mask):
     """
     Args:
@@ -59,12 +59,11 @@ def binary_mask_to_rle(mask):
     return [x for x in runs]
 
 
-# Copied from transformers.models.detr.feature_extraction_detr.convert_segmentation_to_rle
+# Copied from transformers.models.detr.image_processing_detr.convert_segmentation_to_rle
 def convert_segmentation_to_rle(segmentation):
     """
-    Converts given segmentation map of shape (height, width) to the run-length encoding (RLE) format.
-
     Args:
+    Converts given segmentation map of shape (height, width) to the run-length encoding (RLE) format.
         segmentation (`torch.Tensor` or `numpy.array`):
             A segmentation map of shape `(height, width)` where each value denotes a segment or class id.
     Returns:
@@ -81,13 +80,12 @@ def convert_segmentation_to_rle(segmentation):
     return run_length_encodings
 
 
-# Copied from transformers.models.detr.feature_extraction_detr.remove_low_and_no_objects
+# Copied from transformers.models.detr.image_processing_detr.remove_low_and_no_objects
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
     """
+    Args:
     Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
     `labels`.
-
-    Args:
         masks (`torch.Tensor`):
             A tensor of shape `(num_queries, height, width)`.
         scores (`torch.Tensor`):
@@ -110,7 +108,7 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
     return masks[to_keep], scores[to_keep], labels[to_keep]
 
 
-# Copied from transformers.models.detr.feature_extraction_detr.check_segment_validity
+# Copied from transformers.models.detr.image_processing_detr.check_segment_validity
 def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
     # Get the mask associated with the k class
     mask_k = mask_labels == k
@@ -129,7 +127,7 @@ def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overl
     return mask_exists, mask_k
 
 
-# Copied from transformers.models.detr.feature_extraction_detr.compute_segments
+# Copied from transformers.models.detr.image_processing_detr.compute_segments
 def compute_segments(
     mask_probs,
     pred_scores,
