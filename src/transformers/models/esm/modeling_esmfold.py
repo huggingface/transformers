@@ -24,6 +24,7 @@ import torch.nn as nn
 from torch.nn import LayerNorm
 
 from ...deepspeed import is_deepspeed_available
+from ...file_utils import add_code_sample_docstrings
 from ...modeling_outputs import ModelOutput
 from ...utils import (
     ContextManagers,
@@ -52,6 +53,9 @@ from .openfold_utils import (
 
 
 logger = logging.get_logger(__name__)
+_CHECKPOINT_FOR_DOC = "Rocketknight1/esmfold_v1"
+_CONFIG_FOR_DOC = "EsmConfig"
+_TOKENIZER_FOR_DOC = "EsmTokenizer"
 
 
 @dataclass
@@ -2078,6 +2082,12 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         return torch.tensor(esm_reorder)
 
     @add_start_docstrings_to_model_forward(ESMFOLD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=EsmForProteinFoldingOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     @replace_return_docstrings(output_type=EsmForProteinFoldingOutput, config_class=EsmConfig)
     def forward(
         self,
