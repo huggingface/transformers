@@ -24,11 +24,11 @@ from torchvision.transforms import Compose, Resize, ToTensor
 from transformers import CLIPSegConfig, CLIPSegForImageSegmentation, CLIPSegTextConfig, CLIPSegVisionConfig
 
 
-def get_clipseg_config(checkpoint_path):
+def get_clipseg_config(model_name):
     text_config = CLIPSegTextConfig()
     vision_config = CLIPSegVisionConfig(patch_size=16)
 
-    use_complex_transposed_convolution = True if "refined" in checkpoint_path else False
+    use_complex_transposed_convolution = True if "refined" in model_name else False
 
     config = CLIPSegConfig.from_text_vision_configs(
         text_config, vision_config, use_complex_transposed_convolution=use_complex_transposed_convolution
@@ -155,8 +155,8 @@ image_transforms = Compose(
 )
 
 
-def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_hub):
-    config = get_clipseg_config(checkpoint_path)
+def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub):
+    config = get_clipseg_config(model_name)
     model = CLIPSegForImageSegmentation(config)
     model.eval()
 
@@ -194,7 +194,7 @@ def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_t
     # verify values
     expected_cond = torch.tensor([0.0548, 0.0067, -0.1543])
     expected_pooled_output = torch.tensor([0.2208, -0.7577, -0.1391])
-    if "refined" in checkpoint_path:
+    if "refined" in model_name:
         expected_masks_slice = torch.tensor(
             [[-6.8533, -6.8308, -6.6634], [-6.7272, -6.4926, -6.4597], [-6.4338, -6.2161, -6.2296]]
         )
@@ -216,18 +216,25 @@ def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_t
         # feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print("Pushing model to the hub")
-        model.push_to_hub("nielsr/clipseg-test")
+        print(f"Pushing model {model_name} to the hub")
+        model.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
+        "--model_name",
+        default="clipseg",
+        type=str,
+        choices=['clipseg', 'clipseg-rd16', 'clipseg-rd64-refined'],
+        help="Name of the model. Supported models are: clipseg-rd64, clipseg-rd16 and clipseg-rd64-refined (rd meaning reduce dimension)",
+    )
+    parser.add_argument(
         "--checkpoint_path",
         default="/Users/nielsrogge/Documents/CLIPSeg/clip_plus_rd64-uni.pth",
         type=str,
-        help="Path to the original checkpoint.",
+        help="Path to the original checkpoint. Note that the script assumes that the checkpoint includes both CLIP and the decoder weights.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
@@ -237,4 +244,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_clipseg_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_clipseg_checkpoint(args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
