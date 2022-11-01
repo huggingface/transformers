@@ -31,8 +31,6 @@ try:
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
-else:
-    _import_structure["tokenization_roc_bert_fast"] = ["RocBertTokenizerFast"]
 
 try:
     if not is_torch_available():
