@@ -406,7 +406,8 @@ def main():
     # Not that straightforward in torchvision: https://github.com/pytorch/vision/issues/9
     # Currently based on official torchvision references: https://github.com/pytorch/vision/blob/main/references/segmentation/transforms.py
     if "shortest_edge" in feature_extractor.size:
-        size = feature_extractor.size["shortest_edge"]
+        # We instead set the target size as (shortest_edge, shortest_edge) to here to ensure all images are batchable.
+        size = (feature_extractor.size["shortest_edge"], feature_extractor.size["shortest_edge"])
     else:
         size = (feature_extractor.size["height"], feature_extractor.size["width"])
     train_transforms = Compose(
