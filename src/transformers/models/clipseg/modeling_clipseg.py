@@ -1207,9 +1207,6 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         self.film_mul = nn.Linear(config.projection_dim, config.reduce_dim)
         self.film_add = nn.Linear(config.projection_dim, config.reduce_dim)
 
-        # TODO remove, this is probably not used
-        self.reduce = nn.Linear(config.vision_config.hidden_size, config.reduce_dim)
-
         if config.use_complex_transposed_convolution:
             transposed_kernels = (config.vision_config.patch_size // 4, config.vision_config.patch_size // 4)
 

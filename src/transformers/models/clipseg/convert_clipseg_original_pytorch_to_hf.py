@@ -173,7 +173,7 @@ def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_t
 
     if missing_keys != ["clipseg.text_model.embeddings.position_ids", "clipseg.vision_model.embeddings.position_ids"]:
         raise ValueError("Missing keys that are not expected: {}".format(missing_keys))
-    if len(unexpected_keys) > 0:
+    if unexpected_keys != ["decoder.reduce.weight", "decoder.reduce.bias"]:
         raise ValueError(f"Unexpected keys: {unexpected_keys}")
 
     # TODO create feature extractor
