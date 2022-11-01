@@ -7,15 +7,8 @@ from configuration_hifigan import CodeHiFiGANConfig, HiFiGANConfig
 from transformers import PreTrainedModel
 
 
-LRELU_SLOPE = 0.1
-
-
-def get_padding(kernel_size, dilation=1):
-    return (kernel_size * dilation - dilation) // 2
-
-
 class HiFiGANResidualBlock(nn.Module):
-    def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5)):
+    def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5), leaky_relu_slope=0.1):
         super(HiFiGANResidualBlock, self).__init__()
         self.convs1 = nn.ModuleList(
             [
@@ -25,7 +18,7 @@ class HiFiGANResidualBlock(nn.Module):
                     kernel_size=kernel_size,
                     stride=1,
                     dilation=dilation[i],
-                    padding=get_padding(kernel_size, dilation[i]),
+                    padding=self.get_padding(kernel_size, dilation[i]),
                 )
                 for i in range(len(dilation))
             ]
@@ -39,18 +32,22 @@ class HiFiGANResidualBlock(nn.Module):
                     kernel_size=kernel_size,
                     stride=1,
                     dilation=1,
-                    padding=get_padding(kernel_size, 1),
+                    padding=self.get_padding(kernel_size, 1),
                 )
                 for _ in range(len(dilation))
             ]
         )
+        self.leaky_relu_slope = leaky_relu_slope
+
+    def get_padding(self, kernel_size, dilation=1):
+        return (kernel_size * dilation - dilation) // 2
 
     def forward(self, hidden_states):
         for conv1, conv2 in zip(self.convs1, self.convs2):
             residual = hidden_states
-            hidden_states = F.leaky_relu(hidden_states, LRELU_SLOPE)
+            hidden_states = F.leaky_relu(hidden_states, self.leaky_relu_slope)
             hidden_states = conv1(hidden_states)
-            hidden_states = F.leaky_relu(hidden_states, LRELU_SLOPE)
+            hidden_states = F.leaky_relu(hidden_states, self.leaky_relu_slope)
             hidden_states = conv2(hidden_states)
             hidden_states = hidden_states + residual
         return hidden_states
@@ -87,7 +84,7 @@ class HiFiGANModel(PreTrainedModel):
         for i in range(len(self.upsampler)):
             channels = config.upsample_initial_channel // (2 ** (i + 1))
             for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes):
-                self.resblocks.append(HiFiGANResidualBlock(channels, kernel_size, dilation))
+                self.resblocks.append(HiFiGANResidualBlock(channels, kernel_size, dilation, config.leaky_relu_slope))
 
         self.conv_post = Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
 
@@ -110,7 +107,7 @@ class HiFiGANModel(PreTrainedModel):
     def forward(self, hidden_states):
         hidden_states = self.conv_pre(hidden_states)
         for i in range(self.num_upsamples):
-            hidden_states = F.leaky_relu(hidden_states, LRELU_SLOPE)
+            hidden_states = F.leaky_relu(hidden_states, self.config.leaky_relu_slope)
             hidden_states = self.upsampler[i](hidden_states)
 
             res_state = self.resblocks[i * self.num_kernels](hidden_states)
@@ -194,8 +191,8 @@ class CodeHiFiGANModel(HiFiGANModel):
         signal = signal.unsqueeze(3).repeat(1, 1, 1, max_frames // cond_length)
 
         # pad zeros as needed (if signal's shape does not divide completely with max_frames)
-        reminder = (max_frames - signal.shape[2] * signal.shape[3]) // signal.shape[3]
-        if reminder > 0:
+        remainder = (max_frames - signal.shape[2] * signal.shape[3]) // signal.shape[3]
+        if remainder > 0:
             raise NotImplementedError("Padding condition signal - misalignment between condition features.")
 
         signal = signal.view(batch_size, channels, max_frames)

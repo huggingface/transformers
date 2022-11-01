@@ -14,6 +14,7 @@ class HiFiGANConfig(PretrainedConfig):
         model_in_dim=80,
         sampling_rate=22050,
         initializer_range=0.02,
+        leaky_relu_slope=0.1,
         **kwargs,
     ):
         self.resblock_kernel_sizes = resblock_kernel_sizes
@@ -24,6 +25,7 @@ class HiFiGANConfig(PretrainedConfig):
         self.upsample_kernel_sizes = upsample_kernel_sizes
         self.sampling_rate = sampling_rate
         self.initializer_range = initializer_range
+        self.leaky_relu_slope = leaky_relu_slope
         super().__init__(**kwargs)
 
 
@@ -52,6 +54,7 @@ class CodeHiFiGANConfig(PretrainedConfig):
         speaker_embedding_dim=256,
         initializer_range=0.02,
         duration_predictor_activation="relu",
+        leaky_relu_slope=0.1,
         **kwargs,
     ):
         self.resblock_kernel_sizes = resblock_kernel_sizes
@@ -76,4 +79,5 @@ class CodeHiFiGANConfig(PretrainedConfig):
         self.speaker_embedding_dim = speaker_embedding_dim
         self.initializer_range = initializer_range
         self.duration_predictor_activation = duration_predictor_activation
+        self.leaky_relu_slope = leaky_relu_slope
         super().__init__(**kwargs)
