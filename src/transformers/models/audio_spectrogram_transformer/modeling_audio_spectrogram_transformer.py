@@ -538,8 +538,8 @@ class AudioSpectrogramTransformerModel(AudioSpectrogramTransformerPreTrainedMode
 
 @add_start_docstrings(
     """
-    Audio Spectrogram Transformer model with an audio classification head on top (a linear layer on top of the final
-    hidden state of the [CLS] token) e.g. for AudioSet.
+    Audio Spectrogram Transformer model with an audio classification head on top (a linear layer on top of the pooled
+    output) e.g. for AudioSet, Speech Commands v2.
     """,
     AUDIO_SPECTROGRAM_TRANSFORMER_START_DOCSTRING,
 )

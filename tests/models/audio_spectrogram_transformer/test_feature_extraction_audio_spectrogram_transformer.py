@@ -22,11 +22,15 @@ import numpy as np
 
 from transformers import AudioSpectrogramTransformerFeatureExtractor
 from transformers.testing_utils import require_torch
+from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
 global_rng = random.Random()
+
+if is_torch_available():
+    import torch
 
 
 def floats_list(shape, scale=1.0, rng=None, name=None):
@@ -133,3 +137,28 @@ class AudioSpectrogramTransformerFeatureExtractionTest(SequenceFeatureExtraction
             self.assertTrue(np_processed.input_values.dtype == np.float32)
             pt_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_values.dtype == torch.float32)
+
+    def _load_datasamples(self, num_samples):
+        from datasets import load_dataset
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+
+        return [x["array"] for x in speech_samples]
+
+    @require_torch
+    def test_integration(self):
+        # fmt: off
+        EXPECTED_INPUT_VALUES = torch.tensor(
+            [-0.9894, -1.2776, -0.9066, -1.2776, -0.9349, -1.2609, -1.0386, -1.2776,
+             -1.1561, -1.2776, -1.2052, -1.2723, -1.2190, -1.2132, -1.2776, -1.1133,
+             -1.1953, -1.1343, -1.1584, -1.2203, -1.1770, -1.2474, -1.2381, -1.1936,
+             -0.9270, -0.8317, -0.8049, -0.7706, -0.7565, -0.7869]
+        )
+        # fmt: on
+
+        input_speech = self._load_datasamples(1)
+        feaure_extractor = AudioSpectrogramTransformerFeatureExtractor()
+        input_values = feaure_extractor(input_speech, return_tensors="pt").input_values
+        self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-4))
