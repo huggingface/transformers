@@ -122,9 +122,9 @@ _import_structure = {
     "models": [],
     # Models
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
-    "models.audio_spectogram_transformer": [
-        "AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "AudioSpectogramTransformerConfig",
+    "models.audio_spectrogram_transformer": [
+        "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "AudioSpectrogramTransformerConfig",
     ],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -677,7 +677,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_speech_objects) if not name.startswith("_")
     ]
 else:
-    _import_structure["models.audio_spectogram_transformer"].append("AudioSpectogramTransformerFeatureExtractor")
+    _import_structure["models.audio_spectrogram_transformer"].append("AudioSpectrogramTransformerFeatureExtractor")
     _import_structure["models.mctct"].append("MCTCTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
 
@@ -2165,12 +2165,12 @@ else:
             "ViTPreTrainedModel",
         ]
     )
-    _import_structure["models.audio_spectogram_transformer"].extend(
+    _import_structure["models.audio_spectrogram_transformer"].extend(
         [
-            "AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "AudioSpectogramTransformerModel",
-            "AudioSpectogramTransformerPreTrainedModel",
-            "AudioSpectogramTransformerForSequenceClassification",
+            "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "AudioSpectrogramTransformerModel",
+            "AudioSpectrogramTransformerPreTrainedModel",
+            "AudioSpectrogramTransformerForSequenceClassification",
         ]
     )
     _import_structure["models.vit_mae"].extend(
@@ -3315,9 +3315,9 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.audio_spectogram_transformer import (
-        AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        AudioSpectogramTransformerConfig,
+    from .models.audio_spectrogram_transformer import (
+        AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        AudioSpectrogramTransformerConfig,
     )
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -3816,7 +3816,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_speech_objects import *
     else:
-        from .models.audio_spectogram_transformer import AudioSpectogramTransformerFeatureExtractor
+        from .models.audio_spectrogram_transformer import AudioSpectrogramTransformerFeatureExtractor
         from .models.mctct import MCTCTFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
 
@@ -3973,11 +3973,11 @@ if TYPE_CHECKING:
             AlbertPreTrainedModel,
             load_tf_weights_in_albert,
         )
-        from .models.audio_spectogram_transformer import (
-            AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            AudioSpectogramTransformerForSequenceClassification,
-            AudioSpectogramTransformerModel,
-            AudioSpectogramTransformerPreTrainedModel,
+        from .models.audio_spectrogram_transformer import (
+            AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            AudioSpectrogramTransformerForSequenceClassification,
+            AudioSpectrogramTransformerModel,
+            AudioSpectrogramTransformerPreTrainedModel,
         )
         from .models.auto import (
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,

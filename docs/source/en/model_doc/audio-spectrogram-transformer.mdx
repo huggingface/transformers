@@ -10,12 +10,12 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Audio Spectogram Transformer
+# Audio Spectrogram Transformer
 
 ## Overview
 
-The Audio Spectogram Transformer model was proposed in [AST: Audio Spectrogram Transformer](https://arxiv.org/abs/2104.01778) by Yuan Gong, Yu-An Chung, James Glass.
-The Audio Spectogram Transformer applies a [Vision Transformer](vit) to audio, by turning audio into an image (spectogram). The model obtains state-of-the-art results
+The Audio Spectrogram Transformer model was proposed in [AST: Audio Spectrogram Transformer](https://arxiv.org/abs/2104.01778) by Yuan Gong, Yu-An Chung, James Glass.
+The Audio Spectrogram Transformer applies a [Vision Transformer](vit) to audio, by turning audio into an image (spectrogram). The model obtains state-of-the-art results
 for audio classification.
 
 The abstract from the paper is the following:
@@ -24,10 +24,10 @@ The abstract from the paper is the following:
 
 Tips:
 
-- When fine-tuning the Audio Spectogram Transformer (AST) on your own dataset, it's recommended to take care of the input normalization.
+- When fine-tuning the Audio Spectrogram Transformer (AST) on your own dataset, it's recommended to take care of the input normalization.
 The authors normalize the input audio to have a 0 mean and 0.5 std. To use the pretrained model, you should roughly normalize the input to
 this range. You can check [`ast/src/get_norm_stats.py`](https://github.com/YuanGongND/ast/blob/master/src/get_norm_stats.py) to see how
-the authors compute the stats, or you can try using the default mean and std of [`AudioSpectogramTransformerFeatureExtractor`] (which uses the
+the authors compute the stats, or you can try using the default mean and std of [`AudioSpectrogramTransformerFeatureExtractor`] (which uses the
 AudioSet statistics).
 - Note that the AST needs a smaller learning rate (the authors use a 10 times smaller learning rate compared to their CNN model proposed in the
 [PSLA paper](https://arxiv.org/abs/2102.01243)) and converges faster, so please search the learning rate and learning rate scheduler for your task.
@@ -35,27 +35,27 @@ AudioSet statistics).
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/audio_spectogram_transformer_architecture.png"
 alt="drawing" width="600"/>
 
-<small> Audio Spectogram Transformer architecture. Taken from the <a href="https://arxiv.org/abs/2104.01778">original paper</a>.</small>
+<small> Audio pectrogram Transformer architecture. Taken from the <a href="https://arxiv.org/abs/2104.01778">original paper</a>.</small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/YuanGongND/ast).
 
 
-## AudioSpectogramTransformerConfig
+## AudioSpectrogramTransformerConfig
 
-[[autodoc]] AudioSpectogramTransformerConfig
+[[autodoc]] AudioSpectrogramTransformerConfig
 
-## AudioSpectogramTransformerFeatureExtractor
+## AudioSpectrogramTransformerFeatureExtractor
 
-[[autodoc]] AudioSpectogramTransformerFeatureExtractor
+[[autodoc]] AudioSpectrogramTransformerFeatureExtractor
     - __call__
 
-## AudioSpectogramTransformerModel
+## AudioSpectrogramTransformerModel
 
-[[autodoc]] AudioSpectogramTransformerModel
+[[autodoc]] AudioSpectrogramTransformerModel
     - forward
 
-## AudioSpectogramTransformerForSequenceClassification
+## AudioSpectrogramTransformerForSequenceClassification
 
-[[autodoc]] AudioSpectogramTransformerForSequenceClassification
+[[autodoc]] AudioSpectrogramTransformerForSequenceClassification
     - forward

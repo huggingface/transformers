@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Feature extractor class for Audio Spectogram Transformer.
+Feature extractor class for Audio Spectrogram Transformer.
 """
 
 from typing import List, Optional, Union
@@ -30,12 +30,12 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
+class AudioSpectrogramTransformerFeatureExtractor(SequenceFeatureExtractor):
     r"""
-    Constructs a Audio Spectogram Transformer feature extractor.
+    Constructs a Audio Spectrogram Transformer feature extractor.
 
-    This feature extractor inherits from [`AudioSpectogramTransformerFeatureExtractor`] which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This feature extractor inherits from [`AudioSpectrogramTransformerFeatureExtractor`] which contains most of the
+    main methods. Users should refer to this superclass for more information regarding those methods.
 
     This class extracts mel-filter bank features from raw speech using TorchAudio and applies utterance-level cepstral
     mean and variance normalization to the extracted features.
@@ -56,7 +56,7 @@ class AudioSpectogramTransformerFeatureExtractor(SequenceFeatureExtractor):
             Whether or not to normalize the extracted features to a std of 05. Uses the AudioSet std by default,
             obtained by the authors.
         return_attention_mask (`bool`, *optional*, defaults to `False`):
-            Whether or not [`~AudioSpectogramTransformerFeatureExtractor.__call__`] should return `attention_mask`.
+            Whether or not [`~AudioSpectrogramTransformerFeatureExtractor.__call__`] should return `attention_mask`.
     """
 
     model_input_names = ["input_values", "attention_mask"]

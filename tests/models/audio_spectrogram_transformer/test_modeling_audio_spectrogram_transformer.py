@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch AudioSpectogramTransformer model. """
+""" Testing suite for the PyTorch AudioSpectrogramTransformer model. """
 
 import inspect
 import unittest
 
 from huggingface_hub import hf_hub_download
-from transformers import AudioSpectogramTransformerConfig
+from transformers import AudioSpectrogramTransformerConfig
 from transformers.testing_utils import require_torch, require_torchaudio, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_torchaudio_available
 
@@ -30,19 +30,19 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import AudioSpectogramTransformerForSequenceClassification, AudioSpectogramTransformerModel
-    from transformers.models.audio_spectogram_transformer.modeling_audio_spectogram_transformer import (
-        AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+    from transformers import AudioSpectrogramTransformerForSequenceClassification, AudioSpectrogramTransformerModel
+    from transformers.models.audio_spectrogram_transformer.modeling_audio_spectrogram_transformer import (
+        AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
 
 if is_torchaudio_available():
     import torchaudio
 
-    from transformers import AudioSpectogramTransformerFeatureExtractor
+    from transformers import AudioSpectrogramTransformerFeatureExtractor
 
 
-class AudioSpectogramTransformerModelTester:
+class AudioSpectrogramTransformerModelTester:
     def __init__(
         self,
         parent,
@@ -85,7 +85,7 @@ class AudioSpectogramTransformerModelTester:
         self.frequency_stride = frequency_stride
         self.time_stride = time_stride
 
-        # in AudioSpectogramTransformer, the seq length equals the number of patches + 2 (we add 2 for the [CLS] and distillation tokens)
+        # in AudioSpectrogramTransformer, the seq length equals the number of patches + 2 (we add 2 for the [CLS] and distillation tokens)
         test_input = torch.randn(1, 1, self.frequency_dimension, self.time_dimension)
         test_projection = nn.Conv2d(
             1,
@@ -111,7 +111,7 @@ class AudioSpectogramTransformerModelTester:
         return config, input_values, labels
 
     def get_config(self):
-        return AudioSpectogramTransformerConfig(
+        return AudioSpectrogramTransformerConfig(
             patch_size=self.patch_size,
             time_dimension=self.time_dimension,
             frequency_dimension=self.frequency_dimension,
@@ -129,7 +129,7 @@ class AudioSpectogramTransformerModelTester:
         )
 
     def create_and_check_model(self, config, input_values, labels):
-        model = AudioSpectogramTransformerModel(config=config)
+        model = AudioSpectrogramTransformerModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_values)
@@ -147,16 +147,16 @@ class AudioSpectogramTransformerModelTester:
 
 
 @require_torch
-class AudioSpectogramTransformerModelTest(ModelTesterMixin, unittest.TestCase):
+class AudioSpectrogramTransformerModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as AudioSpectogramTransformer does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as AudioSpectrogramTransformer does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (
         (
-            AudioSpectogramTransformerModel,
-            AudioSpectogramTransformerForSequenceClassification,
+            AudioSpectrogramTransformerModel,
+            AudioSpectrogramTransformerForSequenceClassification,
         )
         if is_torch_available()
         else ()
@@ -167,15 +167,15 @@ class AudioSpectogramTransformerModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = AudioSpectogramTransformerModelTester(self)
+        self.model_tester = AudioSpectrogramTransformerModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=AudioSpectogramTransformerConfig, has_text_modality=False, hidden_size=37
+            self, config_class=AudioSpectrogramTransformerConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="AudioSpectogramTransformer does not use inputs_embeds")
+    @unittest.skip(reason="AudioSpectrogramTransformer does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -206,8 +206,8 @@ class AudioSpectogramTransformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = AudioSpectogramTransformerModel.from_pretrained(model_name)
+        for model_name in AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = AudioSpectrogramTransformerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -224,13 +224,13 @@ def prepare_audio():
 
 @require_torch
 @require_torchaudio
-class AudioSpectogramTransformerModelIntegrationTest(unittest.TestCase):
+class AudioSpectrogramTransformerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         # TODO rename nielsr to appropriate organization
         return (
-            AudioSpectogramTransformerFeatureExtractor.from_pretrained(
-                "nielsr/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593"
+            AudioSpectrogramTransformerFeatureExtractor.from_pretrained(
+                "nielsr/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593"
             )
             if is_torchaudio_available()
             else None
@@ -241,8 +241,8 @@ class AudioSpectogramTransformerModelIntegrationTest(unittest.TestCase):
 
         feature_extractor = self.default_feature_extractor
         # TODO rename nielsr to appropriate organization
-        model = AudioSpectogramTransformerForSequenceClassification.from_pretrained(
-            "nielsr/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593"
+        model = AudioSpectrogramTransformerForSequenceClassification.from_pretrained(
+            "nielsr/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593"
         ).to(torch_device)
 
         feature_extractor = self.default_feature_extractor

@@ -20,7 +20,7 @@ import unittest
 
 import numpy as np
 
-from transformers import AudioSpectogramTransformerFeatureExtractor
+from transformers import AudioSpectrogramTransformerFeatureExtractor
 from transformers.testing_utils import require_torch
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
@@ -43,7 +43,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     return values
 
 
-class AudioSpectogramTransformerFeatureExtractionTester(unittest.TestCase):
+class AudioSpectrogramTransformerFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -95,12 +95,12 @@ class AudioSpectogramTransformerFeatureExtractionTester(unittest.TestCase):
         return speech_inputs
 
 
-class AudioSpectogramTransformerFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+class AudioSpectrogramTransformerFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
 
-    feature_extraction_class = AudioSpectogramTransformerFeatureExtractor
+    feature_extraction_class = AudioSpectrogramTransformerFeatureExtractor
 
     def setUp(self):
-        self.feat_extract_tester = AudioSpectogramTransformerFeatureExtractionTester(self)
+        self.feat_extract_tester = AudioSpectrogramTransformerFeatureExtractionTester(self)
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus

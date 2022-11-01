@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Audio Spectogram Transformer checkpoints from the original repository. URL: https://github.com/YuanGongND/ast"""
+"""Convert Audio Spectrogram Transformer checkpoints from the original repository. URL: https://github.com/YuanGongND/ast"""
 
 
 import argparse
@@ -25,9 +25,9 @@ from datasets import load_dataset
 
 from huggingface_hub import hf_hub_download
 from transformers import (
-    AudioSpectogramTransformerConfig,
-    AudioSpectogramTransformerFeatureExtractor,
-    AudioSpectogramTransformerForSequenceClassification,
+    AudioSpectrogramTransformerConfig,
+    AudioSpectrogramTransformerFeatureExtractor,
+    AudioSpectrogramTransformerForSequenceClassification,
 )
 from transformers.utils import logging
 
@@ -36,8 +36,8 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def get_audio_spectogram_transformer_config(model_name):
-    config = AudioSpectogramTransformerConfig()
+def get_audio_spectrogram_transformer_config(model_name):
+    config = AudioSpectrogramTransformerConfig()
 
     if "10-10" in model_name:
         pass
@@ -73,7 +73,7 @@ def get_audio_spectogram_transformer_config(model_name):
 
 def rename_key(name):
     if "module.v" in name:
-        name = name.replace("module.v", "audio_spectogram_transformer")
+        name = name.replace("module.v", "audio_spectrogram_transformer")
     if "cls_token" in name:
         name = name.replace("cls_token", "embeddings.cls_token")
     if "dist_token" in name:
@@ -98,8 +98,8 @@ def rename_key(name):
     if "mlp.fc2" in name:
         name = name.replace("mlp.fc2", "output.dense")
     # final layernorm
-    if "audio_spectogram_transformer.norm" in name:
-        name = name.replace("audio_spectogram_transformer.norm", "audio_spectogram_transformer.layernorm")
+    if "audio_spectrogram_transformer.norm" in name:
+        name = name.replace("audio_spectrogram_transformer.norm", "audio_spectrogram_transformer.layernorm")
     # classifier head
     if "module.mlp_head.0" in name:
         name = name.replace("module.mlp_head.0", "layernorm")
@@ -119,23 +119,23 @@ def convert_state_dict(orig_state_dict, config):
             dim = config.hidden_size
             if "weight" in key:
                 orig_state_dict[
-                    f"audio_spectogram_transformer.encoder.layer.{layer_num}.attention.attention.query.weight"
+                    f"audio_spectrogram_transformer.encoder.layer.{layer_num}.attention.attention.query.weight"
                 ] = val[:dim, :]
                 orig_state_dict[
-                    f"audio_spectogram_transformer.encoder.layer.{layer_num}.attention.attention.key.weight"
+                    f"audio_spectrogram_transformer.encoder.layer.{layer_num}.attention.attention.key.weight"
                 ] = val[dim : dim * 2, :]
                 orig_state_dict[
-                    f"audio_spectogram_transformer.encoder.layer.{layer_num}.attention.attention.value.weight"
+                    f"audio_spectrogram_transformer.encoder.layer.{layer_num}.attention.attention.value.weight"
                 ] = val[-dim:, :]
             else:
                 orig_state_dict[
-                    f"audio_spectogram_transformer.encoder.layer.{layer_num}.attention.attention.query.bias"
+                    f"audio_spectrogram_transformer.encoder.layer.{layer_num}.attention.attention.query.bias"
                 ] = val[:dim]
                 orig_state_dict[
-                    f"audio_spectogram_transformer.encoder.layer.{layer_num}.attention.attention.key.bias"
+                    f"audio_spectrogram_transformer.encoder.layer.{layer_num}.attention.attention.key.bias"
                 ] = val[dim : dim * 2]
                 orig_state_dict[
-                    f"audio_spectogram_transformer.encoder.layer.{layer_num}.attention.attention.value.bias"
+                    f"audio_spectrogram_transformer.encoder.layer.{layer_num}.attention.attention.value.bias"
                 ] = val[-dim:]
         else:
             orig_state_dict[rename_key(key)] = val
@@ -155,35 +155,35 @@ def remove_keys(state_dict):
 
 
 @torch.no_grad()
-def convert_audio_spectogram_transformer_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
+def convert_audio_spectrogram_transformer_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
     """
-    Copy/paste/tweak model's weights to our Audio Spectogram Transformer structure.
+    Copy/paste/tweak model's weights to our Audio Spectrogram Transformer structure.
     """
-    config = get_audio_spectogram_transformer_config(model_name)
+    config = get_audio_spectrogram_transformer_config(model_name)
 
     model_name_to_url = {
-        "audio-spectogram-transformer-finetuned-audioset-10-10-0.4593": (
+        "audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593": (
             "https://www.dropbox.com/s/ca0b1v2nlxzyeb4/audioset_10_10_0.4593.pth?dl=1"
         ),
-        "audio-spectogram-transformer-finetuned-audioset-10-10-0.450": (
+        "audio-spectrogram-transformer-finetuned-audioset-10-10-0.450": (
             "https://www.dropbox.com/s/1tv0hovue1bxupk/audioset_10_10_0.4495.pth?dl=1"
         ),
-        "audio-spectogram-transformer-finetuned-audioset-10-10-0.448": (
+        "audio-spectrogram-transformer-finetuned-audioset-10-10-0.448": (
             "https://www.dropbox.com/s/6u5sikl4b9wo4u5/audioset_10_10_0.4483.pth?dl=1"
         ),
-        "audio-spectogram-transformer-finetuned-audioset-10-10-0.448-v2": (
+        "audio-spectrogram-transformer-finetuned-audioset-10-10-0.448-v2": (
             "https://www.dropbox.com/s/kt6i0v9fvfm1mbq/audioset_10_10_0.4475.pth?dl=1"
         ),
-        "audio-spectogram-transformer-finetuned-audioset-12-12-0.447": (
+        "audio-spectrogram-transformer-finetuned-audioset-12-12-0.447": (
             "https://www.dropbox.com/s/snfhx3tizr4nuc8/audioset_12_12_0.4467.pth?dl=1"
         ),
-        "audio-spectogram-transformer-finetuned-audioset-14-14-0.443": (
+        "audio-spectrogram-transformer-finetuned-audioset-14-14-0.443": (
             "https://www.dropbox.com/s/z18s6pemtnxm4k7/audioset_14_14_0.4431.pth?dl=1"
         ),
-        "audio-spectogram-transformer-finetuned-audioset-16-16-0.442": (
+        "audio-spectrogram-transformer-finetuned-audioset-16-16-0.442": (
             "https://www.dropbox.com/s/mdsa4t1xmcimia6/audioset_16_16_0.4422.pth?dl=1"
         ),
-        "audio-spectogram-transformer-finetuned-speech-commands-v2": (
+        "audio-spectrogram-transformer-finetuned-speech-commands-v2": (
             "https://www.dropbox.com/s/q0tbqpwv44pquwy/speechcommands_10_10_0.9812.pth?dl=1"
         ),
     }
@@ -197,7 +197,7 @@ def convert_audio_spectogram_transformer_checkpoint(model_name, pytorch_dump_fol
     new_state_dict = convert_state_dict(state_dict, config)
 
     # load 🤗 model
-    model = AudioSpectogramTransformerForSequenceClassification(config)
+    model = AudioSpectrogramTransformerForSequenceClassification(config)
     model.eval()
 
     model.load_state_dict(new_state_dict)
@@ -206,14 +206,16 @@ def convert_audio_spectogram_transformer_checkpoint(model_name, pytorch_dump_fol
     # source: https://github.com/YuanGongND/ast/blob/79e873b8a54d0a3b330dd522584ff2b9926cd581/src/run.py#L62
     mean = -4.2677393 if "speech-commands" not in model_name else -6.845978
     std = 4.5689974 if "speech-commands" not in model_name else 5.5654526
-    feature_extractor = AudioSpectogramTransformerFeatureExtractor(mean=mean, std=std)
+    feature_extractor = AudioSpectrogramTransformerFeatureExtractor(mean=mean, std=std)
 
     if "speech-commands" in model_name:
         dataset = load_dataset("speech_commands", "v0.02", split="validation")
         waveform = dataset[0]["audio"]["array"]
     else:
         filepath = hf_hub_download(
-            repo_id="nielsr/audio-spectogram-transformer-checkpoint", filename="sample_audio.flac", repo_type="dataset"
+            repo_id="nielsr/audio-spectogram-transformer-checkpoint",
+            filename="sample_audio.flac",
+            repo_type="dataset",
         )
 
         waveform, _ = torchaudio.load(filepath)
@@ -226,21 +228,21 @@ def convert_audio_spectogram_transformer_checkpoint(model_name, pytorch_dump_fol
     outputs = model(**inputs)
     logits = outputs.logits
 
-    if model_name == "audio-spectogram-transformer-finetuned-audioset-10-10-0.4593":
+    if model_name == "audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593":
         expected_slice = torch.tensor([-0.8760, -7.0042, -8.6602])
-    elif model_name == "audio-spectogram-transformer-finetuned-audioset-10-10-0.450":
+    elif model_name == "audio-spectrogram-transformer-finetuned-audioset-10-10-0.450":
         expected_slice = torch.tensor([-1.1986, -7.0903, -8.2718])
-    elif model_name == "audio-spectogram-transformer-finetuned-audioset-10-10-0.448":
+    elif model_name == "audio-spectrogram-transformer-finetuned-audioset-10-10-0.448":
         expected_slice = torch.tensor([-2.6128, -8.0080, -9.4344])
-    elif model_name == "audio-spectogram-transformer-finetuned-audioset-10-10-0.448-v2":
+    elif model_name == "audio-spectrogram-transformer-finetuned-audioset-10-10-0.448-v2":
         expected_slice = torch.tensor([-1.5080, -7.4534, -8.8917])
-    elif model_name == "audio-spectogram-transformer-finetuned-audioset-12-12-0.447":
+    elif model_name == "audio-spectrogram-transformer-finetuned-audioset-12-12-0.447":
         expected_slice = torch.tensor([-0.5050, -6.5833, -8.0843])
-    elif model_name == "audio-spectogram-transformer-finetuned-audioset-14-14-0.443":
+    elif model_name == "audio-spectrogram-transformer-finetuned-audioset-14-14-0.443":
         expected_slice = torch.tensor([-0.3826, -7.0336, -8.2413])
-    elif model_name == "audio-spectogram-transformer-finetuned-audioset-16-16-0.442":
+    elif model_name == "audio-spectrogram-transformer-finetuned-audioset-16-16-0.442":
         expected_slice = torch.tensor([-1.2113, -6.9101, -8.3470])
-    elif model_name == "audio-spectogram-transformer-finetuned-speech-commands-v2":
+    elif model_name == "audio-spectrogram-transformer-finetuned-speech-commands-v2":
         expected_slice = torch.tensor([6.1589, -8.0566, -8.7984])
     else:
         raise ValueError("Unknown model name")
@@ -266,9 +268,9 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="audio-spectogram-transformer-finetuned-audioset-10-10-0.4593",
+        default="audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593",
         type=str,
-        help="Name of the Audio Spectogram Transformer model you'd like to convert.",
+        help="Name of the Audio Spectrogram Transformer model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
@@ -278,4 +280,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_audio_spectogram_transformer_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_audio_spectrogram_transformer_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)

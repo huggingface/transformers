@@ -21,10 +21,10 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_speech_avai
 
 
 _import_structure = {
-    "configuration_audio_spectogram_transformer": [
-        "AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "AudioSpectogramTransformerConfig",
-        "AudioSpectogramTransformerOnnxConfig",
+    "configuration_audio_spectrogram_transformer": [
+        "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "AudioSpectrogramTransformerConfig",
+        "AudioSpectrogramTransformerOnnxConfig",
     ]
 }
 
@@ -34,8 +34,8 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_audio_spectogram_transformer"] = [
-        "AudioSpectogramTransformerFeatureExtractor"
+    _import_structure["feature_extraction_audio_spectrogram_transformer"] = [
+        "AudioSpectrogramTransformerFeatureExtractor"
     ]
 
 try:
@@ -44,18 +44,18 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_audio_spectogram_transformer"] = [
-        "AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "AudioSpectogramTransformerModel",
-        "AudioSpectogramTransformerPreTrainedModel",
-        "AudioSpectogramTransformerForSequenceClassification",
+    _import_structure["modeling_audio_spectrogram_transformer"] = [
+        "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "AudioSpectrogramTransformerModel",
+        "AudioSpectrogramTransformerPreTrainedModel",
+        "AudioSpectrogramTransformerForSequenceClassification",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_audio_spectogram_transformer import (
-        AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        AudioSpectogramTransformerConfig,
-        AudioSpectogramTransformerOnnxConfig,
+    from .configuration_audio_spectrogram_transformer import (
+        AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        AudioSpectrogramTransformerConfig,
+        AudioSpectrogramTransformerOnnxConfig,
     )
 
     try:
@@ -64,7 +64,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_audio_spectogram_transformer import AudioSpectogramTransformerFeatureExtractor
+        from .feature_extraction_audio_spectrogram_transformer import AudioSpectrogramTransformerFeatureExtractor
 
     try:
         if not is_torch_available():
@@ -72,11 +72,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_audio_spectogram_transformer import (
-            AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            AudioSpectogramTransformerForSequenceClassification,
-            AudioSpectogramTransformerModel,
-            AudioSpectogramTransformerPreTrainedModel,
+        from .modeling_audio_spectrogram_transformer import (
+            AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            AudioSpectrogramTransformerForSequenceClassification,
+            AudioSpectrogramTransformerModel,
+            AudioSpectrogramTransformerPreTrainedModel,
         )
 
 else:

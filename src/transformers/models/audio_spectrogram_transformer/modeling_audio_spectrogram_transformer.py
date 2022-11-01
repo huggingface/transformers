@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Audio Spectogram Transformer model."""
+""" PyTorch Audio Spectrogram Transformer model."""
 
 import math
 from typing import Dict, List, Optional, Set, Tuple, Union
@@ -27,45 +27,45 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Seq
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from .configuration_audio_spectogram_transformer import AudioSpectogramTransformerConfig
+from .configuration_audio_spectrogram_transformer import AudioSpectrogramTransformerConfig
 
 
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "AudioSpectogramTransformerConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AudioSpectogramTransformerFeatureExtractor"
+_CONFIG_FOR_DOC = "AudioSpectrogramTransformerConfig"
+_FEAT_EXTRACTOR_FOR_DOC = "AudioSpectrogramTransformerFeatureExtractor"
 
 # Base docstring
 # TODO update to appropriate organization
-_CHECKPOINT_FOR_DOC = "nielsr/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593"
+_CHECKPOINT_FOR_DOC = "nielsr/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593"
 _EXPECTED_OUTPUT_SHAPE = [1, 1214, 768]
 
 # Audio classification docstring
 # TODO update to appropriate organization
-_SEQ_CLASS_CHECKPOINT = "nielsr/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593"
+_SEQ_CLASS_CHECKPOINT = "nielsr/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'Speech'"
 _SEQ_CLASS_EXPECTED_LOSS = 0.17
 
 
-AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
+AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # TODO update to appropriate organization
-    "nielsr/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593",
-    # See all Audio Spectogram Transformer models at https://huggingface.co/models?filter=audio-spectogram-transformer
+    "nielsr/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593",
+    # See all Audio Spectrogram Transformer models at https://huggingface.co/models?filter=audio-spectrogram-transformer
 ]
 
 
-class AudioSpectogramTransformerEmbeddings(nn.Module):
+class AudioSpectrogramTransformerEmbeddings(nn.Module):
     """
     Construct the CLS token, position and patch embeddings.
     """
 
-    def __init__(self, config: AudioSpectogramTransformerConfig) -> None:
+    def __init__(self, config: AudioSpectrogramTransformerConfig) -> None:
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.distillation_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.patch_embeddings = AudioSpectogramTransformerPatchEmbeddings(config)
+        self.patch_embeddings = AudioSpectrogramTransformerPatchEmbeddings(config)
 
         frequency_dimension, time_dimension = self.get_shape(config)
         num_patches = frequency_dimension * time_dimension
@@ -103,7 +103,7 @@ class AudioSpectogramTransformerEmbeddings(nn.Module):
         return embeddings
 
 
-class AudioSpectogramTransformerPatchEmbeddings(nn.Module):
+class AudioSpectrogramTransformerPatchEmbeddings(nn.Module):
     """
     This class turns `input_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -128,9 +128,9 @@ class AudioSpectogramTransformerPatchEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->AudioSpectogramTransformer
-class AudioSpectogramTransformerSelfAttention(nn.Module):
-    def __init__(self, config: AudioSpectogramTransformerConfig) -> None:
+# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->AudioSpectrogramTransformer
+class AudioSpectrogramTransformerSelfAttention(nn.Module):
+    def __init__(self, config: AudioSpectrogramTransformerConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -189,14 +189,14 @@ class AudioSpectogramTransformerSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->AudioSpectogramTransformer
-class AudioSpectogramTransformerSelfOutput(nn.Module):
+# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->AudioSpectrogramTransformer
+class AudioSpectrogramTransformerSelfOutput(nn.Module):
     """
-    The residual connection is defined in AudioSpectogramTransformerLayer instead of here (as is the case with other
+    The residual connection is defined in AudioSpectrogramTransformerLayer instead of here (as is the case with other
     models), due to the layernorm applied before each block.
     """
 
-    def __init__(self, config: AudioSpectogramTransformerConfig) -> None:
+    def __init__(self, config: AudioSpectrogramTransformerConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -209,12 +209,12 @@ class AudioSpectogramTransformerSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->AudioSpectogramTransformer
-class AudioSpectogramTransformerAttention(nn.Module):
-    def __init__(self, config: AudioSpectogramTransformerConfig) -> None:
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->AudioSpectrogramTransformer
+class AudioSpectrogramTransformerAttention(nn.Module):
+    def __init__(self, config: AudioSpectrogramTransformerConfig) -> None:
         super().__init__()
-        self.attention = AudioSpectogramTransformerSelfAttention(config)
-        self.output = AudioSpectogramTransformerSelfOutput(config)
+        self.attention = AudioSpectrogramTransformerSelfAttention(config)
+        self.output = AudioSpectrogramTransformerSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads: Set[int]) -> None:
@@ -249,9 +249,9 @@ class AudioSpectogramTransformerAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->AudioSpectogramTransformer
-class AudioSpectogramTransformerIntermediate(nn.Module):
-    def __init__(self, config: AudioSpectogramTransformerConfig) -> None:
+# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->AudioSpectrogramTransformer
+class AudioSpectrogramTransformerIntermediate(nn.Module):
+    def __init__(self, config: AudioSpectrogramTransformerConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -267,9 +267,9 @@ class AudioSpectogramTransformerIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->AudioSpectogramTransformer
-class AudioSpectogramTransformerOutput(nn.Module):
-    def __init__(self, config: AudioSpectogramTransformerConfig) -> None:
+# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->AudioSpectrogramTransformer
+class AudioSpectrogramTransformerOutput(nn.Module):
+    def __init__(self, config: AudioSpectrogramTransformerConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -283,17 +283,17 @@ class AudioSpectogramTransformerOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->AudioSpectogramTransformer
-class AudioSpectogramTransformerLayer(nn.Module):
+# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->AudioSpectrogramTransformer
+class AudioSpectrogramTransformerLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: AudioSpectogramTransformerConfig) -> None:
+    def __init__(self, config: AudioSpectrogramTransformerConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = AudioSpectogramTransformerAttention(config)
-        self.intermediate = AudioSpectogramTransformerIntermediate(config)
-        self.output = AudioSpectogramTransformerOutput(config)
+        self.attention = AudioSpectrogramTransformerAttention(config)
+        self.intermediate = AudioSpectrogramTransformerIntermediate(config)
+        self.output = AudioSpectrogramTransformerOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -306,7 +306,7 @@ class AudioSpectogramTransformerLayer(nn.Module):
         self_attention_outputs = self.attention(
             self.layernorm_before(
                 hidden_states
-            ),  # in AudioSpectogramTransformer, layernorm is applied before self-attention
+            ),  # in AudioSpectrogramTransformer, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
         )
@@ -316,7 +316,7 @@ class AudioSpectogramTransformerLayer(nn.Module):
         # first residual connection
         hidden_states = attention_output + hidden_states
 
-        # in AudioSpectogramTransformer, layernorm is also applied after self-attention
+        # in AudioSpectrogramTransformer, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
 
@@ -328,12 +328,12 @@ class AudioSpectogramTransformerLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->AudioSpectogramTransformer
-class AudioSpectogramTransformerEncoder(nn.Module):
-    def __init__(self, config: AudioSpectogramTransformerConfig) -> None:
+# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->AudioSpectrogramTransformer
+class AudioSpectrogramTransformerEncoder(nn.Module):
+    def __init__(self, config: AudioSpectrogramTransformerConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([AudioSpectogramTransformerLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([AudioSpectrogramTransformerLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -386,14 +386,14 @@ class AudioSpectogramTransformerEncoder(nn.Module):
         )
 
 
-class AudioSpectogramTransformerPreTrainedModel(PreTrainedModel):
+class AudioSpectrogramTransformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = AudioSpectogramTransformerConfig
-    base_model_prefix = "audio_spectogram_transformer"
+    config_class = AudioSpectrogramTransformerConfig
+    base_model_prefix = "audio_spectrogram_transformer"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
 
@@ -408,28 +408,29 @@ class AudioSpectogramTransformerPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    # Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel._set_gradient_checkpointing with ViT->AudioSpectogramTransformer
-    def _set_gradient_checkpointing(self, module: AudioSpectogramTransformerEncoder, value: bool = False) -> None:
-        if isinstance(module, AudioSpectogramTransformerEncoder):
+    # Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel._set_gradient_checkpointing with ViT->AudioSpectrogramTransformer
+    def _set_gradient_checkpointing(self, module: AudioSpectrogramTransformerEncoder, value: bool = False) -> None:
+        if isinstance(module, AudioSpectrogramTransformerEncoder):
             module.gradient_checkpointing = value
 
 
-AUDIO_SPECTOGRAM_TRANSFORMER_START_DOCSTRING = r"""
+AUDIO_SPECTROGRAM_TRANSFORMER_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config ([`AudioSpectogramTransformerConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+        config ([`AudioSpectrogramTransformerConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-AUDIO_SPECTOGRAM_TRANSFORMER_INPUTS_DOCSTRING = r"""
+AUDIO_SPECTROGRAM_TRANSFORMER_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AudioSpectogramTransformerFeatureExtractor`]. See
-            [`AudioSpectogramTransformerFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AudioSpectrogramTransformerFeatureExtractor`]. See
+            [`AudioSpectrogramTransformerFeatureExtractor.__call__`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -449,24 +450,24 @@ AUDIO_SPECTOGRAM_TRANSFORMER_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare AudioSpectogramTransformer Model transformer outputting raw hidden-states without any specific head on"
+    "The bare AudioSpectrogramTransformer Model transformer outputting raw hidden-states without any specific head on"
     " top.",
-    AUDIO_SPECTOGRAM_TRANSFORMER_START_DOCSTRING,
+    AUDIO_SPECTROGRAM_TRANSFORMER_START_DOCSTRING,
 )
-class AudioSpectogramTransformerModel(AudioSpectogramTransformerPreTrainedModel):
-    def __init__(self, config: AudioSpectogramTransformerConfig):
+class AudioSpectrogramTransformerModel(AudioSpectrogramTransformerPreTrainedModel):
+    def __init__(self, config: AudioSpectrogramTransformerConfig):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = AudioSpectogramTransformerEmbeddings(config)
-        self.encoder = AudioSpectogramTransformerEncoder(config)
+        self.embeddings = AudioSpectrogramTransformerEmbeddings(config)
+        self.encoder = AudioSpectrogramTransformerEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> AudioSpectogramTransformerPatchEmbeddings:
+    def get_input_embeddings(self) -> AudioSpectrogramTransformerPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
@@ -477,7 +478,7 @@ class AudioSpectogramTransformerModel(AudioSpectogramTransformerPreTrainedModel)
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(AUDIO_SPECTOGRAM_TRANSFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(AUDIO_SPECTROGRAM_TRANSFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -537,17 +538,17 @@ class AudioSpectogramTransformerModel(AudioSpectogramTransformerPreTrainedModel)
 
 @add_start_docstrings(
     """
-    Audio Spectogram Transformer model with an audio classification head on top (a linear layer on top of the final
+    Audio Spectrogram Transformer model with an audio classification head on top (a linear layer on top of the final
     hidden state of the [CLS] token) e.g. for AudioSet.
     """,
-    AUDIO_SPECTOGRAM_TRANSFORMER_START_DOCSTRING,
+    AUDIO_SPECTROGRAM_TRANSFORMER_START_DOCSTRING,
 )
-class AudioSpectogramTransformerForSequenceClassification(AudioSpectogramTransformerPreTrainedModel):
-    def __init__(self, config: AudioSpectogramTransformerConfig) -> None:
+class AudioSpectrogramTransformerForSequenceClassification(AudioSpectrogramTransformerPreTrainedModel):
+    def __init__(self, config: AudioSpectrogramTransformerConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.audio_spectogram_transformer = AudioSpectogramTransformerModel(config)
+        self.audio_spectrogram_transformer = AudioSpectrogramTransformerModel(config)
 
         # Classifier head
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -556,7 +557,7 @@ class AudioSpectogramTransformerForSequenceClassification(AudioSpectogramTransfo
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(AUDIO_SPECTOGRAM_TRANSFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(AUDIO_SPECTROGRAM_TRANSFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
@@ -583,7 +584,7 @@ class AudioSpectogramTransformerForSequenceClassification(AudioSpectogramTransfo
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.audio_spectogram_transformer(
+        outputs = self.audio_spectrogram_transformer(
             input_values,
             head_mask=head_mask,
             output_attentions=output_attentions,

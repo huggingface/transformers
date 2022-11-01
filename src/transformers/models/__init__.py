@@ -18,7 +18,7 @@
 
 from . import (
     albert,
-    audio_spectogram_transformer,
+    audio_spectrogram_transformer,
     auto,
     bart,
     barthez,
