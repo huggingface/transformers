@@ -48,13 +48,12 @@ class AudioSpectrogramTransformerFeatureExtractor(SequenceFeatureExtractor):
         num_mel_bins (`int`, defaults to 128):
             Number of Mel-frequency bins.
         do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether or not to apply utterance-level cepstral mean and variance normalization to extracted features.
-        mean (`int`, *optional*, defaults to -4.2677393):
-            Whether or not to normalize the extracted features to a mean of 0. Uses the AudioSet mean by default,
-            obtained by the authors.
-        std (`int`, *optional*, defaults to 4.5689974):
-            Whether or not to normalize the extracted features to a std of 05. Uses the AudioSet std by default,
-            obtained by the authors.
+            Whether or not to normalize the log-Mel features using `mean` and `std`.
+        mean (`float`, *optional*, defaults to -4.2677393):
+            The mean value used to normalize the log-Mel features. Uses the AudioSet mean by default.
+        std (`float`, *optional*, defaults to 4.5689974):
+            The standard deviation value used to normalize the log-Mel features. Uses the AudioSet standard deviation
+            by default.
         return_attention_mask (`bool`, *optional*, defaults to `False`):
             Whether or not [`~AudioSpectrogramTransformerFeatureExtractor.__call__`] should return `attention_mask`.
     """
@@ -107,8 +106,8 @@ class AudioSpectrogramTransformerFeatureExtractor(SequenceFeatureExtractor):
 
         # pad or truncate, depending on difference
         if difference > 0:
-            m = torch.nn.ZeroPad2d((0, 0, 0, difference))
-            fbank = m(fbank)
+            pad_module = torch.nn.ZeroPad2d((0, 0, 0, difference))
+            fbank = pad_module(fbank)
         elif difference < 0:
             fbank = fbank[0:max_length, :]
 

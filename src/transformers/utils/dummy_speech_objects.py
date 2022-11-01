@@ -3,7 +3,7 @@
 from ..utils import DummyObject, requires_backends
 
 
-class AudioSpectogramTransformerFeatureExtractor(metaclass=DummyObject):
+class AudioSpectrogramTransformerFeatureExtractor(metaclass=DummyObject):
     _backends = ["speech"]
 
     def __init__(self, *args, **kwargs):

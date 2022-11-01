@@ -350,24 +350,24 @@ def load_tf_weights_in_albert(*args, **kwargs):
     requires_backends(load_tf_weights_in_albert, ["torch"])
 
 
-AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class AudioSpectogramTransformerForSequenceClassification(metaclass=DummyObject):
+class AudioSpectrogramTransformerForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class AudioSpectogramTransformerModel(metaclass=DummyObject):
+class AudioSpectrogramTransformerModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class AudioSpectogramTransformerPreTrainedModel(metaclass=DummyObject):
+class AudioSpectrogramTransformerPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
