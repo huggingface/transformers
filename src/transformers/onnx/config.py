@@ -316,7 +316,7 @@ class OnnxConfig(ABC):
                 The height of the generated images.
             sampling_rate (`int`, *optional* defaults to 22050)
                 The sampling rate for audio data generation.
-            time_duration (`int`, *optional* defaults to 5 sec)
+            time_duration (`float`, *optional* defaults to 5.0 sec)
                 Total seconds of sampling for audio data generation.
             frequency (`int`, *optional* defaults to 220)
                 The desired natural frequency of generated audio.
@@ -348,7 +348,11 @@ class OnnxConfig(ABC):
                 seq_length, fixed_dimension=OnnxConfig.default_fixed_sequence, num_token_to_add=token_to_add
             )
             # Generate dummy inputs according to compute batch and sequence
-            input_token = preprocessor.unk_token if preprocessor.unk_token else "0"
+            input_token = (
+                preprocessor.unk_token
+                if (preprocessor.unk_token is not None and len(preprocessor.unk_token) > 0)
+                else "0"
+            )
             dummy_input = [" ".join([input_token]) * seq_length] * batch_size
             if self.task == "multiple-choice":
                 # If dynamic axis (-1) we forward with a fixed dimension of 4 candidate answers to avoid optimizations

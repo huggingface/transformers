@@ -23,8 +23,9 @@ from ...utils import logging
 
 
 if TYPE_CHECKING:
-    from ... import PreTrainedTokenizerBase, TensorType
     from ...feature_extraction_utils import FeatureExtractionMixin
+    from ...tokenization_utils_base import PreTrainedTokenizerBase
+    from ...utils import TensorType
 
 logger = logging.get_logger(__name__)
 
