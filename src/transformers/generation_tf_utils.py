@@ -345,15 +345,97 @@ class TFBeamSampleEncoderDecoderOutput(ModelOutput):
     decoder_hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
 
 
+@dataclass
+class TFContrastiveSearchDecoderOnlyOutput(ModelOutput):
+    """
+    Base class for outputs of decoder-only generation models using contrastive search.
+
+
+    Args:
+        sequences (`tf.Tensor` of shape `(batch_size, sequence_length)`):
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
+        scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
+            at each generation step. Tuple of `tf.Tensor` with up to `max_new_tokens` elements (one element for each
+            generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
+        attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            `tf.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+        hidden_states (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            `tf.Tensor` of shape `(batch_size, generated_length, hidden_size)`.
+    """
+
+    sequences: tf.Tensor = None
+    scores: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+
+
+@dataclass
+class TFContrastiveSearchEncoderDecoderOutput(ModelOutput):
+    """
+    Base class for outputs of encoder-decoder generation models using contrastive search. Hidden states and attention
+    weights of the decoder (respectively the encoder) can be accessed via the encoder_attentions and the
+    encoder_hidden_states attributes (respectively the decoder_attentions and the decoder_hidden_states attributes)
+
+
+    Args:
+        sequences (`tf.Tensor` of shape `(batch_size, sequence_length)`):
+            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
+        scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+            Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
+            at each generation step. Tuple of `tf.Tensor` with up to `max_new_tokens` elements (one element for each
+            generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
+        encoder_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Tuple of `tf.Tensor` (one for each layer of the decoder) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+        encoder_hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
+        decoder_attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            `tf.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+        cross_attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            `tf.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+        decoder_hidden_states (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            `tf.Tensor` of shape `(batch_size, generated_length, hidden_size)`.
+    """
+
+    sequences: tf.Tensor = None
+    scores: Optional[Tuple[tf.Tensor]] = None
+    encoder_attentions: Optional[Tuple[tf.Tensor]] = None
+    encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
+    decoder_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    cross_attentions: Optional[Tuple[Tuple[tf.Tensor]]] = None
+    decoder_hidden_states: Optional[Tuple[Tuple[tf.Tensor]]] = None
+
+
 TFGreedySearchOutput = Union[TFGreedySearchEncoderDecoderOutput, TFGreedySearchDecoderOnlyOutput]
 TFSampleOutput = Union[TFSampleEncoderDecoderOutput, TFSampleDecoderOnlyOutput]
 TFBeamSearchOutput = Union[TFBeamSearchEncoderDecoderOutput, TFBeamSearchDecoderOnlyOutput]
 TFBeamSampleOutput = Union[TFBeamSampleEncoderDecoderOutput, TFBeamSampleDecoderOnlyOutput]
+TFContrastiveSearchOutput = Union[TFContrastiveSearchEncoderDecoderOutput, TFContrastiveSearchDecoderOnlyOutput]
+TFGenerateOutput = Union[TFGreedySearchOutput, TFSampleOutput, TFBeamSearchOutput, TFBeamSampleOutput, TFContrastiveSearchOutput]
 
 
 class TFGenerationMixin:
     """
     A class containing all of the functions supporting generation, to be used as a mixin in [`TFPreTrainedModel`].
+
+    The class exposes [`~generation_tf_utils.TFGenerationMixin.generate`], which can be used for:
+        - *greedy decoding* by calling [`~generation_tf_utils.TFGenerationMixin.greedy_search`] if `num_beams=1` and
+          `do_sample=False`.
+        - *contrastive search* by calling [`~generation_tf_utils.TFGenerationMixin.contrastive_search`] if
+          `penalty_alpha>0` and `top_k>1`
+        - *multinomial sampling* by calling [`~generation_tf_utils.TFGenerationMixin.sample`] if `num_beams=1` and
+          `do_sample=True`.
+        - *beam-search decoding* by calling [`~generation_tf_utils.TFGenerationMixin.beam_search`] if `num_beams>1` and
+          `do_sample=False`.
     """
 
     _seed_generator = None
@@ -386,6 +468,7 @@ class TFGenerationMixin:
         early_stopping=None,
         num_beams=None,
         temperature=None,
+        penalty_alpha=None,
         top_k=None,
         top_p=None,
         repetition_penalty=None,
@@ -409,10 +492,19 @@ class TFGenerationMixin:
         begin_suppress_tokens: Optional[List[int]] = None,
         forced_decoder_ids: Optional[List[List[int]]] = None,
         **model_kwargs,
-    ) -> Union[TFGreedySearchOutput, TFSampleOutput, TFBeamSearchOutput, TFBeamSampleOutput, tf.Tensor]:
+    ) -> Union[TFGenerateOutput, tf.Tensor]:
         r"""
-        Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
-        beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
+        Generates sequences of token ids for models with a language modeling head. The method supports the following
+        generation methods for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
+
+            - *greedy decoding* by calling [`~generation_tf_utils.TFGenerationMixin.greedy_search`] if `num_beams=1`
+              and `do_sample=False`.
+            - *contrastive search* by calling [`~generation_tf_utils.TFGenerationMixin.contrastive_search`] if
+              `penalty_alpha>0` and `top_k>1`
+            - *multinomial sampling* by calling [`~generation_tf_utils.TFGenerationMixin.sample`] if `num_beams=1` and
+              `do_sample=True`.
+            - *beam-search decoding* by calling [`~generation_tf_utils.TFGenerationMixin.beam_search`] if `num_beams>1`
+              and `do_sample=False`.
 
         Adapted in part from [Facebook's XLM beam search
         code](https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529).
@@ -447,6 +539,8 @@ class TFGenerationMixin:
                 Number of beams for beam search. 1 means no beam search.
             temperature (`float`, *optional*, defaults to 1.0):
                 The value used to module the next token probabilities.
+            penalty_alpha (`float`, *optional*):
+                The values balance the model confidence and the degeneration penalty in contrastive search decoding.
             top_k (`int`, *optional*, defaults to 50):
                 The number of highest probability vocabulary tokens to keep for top-k-filtering.
             top_p (`float`, *optional*, defaults to 1.0):
@@ -606,6 +700,7 @@ class TFGenerationMixin:
                 early_stopping=early_stopping,
                 num_beams=num_beams,
                 temperature=temperature,
+                penalty_alpha=penalty_alpha,
                 top_k=top_k,
                 top_p=top_p,
                 repetition_penalty=repetition_penalty,
@@ -1374,6 +1469,7 @@ class TFGenerationMixin:
         early_stopping=None,
         num_beams=None,
         temperature=None,
+        penalty_alpha=None,
         top_k=None,
         top_p=None,
         repetition_penalty=None,
@@ -1400,8 +1496,17 @@ class TFGenerationMixin:
         **model_kwargs,
     ) -> Union[TFGreedySearchOutput, TFSampleOutput, TFBeamSearchOutput, TFBeamSampleOutput, tf.Tensor]:
         r"""
-        Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
-        beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
+        Generates sequences of token ids for models with a language modeling head. The method supports the following
+        generation methods for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
+
+            - *greedy decoding* by calling [`~generation_tf_utils.TFGenerationMixin.greedy_search`] if `num_beams=1`
+              and `do_sample=False`.
+            - *contrastive search* by calling [`~generation_tf_utils.TFGenerationMixin.contrastive_search`] if
+              `penalty_alpha>0` and `top_k>1`
+            - *multinomial sampling* by calling [`~generation_tf_utils.TFGenerationMixin.sample`] if `num_beams=1` and
+              `do_sample=True`.
+            - *beam-search decoding* by calling [`~generation_tf_utils.TFGenerationMixin.beam_search`] if `num_beams>1`
+              and `do_sample=False`.
 
         Adapted in part from [Facebook's XLM beam search
         code](https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529).
@@ -1433,6 +1538,8 @@ class TFGenerationMixin:
                 Number of beams for beam search. 1 means no beam search.
             temperature (`float`, *optional*, defaults to 1.0):
                 The value used to module the next token probabilities.
+            penalty_alpha (`float`, *optional*):
+                The values balance the model confidence and the degeneration penalty in contrastive search decoding.
             top_k (`int`, *optional*, defaults to 50):
                 The number of highest probability vocabulary tokens to keep for top-k-filtering.
             top_p (`float`, *optional*, defaults to 1.0):
@@ -1726,9 +1833,12 @@ class TFGenerationMixin:
 
         # 7. determine generation mode
         # TODO(Matt, Joao, Patrick) - add more use cases here
-        is_greedy_gen_mode = (num_beams == 1) and do_sample is False
+        is_contrastive_search_gen_mode = (
+            top_k is not None and top_k > 1 and do_sample is False and penalty_alpha is not None and penalty_alpha > 0
+        )
+        is_greedy_gen_mode = not is_contrastive_search_gen_mode and (num_beams == 1) and do_sample is False
+        is_beam_gen_mode = not is_contrastive_search_gen_mode and (num_beams > 1) and do_sample is False
         is_sample_gen_mode = (num_beams == 1) and do_sample is True
-        is_beam_gen_mode = (num_beams > 1) and do_sample is False
 
         # 8. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
@@ -1752,13 +1862,31 @@ class TFGenerationMixin:
                 raise ValueError(
                     f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
                 )
-            # 9. run greedy search
+            # 10. run greedy search
             return self.greedy_search(
                 input_ids,
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
                 logits_processor=logits_processor,
+                output_scores=output_scores,
+                return_dict_in_generate=return_dict_in_generate,
+                **model_kwargs,
+            )
+        elif is_contrastive_search_gen_mode:
+            if num_return_sequences > 1:
+                raise ValueError(
+                    f"num_return_sequences has to be 1, but is {num_return_sequences} when doing contrastive search."
+                )
+            # 10. run contrastive search
+            return self.contrastive_search(
+                input_ids,
+                top_k=top_k,
+                penalty_alpha=penalty_alpha,
+                logits_processor=logits_processor,
+                max_length=max_length,
+                pad_token_id=pad_token_id,
+                eos_token_id=eos_token_id,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
                 **model_kwargs,
