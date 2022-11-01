@@ -316,7 +316,7 @@ class OnnxConfig(ABC):
                 The height of the generated images.
             sampling_rate (`int`, *optional* defaults to 22050)
                 The sampling rate for audio data generation.
-            time_duration (`float`, *optional* defaults to 5.0 sec)
+            time_duration (`float`, *optional* defaults to 5.0)
                 Total seconds of sampling for audio data generation.
             frequency (`int`, *optional* defaults to 220)
                 The desired natural frequency of generated audio.
