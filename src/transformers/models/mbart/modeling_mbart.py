@@ -64,7 +64,6 @@ _CHECKPOINT_FOR_QA = "hf-internal-testing/tiny-random-mbart"
 _QA_EXPECTED_LOSS = 3.55
 _QA_EXPECTED_OUTPUT = "'? Jim Henson was a'"
 
-
 MBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/mbart-large-cc25",
     # See all MBART models at https://huggingface.co/models?filter=mbart
@@ -122,7 +121,6 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->MBart
 class MBartLearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -134,13 +132,85 @@ class MBartLearnedPositionalEmbedding(nn.Embedding):
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
-    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
-        """`input_ids_shape` is expected to be [bsz x seqlen]."""
+    def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
+        """`input_ids` is expected to be [bsz, seqlen]."""
+        input_ids_shape = input_ids.size()
         bsz, seq_len = input_ids_shape[:2]
         positions = torch.arange(
             past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
         )
         return super().forward(positions + self.offset)
+
+
+# Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding
+class MBartSinusoidalPositionalEmbedding(nn.Module):
+    """This module produces sinusoidal positional embeddings of any length."""
+
+    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
+        super().__init__()
+        self.offset = 2
+        self.embedding_dim = embedding_dim
+        self.padding_idx = padding_idx
+        self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
+
+    def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
+        emb_weights = self.get_embedding(num_embeddings, embedding_dim, padding_idx)
+        if hasattr(self, "weights"):
+            # in forward put the weights on the correct dtype and device of the param
+            emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
+
+        self.weights = nn.Parameter(emb_weights)
+        self.weights.requires_grad = False
+        self.weights.detach_()
+
+    @staticmethod
+    def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
+        """
+        Build sinusoidal embeddings. This matches the implementation in tensor2tensor, but differs slightly from the
+        description in Section 3.5 of "Attention Is All You Need".
+        """
+        half_dim = embedding_dim // 2
+        emb = math.log(10000) / (half_dim - 1)
+        emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
+        emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
+        emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1)
+        if embedding_dim % 2 == 1:
+            # zero pad
+            emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
+        if padding_idx is not None:
+            emb[padding_idx, :] = 0
+        return emb
+
+    @torch.no_grad()
+    def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
+        bsz, seq_len = input_ids.size()
+        # Create the position ids from the input token ids. Any padded tokens remain padded.
+        position_ids = self.create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length).to(
+            input_ids.device
+        )
+
+        # expand embeddings if needed
+        max_pos = self.padding_idx + 1 + seq_len
+        if max_pos > self.weights.size(0):
+            self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
+
+        return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
+
+    def create_position_ids_from_input_ids(
+        self, input_ids: torch.Tensor, padding_idx: int, past_key_values_length: Optional[int] = 0
+    ):
+        """
+        Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
+        symbols are ignored. This is modified from fairseq's `utils.make_positions`.
+
+        Args:
+            x: torch.Tensor x:
+        Returns: torch.Tensor
+        """
+        # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
+        mask = input_ids.ne(padding_idx).int()
+        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
+        return incremental_indices.long() + padding_idx
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->MBart
@@ -710,13 +780,19 @@ class MBartEncoder(MBartPreTrainedModel):
         else:
             self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
-        self.embed_positions = MBartLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            embed_dim,
-        )
+        if config.learned_embedding:
+            self.embed_positions = MBartLearnedPositionalEmbedding(
+                config.max_position_embeddings,
+                embed_dim,
+            )
+        else:
+            self.embed_positions = MBartSinusoidalPositionalEmbedding(
+                config.max_position_embeddings, embed_dim, padding_idx=self.padding_idx
+            )
         self.layers = nn.ModuleList([MBartEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layernorm_embedding = nn.LayerNorm(embed_dim)
-        self.layer_norm = nn.LayerNorm(config.d_model)
+        if config.layernorm_embedding:
+            self.layernorm_embedding = nn.LayerNorm(embed_dim)
+        self.layer_norm = nn.LayerNorm(embed_dim)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -785,18 +861,17 @@ class MBartEncoder(MBartPreTrainedModel):
         elif input_ids is not None:
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
+        elif inputs_embeds is None:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        embed_pos = self.embed_positions(input_shape)
+        embed_pos = self.embed_positions(input_ids)
 
         hidden_states = inputs_embeds + embed_pos
-        hidden_states = self.layernorm_embedding(hidden_states)
+        if self.config.layernorm_embedding:
+            hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # expand attention_mask
@@ -874,22 +949,30 @@ class MBartDecoder(MBartPreTrainedModel):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
+
+        embed_dim = config.d_model
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
         if embed_tokens is not None:
             self.embed_tokens = embed_tokens
         else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
-        self.embed_positions = MBartLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            config.d_model,
-        )
+        if config.learned_embedding:
+            self.embed_positions = MBartLearnedPositionalEmbedding(
+                config.max_position_embeddings,
+                embed_dim,
+            )
+        else:
+            self.embed_positions = MBartSinusoidalPositionalEmbedding(
+                config.max_position_embeddings, embed_dim, padding_idx=self.padding_idx
+            )
         self.layers = nn.ModuleList([MBartDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.layernorm_embedding = nn.LayerNorm(config.d_model)
-        self.layer_norm = nn.LayerNorm(config.d_model)
+        if config.layernorm_embedding:
+            self.layernorm_embedding = nn.LayerNorm(embed_dim)
+        self.layer_norm = nn.LayerNorm(embed_dim)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -1034,10 +1117,11 @@ class MBartDecoder(MBartPreTrainedModel):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
+        positions = self.embed_positions(input_ids, past_key_values_length)
 
         hidden_states = inputs_embeds + positions
-        hidden_states = self.layernorm_embedding(hidden_states)
+        if self.config.layernorm_embedding:
+            hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 

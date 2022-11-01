@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Wav2Vec2 checkpoint."""
+"""Convert a Wav2Vec2Conformer-2-MBart checkpoint from fairseq to Transformers."""
 
 
 import argparse
@@ -24,8 +24,6 @@ from torch import nn
 from transformers import (
     MBartConfig,
     MBartForCausalLM,
-    PegasusConfig,
-    PegasusForCausalLM,
     SpeechToSpeechConfig,
     SpeechToSpeechModel,
     Wav2Vec2ConformerConfig,
@@ -177,7 +175,7 @@ def recursively_load_weights(fairseq_model, hf_model):
     logger.warning(f"Unused weights: {unused_weights}")
 
 
-# Copied from transformers.models.wav2vec2_conformer.convert_wav2vec2_conformer_original_pytorch_checkpoint_to_pytorch.recursively_load_conv_layer
+# Copied from transformers.models.wav2vec2_conformer.convert_wav2vec2_conformer_original_pytorch_checkpoint_to_pytorch.load_conv_layer
 def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
     name = full_name.split("conv_layers.")[-1]
     items = name.split(".")
@@ -186,32 +184,36 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
     if type_id == 0:
         if "bias" in name:
-            assert value.shape == feature_extractor.conv_layers[layer_id].conv.bias.data.shape, (
-                f"{full_name} has size {value.shape}, but"
-                f" {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
-            )
+            if value.shape != feature_extractor.conv_layers[layer_id].conv.bias.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but"
+                    f" {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
+                )
             feature_extractor.conv_layers[layer_id].conv.bias.data = value
             logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
         elif "weight" in name:
-            assert value.shape == feature_extractor.conv_layers[layer_id].conv.weight.data.shape, (
-                f"{full_name} has size {value.shape}, but"
-                f" {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
-            )
+            if value.shape != feature_extractor.conv_layers[layer_id].conv.weight.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but"
+                    f" {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
+                )
             feature_extractor.conv_layers[layer_id].conv.weight.data = value
             logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
     elif (type_id == 2 and not use_group_norm) or (type_id == 2 and layer_id == 0 and use_group_norm):
         if "bias" in name:
-            assert value.shape == feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape, (
-                f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.bias.data.shape} was"
-                " found."
-            )
+            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but"
+                    f" {feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape} was found."
+                )
             feature_extractor.conv_layers[layer_id].layer_norm.bias.data = value
             logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
         elif "weight" in name:
-            assert value.shape == feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape, (
-                f"{full_name} has size {value.shape}, but"
-                f" {feature_extractor[layer_id].layer_norm.weight.data.shape} was found."
-            )
+            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but"
+                    f" {feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape} was found."
+                )
             feature_extractor.conv_layers[layer_id].layer_norm.weight.data = value
             logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
     else:
@@ -316,11 +318,13 @@ def convert_wav2vec2_checkpoint(
         use_auth_token=True,
         output_hidden_size=fairseq_config.w2v_args.model.encoder_embed_dim,
     )
-    decoder_config = PegasusConfig.from_pretrained(
+    decoder_config = MBartConfig.from_pretrained(
         decoder_config_path,
         decoder_layers=fairseq_config.decoder_layers,
         vocab_size=decoder_output_dim,
         max_position_embeddings=4002,
+        learned_embedding=False,
+        layernorm_embedding=False,
     )
 
     # load feature extractor
@@ -332,7 +336,7 @@ def convert_wav2vec2_checkpoint(
     recursively_load_weights(model.encoder, hf_encoder)
 
     # load decoder weights
-    hf_decoder = PegasusForCausalLM(decoder_config)
+    hf_decoder = MBartForCausalLM(decoder_config)
     missing_keys, unexpected_keys = hf_decoder.model.decoder.load_state_dict(model.decoder.state_dict(), strict=False)
     logger.warning(f"The following keys are missing when loading the decoder weights: {missing_keys}")
     logger.warning(f"The following keys are unexpected when loading the decoder weights: {unexpected_keys}")

@@ -134,6 +134,8 @@ class MBartConfig(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         forced_eos_token_id=2,
+        learned_embedding=True,
+        layernorm_embedding=True,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -156,6 +158,8 @@ class MBartConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.learned_embedding = learned_embedding
+        self.layernorm_embedding = layernorm_embedding
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
