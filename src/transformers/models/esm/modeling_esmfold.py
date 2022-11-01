@@ -61,52 +61,53 @@ class EsmForProteinFoldingOutput(ModelOutput):
 
     Args:
         frames (`torch.FloatTensor`):
-            Write a docstring Matt
+            Output frames.
         sidechain_frames (`torch.FloatTensor`):
-            Write a docstring Matt
+            Output sidechain frames.
         unnormalized_angles (`torch.FloatTensor`):
-            Predicted unnormalized backbone torsion angles.
+            Predicted unnormalized backbone and side chain torsion angles.
         angles (`torch.FloatTensor`):
-            Predicted backbone torsion angles.
+            Predicted backbone and side chain torsion angles.
         positions (`torch.FloatTensor`):
-            Predicted positions of the backbone atoms.
+            Predicted positions of the backbone and side chain atoms.
         states (`torch.FloatTensor`):
-            Write a docstring Matt
+            Hidden states from the protein folding trunk.
         s_s (`torch.FloatTensor`):
             Per-residue embeddings derived by concatenating the hidden states of each layer of the ESM-2 LM stem.
         s_z (`torch.FloatTensor`):
             Pairwise residue embeddings.
         distogram_logits (`torch.FloatTensor`):
-            Write a docstring Matt
+            Input logits to the distogram used to compute residue distances.
         lm_logits (`torch.FloatTensor`):
             Logits output by the ESM-2 protein language model stem.
         aatype (`torch.FloatTensor`):
             Input amino acids (AlphaFold2 indices).
         atom14_atom_exists (`torch.FloatTensor`):
-            Write a docstring Matt
+            Whether each atom exists in the atom14 representation.
         residx_atom14_to_atom37 (`torch.FloatTensor`):
-            Write a docstring Matt
+            Mapping between atoms in the atom14 and atom37 representations.
         residx_atom37_to_atom14 (`torch.FloatTensor`):
-            Write a docstring Matt
+            Mapping between atoms in the atom37 and atom14 representations.
         atom37_atom_exists (`torch.FloatTensor`):
-            Write a docstring Matt
+            Whether each atom exists in the atom37 representation.
         residue_index (`torch.FloatTensor`):
-            Write a docstring Matt
+            The index of each residue in the protein chain. Unless internal padding tokens are used, this will just be
+            a sequence of integers from 0 to `sequence_length`.
         lddt_head (`torch.FloatTensor`):
             Raw outputs from the lddt head used to compute plddt.
         plddt (`torch.FloatTensor`):
             Per-residue confidence scores. Regions of low confidence may indicate areas where the model's prediction is
             uncertain, or where the protein structure is disordered.
         ptm_logits (`torch.FloatTensor`):
-            Write a docstring Matt
+            Raw logits used for computing ptm.
         ptm (`torch.FloatTensor`):
-            Write a docstring Matt
+            TM-score output representing the model's high-level confidence in the overall structure.
         aligned_confidence_probs (`torch.FloatTensor`):
-            Write a docstring Matt
+            Per-residue confidence scores for the aligned structure.
         predicted_aligned_error (`torch.FloatTensor`):
-            Write a docstring Matt
+            Predicted error between the model's prediction and the ground truth.
         max_predicted_aligned_error (`torch.FloatTensor`):
-            Write a docstring Matt
+            Per-sample maximum predicted error.
     """
 
     frames: torch.FloatTensor = None
