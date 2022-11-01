@@ -2082,12 +2082,6 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         return torch.tensor(esm_reorder)
 
     @add_start_docstrings_to_model_forward(ESMFOLD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=EsmForProteinFoldingOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
     @replace_return_docstrings(output_type=EsmForProteinFoldingOutput, config_class=EsmConfig)
     def forward(
         self,
@@ -2098,11 +2092,16 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         num_recycles: Optional[int] = None,
     ):
         r"""
-        Returns:
+        Returns: EsmForProteinFoldingOutput
 
         Example:
+        >>> from transformers import AutoTokenizer, EsmForProteinFolding
+        >>> model = EsmForProteinFolding.from_pretrained("facebook/esmfold_v1")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/esmfold_v1")
+        >>> inputs = tokenizer(["MLKNVQVQLV"], return_tensors='pt')  # A tiny random peptide
+        >>> outputs = model(**inputs)
+        >>> folded_positions = outputs.positions
 
-        TODO Matt
         """
         cfg = self.config.esmfold_config
 
