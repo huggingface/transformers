@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    roc_bert,
     albert,
     auto,
     bart,
@@ -127,6 +126,7 @@ from . import (
     resnet,
     retribert,
     roberta,
+    roc_bert,
     roformer,
     segformer,
     sew,

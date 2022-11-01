@@ -12,10 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" RocBert model configuration """
+""" RocBert model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -27,21 +28,19 @@ ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class RocBertConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~RocBertModel`].
-    It is used to instantiate an RocBert model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the RocBert [roc-bert-base-cased](https://huggingface.co/roc-bert-base-cased) architecture.
+    This is the configuration class to store the configuration of a [`~RocBertModel`]. It is used to instantiate an
+    RocBert model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the RocBert
+    [roc-bert-base-cased](https://huggingface.co/roc-bert-base-cased) architecture.
 
-    Configuration objects inherit from  [`PretrainedConfig`] and can be used
-    to control the model outputs. Read the documentation from  [`PretrainedConfig`]
-    for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the RocBert model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~RocBertModel`] or
-            [`~TFRocBertModel`].
+            `inputs_ids` passed when calling [`~RocBertModel`] or [`~TFRocBertModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -51,18 +50,17 @@ class RocBertConfig(PretrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`~RocBertModel`] or
-            [`~TFRocBertModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`~RocBertModel`] or [`~TFRocBertModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -83,37 +81,36 @@ class RocBertConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "roc_bert"
 
     def __init__(
-            self,
-            vocab_size=30522,
-            hidden_size=768,
-            num_hidden_layers=12,
-            num_attention_heads=12,
-            intermediate_size=3072,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=2,
-            initializer_range=0.02,
-            layer_norm_eps=1e-12,
-            use_cache=True,
-            pad_token_id=0,
-            position_embedding_type="absolute",
-            classifier_dropout=None,
-            enable_cls=True,
-            enable_pronunciation=True,
-            enable_shape=True,
-            pronunciation_embed_dim=768,
-            pronunciation_vocab_size=910,
-            shape_embed_dim=512,
-            shape_vocab_size=24858,
-            concat_input=True,
-            **kwargs
+        self,
+        vocab_size=30522,
+        hidden_size=768,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        intermediate_size=3072,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=2,
+        initializer_range=0.02,
+        layer_norm_eps=1e-12,
+        use_cache=True,
+        pad_token_id=0,
+        position_embedding_type="absolute",
+        classifier_dropout=None,
+        enable_cls=True,
+        enable_pronunciation=True,
+        enable_shape=True,
+        pronunciation_embed_dim=768,
+        pronunciation_vocab_size=910,
+        shape_embed_dim=512,
+        shape_vocab_size=24858,
+        concat_input=True,
+        **kwargs
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -138,7 +135,4 @@ class RocBertConfig(PretrainedConfig):
         self.concat_input = concat_input
         self.position_embedding_type = position_embedding_type
         self.classifier_dropout = classifier_dropout
-        super().__init__(
-            pad_token_id=pad_token_id,
-            **kwargs
-        )
+        super().__init__(pad_token_id=pad_token_id, **kwargs)

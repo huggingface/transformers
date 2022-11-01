@@ -29,7 +29,6 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
-        ("roc_bert", "RocBertConfig"),
         ("albert", "AlbertConfig"),
         ("bart", "BartConfig"),
         ("beit", "BeitConfig"),
@@ -123,6 +122,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("resnet", "ResNetConfig"),
         ("retribert", "RetriBertConfig"),
         ("roberta", "RobertaConfig"),
+        ("roc_bert", "RocBertConfig"),
         ("roformer", "RoFormerConfig"),
         ("segformer", "SegformerConfig"),
         ("sew", "SEWConfig"),
@@ -171,7 +171,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
-        ("roc_bert", "ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bart", "BART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -257,6 +256,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("resnet", "RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("retribert", "RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("roberta", "ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("roc_bert", "ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("roformer", "ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("segformer", "SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew", "SEW_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -298,7 +298,6 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("roc_bert", "RocBert"),
         ("albert", "ALBERT"),
         ("bart", "BART"),
         ("barthez", "BARThez"),
@@ -409,6 +408,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("resnet", "ResNet"),
         ("retribert", "RetriBERT"),
         ("roberta", "RoBERTa"),
+        ("roc_bert", "RocBert"),
         ("roformer", "RoFormer"),
         ("segformer", "SegFormer"),
         ("sew", "SEW"),

@@ -28,7 +28,6 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
-        ("roc_bert", "RocBertModel"),
         ("albert", "AlbertModel"),
         ("bart", "BartModel"),
         ("beit", "BeitModel"),
@@ -121,6 +120,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("resnet", "ResNetModel"),
         ("retribert", "RetriBertModel"),
         ("roberta", "RobertaModel"),
+        ("roc_bert", "RocBertModel"),
         ("roformer", "RoFormerModel"),
         ("segformer", "SegformerModel"),
         ("sew", "SEWModel"),
@@ -219,7 +219,6 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
-("roc_bert", "RocBertForMaskedLM"),
         ("albert", "AlbertForMaskedLM"),
         ("bart", "BartForConditionalGeneration"),
         ("bert", "BertForMaskedLM"),
@@ -270,6 +269,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("reformer", "ReformerModelWithLMHead"),
         ("rembert", "RemBertForMaskedLM"),
         ("roberta", "RobertaForMaskedLM"),
+        ("roc_bert", "RocBertForMaskedLM"),
         ("roformer", "RoFormerForMaskedLM"),
         ("speech_to_text", "Speech2TextForConditionalGeneration"),
         ("squeezebert", "SqueezeBertForMaskedLM"),
@@ -289,7 +289,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
-        ("roc_bert", "RocBertForCausalLM"),
         ("bart", "BartForCausalLM"),
         ("bert", "BertLMHeadModel"),
         ("bert-generation", "BertGenerationDecoder"),
@@ -322,6 +321,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("reformer", "ReformerModelWithLMHead"),
         ("rembert", "RemBertForCausalLM"),
         ("roberta", "RobertaForCausalLM"),
+        ("roc_bert", "RocBertForCausalLM"),
         ("roformer", "RoFormerForCausalLM"),
         ("speech_to_text_2", "Speech2Text2ForCausalLM"),
         ("transfo-xl", "TransfoXLLMHeadModel"),
@@ -424,7 +424,6 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
-("roc_bert", "RocBertForMaskedLM"),
         ("albert", "AlbertForMaskedLM"),
         ("bart", "BartForConditionalGeneration"),
         ("bert", "BertForMaskedLM"),
@@ -456,6 +455,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("reformer", "ReformerForMaskedLM"),
         ("rembert", "RemBertForMaskedLM"),
         ("roberta", "RobertaForMaskedLM"),
+        ("roc_bert", "RocBertForMaskedLM"),
         ("roformer", "RoFormerForMaskedLM"),
         ("squeezebert", "SqueezeBertForMaskedLM"),
         ("tapas", "TapasForMaskedLM"),
@@ -529,7 +529,6 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
-        ("roc_bert", "RocBertForSequenceClassification"),
         ("albert", "AlbertForSequenceClassification"),
         ("bart", "BartForSequenceClassification"),
         ("bert", "BertForSequenceClassification"),
@@ -577,6 +576,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("reformer", "ReformerForSequenceClassification"),
         ("rembert", "RemBertForSequenceClassification"),
         ("roberta", "RobertaForSequenceClassification"),
+        ("roc_bert", "RocBertForSequenceClassification"),
         ("roformer", "RoFormerForSequenceClassification"),
         ("squeezebert", "SqueezeBertForSequenceClassification"),
         ("tapas", "TapasForSequenceClassification"),
@@ -592,7 +592,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
-        ("roc_bert", "RocBertForQuestionAnswering"),
         ("albert", "AlbertForQuestionAnswering"),
         ("bart", "BartForQuestionAnswering"),
         ("bert", "BertForQuestionAnswering"),
@@ -633,6 +632,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("reformer", "ReformerForQuestionAnswering"),
         ("rembert", "RemBertForQuestionAnswering"),
         ("roberta", "RobertaForQuestionAnswering"),
+        ("roc_bert", "RocBertForQuestionAnswering"),
         ("roformer", "RoFormerForQuestionAnswering"),
         ("splinter", "SplinterForQuestionAnswering"),
         ("squeezebert", "SqueezeBertForQuestionAnswering"),
@@ -668,7 +668,6 @@ MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
-("roc_bert", "RocBertForTokenClassification"),
         ("albert", "AlbertForTokenClassification"),
         ("bert", "BertForTokenClassification"),
         ("big_bird", "BigBirdForTokenClassification"),
@@ -703,6 +702,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("qdqbert", "QDQBertForTokenClassification"),
         ("rembert", "RemBertForTokenClassification"),
         ("roberta", "RobertaForTokenClassification"),
+        ("roc_bert", "RocBertForTokenClassification"),
         ("roformer", "RoFormerForTokenClassification"),
         ("squeezebert", "SqueezeBertForTokenClassification"),
         ("xlm", "XLMForTokenClassification"),
@@ -716,7 +716,6 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Multiple Choice mapping
-("roc_bert", "RocBertForMultipleChoice"),
         ("albert", "AlbertForMultipleChoice"),
         ("bert", "BertForMultipleChoice"),
         ("big_bird", "BigBirdForMultipleChoice"),
@@ -742,6 +741,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("qdqbert", "QDQBertForMultipleChoice"),
         ("rembert", "RemBertForMultipleChoice"),
         ("roberta", "RobertaForMultipleChoice"),
+        ("roc_bert", "RocBertForMultipleChoice"),
         ("roformer", "RoFormerForMultipleChoice"),
         ("squeezebert", "SqueezeBertForMultipleChoice"),
         ("xlm", "XLMForMultipleChoice"),

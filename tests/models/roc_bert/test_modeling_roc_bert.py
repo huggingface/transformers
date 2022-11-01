@@ -16,12 +16,12 @@
 
 import unittest
 
-from transformers import RocBertConfig
-from transformers import is_torch_available
+from transformers import RocBertConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
+
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
-from ...test_modeling_common import floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+
 
 if is_torch_available():
     import torch
@@ -35,40 +35,38 @@ if is_torch_available():
         RocBertForTokenClassification,
         RocBertModel,
     )
-    from transformers.models.roc_bert.modeling_roc_bert import (
-        ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
+    from transformers.models.roc_bert.modeling_roc_bert import ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class RocBertModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_token_type_ids=True,
-            use_labels=True,
-            vocab_size=99,
-            pronunciation_vocab_size=99,
-            shape_vocab_size=99,
-            pronunciation_embed_dim=32,
-            shape_embed_dim=32,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            scope=None,
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_token_type_ids=True,
+        use_labels=True,
+        vocab_size=99,
+        pronunciation_vocab_size=99,
+        shape_vocab_size=99,
+        pronunciation_embed_dim=32,
+        shape_embed_dim=32,
+        hidden_size=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -120,7 +118,17 @@ class RocBertModelTester:
 
         config = self.get_config()
 
-        return config, input_ids, input_shape_ids, input_pronunciation_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            input_shape_ids,
+            input_pronunciation_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return RocBertConfig(
@@ -174,32 +182,49 @@ class RocBertModelTester:
         )
 
     def create_and_check_model(
-            self, config, input_ids, input_shape_ids, input_pronunciation_ids, token_type_ids, input_mask,
-            sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        input_shape_ids,
+        input_pronunciation_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = RocBertModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, input_shape_ids=input_shape_ids, input_pronunciation_ids=input_pronunciation_ids,
-                       attention_mask=input_mask, token_type_ids=token_type_ids)
-        result = model(input_ids, input_shape_ids=input_shape_ids, input_pronunciation_ids=input_pronunciation_ids,
-                       token_type_ids=token_type_ids)
+        result = model(
+            input_ids,
+            input_shape_ids=input_shape_ids,
+            input_pronunciation_ids=input_pronunciation_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+        )
+        result = model(
+            input_ids,
+            input_shape_ids=input_shape_ids,
+            input_pronunciation_ids=input_pronunciation_ids,
+            token_type_ids=token_type_ids,
+        )
         result = model(input_ids, input_shape_ids=input_shape_ids, input_pronunciation_ids=input_pronunciation_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_model_as_decoder(
-            self,
-            config,
-            input_ids,
-            input_shape_ids,
-            input_pronunciation_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
+        self,
+        config,
+        input_ids,
+        input_shape_ids,
+        input_pronunciation_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         config.add_cross_attention = True
         model = RocBertModel(config)
@@ -222,55 +247,80 @@ class RocBertModelTester:
             token_type_ids=token_type_ids,
             encoder_hidden_states=encoder_hidden_states,
         )
-        result = model(input_ids, input_shape_ids=input_shape_ids, input_pronunciation_ids=input_pronunciation_ids,
-                       attention_mask=input_mask, token_type_ids=token_type_ids)
+        result = model(
+            input_ids,
+            input_shape_ids=input_shape_ids,
+            input_pronunciation_ids=input_pronunciation_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+        )
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_causal_lm(
-            self,
-            config,
-            input_ids,
-            input_shape_ids,
-            input_pronunciation_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
+        self,
+        config,
+        input_ids,
+        input_shape_ids,
+        input_pronunciation_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         model = RocBertForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, input_shape_ids=input_shape_ids, input_pronunciation_ids=input_pronunciation_ids,
-                       attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        result = model(
+            input_ids,
+            input_shape_ids=input_shape_ids,
+            input_pronunciation_ids=input_pronunciation_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+        )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_for_masked_lm(
-            self, config, input_ids, input_shape_ids, input_pronunciation_ids, token_type_ids, input_mask,
-            sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        input_shape_ids,
+        input_pronunciation_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = RocBertForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, input_shape_ids=input_shape_ids, input_pronunciation_ids=input_pronunciation_ids,
-                       attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        result = model(
+            input_ids,
+            input_shape_ids=input_shape_ids,
+            input_pronunciation_ids=input_pronunciation_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+        )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_decoder_model_past_large_inputs(
-            self,
-            config,
-            input_ids,
-            input_shape_ids,
-            input_pronunciation_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
+        self,
+        config,
+        input_ids,
+        input_shape_ids,
+        input_pronunciation_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         config.is_decoder = True
         config.add_cross_attention = True
@@ -333,8 +383,16 @@ class RocBertModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_for_question_answering(
-            self, config, input_ids, input_shape_ids, input_pronunciation_ids, token_type_ids, input_mask,
-            sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        input_shape_ids,
+        input_pronunciation_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = RocBertForQuestionAnswering(config=config)
         model.to(torch_device)
@@ -352,32 +410,68 @@ class RocBertModelTester:
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_for_sequence_classification(
-            self, config, input_ids, input_shape_ids, input_pronunciation_ids, token_type_ids, input_mask,
-            sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        input_shape_ids,
+        input_pronunciation_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_labels = self.num_labels
         model = RocBertForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, input_shape_ids=input_shape_ids, input_pronunciation_ids=input_pronunciation_ids,
-                       attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
+        result = model(
+            input_ids,
+            input_shape_ids=input_shape_ids,
+            input_pronunciation_ids=input_pronunciation_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=sequence_labels,
+        )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_token_classification(
-            self, config, input_ids, input_shape_ids, input_pronunciation_ids, token_type_ids, input_mask,
-            sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        input_shape_ids,
+        input_pronunciation_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_labels = self.num_labels
         model = RocBertForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, input_shape_ids=input_shape_ids, input_pronunciation_ids=input_pronunciation_ids,
-                       attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        result = model(
+            input_ids,
+            input_shape_ids=input_shape_ids,
+            input_pronunciation_ids=input_pronunciation_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+        )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_for_multiple_choice(
-            self, config, input_ids, input_shape_ids, input_pronunciation_ids, token_type_ids, input_mask,
-            sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        input_shape_ids,
+        input_pronunciation_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_choices = self.num_choices
         model = RocBertForMultipleChoice(config=config)
@@ -385,8 +479,9 @@ class RocBertModelTester:
         model.eval()
         multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_inputs_shape_ids = input_shape_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_inputs_pronunciation_ids = input_pronunciation_ids.unsqueeze(1).expand(-1, self.num_choices,
-                                                                                               -1).contiguous()
+        multiple_choice_inputs_pronunciation_ids = (
+            input_pronunciation_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        )
         multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         result = model(
@@ -412,9 +507,13 @@ class RocBertModelTester:
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "input_shape_ids": input_shape_ids,
-                       "input_pronunciation_ids": input_pronunciation_ids, "token_type_ids": token_type_ids,
-                       "attention_mask": input_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "input_shape_ids": input_shape_ids,
+            "input_pronunciation_ids": input_pronunciation_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+        }
         return config, inputs_dict
 
 

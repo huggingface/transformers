@@ -28,6 +28,7 @@ from transformers.models.roc_bert.tokenization_roc_bert import (
     _is_whitespace,
 )
 from transformers.testing_utils import require_tokenizers, slow
+
 from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 
@@ -324,8 +325,9 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokens_ids = tokenizer.convert_tokens_to_ids(tokens)
                 tokens_shape_ids = tokenizer.convert_tokens_to_shape_ids(tokens)
                 tokens_proun_ids = tokenizer.convert_tokens_to_pronunciation_ids(tokens)
-                prepared_input_dict = tokenizer.prepare_for_model(tokens_ids, tokens_shape_ids, tokens_proun_ids,
-                                                                  add_special_tokens=True)
+                prepared_input_dict = tokenizer.prepare_for_model(
+                    tokens_ids, tokens_shape_ids, tokens_proun_ids, add_special_tokens=True
+                )
 
                 input_dict = tokenizer.encode_plus(string_sequence, add_special_tokens=True)
 

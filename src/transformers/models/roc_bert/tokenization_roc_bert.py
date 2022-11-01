@@ -19,31 +19,32 @@ import itertools
 import json
 import os
 import unicodedata
-from typing import List, Optional, Union, Dict, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...tokenization_utils_base import (
-    TextInput,
-    PreTokenizedInput,
-    EncodedInput,
-    PaddingStrategy,
-    TensorType,
-    TruncationStrategy,
-    BatchEncoding,
     ENCODE_KWARGS_DOCSTRING,
     ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
-    TextInputPair,
+    BatchEncoding,
+    EncodedInput,
     EncodedInputPair,
+    PaddingStrategy,
+    PreTokenizedInput,
     PreTokenizedInputPair,
+    TensorType,
+    TextInput,
+    TextInputPair,
+    TruncationStrategy,
 )
-from ...utils import logging, add_end_docstrings
+from ...utils import add_end_docstrings, logging
+
 
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.txt",
     "word_shape_file": "word_shape.json",
-    "word_pronunciation_file": "word_pronunciation.json"
+    "word_pronunciation_file": "word_pronunciation.json",
 }
 
 # todo: change the path
@@ -86,10 +87,10 @@ def whitespace_tokenize(text):
 
 class RocBertTokenizer(PreTrainedTokenizer):
     r"""
-    Construct a RocBERT tokenizer. Based on WordPiece.
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
-    this superclass for more information regarding those methods.
     Args:
+    Construct a RocBERT tokenizer. Based on WordPiece. This tokenizer inherits from [`PreTrainedTokenizer`] which
+    contains most of the main methods. Users should refer to this superclass for more information regarding those
+    methods.
         vocab_file (`str`):
             File containing the vocabulary.
         word_shape_file (`str`):
@@ -119,8 +120,7 @@ class RocBertTokenizer(PreTrainedTokenizer):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
-            Whether or not to tokenize Chinese characters.
-            This should likely be deactivated for Japanese (see this
+            Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see this
             [issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
@@ -136,21 +136,21 @@ class RocBertTokenizer(PreTrainedTokenizer):
     #                                 "token_type_ids", "attention_mask"]
 
     def __init__(
-            self,
-            vocab_file,
-            word_shape_file,
-            word_pronunciation_file,
-            do_lower_case=True,
-            do_basic_tokenize=True,
-            never_split=None,
-            unk_token="[UNK]",
-            sep_token="[SEP]",
-            pad_token="[PAD]",
-            cls_token="[CLS]",
-            mask_token="[MASK]",
-            tokenize_chinese_chars=True,
-            strip_accents=None,
-            **kwargs
+        self,
+        vocab_file,
+        word_shape_file,
+        word_pronunciation_file,
+        do_lower_case=True,
+        do_basic_tokenize=True,
+        never_split=None,
+        unk_token="[UNK]",
+        sep_token="[SEP]",
+        pad_token="[PAD]",
+        cls_token="[CLS]",
+        mask_token="[MASK]",
+        tokenize_chinese_chars=True,
+        strip_accents=None,
+        **kwargs
     ):
         super().__init__(
             do_lower_case=do_lower_case,
@@ -223,25 +223,25 @@ class RocBertTokenizer(PreTrainedTokenizer):
         return split_tokens
 
     def _encode_plus(
-            self,
-            text: Union[TextInput, PreTokenizedInput, EncodedInput],
-            text_pair: Optional[Union[TextInput, PreTokenizedInput, EncodedInput]] = None,
-            add_special_tokens: bool = True,
-            padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-            truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-            max_length: Optional[int] = None,
-            stride: int = 0,
-            is_split_into_words: bool = False,
-            pad_to_multiple_of: Optional[int] = None,
-            return_tensors: Optional[Union[str, TensorType]] = None,
-            return_token_type_ids: Optional[bool] = None,
-            return_attention_mask: Optional[bool] = None,
-            return_overflowing_tokens: bool = False,
-            return_special_tokens_mask: bool = False,
-            return_offsets_mapping: bool = False,
-            return_length: bool = False,
-            verbose: bool = True,
-            **kwargs
+        self,
+        text: Union[TextInput, PreTokenizedInput, EncodedInput],
+        text_pair: Optional[Union[TextInput, PreTokenizedInput, EncodedInput]] = None,
+        add_special_tokens: bool = True,
+        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        is_split_into_words: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs
     ) -> BatchEncoding:
         def get_input_ids(text):
             if isinstance(text, str):
@@ -318,57 +318,57 @@ class RocBertTokenizer(PreTrainedTokenizer):
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def prepare_for_model(
-            self,
-            ids: List[int],
-            shape_ids: List[int],
-            pronunciation_ids: List[int],
-            pair_ids: Optional[List[int]] = None,
-            pair_shape_ids: Optional[List[int]] = None,
-            pair_pronunciation_ids: Optional[List[int]] = None,
-            add_special_tokens: bool = True,
-            padding: Union[bool, str, PaddingStrategy] = False,
-            truncation: Union[bool, str, TruncationStrategy] = None,
-            max_length: Optional[int] = None,
-            stride: int = 0,
-            pad_to_multiple_of: Optional[int] = None,
-            return_tensors: Optional[Union[str, TensorType]] = None,
-            return_token_type_ids: Optional[bool] = None,
-            return_attention_mask: Optional[bool] = None,
-            return_overflowing_tokens: bool = False,
-            return_special_tokens_mask: bool = False,
-            return_offsets_mapping: bool = False,
-            return_length: bool = False,
-            verbose: bool = True,
-            prepend_batch_axis: bool = False,
-            **kwargs
+        self,
+        ids: List[int],
+        shape_ids: List[int],
+        pronunciation_ids: List[int],
+        pair_ids: Optional[List[int]] = None,
+        pair_shape_ids: Optional[List[int]] = None,
+        pair_pronunciation_ids: Optional[List[int]] = None,
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        prepend_batch_axis: bool = False,
+        **kwargs
     ) -> BatchEncoding:
         """
-                Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model. It
-                adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
-                manages a moving window (with user defined stride) for overflowing tokens. Please Note, for *pair_ids*
-                different than `None` and *truncation_strategy = longest_first* or `True`, it is not possible to return
-                overflowing tokens. Such a combination of arguments will raise an error.
+        Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model. It
+        adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
+        manages a moving window (with user defined stride) for overflowing tokens. Please Note, for *pair_ids*
+        different than `None` and *truncation_strategy = longest_first* or `True`, it is not possible to return
+        overflowing tokens. Such a combination of arguments will raise an error.
 
-                Args:
-                    ids (`List[int]`):
-                        Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
-                        `convert_tokens_to_id` methods.
-                    shape_ids (`List[int]`):
-                        Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
-                        `convert_token_to_shape_id` methods.
-                    pronunciation_ids (`List[int]`):
-                        Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
-                        `convert_token_to_pronunciation_id` methods.
-                    pair_ids (`List[int]`, *optional*):
-                        Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
-                        and `convert_tokens_to_id` methods.
-                    pair_shape_ids (`List[int]`, *optional*):
-                        Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
-                        and `convert_token_to_shape_id` methods.
-                    pair_pronunciation_ids (`List[int]`, *optional*):
-                        Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
-                        and `convert_token_to_pronunciation_id` methods.
-                """
+        Args:
+            ids (`List[int]`):
+                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
+                `convert_tokens_to_id` methods.
+            shape_ids (`List[int]`):
+                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
+                `convert_token_to_shape_id` methods.
+            pronunciation_ids (`List[int]`):
+                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
+                `convert_token_to_pronunciation_id` methods.
+            pair_ids (`List[int]`, *optional*):
+                Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
+                and `convert_tokens_to_id` methods.
+            pair_shape_ids (`List[int]`, *optional*):
+                Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
+                and `convert_token_to_shape_id` methods.
+            pair_pronunciation_ids (`List[int]`, *optional*):
+                Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
+                and `convert_token_to_pronunciation_id` methods.
+        """
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
@@ -392,9 +392,9 @@ class RocBertTokenizer(PreTrainedTokenizer):
             )
 
         if (
-                return_overflowing_tokens
-                and truncation_strategy == TruncationStrategy.LONGEST_FIRST
-                and pair_ids is not None
+            return_overflowing_tokens
+            and truncation_strategy == TruncationStrategy.LONGEST_FIRST
+            and pair_ids is not None
         ):
             raise ValueError(
                 "Not possible to return overflowing tokens for pair of sequences with the "
@@ -446,16 +446,22 @@ class RocBertTokenizer(PreTrainedTokenizer):
         if add_special_tokens:
             sequence = self.build_inputs_with_special_tokens(ids, pair_ids)
             token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids)
-            input_shape_ids = self.build_inputs_with_special_tokens(shape_ids, pair_shape_ids,
-                                                                    self.word_shape["[UNK]"], self.word_shape["[UNK]"])
-            input_pronunciation_ids = self.build_inputs_with_special_tokens(pronunciation_ids, pair_pronunciation_ids,
-                                                                            self.word_pronunciation["[UNK]"],
-                                                                            self.word_pronunciation["[UNK]"])
+            input_shape_ids = self.build_inputs_with_special_tokens(
+                shape_ids, pair_shape_ids, self.word_shape["[UNK]"], self.word_shape["[UNK]"]
+            )
+            input_pronunciation_ids = self.build_inputs_with_special_tokens(
+                pronunciation_ids,
+                pair_pronunciation_ids,
+                self.word_pronunciation["[UNK]"],
+                self.word_pronunciation["[UNK]"],
+            )
         else:
             sequence = ids + pair_ids if pair_ids else ids
             token_type_ids = [0] * len(ids) + ([0] * len(pair_ids) if pair_ids else [])
             input_shape_ids = shape_ids + pair_shape_ids if pair_shape_ids else shape_ids
-            input_pronunciation_ids = pronunciation_ids + pair_pronunciation_ids if pair_pronunciation_ids else pronunciation_ids
+            input_pronunciation_ids = (
+                pronunciation_ids + pair_pronunciation_ids if pair_pronunciation_ids else pronunciation_ids
+            )
 
         # Build output dictionary
         encoded_inputs["input_ids"] = sequence
@@ -492,12 +498,12 @@ class RocBertTokenizer(PreTrainedTokenizer):
         return batch_outputs
 
     def _pad(
-            self,
-            encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
-            max_length: Optional[int] = None,
-            padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-            pad_to_multiple_of: Optional[int] = None,
-            return_attention_mask: Optional[bool] = None,
+        self,
+        encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
+        max_length: Optional[int] = None,
+        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+        pad_to_multiple_of: Optional[int] = None,
+        return_attention_mask: Optional[bool] = None,
     ) -> dict:
         # Load from model defaults
         if return_attention_mask is None:
@@ -525,7 +531,7 @@ class RocBertTokenizer(PreTrainedTokenizer):
                     encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = (
-                            encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
+                        encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
                     )
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
@@ -552,31 +558,31 @@ class RocBertTokenizer(PreTrainedTokenizer):
         return encoded_inputs
 
     def _batch_encode_plus(
-            self,
-            batch_text_or_text_pairs: Union[
-                List[TextInput],
-                List[TextInputPair],
-                List[PreTokenizedInput],
-                List[PreTokenizedInputPair],
-                List[EncodedInput],
-                List[EncodedInputPair],
-            ],
-            add_special_tokens: bool = True,
-            padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-            truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-            max_length: Optional[int] = None,
-            stride: int = 0,
-            is_split_into_words: bool = False,
-            pad_to_multiple_of: Optional[int] = None,
-            return_tensors: Optional[Union[str, TensorType]] = None,
-            return_token_type_ids: Optional[bool] = None,
-            return_attention_mask: Optional[bool] = None,
-            return_overflowing_tokens: bool = False,
-            return_special_tokens_mask: bool = False,
-            return_offsets_mapping: bool = False,
-            return_length: bool = False,
-            verbose: bool = True,
-            **kwargs
+        self,
+        batch_text_or_text_pairs: Union[
+            List[TextInput],
+            List[TextInputPair],
+            List[PreTokenizedInput],
+            List[PreTokenizedInputPair],
+            List[EncodedInput],
+            List[EncodedInputPair],
+        ],
+        add_special_tokens: bool = True,
+        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        is_split_into_words: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs
     ) -> BatchEncoding:
         def get_input_ids(text):
             if isinstance(text, str):
@@ -657,23 +663,23 @@ class RocBertTokenizer(PreTrainedTokenizer):
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def _batch_prepare_for_model(
-            self,
-            batch_ids_pairs: List[Union[PreTokenizedInputPair, Tuple[List[int], None]]],
-            batch_shape_ids_pairs: List[Union[PreTokenizedInputPair, Tuple[List[int], None]]],
-            batch_pronunciation_ids_pairs: List[Union[PreTokenizedInputPair, Tuple[List[int], None]]],
-            add_special_tokens: bool = True,
-            padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-            truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-            max_length: Optional[int] = None,
-            stride: int = 0,
-            pad_to_multiple_of: Optional[int] = None,
-            return_tensors: Optional[str] = None,
-            return_token_type_ids: Optional[bool] = None,
-            return_attention_mask: Optional[bool] = None,
-            return_overflowing_tokens: bool = False,
-            return_special_tokens_mask: bool = False,
-            return_length: bool = False,
-            verbose: bool = True,
+        self,
+        batch_ids_pairs: List[Union[PreTokenizedInputPair, Tuple[List[int], None]]],
+        batch_shape_ids_pairs: List[Union[PreTokenizedInputPair, Tuple[List[int], None]]],
+        batch_pronunciation_ids_pairs: List[Union[PreTokenizedInputPair, Tuple[List[int], None]]],
+        add_special_tokens: bool = True,
+        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[str] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
     ) -> BatchEncoding:
         """
         Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model. It
@@ -774,8 +780,11 @@ class RocBertTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None,
-            cls_token_id: int = None, sep_token_id: int = None
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        cls_token_id: int = None,
+        sep_token_id: int = None,
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
@@ -801,8 +810,7 @@ class RocBertTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None,
-            already_has_special_tokens: bool = False
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -831,7 +839,7 @@ class RocBertTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
@@ -864,15 +872,15 @@ class RocBertTokenizer(PreTrainedTokenizer):
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
                 save_directory,
-                (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["vocab_file"]
+                (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["vocab_file"],
             )
             word_shape_file = os.path.join(
                 save_directory,
-                (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["word_shape_file"]
+                (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["word_shape_file"],
             )
             word_pronunciation_file = os.path.join(
                 save_directory,
-                (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["word_pronunciation_file"]
+                (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["word_pronunciation_file"],
             )
         else:
             raise ValueError(
@@ -892,12 +900,16 @@ class RocBertTokenizer(PreTrainedTokenizer):
                 index += 1
 
         with open(word_shape_file, "w", encoding="utf8") as writer:
-            json.dump(self.word_shape, writer, ensure_ascii=False, indent=4, separators=(', ', ': '))
+            json.dump(self.word_shape, writer, ensure_ascii=False, indent=4, separators=(", ", ": "))
 
         with open(word_pronunciation_file, "w", encoding="utf8") as writer:
-            json.dump(self.word_pronunciation, writer, ensure_ascii=False, indent=4, separators=(', ', ': '))
+            json.dump(self.word_pronunciation, writer, ensure_ascii=False, indent=4, separators=(", ", ": "))
 
-        return (vocab_file, word_shape_file, word_pronunciation_file,)
+        return (
+            vocab_file,
+            word_shape_file,
+            word_pronunciation_file,
+        )
 
 
 # Copied from  transformers.models.bert.tokenization_bert.BasicTokenizer with BasicTokenizer->RocBertBasicTokenizer
@@ -1023,14 +1035,14 @@ class RocBertBasicTokenizer(object):
         # space-separated words, so they are not treated specially and handled
         # like the all of the other languages.
         if (
-                (cp >= 0x4E00 and cp <= 0x9FFF)
-                or (cp >= 0x3400 and cp <= 0x4DBF)  #
-                or (cp >= 0x20000 and cp <= 0x2A6DF)  #
-                or (cp >= 0x2A700 and cp <= 0x2B73F)  #
-                or (cp >= 0x2B740 and cp <= 0x2B81F)  #
-                or (cp >= 0x2B820 and cp <= 0x2CEAF)  #
-                or (cp >= 0xF900 and cp <= 0xFAFF)
-                or (cp >= 0x2F800 and cp <= 0x2FA1F)  #
+            (cp >= 0x4E00 and cp <= 0x9FFF)
+            or (cp >= 0x3400 and cp <= 0x4DBF)  #
+            or (cp >= 0x20000 and cp <= 0x2A6DF)  #
+            or (cp >= 0x2A700 and cp <= 0x2B73F)  #
+            or (cp >= 0x2B740 and cp <= 0x2B81F)  #
+            or (cp >= 0x2B820 and cp <= 0x2CEAF)  #
+            or (cp >= 0xF900 and cp <= 0xFAFF)
+            or (cp >= 0x2F800 and cp <= 0x2FA1F)  #
         ):  #
             return True
 

@@ -18,8 +18,8 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
-from ...utils import is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
+
 
 _import_structure = {
     "configuration_roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RocBertConfig"],
@@ -74,8 +74,8 @@ if TYPE_CHECKING:
     else:
         from .modeling_roc_bert import (
             ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            RocBertForMaskedLM,
             RocBertForCausalLM,
+            RocBertForMaskedLM,
             RocBertForMultipleChoice,
             RocBertForQuestionAnswering,
             RocBertForSequenceClassification,
@@ -85,7 +85,6 @@ if TYPE_CHECKING:
             RocBertPreTrainedModel,
             load_tf_weights_in_roc_bert,
         )
-
 
 
 else:
