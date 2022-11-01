@@ -4,12 +4,13 @@ import torch
 from PIL import Image
 from torchvision.transforms import Compose, Resize, ToTensor
 
-from transformers import CLIPSegConfig, CLIPSegForImageSegmentation
+from transformers import CLIPSegConfig, CLIPSegForImageSegmentation, CLIPSegTextConfig, CLIPSegVisionConfig
 
 
 def get_clipseg_config():
-    config = CLIPSegConfig()
-    config.vision_config.patch_size = 16
+    text_config = CLIPSegTextConfig()
+    vision_config = CLIPSegVisionConfig(patch_size=16)
+    config = CLIPSegConfig.from_text_vision_configs(text_config, vision_config)
     return config
 
 
@@ -139,10 +140,12 @@ def convert_clipseg_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_t
 
     state_dict = torch.load(checkpoint_path, map_location="cpu")
 
+    # remove some keys
     for key in state_dict.copy().keys():
         if key.startswith("model"):
             state_dict.pop(key, None)
 
+    # rename some keys
     state_dict = convert_state_dict(state_dict, config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
 

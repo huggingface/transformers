@@ -137,8 +137,8 @@ class CLIPSegImageSegmentationOutput(ModelOutput):
         )
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->CLIPSeg
 class CLIPSegVisionEmbeddings(nn.Module):
+    # Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings.__init__
     def __init__(self, config: CLIPSegVisionConfig):
         super().__init__()
         self.config = config
@@ -157,6 +157,19 @@ class CLIPSegVisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
 
+    def interpolate_position_embeddings(self, new_size):
+        if len(new_size) != 2:
+            raise ValueError("new_size should consist of 2 values")
+
+        a = self.position_embedding.weight[1:].T.view(1, self.config.hidden_size, self.num_patches)
+        b = (
+            nn.functional.interpolate(a, new_size, mode="bicubic", align_corners=False)
+            .squeeze(0)
+            .view(768, new_size[0] * new_size[1])
+            .T
+        )
+        return torch.cat([self.model.positional_embedding[:1], b])
+
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
@@ -164,7 +177,14 @@ class CLIPSegVisionEmbeddings(nn.Module):
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding(self.position_ids)
+
+        if embeddings.shape[1] != self.num_positions:
+            new_shape = int(math.sqrt(embeddings.shape[1] - 1))
+            embeddings = embeddings + self.interpolate_position_embeddings((new_shape, new_shape))
+            embeddings = embeddings.to(embeddings.dtype)[None, :, :]
+        else:
+            embeddings = embeddings + self.position_embedding(self.position_ids)
+
         return embeddings
 
 
