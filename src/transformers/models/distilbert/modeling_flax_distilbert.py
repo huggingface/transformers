@@ -272,7 +272,7 @@ class FlaxFFN(nn.Module):
         return hidden_states
 
 
-class FlaxDistilbertLayer(nn.Module):
+class FlaxDistilBertLayer(nn.Module):
     config: DistilBertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -319,13 +319,13 @@ class FlaxDistilbertLayer(nn.Module):
         return output
 
 
-class FlaxDistilbertEncoder(nn.Module):
+class FlaxDistilBertEncoder(nn.Module):
     config: DistilBertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
         self.layers = [
-            FlaxDistilbertLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.n_layers)
+            FlaxDistilBertLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.n_layers)
         ]
 
     def __call__(
@@ -375,7 +375,7 @@ class FlaxTransformerEncoder(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.layer = FlaxDistilbertEncoder(self.config, dtype=self.dtype)
+        self.layer = FlaxDistilBertEncoder(self.config, dtype=self.dtype)
 
     def __call__(
         self,
