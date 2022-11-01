@@ -1948,10 +1948,16 @@ class GenerationMixin:
                     expand_size=top_k, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
                 )
 
-                if model_kwargs.get("past") is None:
+                past = model_kwargs.get("past")
+                if past is None:
                     raise ValueError(
-                        f"{self.__class__.__name__} does not support caching and can therefore **not** be used "
+                        f"{self.__class__.__name__} does not support caching and therefore **can't** be used "
                         "for contrastive search."
+                    )
+                elif not isinstance(past[0], (tuple, torch.Tensor)) or past[0][0].shape[0] != batch_size:
+                    raise ValueError(
+                        f"{self.__class__.__name__} does not have a standard cache format and therefore **can't** be "
+                        "used for contrastive search without further modifications."
                     )
 
             # contrastive_search main logic start:
