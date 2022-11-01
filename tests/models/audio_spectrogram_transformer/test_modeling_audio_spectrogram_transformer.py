@@ -86,17 +86,9 @@ class AudioSpectrogramTransformerModelTester:
         self.time_stride = time_stride
 
         # in AudioSpectrogramTransformer, the seq length equals the number of patches + 2 (we add 2 for the [CLS] and distillation tokens)
-        test_input = torch.randn(1, 1, self.frequency_dimension, self.time_dimension)
-        test_projection = nn.Conv2d(
-            1,
-            self.hidden_size,
-            kernel_size=(self.patch_size, self.patch_size),
-            stride=(self.frequency_stride, self.time_stride),
-        )
-        test_out = test_projection(test_input)
-        frequency_dimension = test_out.shape[2]
-        time_dimension = test_out.shape[3]
-        num_patches = frequency_dimension * time_dimension
+        frequency_out_dimension = (self.frequency_dimension - self.patch_size) // self.frequency_stride + 1
+        time_out_dimension = (self.time_dimension - self.patch_size) // self.time_stride + 1
+        num_patches = frequency_out_dimension * time_out_dimension
         self.seq_length = num_patches + 2
 
     def prepare_config_and_inputs(self):

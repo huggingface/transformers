@@ -67,28 +67,19 @@ class AudioSpectrogramTransformerEmbeddings(nn.Module):
         self.distillation_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.patch_embeddings = AudioSpectrogramTransformerPatchEmbeddings(config)
 
-        frequency_dimension, time_dimension = self.get_shape(config)
-        num_patches = frequency_dimension * time_dimension
+        frequency_out_dimension, time_out_dimension = self.get_shape(config)
+        num_patches = frequency_out_dimension * time_out_dimension
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 2, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
     def get_shape(self, config):
-        frequency_stride = config.frequency_stride
-        time_stride = config.time_stride
-        frequency_dimension = config.frequency_dimension
-        time_dimension = config.time_dimension
-        test_input = torch.randn(1, 1, frequency_dimension, time_dimension)
-        test_projection = nn.Conv2d(
-            1,
-            config.hidden_size,
-            kernel_size=(config.patch_size, config.patch_size),
-            stride=(frequency_stride, time_stride),
-        )
-        test_out = test_projection(test_input)
-        frequency_dimension = test_out.shape[2]
-        time_dimension = test_out.shape[3]
-        return frequency_dimension, time_dimension
+        # see Karpathy's cs231n blog on how to calculate the output dimensions
+        # https://cs231n.github.io/convolutional-networks/#conv
+        frequency_out_dimension = (config.frequency_dimension - config.patch_size) // config.frequency_stride + 1
+        time_out_dimension = (config.time_dimension - config.patch_size) // config.time_stride + 1
+
+        return frequency_out_dimension, time_out_dimension
 
     def forward(self, input_values: torch.Tensor) -> torch.Tensor:
         batch_size = input_values.shape[0]
