@@ -21,7 +21,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_availabl
 
 
 _import_structure = {
-    "configuration_whisper": ["WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP", "WhisperConfig"],
+    "configuration_whisper": ["WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP", "WhisperConfig", "WhisperOnnxConfig"],
     "feature_extraction_whisper": ["WhisperFeatureExtractor"],
     "processing_whisper": ["WhisperProcessor"],
     "tokenization_whisper": ["WhisperTokenizer"],
@@ -55,7 +55,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_whisper import WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP, WhisperConfig
+    from .configuration_whisper import WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP, WhisperConfig, WhisperOnnxConfig
     from .feature_extraction_whisper import WhisperFeatureExtractor
     from .processing_whisper import WhisperProcessor
     from .tokenization_whisper import WhisperTokenizer

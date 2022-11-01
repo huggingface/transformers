@@ -29,6 +29,7 @@ if is_torch_available():
         AutoModelForSemanticSegmentation,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
+        AutoModelForSpeechSeq2Seq,
         AutoModelForTokenClassification,
         AutoModelForVision2Seq,
     )
@@ -100,6 +101,7 @@ class FeaturesManager:
             "masked-im": AutoModelForMaskedImageModeling,
             "semantic-segmentation": AutoModelForSemanticSegmentation,
             "vision2seq-lm": AutoModelForVision2Seq,
+            "speech2seq-lm": AutoModelForSpeechSeq2Seq,
         }
     if is_tf_available():
         _TASKS_TO_TF_AUTOMODELS = {
@@ -491,6 +493,13 @@ class FeaturesManager:
         ),
         "vit": supported_features_mapping(
             "default", "image-classification", "masked-im", onnx_config_cls="models.vit.ViTOnnxConfig"
+        ),
+        "whisper": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "speech2seq-lm",
+            "speech2seq-lm-with-past",
+            onnx_config_cls="models.whisper.WhisperOnnxConfig",
         ),
         "xlm": supported_features_mapping(
             "default",
