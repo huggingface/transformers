@@ -369,8 +369,6 @@ class T5Attention(nn.Module):
         self.n_heads = self.n_heads - len(heads)
         self.inner_dim = self.key_value_proj_dim * self.n_heads
         self.pruned_heads = self.pruned_heads.union(heads)
-        if self.has_relative_attention_bias:
-            self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
 
     @staticmethod
     def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
@@ -506,32 +504,36 @@ class T5Attention(nn.Module):
         value_states = project(
             hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
         )
+
         # compute scores
         scores = torch.matmul(
             query_states, key_states.transpose(3, 2)
         )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
 
-        if not self.has_relative_attention_bias:
-            position_bias = torch.zeros(
-                (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
-            )
-            if self.gradient_checkpointing and self.training:
-                position_bias.requires_grad = True
-        else:
-            position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
-        # if key and values are already calculated
-        # we want only the last query position bias
-        if past_key_value is not None:
-            position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
+        if position_bias is None:
+            if not self.has_relative_attention_bias:
+                position_bias = torch.zeros(
+                    (1, self.n_heads+len(self.pruned_heads), real_seq_length, key_length), device=scores.device, dtype=scores.dtype
+                )
+                if self.gradient_checkpointing and self.training:
+                    position_bias.requires_grad = True
+            else:
+                position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
 
-        if mask is not None:
-            position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
+            # if key and values are already calculated
+            # we want only the last query position bias
+            if past_key_value is not None:
+                position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
+
+            if mask is not None:
+                position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
         if self.pruned_heads:
-            position_bias_masked = position_bias
+            mask = torch.ones(position_bias.shape[1])
+            mask[list(self.pruned_heads)] = 0
+            position_bias_masked = position_bias[:, mask.bool()]
         else:
             position_bias_masked = position_bias
-
 
         scores += position_bias_masked
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
