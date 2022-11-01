@@ -432,19 +432,30 @@ Depending on your task, you'll typically pass the following parameters to [`Trai
    >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
    ```
 
-4. Your preprocessed train and test datasets:
+4. Load a dataset:
 
    ```py
-   >>> train_dataset = dataset["train"]  # doctest: +SKIP
-   >>> eval_dataset = dataset["eval"]  # doctest: +SKIP
+   >>> from datasets import load_dataset
+
+   >>> dataset = load_dataset("rottten_tomatoes")
    ```
 
-5. A [`DataCollator`] to create a batch of examples from your dataset:
+5. Create a function to tokenize the dataset, and apply it over the entire dataset with [`~datasets.Dataset.map`]:
 
    ```py
-   >>> from transformers import DefaultDataCollator
+   >>> def tokenize_dataset(dataset):
+   ...     return tokenizer(dataset["text"])
 
-   >>> data_collator = DefaultDataCollator()
+
+   >>> dataset = dataset.map(tokenize_dataset, batched=True)
+   ```
+
+6. A [`DataCollatorWithPadding`] to create a batch of examples from your dataset:
+
+   ```py
+   >>> from transformers import DataCollatorWithPadding
+
+   >>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
    ```
 
 Now gather all these classes in [`Trainer`]:
