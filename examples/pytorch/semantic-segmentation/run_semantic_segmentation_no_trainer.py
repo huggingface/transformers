@@ -405,10 +405,15 @@ def main():
     # Define torchvision transforms to be applied to each image + target.
     # Not that straightforward in torchvision: https://github.com/pytorch/vision/issues/9
     # Currently based on official torchvision references: https://github.com/pytorch/vision/blob/main/references/segmentation/transforms.py
+    if "shortest_edge" in feature_extractor.size:
+        # We instead set the target size as (shortest_edge, shortest_edge) to here to ensure all images are batchable.
+        size = (feature_extractor.size["shortest_edge"], feature_extractor.size["shortest_edge"])
+    else:
+        size = (feature_extractor.size["height"], feature_extractor.size["width"])
     train_transforms = Compose(
         [
             ReduceLabels() if args.reduce_labels else Identity(),
-            RandomCrop(size=feature_extractor.size),
+            RandomCrop(size=size),
             RandomHorizontalFlip(flip_prob=0.5),
             PILToTensor(),
             ConvertImageDtype(torch.float),
@@ -420,7 +425,7 @@ def main():
     val_transforms = Compose(
         [
             ReduceLabels() if args.reduce_labels else Identity(),
-            Resize(size=(feature_extractor.size, feature_extractor.size)),
+            Resize(size=size),
             PILToTensor(),
             ConvertImageDtype(torch.float),
             Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std),
