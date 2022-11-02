@@ -325,7 +325,6 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
             mask_pred,
             target_sizes=[meta["ori_shape"] for meta in img_metas],
             scale_factors=[meta["scale_factor"] for meta in img_metas],
-            rescale=True,
         )
         self.assertEquals(len(mask_results[0]), 80)
         self.assertEquals(mask_results[0][15][0].sum(), 52418)

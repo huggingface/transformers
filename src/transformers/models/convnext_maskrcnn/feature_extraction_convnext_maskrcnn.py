@@ -773,7 +773,7 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
         img_shapes = []
         for target_size, scale_factor in zip(target_sizes, scale_factors):
             height, width = target_size[-2:]
-            img_shape = (3, height*scale_factor[0], width*scale_factor[1])
+            img_shape = (3, height*scale_factor[1], width*scale_factor[0])
             img_shapes.append(img_shape)
         
         # apply bbox post-processing to each image individually
@@ -818,7 +818,7 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
         return results
 
     def post_process_instance_segmentation(
-        self, object_detection_results, mask_pred, target_sizes=None, scale_factors=None, rescale=True
+        self, object_detection_results, mask_pred, target_sizes=None, scale_factors=None,
     ):
         det_bboxes = [result["boxes"] for result in object_detection_results]
         det_labels = [result["labels"] for result in object_detection_results]
@@ -829,13 +829,13 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
 
         num_imgs = len(object_detection_results)
 
-        if rescale:
-            scale_factors = [torch.from_numpy(scale_factor).to(det_bboxes[0].device) for scale_factor in scale_factors]
-            _bboxes = [
-                # det_bboxes[i][:, :4] * scale_factors[i] if rescale else det_bboxes[i][:, :4]
-                det_bboxes[i] * scale_factors[i] if rescale else det_bboxes[i]
-                for i in range(num_imgs)
-            ]
+        rescale = True # we rescale by default
+        scale_factors = [torch.from_numpy(scale_factor).to(det_bboxes[0].device) for scale_factor in scale_factors]
+        _bboxes = [
+            # det_bboxes[i][:, :4] * scale_factors[i] if rescale else det_bboxes[i][:, :4]
+            det_bboxes[i] * scale_factors[i] if rescale else det_bboxes[i]
+            for i in range(num_imgs)
+        ]
 
         # apply mask post-processing to each image individually
         segm_results = []
@@ -850,7 +850,7 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
                     self.test_cfg,
                     target_sizes[i],
                     scale_factors[i],
-                    rescale,
+                    rescale=rescale,
                 )
                 segm_results.append(segm_result)
 
