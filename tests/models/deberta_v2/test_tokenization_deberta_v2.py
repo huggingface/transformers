@@ -30,7 +30,7 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = DebertaV2Tokenizer
     rust_tokenizer_class = DebertaV2TokenizerFast
-    test_sentencepiece = False
+    test_sentencepiece = True
     test_sentencepiece_ignore_case = True
 
     def setUp(self):
@@ -78,6 +78,12 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         rust_tokens = rust_tokenizer.convert_ids_to_tokens(rust_tokenizer.encode(sequence, add_special_tokens=False))
 
         self.assertListEqual(rust_tokens, tokens_target)
+
+    def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
+        pass
+
+    def test_sentencepiece_tokenize_and_decode(self):
+        pass
 
     def test_split_by_punct(self):
         # fmt: off
