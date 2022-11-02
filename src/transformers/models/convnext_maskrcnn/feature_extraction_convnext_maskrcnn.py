@@ -624,12 +624,15 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
 
         return results
 
-    def post_process_instance_segmentation(self, det_bboxes, det_labels, mask_pred, img_metas, rescale=True):
+    def post_process_instance_segmentation(self, object_detection_results, mask_pred, img_metas, rescale=True):
+        det_bboxes = [result['boxes'] for result in object_detection_results]
+        det_labels = [result['labels'] for result in object_detection_results]
+        
         # split batch mask prediction back to each image
         num_mask_roi_per_img = [len(det_bbox) for det_bbox in det_bboxes]
         mask_preds = mask_pred.split(num_mask_roi_per_img, 0)
 
-        num_imgs = len(det_bboxes)
+        num_imgs = len(object_detection_results)
         ori_shapes = tuple(meta["ori_shape"] for meta in img_metas)
         scale_factors = tuple(meta["scale_factor"] for meta in img_metas)
 
@@ -638,7 +641,7 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
             _bboxes = [
                 # det_bboxes[i][:, :4] * scale_factors[i] if rescale else det_bboxes[i][:, :4]
                 det_bboxes[i] * scale_factors[i] if rescale else det_bboxes[i]
-                for i in range(len(det_bboxes))
+                for i in range(num_imgs)
             ]
 
         # apply mask post-processing to each image individually
