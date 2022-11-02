@@ -336,13 +336,12 @@ class SwitchTransformersSparseMLP(nn.Module):
         r"""
         Hold on, this will be slightly tricky to understand In the correct order, a MoE layer does the following:
 
-        1- Gets the `router_mask` from the router. This mask will contain the indices of the routed tokens. Also
-        retrieve the probabilities (max prob) for each token. The probabilities are needed in the computation of the
-        hidden states since the probabilities will be broadcasted to the hidden states values (they can be interpreted
+        1- Gets the `router_mask` from the router. The shape of the mask is `(batch_size, sequence_length, num_expert)` and corresponds to the argmax of the `router_probs`.  The probabilities are needed in the computation of the
+        hidden states : they are broadcasted to the hidden states values (can be interpreted
         as a scaling factor).
 
-        2- Dispatch the tokens to the experts. We do a classic for loop over the experts and assign for each expert the
-        corresponding hidden state
+        2- Dispatch the tokens to its associated experts. We do a classic for loop over the experts and assign for each expert the
+        corresponding hidden states.
 
         """
         # Step 1: Get the router_mask from the router as wel as the probabilities
