@@ -173,6 +173,7 @@ def center_crop(image, size):
     image = tf.image.crop_to_bounding_box(image, top, left, crop_height, crop_width)
     return image
 
+
 # Numpy and TensorFlow compatible version of PyTorch RandomResizedCrop. Code adapted from:
 # https://pytorch.org/vision/main/_modules/torchvision/transforms/transforms.html#RandomResizedCrop
 def random_crop(image, scale=(0.08, 1.0), ratio=(3.0 / 4.0, 4.0 / 3.0)):
