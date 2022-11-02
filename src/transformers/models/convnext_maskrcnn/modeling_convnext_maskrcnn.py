@@ -2821,24 +2821,15 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         mask_results.update(loss_mask=loss_mask, mask_targets=mask_targets)
         return mask_results
 
-    def forward_test_mask(self, x, img_metas, det_bboxes, rescale=True):
+    def forward_test_mask(self, hidden_states, img_metas, det_bboxes, rescale=True):
         """Simple test for mask head without augmentation."""
         # image shapes of images in the batch
         scale_factors = tuple(meta["scale_factor"] for meta in img_metas)
 
-        if isinstance(scale_factors[0], float):
-            # TODO: remove this deprecation
-            warnings.warn(
-                "Scale factor in img_metas should be a "
-                "ndarray with shape (4,) "
-                "arrange as (factor_w, factor_h, factor_w, factor_h), "
-                "The scale_factor with float type has been deprecated. "
-            )
-            scale_factors = np.array([scale_factors] * 4, dtype=np.float32)
-
         # if all(det_bbox.shape[0] == 0 for det_bbox in det_bboxes):
         #     segm_results = [[[] for _ in range(self.mask_head.num_classes)] for _ in range(num_imgs)]
         # else:
+        
         # if det_bboxes is rescaled to the original image size, we need to
         # rescale it back to the testing scale to obtain RoIs.
         if rescale:
@@ -2849,7 +2840,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             for i in range(len(det_bboxes))
         ]
         mask_rois = bbox2roi(_bboxes)
-        mask_results = self._mask_forward(x, mask_rois)
+        mask_results = self._mask_forward(hidden_states, mask_rois)
         mask_pred = mask_results["mask_pred"]
 
         return mask_pred
