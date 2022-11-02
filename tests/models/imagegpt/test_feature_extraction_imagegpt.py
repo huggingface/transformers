@@ -47,9 +47,10 @@ class ImageGPTFeatureExtractionTester(unittest.TestCase):
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        size=18,
+        size=None,
         do_normalize=True,
     ):
+        size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels

@@ -298,10 +298,14 @@ def main():
 
     # transformations as done in original MAE paper
     # source: https://github.com/facebookresearch/mae/blob/main/main_pretrain.py
+    if "shortest_edge" in feature_extractor.size:
+        size = feature_extractor.size["shortest_edge"]
+    else:
+        size = (feature_extractor.size["height"], feature_extractor.size["width"])
     transforms = Compose(
         [
             Lambda(lambda img: img.convert("RGB") if img.mode != "RGB" else img),
-            RandomResizedCrop(feature_extractor.size, scale=(0.2, 1.0), interpolation=InterpolationMode.BICUBIC),
+            RandomResizedCrop(size, scale=(0.2, 1.0), interpolation=InterpolationMode.BICUBIC),
             RandomHorizontalFlip(),
             ToTensor(),
             Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std),
