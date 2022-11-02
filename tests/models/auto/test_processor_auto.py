@@ -206,9 +206,9 @@ class AutoFeatureExtractorTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-bert")
         self.assertEqual(processor.__class__.__name__, "BertTokenizerFast")
 
-    def test_auto_processor_creates_feature_extractor(self):
+    def test_auto_processor_creates_image_processor(self):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-convnext")
-        self.assertEqual(processor.__class__.__name__, "ConvNextFeatureExtractor")
+        self.assertEqual(processor.__class__.__name__, "ConvNextImageProcessor")
 
 
 @is_staging_test
