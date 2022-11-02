@@ -67,11 +67,6 @@ CONVNEXTMASKRCNN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all ConvNextMaskRCNN models at https://huggingface.co/models?filter=convnext_maskrcnn
 ]
 
-BYTES_PER_FLOAT = 4
-# TODO: This memory limit may be too much or too little. It would be better to
-# determine it based on available resources.
-GPU_MEM_LIMIT = 1024**3  # 1 GB memory limit
-
 
 @dataclass
 class RPNOutput(ModelOutput):
@@ -373,63 +368,6 @@ def bbox2result(bboxes, labels, num_classes):
         bboxes = bboxes.detach().cpu().numpy()
         labels = labels.detach().cpu().numpy()
     return [bboxes[labels == i, :] for i in range(num_classes)]
-
-
-def _do_paste_mask(masks, boxes, img_h, img_w, skip_empty=True):
-    """Paste instance masks according to boxes.
-    Args:
-    This implementation is modified from https://github.com/facebookresearch/detectron2/
-        masks (Tensor): N, 1, H, W boxes (Tensor): N, 4 img_h (int): Height of the image to be pasted. img_w (int):
-        Width of the image to be pasted. skip_empty (bool): Only paste masks within the region that
-            tightly bound all boxes, and returns the results this region only. An important optimization for CPU.
-    Returns:
-        tuple: (Tensor, tuple). The first item is mask tensor, the second one
-            is the slice object.
-        If skip_empty == False, the whole image will be pasted. It will
-            return a mask of shape (N, img_h, img_w) and an empty tuple.
-        If skip_empty == True, only area around the mask will be pasted.
-            A mask of shape (N, h', w') and its start and end coordinates in the original image will be returned.
-    """
-    # On GPU, paste all masks together (up to chunk size)
-    # by using the entire image to sample the masks
-    # Compared to pasting them one by one,
-    # this has more operations but is faster on COCO-scale dataset.
-    device = masks.device
-    if skip_empty:
-        x0_int, y0_int = torch.clamp(boxes.min(dim=0).values.floor()[:2] - 1, min=0).to(dtype=torch.int32)
-        x1_int = torch.clamp(boxes[:, 2].max().ceil() + 1, max=img_w).to(dtype=torch.int32)
-        y1_int = torch.clamp(boxes[:, 3].max().ceil() + 1, max=img_h).to(dtype=torch.int32)
-    else:
-        x0_int, y0_int = 0, 0
-        x1_int, y1_int = img_w, img_h
-    x0, y0, x1, y1 = torch.split(boxes, 1, dim=1)  # each is Nx1
-
-    N = masks.shape[0]
-
-    img_y = torch.arange(y0_int, y1_int, device=device).to(torch.float32) + 0.5
-    img_x = torch.arange(x0_int, x1_int, device=device).to(torch.float32) + 0.5
-    img_y = (img_y - y0) / (y1 - y0) * 2 - 1
-    img_x = (img_x - x0) / (x1 - x0) * 2 - 1
-    # img_x, img_y have shapes (N, w), (N, h)
-    # IsInf op is not supported with ONNX<=1.7.0
-    if not torch.onnx.is_in_onnx_export():
-        if torch.isinf(img_x).any():
-            inds = torch.where(torch.isinf(img_x))
-            img_x[inds] = 0
-        if torch.isinf(img_y).any():
-            inds = torch.where(torch.isinf(img_y))
-            img_y[inds] = 0
-
-    gx = img_x[:, None, :].expand(N, img_y.size(1), img_x.size(1))
-    gy = img_y[:, :, None].expand(N, img_y.size(1), img_x.size(1))
-    grid = torch.stack([gx, gy], dim=3)
-
-    img_masks = nn.functional.grid_sample(masks.to(dtype=torch.float32), grid, align_corners=False)
-
-    if skip_empty:
-        return img_masks[:, 0], (slice(y0_int, y1_int), slice(x0_int, x1_int))
-    else:
-        return img_masks[:, 0], ()
 
 
 # Copied from transformers.models.convnext.modeling_convnext.drop_path
@@ -2766,111 +2704,6 @@ class ConvNextMaskRCNNFCNMaskHead(nn.Module):
         loss["loss_mask"] = loss_mask
         return loss
 
-    def get_seg_masks(self, mask_pred, det_bboxes, det_labels, rcnn_test_cfg, ori_shape, scale_factor, rescale):
-        """Get segmentation masks from mask_pred and bboxes.
-        Args:
-            mask_pred (Tensor or ndarray): shape (n, #class, h, w).
-                For single-scale testing, mask_pred is the direct output of model, whose type is Tensor, while for
-                multi-scale testing, it will be converted to numpy array outside of this method.
-            det_bboxes (Tensor): shape (n, 4/5)
-            det_labels (Tensor): shape (n, )
-            rcnn_test_cfg (dict): rcnn testing config
-            ori_shape (Tuple): original image height and width, shape (2,)
-            scale_factor(ndarray | Tensor): If `rescale is True`, box
-                coordinates are divided by this scale factor to fit `ori_shape`.
-            rescale (bool): If True, the resulting masks will be rescaled to
-                `ori_shape`.
-        Returns:
-            list[list]: encoded masks. The c-th item in the outer list
-                corresponds to the c-th class. Given the c-th outer list, the i-th item in that inner list is the mask
-                for the i-th box with class label c.
-        Example:
-            >>> import mmcv >>> from mmdet.models.roi_heads.mask_heads.fcn_mask_head import * # NOQA >>> N = 7 # N =
-            number of extracted ROIs >>> C, H, W = 11, 32, 32 >>> # Create example instance of FCN Mask Head. >>> self
-            = FCNMaskHead(num_classes=C, num_convs=0) >>> inputs = torch.rand(N, self.in_channels, H, W) >>> mask_pred
-            = self.forward(inputs) >>> # Each input is associated with some bounding box >>> det_bboxes =
-            torch.Tensor([[1, 1, 42, 42 ]] * N) >>> det_labels = torch.randint(0, C, size=(N,)) >>> rcnn_test_cfg =
-            mmcv.Config({'mask_thr_binary': 0, }) >>> ori_shape = (H * 4, W * 4) >>> scale_factor =
-            torch.FloatTensor((1, 1)) >>> rescale = False >>> # Encoded masks are a list for each category. >>>
-            encoded_masks = self.get_seg_masks( >>> mask_pred, det_bboxes, det_labels, rcnn_test_cfg, ori_shape, >>>
-            scale_factor, rescale >>> ) >>> assert len(encoded_masks) == C >>> assert sum(list(map(len,
-            encoded_masks))) == N
-        """
-        if isinstance(mask_pred, torch.Tensor):
-            mask_pred = mask_pred.sigmoid()
-        else:
-            # In AugTest, has been activated before
-            mask_pred = det_bboxes.new_tensor(mask_pred)
-
-        device = mask_pred.device
-        cls_segms = [[] for _ in range(self.num_classes)]  # BG is not included in num_classes
-        bboxes = det_bboxes[:, :4]
-        labels = det_labels
-
-        # In most cases, scale_factor should have been
-        # converted to Tensor when rescale the bbox
-        if not isinstance(scale_factor, torch.Tensor):
-            if isinstance(scale_factor, float):
-                scale_factor = np.array([scale_factor] * 4)
-                # TODO: remove this deprecation
-                warnings.warn(
-                    "Scale_factor should be a Tensor or ndarray with shape (4,), float would be deprecated. "
-                )
-            assert isinstance(scale_factor, np.ndarray)
-            scale_factor = torch.Tensor(scale_factor)
-
-        if rescale:
-            img_h, img_w = ori_shape[-2:]
-            bboxes = bboxes / scale_factor.to(bboxes)
-        else:
-            ori_shape = ori_shape[-2:]
-            w_scale, h_scale = scale_factor[0], scale_factor[1]
-            img_h = np.round(ori_shape[0] * h_scale.item()).astype(np.int32)
-            img_w = np.round(ori_shape[1] * w_scale.item()).astype(np.int32)
-
-        N = len(mask_pred)
-        # The actual implementation split the input into chunks,
-        # and paste them chunk by chunk.
-        if device.type == "cpu":
-            # CPU is most efficient when they are pasted one by one with
-            # skip_empty=True, so that it performs minimal number of
-            # operations.
-            num_chunks = N
-        else:
-            # GPU benefits from parallelism for larger chunks,
-            # but may have memory issue
-            # the types of img_w and img_h are np.int32,
-            # when the image resolution is large,
-            # the calculation of num_chunks will overflow.
-            # so we need to change the types of img_w and img_h to int.
-            # See https://github.com/open-mmlab/mmdetection/pull/5191
-            num_chunks = int(np.ceil(N * int(img_h) * int(img_w) * BYTES_PER_FLOAT / GPU_MEM_LIMIT))
-            assert num_chunks <= N, "Default GPU_MEM_LIMIT is too small; try increasing it"
-        chunks = torch.chunk(torch.arange(N, device=device), num_chunks)
-
-        threshold = rcnn_test_cfg["mask_thr_binary"]
-        im_mask = torch.zeros(N, img_h, img_w, device=device, dtype=torch.bool if threshold >= 0 else torch.uint8)
-
-        if not self.class_agnostic:
-            mask_pred = mask_pred[range(N), labels][:, None]
-
-        for inds in chunks:
-            masks_chunk, spatial_inds = _do_paste_mask(
-                mask_pred[inds], bboxes[inds], img_h, img_w, skip_empty=device.type == "cpu"
-            )
-
-            if threshold >= 0:
-                masks_chunk = (masks_chunk >= threshold).to(dtype=torch.bool)
-            else:
-                # for visualization and debugging
-                masks_chunk = (masks_chunk * 255).to(dtype=torch.uint8)
-
-            im_mask[(inds,) + spatial_inds] = masks_chunk
-
-        for i in range(N):
-            cls_segms[labels[i]].append(im_mask[i].detach().cpu().numpy())
-        return cls_segms
-
 
 class ConvNextMaskRCNNRoIHead(nn.Module):
     """
@@ -3059,7 +2892,6 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             )
             scale_factors = np.array([scale_factors] * 4, dtype=np.float32)
 
-        # num_imgs = len(det_bboxes)
         # if all(det_bbox.shape[0] == 0 for det_bbox in det_bboxes):
         #     segm_results = [[[] for _ in range(self.mask_head.num_classes)] for _ in range(num_imgs)]
         # else:
