@@ -368,8 +368,10 @@ class WhisperTokenizer(PreTrainedTokenizer):
         update the prefix tokens as required when fine-tuning. Example:
 
         ```python
+        >>> # instantiate the tokenizer and set the prefix token to Spanish
         >>> tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny", language="spanish")
-        >>> tokenizer.set_prefix_tokens(language="french")  # update the language prefix token
+        >>> # now switch the prefix token from Spanish to French
+        >>> tokenizer.set_prefix_tokens(language="french")
         ```
 
         Args:
