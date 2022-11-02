@@ -23,13 +23,19 @@ logger = logging.get_logger(__name__)
 VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "uclanlp/visualbert-vqa": "https://huggingface.co/uclanlp/visualbert-vqa/resolve/main/config.json",
     "uclanlp/visualbert-vqa-pre": "https://huggingface.co/uclanlp/visualbert-vqa-pre/resolve/main/config.json",
-    "uclanlp/visualbert-vqa-coco-pre": "https://huggingface.co/uclanlp/visualbert-vqa-coco-pre/resolve/main/config.json",
+    "uclanlp/visualbert-vqa-coco-pre": (
+        "https://huggingface.co/uclanlp/visualbert-vqa-coco-pre/resolve/main/config.json"
+    ),
     "uclanlp/visualbert-vcr": "https://huggingface.co/uclanlp/visualbert-vcr/resolve/main/config.json",
     "uclanlp/visualbert-vcr-pre": "https://huggingface.co/uclanlp/visualbert-vcr-pre/resolve/main/config.json",
-    "uclanlp/visualbert-vcr-coco-pre": "https://huggingface.co/uclanlp/visualbert-vcr-coco-pre/resolve/main/config.json",
+    "uclanlp/visualbert-vcr-coco-pre": (
+        "https://huggingface.co/uclanlp/visualbert-vcr-coco-pre/resolve/main/config.json"
+    ),
     "uclanlp/visualbert-nlvr2": "https://huggingface.co/uclanlp/visualbert-nlvr2/resolve/main/config.json",
     "uclanlp/visualbert-nlvr2-pre": "https://huggingface.co/uclanlp/visualbert-nlvr2-pre/resolve/main/config.json",
-    "uclanlp/visualbert-nlvr2-coco-pre": "https://huggingface.co/uclanlp/visualbert-nlvr2-coco-pre/resolve/main/config.json"
+    "uclanlp/visualbert-nlvr2-coco-pre": (
+        "https://huggingface.co/uclanlp/visualbert-nlvr2-coco-pre/resolve/main/config.json"
+    )
     # See all VisualBERT models at https://huggingface.co/models?filter=visual_bert
 }
 
@@ -90,12 +96,12 @@ class VisualBertConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import VisualBertModel, VisualBertConfig
+    >>> from transformers import VisualBertConfig, VisualBertModel
 
     >>> # Initializing a VisualBERT visualbert-vqa-coco-pre style configuration
-    >>> configuration = VisualBertConfig.from_pretrained("visualbert-vqa-coco-pre")
+    >>> configuration = VisualBertConfig.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
 
-    >>> # Initializing a model from the visualbert-vqa-coco-pre style configuration
+    >>> # Initializing a model (with random weights) from the visualbert-vqa-coco-pre style configuration
     >>> model = VisualBertModel(configuration)
 
     >>> # Accessing the model configuration

@@ -18,26 +18,44 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_flax_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_torch_available
 
 
-_import_structure = {
-    "configuration_speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
-}
+_import_structure = {"configuration_speech_encoder_decoder": ["SpeechEncoderDecoderConfig"]}
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_speech_encoder_decoder"] = ["SpeechEncoderDecoderModel"]
 
-if is_flax_available():
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_flax_speech_encoder_decoder"] = ["FlaxSpeechEncoderDecoderModel"]
 
 if TYPE_CHECKING:
     from .configuration_speech_encoder_decoder import SpeechEncoderDecoderConfig
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_speech_encoder_decoder import SpeechEncoderDecoderModel
 
-    if is_flax_available():
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_flax_speech_encoder_decoder import FlaxSpeechEncoderDecoderModel
 
 else:

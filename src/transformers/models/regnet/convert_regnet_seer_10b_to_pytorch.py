@@ -163,9 +163,9 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     filename = "imagenet-1k-id2label.json"
     num_labels = 1000
 
-    repo_id = "datasets/huggingface/label-files"
+    repo_id = "huggingface/label-files"
     num_labels = num_labels
-    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
+    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename, repo_type="dataset")), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label
@@ -277,7 +277,10 @@ if __name__ == "__main__":
         "--model_name",
         default=None,
         type=str,
-        help="The name of the model you wish to convert, it must be one of the supported regnet* architecture, currently: regnetx-*, regnety-*. If `None`, all of them will the converted.",
+        help=(
+            "The name of the model you wish to convert, it must be one of the supported regnet* architecture,"
+            " currently: regnetx-*, regnety-*. If `None`, all of them will the converted."
+        ),
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",

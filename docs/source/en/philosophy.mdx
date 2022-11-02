@@ -14,29 +14,28 @@ specific language governing permissions and limitations under the License.
 
 🤗 Transformers is an opinionated library built for:
 
-- NLP researchers and educators seeking to use/study/extend large-scale transformers models
-- hands-on practitioners who want to fine-tune those models and/or serve them in production
-- engineers who just want to download a pretrained model and use it to solve a given NLP task.
+- machine learning researchers and educators seeking to use, study or extend large-scale Transformers models.
+- hands-on practitioners who want to fine-tune those models or serve them in production, or both.
+- engineers who just want to download a pretrained model and use it to solve a given machine learning task.
 
 The library was designed with two strong goals in mind:
 
-- Be as easy and fast to use as possible:
+1. Be as easy and fast to use as possible:
 
   - We strongly limited the number of user-facing abstractions to learn, in fact, there are almost no abstractions,
     just three standard classes required to use each model: [configuration](main_classes/configuration),
-    [models](main_classes/model) and [tokenizer](main_classes/tokenizer).
+    [models](main_classes/model), and a preprocessing class ([tokenizer](main_classes/tokenizer) for NLP, [feature extractor](main_classes/feature_extractor) for vision and audio, and [processor](main_classes/processors) for multimodal inputs).
   - All of these classes can be initialized in a simple and unified way from pretrained instances by using a common
-    `from_pretrained()` instantiation method which will take care of downloading (if needed), caching and
-    loading the related class instance and associated data (configurations' hyper-parameters, tokenizers' vocabulary,
+    `from_pretrained()` method which downloads (if needed), caches and
+    loads the related class instance and associated data (configurations' hyperparameters, tokenizers' vocabulary,
     and models' weights) from a pretrained checkpoint provided on [Hugging Face Hub](https://huggingface.co/models) or your own saved checkpoint.
   - On top of those three base classes, the library provides two APIs: [`pipeline`] for quickly
-    using a model (plus its associated tokenizer and configuration) on a given task and
-    [`Trainer`]/`Keras.fit` to quickly train or fine-tune a given model.
+    using a model for inference on a given task and [`Trainer`] to quickly train or fine-tune a PyTorch model (all TensorFlow models are compatible with `Keras.fit`).
   - As a consequence, this library is NOT a modular toolbox of building blocks for neural nets. If you want to
-    extend/build-upon the library, just use regular Python/PyTorch/TensorFlow/Keras modules and inherit from the base
-    classes of the library to reuse functionalities like model loading/saving.
+    extend or build upon the library, just use regular Python, PyTorch, TensorFlow, Keras modules and inherit from the base
+    classes of the library to reuse functionalities like model loading and saving. If you'd like to learn more about our coding philosophy for models, check out our [Repeat Yourself](https://huggingface.co/blog/transformers-design-philosophy) blog post.
 
-- Provide state-of-the-art models with performances as close as possible to the original models:
+2. Provide state-of-the-art models with performances as close as possible to the original models:
 
   - We provide at least one example for each architecture which reproduces a result provided by the official authors
     of said architecture.
@@ -48,33 +47,29 @@ A few other goals:
 - Expose the models' internals as consistently as possible:
 
   - We give access, using a single API, to the full hidden-states and attention weights.
-  - Tokenizer and base model's API are standardized to easily switch between models.
+  - The preprocessing classes and base model APIs are standardized to easily switch between models.
 
-- Incorporate a subjective selection of promising tools for fine-tuning/investigating these models:
+- Incorporate a subjective selection of promising tools for fine-tuning and investigating these models:
 
-  - A simple/consistent way to add new tokens to the vocabulary and embeddings for fine-tuning.
-  - Simple ways to mask and prune transformer heads.
+  - A simple and consistent way to add new tokens to the vocabulary and embeddings for fine-tuning.
+  - Simple ways to mask and prune Transformer heads.
 
-- Switch easily between PyTorch and TensorFlow 2.0, allowing training using one framework and inference using another.
+- Easily switch between PyTorch, TensorFlow 2.0 and Flax, allowing training with one framework and inference with another.
 
 ## Main concepts
 
 The library is built around three types of classes for each model:
 
-- **Model classes** such as [`BertModel`], which are 30+ PyTorch models ([torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)) or Keras models ([tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)) that work with the pretrained weights provided in the
-  library.
-- **Configuration classes** such as [`BertConfig`], which store all the parameters required to build
-  a model. You don't always need to instantiate these yourself. In particular, if you are using a pretrained model
-  without any modification, creating the model will automatically take care of instantiating the configuration (which
-  is part of the model).
-- **Tokenizer classes** such as [`BertTokenizer`], which store the vocabulary for each model and
-  provide methods for encoding/decoding strings in a list of token embeddings indices to be fed to a model.
+- **Model classes** can be PyTorch models ([torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)), Keras models ([tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)) or JAX/Flax models ([flax.linen.Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html)) that work with the pretrained weights provided in the library.
+- **Configuration classes** store the hyperparameters required to build a model (such as the number of layers and hidden size). You don't always need to instantiate these yourself. In particular, if you are using a pretrained model without any modification, creating the model will automatically take care of instantiating the configuration (which is part of the model).
+- **Preprocessing classes** convert the raw data into a format accepted by the model. A [tokenizer](main_classes/tokenizer) stores the vocabulary for each model and provide methods for encoding and decoding strings in a list of token embedding indices to be fed to a model. [Feature extractors](main_classes/feature_extractor) preprocess audio or vision inputs, and a [processor](main_classes/processors) handles multimodal inputs.
 
-All these classes can be instantiated from pretrained instances and saved locally using two methods:
+All these classes can be instantiated from pretrained instances, saved locally, and shared on the Hub with three methods:
 
-- `from_pretrained()` lets you instantiate a model/configuration/tokenizer from a pretrained version either
+- `from_pretrained()` lets you instantiate a model, configuration, and preprocessing class from a pretrained version either
   provided by the library itself (the supported models can be found on the [Model Hub](https://huggingface.co/models)) or
-  stored locally (or on a server) by the user,
-- `save_pretrained()` lets you save a model/configuration/tokenizer locally so that it can be reloaded using
+  stored locally (or on a server) by the user.
+- `save_pretrained()` lets you save a model, configuration, and preprocessing class locally so that it can be reloaded using
   `from_pretrained()`.
+- `push_to_hub()` lets you share a model, configuration, and a preprocessing class to the Hub, so it is easily accessible to everyone.
 

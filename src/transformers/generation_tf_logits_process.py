@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import inspect
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -38,7 +38,10 @@ TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
             [What are input IDs?](../glossary#input-ids)
         scores (`tf.Tensor` of shape `(batch_size, config.vocab_size)`):
             Prediction scores of a language modeling head. These can be logits for each vocabulary when not using beam
-            search or log softmax for each vocabulary token when using beam search
+            search or log softmax for each vocabulary token when using beam search.
+        cur_len (`int`):
+            The current length of valid input sequence tokens. In the TF implementation, the input_ids' sequence length
+            is the maximum length generate can produce, and we need to know which of its tokens are valid.
         kwargs:
             Additional logits processor specific kwargs.
 
@@ -51,7 +54,7 @@ class TFLogitsProcessor:
     """Abstract base class for all logit processors that can be applied during generation."""
 
     @add_start_docstrings(TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         """TF method for processing logits."""
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
@@ -62,7 +65,7 @@ class TFLogitsWarper:
     """Abstract base class for all logit warpers that can be applied during generation with multinomial sampling."""
 
     @add_start_docstrings(TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         """TF method for warping logits."""
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
@@ -77,18 +80,18 @@ class TFLogitsProcessorList(list):
     """
 
     @add_start_docstrings(TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, **kwargs) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int, **kwargs) -> tf.Tensor:
         for processor in self:
             function_args = inspect.signature(processor.__call__).parameters
-            if len(function_args) > 2:
+            if len(function_args) > 3:
                 if not all(arg in kwargs for arg in list(function_args.keys())[2:]):
                     raise ValueError(
                         f"Make sure that all the required parameters: {list(function_args.keys())} for "
                         f"{processor.__class__} are passed to the logits processor."
                     )
-                scores = processor(input_ids, scores, **kwargs)
+                scores = processor(input_ids, scores, cur_len, **kwargs)
             else:
-                scores = processor(input_ids, scores)
+                scores = processor(input_ids, scores, cur_len)
         return scores
 
 
@@ -107,7 +110,7 @@ class TFTemperatureLogitsWarper(TFLogitsWarper):
 
         self.temperature = temperature
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         scores = scores / self.temperature
         return scores
 
@@ -133,7 +136,7 @@ class TFTopKLogitsWarper(TFLogitsWarper):
         self.filter_value = filter_value
         self.min_tokens_to_keep = min_tokens_to_keep
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         top_k = min(max(self.top_k, self.min_tokens_to_keep), scores.shape[-1])  # Safety check
         # Boolean mask containing all tokens with a probability less than the last token of the top-k
         indices_to_remove = scores < tf.math.top_k(scores, k=top_k)[0][..., -1:]
@@ -147,8 +150,8 @@ class TFTopPLogitsWarper(TFLogitsWarper):
 
     Args:
         top_p (`float`):
-            If set to < 1, only the most probable tokens with probabilities that add up to `top_p` or higher are kept
-            for generation.
+            If set to < 1, only the smallest set of most probable tokens with probabilities that add up to `top_p` or
+            higher are kept for generation.
         filter_value (`float`, *optional*, defaults to `-float("Inf")`):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
@@ -163,7 +166,7 @@ class TFTopPLogitsWarper(TFLogitsWarper):
         self.filter_value = filter_value
         self.min_tokens_to_keep = min_tokens_to_keep
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor) -> tf.Tensor:
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         topk_scores, topk_indices = tf.math.top_k(scores, scores.shape[-1])
 
         mask_scores = tf.fill(scores.shape, self.filter_value)
@@ -259,9 +262,11 @@ class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
 
         # Scatters the penalties
         token_penalties = tf.ones(logits.shape)
+        batch_size = input_ids.shape[0]
+        seq_len = tf.shape(input_ids)[1]  # the sequence length has dynamic size, hence the dynamic shape
         indexable_prev_input_ids = tf.concat(
             (
-                tf.expand_dims(tf.repeat(tf.range(input_ids.shape[0]), input_ids.shape[1]), axis=-1),
+                tf.expand_dims(tf.repeat(tf.range(batch_size), seq_len), axis=-1),
                 tf.expand_dims(tf.reshape(input_ids, [-1]), axis=-1),
             ),
             axis=1,
@@ -294,7 +299,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
     def __init__(self, bad_words_ids: List[List[int]], eos_token_id: int):
 
         if not isinstance(bad_words_ids, List) or len(bad_words_ids) == 0:
-            raise ValueError(f"`bad_words_ids` has to be a non-emtpy list, but is {bad_words_ids}.")
+            raise ValueError(f"`bad_words_ids` has to be a non-empty list, but is {bad_words_ids}.")
         if any(not isinstance(bad_word_ids, list) for bad_word_ids in bad_words_ids):
             raise ValueError(f"`bad_words_ids` has to be a list of lists, but is {bad_words_ids}.")
         if any(
@@ -305,58 +310,75 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
                 f"Each list in `bad_words_ids` has to be a list of positive integers, but is {bad_words_ids}."
             )
 
-        self.bad_words_ids = bad_words_ids
+        # stores the information about bad words in three tensors:
+        # 1. a rectangular tensor with the forbidden sequences (padded with `-1`), for full data comparisons
+        self.bad_word_seqs_ids = tf.ragged.constant(bad_words_ids).to_tensor(default_value=-1)
+        # 2. a tensor with the unpadded length of each forbidden sequence, for quick length comparisons
+        bad_word_seqs_len = [len(bad_words) for bad_words in bad_words_ids]
+        if any([word_len == 0 for word_len in bad_word_seqs_len]):
+            raise ValueError(f"Banned words token sequences {bad_words_ids} cannot have an empty list")
+        self.bad_word_seqs_len = tf.convert_to_tensor(bad_word_seqs_len, dtype=tf.int32)
+        # 3. a tensor containing the last token for each sequence, for easy access to the tokens that may be banned
+        self.seq_forbidden_tokens = tf.convert_to_tensor([bad_words[-1] for bad_words in bad_words_ids])
 
-    def calc_banned_bad_words_ids(self, prev_input_ids):
-        banned_tokens = []
+    def _calc_row_banned_bad_tokens(self, row_input_ids: tf.Tensor) -> tf.Tensor:
+        def _tokens_match(bad_word_seq_number):
+            def _len_one():
+                # If the bad sequence only has one token, always mask it
+                return tf.cond(
+                    tf.math.equal(self.bad_word_seqs_len[bad_word_seq_number], 1),
+                    lambda: tf.ones((), dtype=tf.bool),
+                    _len_greater_than_cur_len,
+                )
 
-        def _tokens_match(prev_tokens, tokens):
-            if len(tokens) == 0:
-                # if bad word tokens is just one token always ban it
-                return True
-            if len(tokens) > len(prev_tokens):
-                # if bad word tokens are longer than prev tokens they can't be equal
-                return False
+            def _len_greater_than_cur_len():
+                # Otherwise, if the bad sequence is longer than the current length they can't ever match
+                return tf.cond(
+                    tf.math.greater(self.bad_word_seqs_len[bad_word_seq_number], tf.shape(row_input_ids)[0]),
+                    lambda: tf.zeros((), dtype=tf.bool),
+                    _match_found,
+                )
 
-            if prev_tokens[-len(tokens) :] == tokens:
-                # if tokens match
-                return True
-            else:
-                return False
+            def _match_found():
+                # Finaly, runs the actual comparison. Can only be called if the previous comparisons do not yield
+                # an answer (otherwise we get indexing exceptions)
+                compare_len = self.bad_word_seqs_len[bad_word_seq_number] - 1
+                return tf.cond(
+                    tf.math.reduce_all(
+                        tf.math.equal(
+                            row_input_ids[-compare_len:], self.bad_word_seqs_ids[bad_word_seq_number, :compare_len]
+                        )
+                    ),
+                    lambda: tf.ones((), dtype=tf.bool),
+                    lambda: tf.zeros((), dtype=tf.bool),
+                )
 
-        for prev_input_ids_slice in prev_input_ids:
-            banned_tokens_slice = []
+            match = _len_one()
+            return match
 
-            for banned_token_seq in self.bad_words_ids:
-                assert (
-                    len(banned_token_seq) > 0
-                ), f"Banned words token sequences {self.bad_words_ids} cannot have an empty list"
-
-                if _tokens_match(prev_input_ids_slice.numpy().tolist(), banned_token_seq[:-1]) is False:
-                    # if tokens do not match continue
-                    continue
-
-                banned_tokens_slice.append(banned_token_seq[-1])
-
-            banned_tokens.append(banned_tokens_slice)
-
-        return banned_tokens
+        # Compares the current row against all bad word sequences, obtaining a mask with the matches.
+        match_mask = tf.map_fn(_tokens_match, tf.range(self.bad_word_seqs_ids.shape[0]), fn_output_signature=tf.bool)
+        row_banned_tokens = self.seq_forbidden_tokens[match_mask]
+        return row_banned_tokens
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
-
-        vocab_size = scores.shape[-1]
-
-        # calculate a list of banned tokens according to bad words
-        banned_tokens = self.calc_banned_bad_words_ids(input_ids[:, :cur_len])
-
-        banned_tokens_indices_mask = []
-        for banned_tokens_slice in banned_tokens:
-            banned_tokens_indices_mask.append(
-                [True if token in banned_tokens_slice else False for token in range(vocab_size)]
+        # We want to mask some banned tokens, at a score level. Since the banned tokens depend on the previous
+        # `input_ids`, they may have a different length for each row, and they may even be empty for some rows.
+        # To remain simple and XLA-compatible, we work on a per-row fashion.
+        # TODO (Joao): this function might trigger XLA retracing as `cur_len` increases. Fix it if it becomes
+        # a frequent choke point. (make `cur_len` a tensor?)
+        def _get_row_updated_score(row_inputs: Tuple[tf.Tensor]) -> tf.Tensor:
+            row_input_ids, row_score = row_inputs
+            banned_tokens = self._calc_row_banned_bad_tokens(row_input_ids[:cur_len])
+            banned_tokens_mask = tf.scatter_nd(
+                indices=tf.expand_dims(banned_tokens, axis=-1),
+                updates=tf.ones_like(banned_tokens, dtype=tf.bool),
+                shape=row_score.shape,
             )
+            row_score = tf.where(banned_tokens_mask, -float("inf"), row_score)
+            return row_score
 
-        scores = tf.where(tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores)
-
+        scores = tf.map_fn(_get_row_updated_score, (input_ids, scores), fn_output_signature=tf.float32)
         return scores
 
 
@@ -400,6 +422,11 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
         return banned_tokens
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+
+        # TODO (joao): enable XLA on this logits processor. See discussion and attempts in
+        # https://github.com/huggingface/transformers/pull/16974
+        if not tf.executing_eagerly():
+            raise NotImplementedError("TFNoRepeatNGramLogitsProcessor is only implemented for eager execution.")
 
         batch_size, vocab_size = scores.shape
         banned_tokens = self.calc_banned_ngram_tokens(input_ids, batch_size, cur_len)
@@ -476,4 +503,86 @@ class TFForcedEOSTokenLogitsProcessor(TFLogitsProcessor):
                     (scores, tf.broadcast_to(-float("inf"), (batch_size, (num_tokens - 1) - self.eos_token_id))),
                     axis=-1,
                 )
+        return scores
+
+
+class TFSuppressTokensAtBeginLogitsProcessor(TFLogitsProcessor):
+    r"""
+    [`TFSuppressTokensAtBeginLogitsProcessor`] suppresses a list of tokens as soon as the `generate` function starts
+    generating using `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` at not
+    sampled at the begining of the generation.
+    """
+
+    def __init__(self, begin_suppress_tokens, begin_index):
+        self.begin_suppress_tokens = list(begin_suppress_tokens)
+        self.begin_index = begin_index
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        scores = tf.cond(
+            tf.equal(cur_len, self.begin_index),
+            lambda: tf.tensor_scatter_nd_update(
+                scores,
+                indices=[[i, token] for i in range(scores.shape[0]) for token in self.begin_suppress_tokens],
+                updates=[-float("inf") for _ in range(scores.shape[0] * len(self.begin_suppress_tokens))],
+            ),
+            lambda: scores,
+        )
+        return scores
+
+
+class TFSuppressTokensLogitsProcessor(TFLogitsProcessor):
+    r"""This processor can be used to suppress a list of tokens. The processor will set their log probs to `-inf` so that they
+    are not sampled."""
+
+    def __init__(self, suppress_tokens):
+        self.suppress_tokens = list(suppress_tokens)
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        scores = tf.tensor_scatter_nd_update(
+            scores,
+            indices=[[i, token] for i in range(scores.shape[0]) for token in self.suppress_tokens],
+            updates=[-float("inf") for _ in range(scores.shape[0] * len(self.suppress_tokens))],
+        )
+        return scores
+
+
+class TFForceTokensLogitsProcessor(TFLogitsProcessor):
+    r"""This processor takes a list of pairs of integers which indicates a mapping from generation indices to token
+    indices that will be forced before sampling. The processor will set their log probs to `0` and all other tokens to
+    `-inf` so that they are sampled at their corresponding index."""
+
+    def __init__(self, force_token_map: List[List[int]]):
+        force_token_map = dict(force_token_map)
+        # Converts the dictionary of format {index: token} containing the tokens to be forced to an array, where the
+        # index of the array corresponds to the index of the token to be forced, for XLA compatibility.
+        # Indexes without forced tokens will have an negative value.
+        force_token_array = np.ones((max(force_token_map.keys()) + 1), dtype=np.int32) * -1
+        for index, token in force_token_map.items():
+            force_token_array[index] = token
+        self.force_token_array = tf.convert_to_tensor(force_token_array, dtype=tf.int32)
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        def _force_token(generation_idx):
+            batch_size = scores.shape[0]
+            current_token = self.force_token_array[generation_idx]
+
+            new_scores = tf.ones_like(scores, dtype=scores.dtype) * -float("inf")
+            indices = tf.stack((tf.range(batch_size), tf.tile([current_token], [batch_size])), axis=1)
+            updates = tf.zeros((batch_size,), dtype=scores.dtype)
+            new_scores = tf.tensor_scatter_nd_update(new_scores, indices, updates)
+            return new_scores
+
+        scores = tf.cond(
+            tf.greater_equal(cur_len, tf.shape(self.force_token_array)[0]),
+            # If the current length is geq than the length of force_token_array, the processor does nothing.
+            lambda: tf.identity(scores),
+            # Otherwise, it may force a certain token.
+            lambda: tf.cond(
+                tf.greater_equal(self.force_token_array[cur_len], 0),
+                # Only valid (positive) tokens are forced
+                lambda: _force_token(cur_len),
+                # Otherwise, the processor does nothing.
+                lambda: scores,
+            ),
+        )
         return scores

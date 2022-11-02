@@ -167,7 +167,7 @@ def sort_imports(file, check_only=True):
     """
     Sort `_import_structure` imports in `file`, `check_only` determines if we only check or overwrite.
     """
-    with open(file, "r") as f:
+    with open(file, encoding="utf-8") as f:
         code = f.read()
 
     if "_import_structure" not in code:
@@ -227,7 +227,7 @@ def sort_imports(file, check_only=True):
             return True
         else:
             print(f"Overwriting {file}.")
-            with open(file, "w") as f:
+            with open(file, "w", encoding="utf-8") as f:
                 f.write("\n".join(main_blocks))
 
 

@@ -25,12 +25,20 @@ logger = logging.get_logger(__name__)
 
 DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "distilbert-base-uncased": "https://huggingface.co/distilbert-base-uncased/resolve/main/config.json",
-    "distilbert-base-uncased-distilled-squad": "https://huggingface.co/distilbert-base-uncased-distilled-squad/resolve/main/config.json",
+    "distilbert-base-uncased-distilled-squad": (
+        "https://huggingface.co/distilbert-base-uncased-distilled-squad/resolve/main/config.json"
+    ),
     "distilbert-base-cased": "https://huggingface.co/distilbert-base-cased/resolve/main/config.json",
-    "distilbert-base-cased-distilled-squad": "https://huggingface.co/distilbert-base-cased-distilled-squad/resolve/main/config.json",
+    "distilbert-base-cased-distilled-squad": (
+        "https://huggingface.co/distilbert-base-cased-distilled-squad/resolve/main/config.json"
+    ),
     "distilbert-base-german-cased": "https://huggingface.co/distilbert-base-german-cased/resolve/main/config.json",
-    "distilbert-base-multilingual-cased": "https://huggingface.co/distilbert-base-multilingual-cased/resolve/main/config.json",
-    "distilbert-base-uncased-finetuned-sst-2-english": "https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/config.json",
+    "distilbert-base-multilingual-cased": (
+        "https://huggingface.co/distilbert-base-multilingual-cased/resolve/main/config.json"
+    ),
+    "distilbert-base-uncased-finetuned-sst-2-english": (
+        "https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/config.json"
+    ),
 }
 
 
@@ -79,12 +87,12 @@ class DistilBertConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import DistilBertModel, DistilBertConfig
+    >>> from transformers import DistilBertConfig, DistilBertModel
 
     >>> # Initializing a DistilBERT configuration
     >>> configuration = DistilBertConfig()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = DistilBertModel(configuration)
 
     >>> # Accessing the model configuration

@@ -44,7 +44,7 @@ specific language governing permissions and limitations under the License.
 Every model is different yet bears similarities with the others. Therefore most models use the same inputs, which are
 detailed here alongside usage examples.
 
-<a id='input-ids'></a>
+
 
 ### Input IDs
 
@@ -113,7 +113,7 @@ we will see
 
 because this is the way a [`BertModel`] is going to expect its inputs.
 
-<a id='attention-mask'></a>
+
 
 ### Attention mask
 
@@ -171,7 +171,7 @@ in the dictionary returned by the tokenizer under the key "attention_mask":
 [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]
 ```
 
-<a id='token-type-ids'></a>
+
 
 ### Token Type IDs
 
@@ -224,7 +224,7 @@ second sequence, corresponding to the "question", has all its tokens represented
 
 Some models, like [`XLNetModel`] use an additional token represented by a `2`.
 
-<a id='position-ids'></a>
+
 
 ### Position IDs
 
@@ -238,7 +238,7 @@ absolute positional embeddings.
 Absolute positional embeddings are selected in the range `[0, config.max_position_embeddings - 1]`. Some models use
 other types of positional embeddings, such as sinusoidal position embeddings or relative position embeddings.
 
-<a id='labels'></a>
+
 
 ### Labels
 
@@ -266,7 +266,7 @@ These labels are different according to the model head, for example:
 The base models (e.g., [`BertModel`]) do not accept labels, as these are the base transformer
 models, simply outputting features.
 
-<a id='decoder-input-ids'></a>
+
 
 ### Decoder input IDs
 
@@ -279,7 +279,6 @@ such models, passing the `labels` is the preferred way to handle training.
 
 Please check each model's docs to see how they handle these input IDs for sequence to sequence training.
 
-<a id='feed-forward-chunking'></a>
 
 ### Feed Forward Chunking
 

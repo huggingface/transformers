@@ -138,7 +138,7 @@ class FillMaskPipeline(Pipeline):
                 # For multi masks though, the other [MASK] would be removed otherwise
                 # making the output look odd, so we add them back
                 sequence = self.tokenizer.decode(tokens, skip_special_tokens=single_mask)
-                proposition = {"score": v, "token": p, "token_str": self.tokenizer.decode(p), "sequence": sequence}
+                proposition = {"score": v, "token": p, "token_str": self.tokenizer.decode([p]), "sequence": sequence}
                 row.append(proposition)
             result.append(row)
         if single_mask:
@@ -167,7 +167,7 @@ class FillMaskPipeline(Pipeline):
                 if len(input_ids) == 0:
                     logger.warning(
                         f"The specified target token `{target}` does not exist in the model vocabulary. "
-                        f"We cannot replace it with anything meaningful, ignoring it"
+                        "We cannot replace it with anything meaningful, ignoring it"
                     )
                     continue
                 id_ = input_ids[0]

@@ -150,7 +150,7 @@ class QuantAct(nn.Module):
     def __repr__(self):
         return (
             f"{self.__class__.__name__}(activation_bit={self.activation_bit}, "
-            f"quant_mode: {self.activation_bit}, Act_min: {self.x_min.item():.2f}, "
+            f"quant_mode: {self.quant_mode}, Act_min: {self.x_min.item():.2f}, "
             f"Act_max: {self.x_max.item():.2f})"
         )
 

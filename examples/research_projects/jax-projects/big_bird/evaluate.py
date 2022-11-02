@@ -106,7 +106,7 @@ def main():
         return start_logits, end_logits, jnp.argmax(pooled_logits, axis=-1)
 
     def evaluate(example):
-        # encode question and context so that they are seperated by a tokenizer.sep_token and cut at max_length
+        # encode question and context so that they are separated by a tokenizer.sep_token and cut at max_length
         inputs = tokenizer(
             example["question"],
             example["context"],

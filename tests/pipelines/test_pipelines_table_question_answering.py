@@ -23,7 +23,6 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import (
-    is_pipeline_test,
     require_pandas,
     require_tensorflow_probability,
     require_tf,
@@ -35,7 +34,6 @@ from transformers.testing_utils import (
 from .test_pipelines_common import PipelineTestCaseMeta
 
 
-@is_pipeline_test
 class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     # Putting it there for consistency, but TQA do not have fast tokenizer
     # which are needed to generate automatic tests
@@ -92,7 +90,8 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             },
             query=[
                 "What repository has the largest number of stars?",
-                "Given that the numbers of stars defines if a repository is active, what repository is the most active?",
+                "Given that the numbers of stars defines if a repository is active, what repository is the most"
+                " active?",
                 "What is the number of repositories?",
                 "What is the average number of stars?",
                 "What is the total amount of stars?",
@@ -194,7 +193,8 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             },
             query=[
                 "What repository has the largest number of stars?",
-                "Given that the numbers of stars defines if a repository is active, what repository is the most active?",
+                "Given that the numbers of stars defines if a repository is active, what repository is the most"
+                " active?",
                 "What is the number of repositories?",
                 "What is the average number of stars?",
                 "What is the total amount of stars?",
@@ -313,7 +313,8 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             },
             query=[
                 "What repository has the largest number of stars?",
-                "Given that the numbers of stars defines if a repository is active, what repository is the most active?",
+                "Given that the numbers of stars defines if a repository is active, what repository is the most"
+                " active?",
                 "What is the number of repositories?",
                 "What is the average number of stars?",
                 "What is the total amount of stars?",
@@ -434,7 +435,8 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             },
             query=[
                 "What repository has the largest number of stars?",
-                "Given that the numbers of stars defines if a repository is active, what repository is the most active?",
+                "Given that the numbers of stars defines if a repository is active, what repository is the most"
+                " active?",
                 "What is the number of repositories?",
                 "What is the average number of stars?",
                 "What is the total amount of stars?",

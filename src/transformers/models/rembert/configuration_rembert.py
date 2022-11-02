@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "rembert": "https://huggingface.co/google/rembert/resolve/main/config.json",
+    "google/rembert": "https://huggingface.co/google/rembert/resolve/main/config.json",
     # See all RemBERT models at https://huggingface.co/models?filter=rembert
 }
 
@@ -80,16 +80,17 @@ class RemBertConfig(PretrainedConfig):
     Example:
 
     ```python
+    >>> from transformers import RemBertModel, RemBertConfig
 
-    ```
+    >>> # Initializing a RemBERT rembert style configuration
+    >>> configuration = RemBertConfig()
 
-        >>> from transformers import RemBertModel, RemBertConfig >>> # Initializing a RemBERT rembert style
-        configuration >>> configuration = RemBertConfig()
+    >>> # Initializing a model from the rembert style configuration
+    >>> model = RemBertModel(configuration)
 
-        >>> # Initializing a model from the rembert style configuration >>> model = RemBertModel(configuration)
-
-        >>> # Accessing the model configuration >>> configuration = model.config
-    """
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
     model_type = "rembert"
 
     def __init__(

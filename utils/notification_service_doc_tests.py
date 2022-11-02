@@ -118,7 +118,10 @@ class Message:
             "type": "section",
             "text": {
                 "type": "plain_text",
-                "text": f"There were {self.n_failures} failures, out of {self.n_tests} tests.\nThe suite ran in {self.time}.",
+                "text": (
+                    f"There were {self.n_failures} failures, out of {self.n_tests} tests.\nThe suite ran in"
+                    f" {self.time}."
+                ),
                 "emoji": True,
             },
             "accessory": {
@@ -164,7 +167,7 @@ class Message:
         if self.n_failures > 0:
             blocks.extend([self.category_failures])
 
-        if self.no_failures == 0:
+        if self.n_failures == 0:
             blocks.append(self.no_failures)
 
         return json.dumps(blocks)
@@ -286,7 +289,7 @@ def retrieve_artifact(name: str):
         files = os.listdir(name)
         for file in files:
             try:
-                with open(os.path.join(name, file)) as f:
+                with open(os.path.join(name, file), encoding="utf-8") as f:
                     _artifact[file.split(".")[0]] = f.read()
             except UnicodeDecodeError as e:
                 raise ValueError(f"Could not open {os.path.join(name, file)}.") from e

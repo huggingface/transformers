@@ -20,7 +20,7 @@ import json
 import math
 import os
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -81,12 +81,14 @@ def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
     # Check that the token and position embeddings weight dimensions map those of the init parameters.
     if model.tokens_embed.weight.shape != init_params[1].shape:
         raise ValueError(
-            f"tokens_embed.weight.shape: {model.tokens_embed.weight.shape} does not match init_param[1].shape: {init_params[1].shape}"
+            f"tokens_embed.weight.shape: {model.tokens_embed.weight.shape} does not match init_param[1].shape:"
+            f" {init_params[1].shape}"
         )
 
     if model.positions_embed.weight.shape != init_params[0].shape:
         raise ValueError(
-            f"positions_embed.weight.shape: {model.positions_embed.weight.shape} does not match init_param[0].shape: {init_params[0].shape}"
+            f"positions_embed.weight.shape: {model.positions_embed.weight.shape} does not match init_param[0].shape:"
+            f" {init_params[0].shape}"
         )
 
     model.tokens_embed.weight.data = torch.from_numpy(init_params[1])
@@ -473,11 +475,11 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
-            # positions we want to attend and -10000.0 for masked positions.
+            # positions we want to attend and the dtype's smallest value for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
             attention_mask = attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * -10000.0
+            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.n_layer)
@@ -605,6 +607,9 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
+    def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, **kwargs) -> Dict[str, Any]:
+        return {"input_ids": input_ids}
+
 
 @add_start_docstrings(
     """
@@ -674,7 +679,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         >>> model = OpenAIGPTDoubleHeadsModel.from_pretrained("openai-gpt")
         >>> tokenizer.add_special_tokens(
         ...     {"cls_token": "[CLS]"}
-        >>> )  # Add a [CLS] to the vocabulary (we should train it also!)
+        ... )  # Add a [CLS] to the vocabulary (we should train it also!)
         >>> model.resize_token_embeddings(len(tokenizer))
 
         >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
@@ -812,7 +817,7 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
                 sequence_lengths = -1
                 logger.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
 
         pooled_logits = logits[range(batch_size), sequence_lengths]

@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import inspect
 from collections import defaultdict
 from typing import TYPE_CHECKING, Dict, Optional, Union
 
@@ -168,7 +169,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 pronounced after `0.5` and before `0.6` seconds. If set to `"word"`, the pipeline will return
                 `timestamps` along the text for every word in the text. For instance if you get `[{"text": "hi ",
                 "timestamps": (0.5,0.9), {"text": "there", "timestamps": (1.0, .1.5)}]`, then it means the model
-                predicts that the word "hi" was pronounces before 0.5 and after 0.9 seconds.
+                predicts that the word "hi" was pronounced after `0.5` and before `0.9` seconds.
 
         Return:
             `Dict`: A dictionary with the following keys:
@@ -249,6 +250,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
 
         if chunk_length_s:
+            if self.type not in {"ctc", "ctc_with_lm"}:
+                raise ValueError(
+                    "`chunk_length_s` is only valid for CTC models, use other chunking options for other models"
+                )
             if stride_length_s is None:
                 stride_length_s = chunk_length_s / 6
 
@@ -259,14 +264,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             # Currently chunking is not possible at this level for `seq2seq` so
             # it's ok.
             align_to = self.model.config.inputs_to_logits_ratio
-            chunk_len = int(round(chunk_length_s * self.feature_extractor.sampling_rate / align_to)) * align_to
-            stride_left = int(round(stride_length_s[0] * self.feature_extractor.sampling_rate / align_to)) * align_to
-            stride_right = int(round(stride_length_s[1] * self.feature_extractor.sampling_rate / align_to)) * align_to
+            chunk_len = int(round(chunk_length_s * self.feature_extractor.sampling_rate / align_to) * align_to)
+            stride_left = int(round(stride_length_s[0] * self.feature_extractor.sampling_rate / align_to) * align_to)
+            stride_right = int(round(stride_length_s[1] * self.feature_extractor.sampling_rate / align_to) * align_to)
 
-            if self.type not in {"ctc", "ctc_with_lm"}:
-                raise ValueError(
-                    "`chunk_length_s` is only valid for CTC models, use other chunking options for other models"
-                )
             if chunk_len < stride_left + stride_right:
                 raise ValueError("Chunk length must be superior to stride length")
 
@@ -304,12 +305,18 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     f"`input_features` or `input_values` key, but only has {model_inputs.keys()}"
                 )
 
-            attention_mask = model_inputs.pop("attention_mask", None)
-            tokens = self.model.generate(
-                encoder_outputs=encoder(inputs, attention_mask=attention_mask),
-                attention_mask=attention_mask,
-            )
+            accepts_attention_mask = "attention_mask" in set(inspect.signature(encoder.forward).parameters.keys())
+            if accepts_attention_mask:
+                attention_mask = model_inputs.pop("attention_mask", None)
+                tokens = self.model.generate(
+                    encoder_outputs=encoder(inputs, attention_mask=attention_mask),
+                    attention_mask=attention_mask,
+                )
+            else:
+                tokens = self.model.generate(inputs)
+
             out = {"tokens": tokens}
+
         else:
             stride = model_inputs.pop("stride", None)
             input_values = model_inputs.pop("input_values")

@@ -108,7 +108,10 @@ def run_generate(verbose=True):
         nargs="?",
         type=str,
         const=datetime_now(),
-        help="use in conjunction w/ --dump-args to print with the results whatever other info you'd like, e.g. lang=en-ru. If no value is passed, the current datetime string will be used.",
+        help=(
+            "use in conjunction w/ --dump-args to print with the results whatever other info you'd like, e.g."
+            " lang=en-ru. If no value is passed, the current datetime string will be used."
+        ),
     )
     # Unspecified args like --num_beams=2 --decoder_start_token_id=4 are passed to model.generate
     args, rest = parser.parse_known_args()

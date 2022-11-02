@@ -38,7 +38,10 @@ class ModelCardTester(unittest.TestCase):
             },
             "training_data": {
                 "Dataset": "English Wikipedia dump dated 2018-12-01",
-                "Preprocessing": "Using SentencePiece vocabulary of size 52k tokens. See details on https://arxiv.org/pdf/1810.03993.pdf",
+                "Preprocessing": (
+                    "Using SentencePiece vocabulary of size 52k tokens. See details on"
+                    " https://arxiv.org/pdf/1810.03993.pdf"
+                ),
             },
             "quantitative_analyses": {"BLEU": 55.1, "ROUGE-1": 76},
         }

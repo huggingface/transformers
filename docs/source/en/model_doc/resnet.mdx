@@ -31,7 +31,7 @@ The figure below illustrates the architecture of ResNet. Taken from the [origina
 
 <img width="600" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/resnet_architecture.png"/>
 
-This model was contributed by [Francesco](https://huggingface.co/Francesco). The original code can be found [here](https://github.com/KaimingHe/deep-residual-networks).
+This model was contributed by [Francesco](https://huggingface.co/Francesco). The TensorFlow version of this model was added by [amyeroberts](https://huggingface.co/amyeroberts). The original code can be found [here](https://github.com/KaimingHe/deep-residual-networks).
 
 ## ResNetConfig
 
@@ -48,3 +48,15 @@ This model was contributed by [Francesco](https://huggingface.co/Francesco). The
 
 [[autodoc]] ResNetForImageClassification
     - forward
+
+
+## TFResNetModel
+
+[[autodoc]] TFResNetModel
+    - call
+
+
+## TFResNetForImageClassification
+
+[[autodoc]] TFResNetForImageClassification
+    - call

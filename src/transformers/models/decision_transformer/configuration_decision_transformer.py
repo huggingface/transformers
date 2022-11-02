@@ -21,7 +21,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "edbeeching/decision-transformer-gym-hopper-medium": "https://huggingface.co/edbeeching/decision-transformer-gym-hopper-medium/resolve/main/config.json",
+    "edbeeching/decision-transformer-gym-hopper-medium": (
+        "https://huggingface.co/edbeeching/decision-transformer-gym-hopper-medium/resolve/main/config.json"
+    ),
     # See all DecisionTransformer models at https://huggingface.co/models?filter=decision_transformer
 }
 
@@ -88,13 +90,13 @@ class DecisionTransformerConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import DecisionTransformerModel, DecisionTransformerConfig
+    >>> from transformers import DecisionTransformerConfig, DecisionTransformerModel
 
     >>> # Initializing a DecisionTransformer configuration
     >>> configuration = DecisionTransformerConfig()
 
-    >>> # Initializing a model from the configuration
-    >>> model = DecisionTransformerConfig(configuration)
+    >>> # Initializing a model (with random weights) from the configuration
+    >>> model = DecisionTransformerModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

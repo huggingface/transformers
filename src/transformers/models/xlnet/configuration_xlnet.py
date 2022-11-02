@@ -131,7 +131,7 @@ class XLNetConfig(PretrainedConfig):
     >>> # Initializing a XLNet configuration
     >>> configuration = XLNetConfig()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = XLNetModel(configuration)
 
     >>> # Accessing the model configuration
@@ -219,7 +219,8 @@ class XLNetConfig(PretrainedConfig):
 
         if "use_cache" in kwargs:
             warnings.warn(
-                "The `use_cache` argument is deprecated and will be removed in a future version, use `use_mems_eval` instead.",
+                "The `use_cache` argument is deprecated and will be removed in a future version, use `use_mems_eval`"
+                " instead.",
                 FutureWarning,
             )
             use_mems_eval = kwargs["use_cache"]

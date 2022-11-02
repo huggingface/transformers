@@ -48,7 +48,8 @@ class FSNERTokenizerUtils(object):
 
         else:
             raise Exception(
-                "Type of parameter x was not recognized! Only `list of strings` for query or `list of lists of strings` for supports are supported."
+                "Type of parameter x was not recognized! Only `list of strings` for query or `list of lists of"
+                " strings` for supports are supported."
             )
 
         return d

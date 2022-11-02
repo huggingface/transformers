@@ -21,7 +21,7 @@ jobs:
         id: cache
         with:
           path: ~/venv/
-          key: v2-metadata-${{ hashFiles('setup.py') }}
+          key: v3-metadata-${{ hashFiles('setup.py') }}
 
       - name: Create virtual environment on cache miss
         if: steps.cache.outputs.cache-hit != 'true'

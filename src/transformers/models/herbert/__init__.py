@@ -18,21 +18,29 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_tokenizers_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available
 
 
-_import_structure = {
-    "tokenization_herbert": ["HerbertTokenizer"],
-}
+_import_structure = {"tokenization_herbert": ["HerbertTokenizer"]}
 
-if is_tokenizers_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_herbert_fast"] = ["HerbertTokenizerFast"]
 
 
 if TYPE_CHECKING:
     from .tokenization_herbert import HerbertTokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_herbert_fast import HerbertTokenizerFast
 
 else:

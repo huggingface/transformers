@@ -22,7 +22,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/reformer-crime-and-punishment": "https://huggingface.co/google/reformer-crime-and-punishment/resolve/main/config.json",
+    "google/reformer-crime-and-punishment": (
+        "https://huggingface.co/google/reformer-crime-and-punishment/resolve/main/config.json"
+    ),
     "google/reformer-enwik8": "https://huggingface.co/google/reformer-enwik8/resolve/main/config.json",
 }
 
@@ -144,12 +146,12 @@ class ReformerConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import ReformerModel, ReformerConfig
+    >>> from transformers import ReformerConfig, ReformerModel
 
     >>> # Initializing a Reformer configuration
     >>> configuration = ReformerConfig()
 
-    >>> # Initializing a Reformer model
+    >>> # Initializing a Reformer model (with random weights)
     >>> model = ReformerModel(configuration)
 
     >>> # Accessing the model configuration

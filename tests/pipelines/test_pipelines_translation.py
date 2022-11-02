@@ -25,12 +25,11 @@ from transformers import (
     TranslationPipeline,
     pipeline,
 )
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, slow
+from transformers.testing_utils import require_tf, require_torch, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
 
-@is_pipeline_test
 class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
@@ -61,7 +60,10 @@ class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
             outputs,
             [
                 {
-                    "translation_text": "Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide"
+                    "translation_text": (
+                        "Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide"
+                        " Beide Beide"
+                    )
                 }
             ],
         )
@@ -74,7 +76,10 @@ class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
             outputs,
             [
                 {
-                    "translation_text": "Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide"
+                    "translation_text": (
+                        "Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide"
+                        " Beide Beide"
+                    )
                 }
             ],
         )
@@ -87,7 +92,10 @@ class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
             outputs,
             [
                 {
-                    "translation_text": "monoton monoton monoton monoton monoton monoton monoton monoton monoton monoton urine urine urine urine urine urine urine urine urine"
+                    "translation_text": (
+                        "monoton monoton monoton monoton monoton monoton monoton monoton monoton monoton urine urine"
+                        " urine urine urine urine urine urine urine"
+                    )
                 }
             ],
         )
@@ -100,13 +108,15 @@ class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
             outputs,
             [
                 {
-                    "translation_text": "monoton monoton monoton monoton monoton monoton monoton monoton monoton monoton urine urine urine urine urine urine urine urine urine"
+                    "translation_text": (
+                        "monoton monoton monoton monoton monoton monoton monoton monoton monoton monoton urine urine"
+                        " urine urine urine urine urine urine urine"
+                    )
                 }
             ],
         )
 
 
-@is_pipeline_test
 class TranslationNewFormatPipelineTests(unittest.TestCase):
     @require_torch
     @slow

@@ -18,7 +18,13 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_tf_available, is_tokenizers_available, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_tf_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
@@ -27,10 +33,20 @@ _import_structure = {
     "tokenization_funnel": ["FunnelTokenizer"],
 }
 
-if is_tokenizers_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_funnel_fast"] = ["FunnelTokenizerFast"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_funnel"] = [
         "FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FunnelBaseModel",
@@ -45,7 +61,12 @@ if is_torch_available():
         "load_tf_weights_in_funnel",
     ]
 
-if is_tf_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_tf_funnel"] = [
         "TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFFunnelBaseModel",
@@ -64,10 +85,20 @@ if TYPE_CHECKING:
     from .configuration_funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig
     from .tokenization_funnel import FunnelTokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_funnel_fast import FunnelTokenizerFast
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_funnel import (
             FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST,
             FunnelBaseModel,
@@ -82,7 +113,12 @@ if TYPE_CHECKING:
             load_tf_weights_in_funnel,
         )
 
-    if is_tf_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_funnel import (
             TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFFunnelBaseModel,

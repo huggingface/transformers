@@ -5,3 +5,4 @@ nltk
 rouge-score
 seqeval
 tensorboard
+evaluate >= 0.2.0

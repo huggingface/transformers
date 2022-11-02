@@ -188,7 +188,7 @@ class OriginalMaskFormerCheckpointToOursConverter:
         self.config = config
 
     def pop_all(self, renamed_keys: List[Tuple[str, str]], dst_state_dict: StateDict, src_state_dict: StateDict):
-        for (src_key, dst_key) in renamed_keys:
+        for src_key, dst_key in renamed_keys:
             dst_state_dict[dst_key] = src_state_dict.pop(src_key)
 
     def replace_backbone(self, dst_state_dict: StateDict, src_state_dict: StateDict, config: MaskFormerConfig):
@@ -643,12 +643,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "--checkpoints_dir",
         type=Path,
-        help="A directory containing the model's checkpoints. The directory has to have the following structure: <DIR_NAME>/<DATASET_NAME>/<CONFIG_NAME>.pkl",
+        help=(
+            "A directory containing the model's checkpoints. The directory has to have the following structure:"
+            " <DIR_NAME>/<DATASET_NAME>/<CONFIG_NAME>.pkl"
+        ),
     )
     parser.add_argument(
         "--configs_dir",
         type=Path,
-        help="A directory containing the model's configs, see detectron2 doc. The directory has to have the following structure: <DIR_NAME>/<DATASET_NAME>/<CONFIG_NAME>.yaml",
+        help=(
+            "A directory containing the model's configs, see detectron2 doc. The directory has to have the following"
+            " structure: <DIR_NAME>/<DATASET_NAME>/<CONFIG_NAME>.yaml"
+        ),
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
@@ -660,7 +666,10 @@ if __name__ == "__main__":
         "--maskformer_dir",
         required=True,
         type=Path,
-        help="A path to MaskFormer's original implementation directory. You can download from here: https://github.com/facebookresearch/MaskFormer",
+        help=(
+            "A path to MaskFormer's original implementation directory. You can download from here:"
+            " https://github.com/facebookresearch/MaskFormer"
+        ),
     )
 
     args = parser.parse_args()

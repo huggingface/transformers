@@ -146,7 +146,10 @@ def get_args():
         "--model_type",
         choices=["rag_sequence", "rag_token", "bart"],
         type=str,
-        help="RAG model type: rag_sequence, rag_token or bart, if none specified, the type is inferred from the model_name_or_path",
+        help=(
+            "RAG model type: rag_sequence, rag_token or bart, if none specified, the type is inferred from the"
+            " model_name_or_path"
+        ),
     )
     parser.add_argument(
         "--index_name",
@@ -174,7 +177,10 @@ def get_args():
         choices=["e2e", "retrieval"],
         default="e2e",
         type=str,
-        help="Evaluation mode, e2e calculates exact match and F1 of the downstream task, retrieval calculates precision@k.",
+        help=(
+            "Evaluation mode, e2e calculates exact match and F1 of the downstream task, retrieval calculates"
+            " precision@k."
+        ),
     )
     parser.add_argument("--k", default=1, type=int, help="k for the precision@k calculation")
     parser.add_argument(
@@ -196,9 +202,11 @@ def get_args():
         default="qa",
         type=str,
         choices=["qa", "ans"],
-        help="Format of the gold data file"
-        "qa - a single line in the following format: question [tab] answer_list"
-        "ans - a single line of the gold file contains the expected answer string",
+        help=(
+            "Format of the gold data file"
+            "qa - a single line in the following format: question [tab] answer_list"
+            "ans - a single line of the gold file contains the expected answer string"
+        ),
     )
     parser.add_argument(
         "--predictions_path",

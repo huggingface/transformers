@@ -137,7 +137,7 @@ class RetrievalQAEmbedder(nn.Module):
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
             head_mask = [None] * self.sent_encoder.config.num_hidden_layers
             extended_attention_mask: torch.Tensor = self.sent_encoder.get_extended_attention_mask(
-                attention_mask, input_shape, device
+                attention_mask, input_shape
             )
 
             # define function for checkpointing
@@ -649,7 +649,7 @@ def batch_query_qa_dense_index(questions, qa_embedder, tokenizer, wiki_passages,
         "<P> " + " <P> ".join([p["passage_text"] for p in res_passages]) for res_passages in res_passages_lst
     ]
     all_res_lists = []
-    for (res_passages, dl) in zip(res_passages_lst, D):
+    for res_passages, dl in zip(res_passages_lst, D):
         res_list = [dict([(k, p[k]) for k in wiki_passages.column_names]) for p in res_passages]
         for r, sc in zip(res_list, dl):
             r["score"] = float(sc)
@@ -679,7 +679,7 @@ def batch_query_qa_dense_index_nn(passages, qa_embedder, tokenizer, wiki_passage
         "<P> " + " <P> ".join([p["passage_text"] for p in res_passages]) for res_passages in res_passages_lst
     ]
     all_res_lists = []
-    for (res_passages, dl, il) in zip(res_passages_lst, D, I):
+    for res_passages, dl, il in zip(res_passages_lst, D, I):
         res_list = [dict([(k, p[k]) for k in wiki_passages.column_names]) for p in res_passages]
         for r, sc, i in zip(res_list, dl, il):
             r["passage_id"] = int(i)

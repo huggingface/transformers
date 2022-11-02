@@ -21,7 +21,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/trocr-base-handwritten": "https://huggingface.co/microsoft/trocr-base-handwritten/resolve/main/config.json",
+    "microsoft/trocr-base-handwritten": (
+        "https://huggingface.co/microsoft/trocr-base-handwritten/resolve/main/config.json"
+    ),
     # See all TrOCR models at https://huggingface.co/models?filter=trocr
 }
 
@@ -65,7 +67,7 @@ class TrOCRConfig(PretrainedConfig):
             The dropout ratio for classifier.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -80,12 +82,12 @@ class TrOCRConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import TrOCRForCausalLM, TrOCRConfig
+    >>> from transformers import TrOCRConfig, TrOCRForCausalLM
 
     >>> # Initializing a TrOCR-base style configuration
     >>> configuration = TrOCRConfig()
 
-    >>> # Initializing a model from the TrOCR-base style configuration
+    >>> # Initializing a model (with random weights) from the TrOCR-base style configuration
     >>> model = TrOCRForCausalLM(configuration)
 
     >>> # Accessing the model configuration
@@ -115,7 +117,7 @@ class TrOCRConfig(PretrainedConfig):
         classifier_dropout=0.0,
         init_std=0.02,
         decoder_layerdrop=0.0,
-        use_cache=False,
+        use_cache=True,
         scale_embedding=False,
         use_learned_position_embeddings=True,
         layernorm_embedding=True,

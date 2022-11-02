@@ -117,12 +117,12 @@ class GPT2Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import GPT2Model, GPT2Config
+    >>> from transformers import GPT2Config, GPT2Model
 
     >>> # Initializing a GPT2 configuration
     >>> configuration = GPT2Config()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = GPT2Model(configuration)
 
     >>> # Accessing the model configuration
@@ -262,8 +262,9 @@ class GPT2OnnxConfig(OnnxConfigWithPast):
 
         ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
         if self.use_past:
+            mask_dtype = ordered_inputs["attention_mask"].dtype
             ordered_inputs["attention_mask"] = torch.cat(
-                [ordered_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
+                [ordered_inputs["attention_mask"], torch.ones(batch, past_key_values_length, dtype=mask_dtype)], dim=1
             )
 
         return ordered_inputs

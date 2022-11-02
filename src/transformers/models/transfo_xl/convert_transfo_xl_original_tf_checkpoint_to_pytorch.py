@@ -101,8 +101,10 @@ if __name__ == "__main__":
         "--transfo_xl_config_file",
         default="",
         type=str,
-        help="An optional config json file corresponding to the pre-trained BERT model. \n"
-        "This specifies the model architecture.",
+        help=(
+            "An optional config json file corresponding to the pre-trained BERT model. \n"
+            "This specifies the model architecture."
+        ),
     )
     parser.add_argument(
         "--transfo_xl_dataset_file",

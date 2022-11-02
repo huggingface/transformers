@@ -20,8 +20,7 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 
 from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from .utils import PaddingStrategy, TensorType, is_tf_available, is_torch_available, logging, to_numpy
-from .utils.generic import _is_tensorflow, _is_torch
+from .utils import PaddingStrategy, TensorType, is_tf_tensor, is_torch_tensor, logging, to_numpy
 
 
 logger = logging.get_logger(__name__)
@@ -131,8 +130,9 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         # The model's main input name, usually `input_values`, has be passed for padding
         if self.model_input_names[0] not in processed_features:
             raise ValueError(
-                "You should supply an instance of `transformers.BatchFeature` or list of `transformers.BatchFeature` to this method "
-                f"that includes {self.model_input_names[0]}, but you provided {list(processed_features.keys())}"
+                "You should supply an instance of `transformers.BatchFeature` or list of `transformers.BatchFeature`"
+                f" to this method that includes {self.model_input_names[0]}, but you provided"
+                f" {list(processed_features.keys())}"
             )
 
         required_input = processed_features[self.model_input_names[0]]
@@ -159,16 +159,16 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 first_element = required_input[index][0]
 
         if return_tensors is None:
-            if is_tf_available() and _is_tensorflow(first_element):
+            if is_tf_tensor(first_element):
                 return_tensors = "tf"
-            elif is_torch_available() and _is_torch(first_element):
+            elif is_torch_tensor(first_element):
                 return_tensors = "pt"
             elif isinstance(first_element, (int, float, list, tuple, np.ndarray)):
                 return_tensors = "np"
             else:
                 raise ValueError(
                     f"type of {first_element} unknown: {type(first_element)}. "
-                    f"Should be one of a python, numpy, pytorch or tensorflow object."
+                    "Should be one of a python, numpy, pytorch or tensorflow object."
                 )
 
         for key, value in processed_features.items():
@@ -353,14 +353,14 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         if max_length is None:
             if padding_strategy == PaddingStrategy.MAX_LENGTH:
                 raise ValueError(
-                    f"When setting ``padding={PaddingStrategy.MAX_LENGTH}``, make sure that" f" max_length is defined"
+                    f"When setting ``padding={PaddingStrategy.MAX_LENGTH}``, make sure that max_length is defined"
                 )
 
         # Test if we have a padding value
         if padding_strategy != PaddingStrategy.DO_NOT_PAD and (self.padding_value is None):
             raise ValueError(
-                "Asking to pad but the feature_extractor does not have a padding value. "
-                "Please select a value to use as `padding_value`. For example: `feature_extractor.padding_value = 0.0`."
+                "Asking to pad but the feature_extractor does not have a padding value. Please select a value to use"
+                " as `padding_value`. For example: `feature_extractor.padding_value = 0.0`."
             )
 
         return padding_strategy

@@ -222,7 +222,7 @@ You will also see a doc file and tests for your new models. First you should run
 
 ```
 make style
-maxke fix-copies
+make fix-copies
 ```
 
 and then you can start tweaking your model. You should:

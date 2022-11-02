@@ -22,7 +22,9 @@ logger = logging.get_logger(__name__)
 
 # TODO: upload to AWS
 RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "yjernite/retribert-base-uncased": "https://huggingface.co/yjernite/retribert-base-uncased/resolve/main/config.json",
+    "yjernite/retribert-base-uncased": (
+        "https://huggingface.co/yjernite/retribert-base-uncased/resolve/main/config.json"
+    ),
 }
 
 

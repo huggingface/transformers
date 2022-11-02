@@ -29,11 +29,14 @@ if is_tf_available():
     from transformers.generation_tf_logits_process import (
         TFForcedBOSTokenLogitsProcessor,
         TFForcedEOSTokenLogitsProcessor,
+        TFForceTokensLogitsProcessor,
         TFLogitsProcessorList,
         TFMinLengthLogitsProcessor,
         TFNoBadWordsLogitsProcessor,
         TFNoRepeatNGramLogitsProcessor,
         TFRepetitionPenaltyLogitsProcessor,
+        TFSuppressTokensAtBeginLogitsProcessor,
+        TFSuppressTokensLogitsProcessor,
         TFTemperatureLogitsWarper,
         TFTopKLogitsWarper,
         TFTopPLogitsWarper,
@@ -75,6 +78,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
     @parameterized.expand([(False,), (True,)])
     def test_temperature_dist_warper(self, use_xla):
         input_ids = None
+        cur_len = None
         length = 20
 
         scores = self._get_uniform_logits(batch_size=2, length=length)
@@ -94,8 +98,8 @@ class TFLogitsProcessorTest(unittest.TestCase):
             temp_dist_warper_sharper = tf.function(temp_dist_warper_sharper, jit_compile=True)
             temp_dist_warper_smoother = tf.function(temp_dist_warper_smoother, jit_compile=True)
 
-        warped_prob_sharp = tf.nn.softmax(temp_dist_warper_sharper(input_ids, tf.identity(scores)), axis=-1)
-        warped_prob_smooth = tf.nn.softmax(temp_dist_warper_smoother(input_ids, tf.identity(scores)), axis=-1)
+        warped_prob_sharp = tf.nn.softmax(temp_dist_warper_sharper(input_ids, tf.identity(scores), cur_len), axis=-1)
+        warped_prob_smooth = tf.nn.softmax(temp_dist_warper_smoother(input_ids, tf.identity(scores), cur_len), axis=-1)
 
         # uniform distribution stays uniform
         tf.debugging.assert_near(probs[0, :], warped_prob_sharp[0, :], atol=1e-3)
@@ -142,6 +146,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
     @parameterized.expand([(False,), (True,)])
     def test_top_k_dist_warper(self, use_xla):
         input_ids = None
+        cur_len = None
         vocab_size = 10
         batch_size = 2
 
@@ -153,7 +158,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
         if use_xla:
             top_k_warp = tf.function(top_k_warp, jit_compile=True)
 
-        scores = top_k_warp(input_ids, ramp_logits)
+        scores = top_k_warp(input_ids, ramp_logits, cur_len)
 
         # check that correct tokens are filtered
         self.assertListEqual(tf.math.is_inf(scores[0]).numpy().tolist(), 7 * [True] + 3 * [False])
@@ -167,12 +172,12 @@ class TFLogitsProcessorTest(unittest.TestCase):
         if use_xla:
             top_k_warp_safety_check = tf.function(top_k_warp_safety_check, jit_compile=True)
 
-        scores = top_k_warp_safety_check(input_ids, logits)
+        scores = top_k_warp_safety_check(input_ids, logits, cur_len)
         # uniform dist is not changed
         self.assertListEqual(tf.math.reduce_sum(tf.where(scores == 0.0, 1, 0), axis=-1).numpy().tolist(), [0, 0])
 
         ramp_logits = np.broadcast_to(np.arange(length, dtype=np.float32), (batch_size, length)).copy()
-        scores = top_k_warp_safety_check(input_ids, ramp_logits)
+        scores = top_k_warp_safety_check(input_ids, ramp_logits, cur_len)
 
         # min_tokens overwrites k: 3 tokens are kept => 2 tokens are nullified
         self.assertListEqual(tf.math.reduce_sum(tf.where(scores == 0.0, 1, 0), axis=-1).numpy().tolist(), [2, 2])
@@ -180,18 +185,22 @@ class TFLogitsProcessorTest(unittest.TestCase):
     @parameterized.expand([(False,), (True,)])
     def test_top_p_dist_warper(self, use_xla):
         input_ids = None
+        cur_len = None
         vocab_size = 10
         batch_size = 2
 
         # create distribution and take log (inverse to Softmax as taken in TFTopPLogitsWarper)
         dist = np.log(np.array([[0.3, 0.1, 0.1, 0.5], [0.15, 0.3, 0.3, 0.25]], dtype=np.float32))
 
-        top_p_warp = TFTopPLogitsWarper(0.7)
+        # top_p should have been 0.8 to test the edge case of top_p being exactly equal to sum of some token prob
+        # However, due to the numerical instability of softmax in TF we choose this as the edge case
+        # top_p as 0.8 passes when use_xla is True and fails when False. Refer PR #18984.
+        top_p_warp = TFTopPLogitsWarper(0.79999995)
         if use_xla:
             top_p_warp = tf.function(top_p_warp, jit_compile=True)
-        filtered_dist = tf.exp(top_p_warp(input_ids, dist))
+        filtered_dist = tf.exp(top_p_warp(input_ids, dist, cur_len))
 
-        # dist should be filtered to keep min num values so that sum is >= 0.7
+        # dist should be filtered to keep min num values so that sum is >= top_p
         # exp (-inf) => 0
         EXPECTED_FILTERED_DIST = tf.constant([[0.3, 0.0, 0.0, 0.5], [0.0, 0.3, 0.3, 0.25]], dtype=tf.float32)
         tf.debugging.assert_near(filtered_dist, EXPECTED_FILTERED_DIST, atol=1e-3)
@@ -208,7 +217,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
         top_p_warp = TFTopPLogitsWarper(0.9, min_tokens_to_keep=2, filter_value=0.0)
         if use_xla:
             top_p_warp = tf.function(top_p_warp, jit_compile=True)
-        filtered_dist = top_p_warp(input_ids, ramp_logits)
+        filtered_dist = top_p_warp(input_ids, ramp_logits, cur_len)
 
         # first batch should keep three tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps
         # 2.
@@ -242,7 +251,8 @@ class TFLogitsProcessorTest(unittest.TestCase):
             tf.math.is_inf(filtered_scores_3_gram).numpy().tolist(), [[False, False, False], [True, False, False]]
         )
 
-    def test_no_bad_words_dist_processor(self):
+    @parameterized.expand([(False,), (True,)])
+    def test_no_bad_words_dist_processor(self, use_xla):
         vocab_size = 5
         batch_size = 2
         eos_token_id = 4
@@ -255,6 +265,8 @@ class TFLogitsProcessorTest(unittest.TestCase):
         scores = self._get_uniform_logits(batch_size, vocab_size)
 
         no_bad_words_dist_proc = TFNoBadWordsLogitsProcessor(bad_words_ids=bad_word_tokens, eos_token_id=eos_token_id)
+        if use_xla:
+            no_bad_words_dist_proc = tf.function(no_bad_words_dist_proc, jit_compile=True)
 
         filtered_scores = no_bad_words_dist_proc(input_ids, tf.identity(scores), cur_len)
 
@@ -322,7 +334,89 @@ class TFLogitsProcessorTest(unittest.TestCase):
         scores = logits_processor(input_ids, scores, cur_len)
         self.assertFalse(tf.math.reduce_any(tf.math.is_inf((scores))))
 
-    def test_processor_list(self):
+    @parameterized.expand([(False,), (True,)])
+    def test_suppress_tokens_at_begin_logits_processor(self, use_xla):
+        vocab_size = 20
+        batch_size = 4
+
+        begin_suppress_tokens = [1, 2, 3]
+        begin_index = 5
+
+        logits_processor = TFSuppressTokensAtBeginLogitsProcessor(
+            begin_suppress_tokens=begin_suppress_tokens, begin_index=begin_index
+        )
+        if use_xla:
+            logits_processor = tf.function(logits_processor, jit_compile=True)
+
+        # Check that no scores are suppressed if begin_index is not reached
+        cur_len = 4
+        input_ids = tf.convert_to_tensor([[11, 17, 15, 8], [14, 0, 19, 5], [13, 11, 18, 19], [11, 12, 16, 15]])
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores = logits_processor(input_ids, scores, cur_len)
+        self.assertFalse(tf.math.reduce_any(tf.math.is_inf((scores))))
+
+        # Check that scores are suppressed if begin_index is reached
+        cur_len = 5
+        input_ids = tf.convert_to_tensor([[5, 5, 5, 0, 17], [18, 1, 9, 14, 17], [18, 6, 8, 15, 19], [8, 12, 17, 1, 2]])
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores = logits_processor(input_ids, scores, cur_len)
+        self.assertTrue(tf.math.reduce_all(tf.math.is_inf(tf.gather(scores, begin_suppress_tokens, axis=1))))
+
+    @parameterized.expand([(False,), (True,)])
+    def test_suppress_tokens_logits_processor(self, use_xla):
+        vocab_size = 20
+        batch_size = 4
+
+        suppress_tokens = [1, 3, 5]
+        keep_tokens = [i for i in range(vocab_size) if i not in suppress_tokens]
+
+        logits_processor = TFSuppressTokensLogitsProcessor(suppress_tokens=suppress_tokens)
+        if use_xla:
+            logits_processor = tf.function(logits_processor, jit_compile=True)
+
+        # Check that suppress_tokens are suppressed and others are not
+        cur_len = 5
+        input_ids = tf.convert_to_tensor([[0, 10, 19, 6, 3], [17, 4, 8, 17, 2], [7, 1, 11, 6, 15], [5, 8, 13, 16, 0]])
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores = logits_processor(input_ids, scores, cur_len)
+        self.assertTrue(tf.math.reduce_all(tf.math.is_inf(tf.gather(scores, suppress_tokens, axis=1))))
+        self.assertFalse(tf.math.reduce_any(tf.math.is_inf(tf.gather(scores, keep_tokens, axis=1))))
+
+    @parameterized.expand([(False,), (True,)])
+    def test_force_tokens_logits_processor(self, use_xla):
+        vocab_size = 20
+        batch_size = 4
+
+        force_token_map = {1: 2, 3: 2}
+
+        logits_processor = TFForceTokensLogitsProcessor(force_token_map=force_token_map)
+        if use_xla:
+            logits_processor = tf.function(logits_processor, jit_compile=True)
+
+        # check that if the cur_len is contained in the force_token_map, the logits are the same
+        # for all tokens except the one the force_token_map points to
+        cur_len = 1
+        input_ids = tf.convert_to_tensor([[11], [7], [5], [15]])
+        ids_tensor((batch_size, cur_len), vocab_size=20)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores = logits_processor(input_ids, scores, cur_len)
+        tf.debugging.assert_near(tf.gather(scores, [force_token_map[cur_len]], axis=1), 0.0)
+
+        non_forced_inds = [i for i in range(vocab_size) if i != force_token_map[cur_len]]
+        self.assertTrue(
+            tf.math.reduce_all(tf.math.is_inf(tf.gather(scores, [non_forced_inds], axis=1))),
+        )
+
+        # check that if the cur_len is not contained in the force_token_map, the logits are not modified
+        cur_len = 2
+        input_ids = tf.convert_to_tensor([[2, 19], [19, 15], [4, 9], [7, 6]])
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        scores = logits_processor(input_ids, scores, cur_len)
+        self.assertFalse(tf.math.reduce_any(tf.math.is_inf((scores))))
+
+    @parameterized.expand([(False,), (True,)])
+    def test_processor_list(self, use_xla):
+        # TODO (Joao): reintroduce TFNoRepeatNGramLogitsProcessor when it gets compatible with XLA
         batch_size = 4
         cur_len = 10
         vocab_size = 15
@@ -341,16 +435,24 @@ class TFLogitsProcessorTest(unittest.TestCase):
         rep_penalty_proc = TFRepetitionPenaltyLogitsProcessor(penalty=2.0)
         top_k_warp = TFTopKLogitsWarper(3)
         top_p_warp = TFTopPLogitsWarper(0.8)
-        no_repeat_proc = TFNoRepeatNGramLogitsProcessor(2)
+        # no_repeat_proc = TFNoRepeatNGramLogitsProcessor(2)
         no_bad_words_dist_proc = TFNoBadWordsLogitsProcessor(bad_words_ids=[[1]], eos_token_id=eos_token_id)
+        if use_xla:
+            min_dist_proc = tf.function(min_dist_proc, jit_compile=True)
+            temp_dist_warp = tf.function(temp_dist_warp, jit_compile=True)
+            rep_penalty_proc = tf.function(rep_penalty_proc, jit_compile=True)
+            top_k_warp = tf.function(top_k_warp, jit_compile=True)
+            top_p_warp = tf.function(top_p_warp, jit_compile=True)
+            # no_repeat_proc = tf.function(no_repeat_proc, jit_compile=True)
+            no_bad_words_dist_proc = tf.function(no_bad_words_dist_proc, jit_compile=True)
 
         # no processor list
         scores = min_dist_proc(input_ids, scores, cur_len)
-        scores = temp_dist_warp(input_ids, scores)
+        scores = temp_dist_warp(input_ids, scores, cur_len)
         scores = rep_penalty_proc(input_ids, scores, cur_len)
-        scores = top_k_warp(input_ids, scores)
-        scores = top_p_warp(input_ids, scores)
-        scores = no_repeat_proc(input_ids, scores, cur_len)
+        scores = top_k_warp(input_ids, scores, cur_len)
+        scores = top_p_warp(input_ids, scores, cur_len)
+        # scores = no_repeat_proc(input_ids, scores, cur_len)
         scores = no_bad_words_dist_proc(input_ids, scores, cur_len)
 
         # with processor list
@@ -361,11 +463,11 @@ class TFLogitsProcessorTest(unittest.TestCase):
                 rep_penalty_proc,
                 top_k_warp,
                 top_p_warp,
-                no_repeat_proc,
+                # no_repeat_proc,
                 no_bad_words_dist_proc,
             ]
         )
-        scores_comp = processor(input_ids, scores_comp, cur_len=cur_len)
+        scores_comp = processor(input_ids, scores_comp, cur_len)
 
         # remove inf
         scores = tf.where(tf.math.is_inf(scores), -1e9, scores)

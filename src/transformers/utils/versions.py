@@ -41,10 +41,11 @@ ops = {
 
 
 def _compare_versions(op, got_ver, want_ver, requirement, pkg, hint):
-    if got_ver is None:
-        raise ValueError("got_ver is None")
-    if want_ver is None:
-        raise ValueError("want_ver is None")
+    if got_ver is None or want_ver is None:
+        raise ValueError(
+            f"Unable to compare versions for {requirement}: need={want_ver} found={got_ver}. This is unusual. Consider"
+            f" reinstalling {pkg}."
+        )
     if not ops[op](version.parse(got_ver), version.parse(want_ver)):
         raise ImportError(
             f"{requirement} is required for a normal functioning of this module, but found {pkg}=={got_ver}.{hint}"
@@ -77,7 +78,8 @@ def require_version(requirement: str, hint: Optional[str] = None) -> None:
         match = re.findall(r"^([^!=<>\s]+)([\s!=<>]{1,2}.+)", requirement)
         if not match:
             raise ValueError(
-                f"requirement needs to be in the pip package format, .e.g., package_a==1.23, or package_b>=1.23, but got {requirement}"
+                "requirement needs to be in the pip package format, .e.g., package_a==1.23, or package_b>=1.23, but"
+                f" got {requirement}"
             )
         pkg, want_full = match[0]
         want_range = want_full.split(",")  # there could be multiple requirements
@@ -86,7 +88,8 @@ def require_version(requirement: str, hint: Optional[str] = None) -> None:
             match = re.findall(r"^([\s!=<>]{1,2})(.+)", w)
             if not match:
                 raise ValueError(
-                    f"requirement needs to be in the pip package format, .e.g., package_a==1.23, or package_b>=1.23, but got {requirement}"
+                    "requirement needs to be in the pip package format, .e.g., package_a==1.23, or package_b>=1.23,"
+                    f" but got {requirement}"
                 )
             op, want_ver = match[0]
             wanted[op] = want_ver

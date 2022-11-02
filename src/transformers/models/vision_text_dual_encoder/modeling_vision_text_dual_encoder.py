@@ -154,7 +154,7 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
 # Copied from transformers.models.clip.modeling_clip.clip_loss
 def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
-    image_loss = contrastive_loss(similarity.T)
+    image_loss = contrastive_loss(similarity.t())
     return (caption_loss + image_loss) / 2.0
 
 
@@ -530,9 +530,9 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         # the projection layers are always newly initialized when loading the model
         # using pre-trained vision and text model.
         logger.warning(
-            "The projection layer and logit scale weights `['visual_projection.weight', 'text_projection.weight', 'logit_scale']` "
-            "are newly initialized. You should probably TRAIN this model on a down-stream task "
-            "to be able to use it for predictions and inference."
+            "The projection layer and logit scale weights `['visual_projection.weight', 'text_projection.weight',"
+            " 'logit_scale']` are newly initialized. You should probably TRAIN this model on a down-stream task to be"
+            " able to use it for predictions and inference."
         )
 
         return model

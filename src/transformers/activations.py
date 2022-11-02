@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+from collections import OrderedDict
 
 import torch
 from packaging import version
@@ -44,7 +45,7 @@ class GELUActivation(nn.Module):
 
     def __init__(self, use_gelu_python: bool = False):
         super().__init__()
-        if version.parse(torch.__version__) < version.parse("1.4") or use_gelu_python:
+        if use_gelu_python:
             self.act = self._gelu_python
         else:
             self.act = nn.functional.gelu
@@ -108,18 +109,8 @@ class SiLUActivation(nn.Module):
     later.
     """
 
-    def __init__(self):
-        super().__init__()
-        if version.parse(torch.__version__) < version.parse("1.7"):
-            self.act = self._silu_python
-        else:
-            self.act = nn.functional.silu
-
-    def _silu_python(self, input: Tensor) -> Tensor:
-        return input * torch.sigmoid(input)
-
     def forward(self, input: Tensor) -> Tensor:
-        return self.act(input)
+        return nn.functional.silu(input)
 
 
 class MishActivation(nn.Module):
@@ -130,7 +121,7 @@ class MishActivation(nn.Module):
 
     def __init__(self):
         super().__init__()
-        if version.parse(torch.__version__) < version.parse("1.9"):
+        if version.parse(torch.__version__) < version.parse("1.9.0"):
             self.act = self._mish_python
         else:
             self.act = nn.functional.mish
@@ -151,21 +142,29 @@ class LinearActivation(nn.Module):
         return input
 
 
-ACT2FN = {
-    "gelu": GELUActivation(),
-    "gelu_10": ClippedGELUActivation(-10, 10),
-    "gelu_fast": FastGELUActivation(),
-    "gelu_new": NewGELUActivation(),
-    "gelu_python": GELUActivation(use_gelu_python=True),
-    "linear": LinearActivation(),
-    "mish": MishActivation(),
-    "quick_gelu": QuickGELUActivation(),
-    "relu": nn.ReLU(),
-    "sigmoid": nn.Sigmoid(),
-    "silu": SiLUActivation(),
-    "swish": SiLUActivation(),
-    "tanh": nn.Tanh(),
+class ClassInstantier(OrderedDict):
+    def __getitem__(self, key):
+        content = super().__getitem__(key)
+        cls, kwargs = content if isinstance(content, tuple) else (content, {})
+        return cls(**kwargs)
+
+
+ACT2CLS = {
+    "gelu": GELUActivation,
+    "gelu_10": (ClippedGELUActivation, {"min": -10, "max": 10}),
+    "gelu_fast": FastGELUActivation,
+    "gelu_new": NewGELUActivation,
+    "gelu_python": (GELUActivation, {"use_gelu_python": True}),
+    "linear": LinearActivation,
+    "mish": MishActivation,
+    "quick_gelu": QuickGELUActivation,
+    "relu": nn.ReLU,
+    "sigmoid": nn.Sigmoid,
+    "silu": SiLUActivation,
+    "swish": SiLUActivation,
+    "tanh": nn.Tanh,
 }
+ACT2FN = ClassInstantier(ACT2CLS)
 
 
 def get_activation(activation_string):

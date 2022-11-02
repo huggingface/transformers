@@ -34,8 +34,8 @@ model is multilingual it expects the sequences in a different format. A special 
 source and target text. The source text format is `X [eos, src_lang_code]` where `X` is the source text. The
 target text format is `[tgt_lang_code] X [eos]`. `bos` is never used.
 
-The regular [`~MBartTokenizer.__call__`] will encode source text format, and it should be wrapped
-inside the context manager [`~MBartTokenizer.as_target_tokenizer`] to encode target text format.
+The regular [`~MBartTokenizer.__call__`] will encode source text format passed as first argument or with the `text`
+keyword, and target text format passed with the `text_label` keyword argument.
 
 - Supervised training
 
@@ -46,13 +46,11 @@ inside the context manager [`~MBartTokenizer.as_target_tokenizer`] to encode tar
 >>> example_english_phrase = "UN Chief Says There Is No Military Solution in Syria"
 >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
 
->>> inputs = tokenizer(example_english_phrase, return_tensors="pt")
->>> with tokenizer.as_target_tokenizer():
-...     labels = tokenizer(expected_translation_romanian, return_tensors="pt")
+>>> inputs = tokenizer(example_english_phrase, text_target=expected_translation_romanian, return_tensors="pt")
 
 >>> model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-en-ro")
 >>> # forward pass
->>> model(**inputs, labels=batch["labels"])
+>>> model(**inputs)
 ```
 
 - Generation
@@ -108,11 +106,9 @@ tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50", src_
 src_text = " UN Chief Says There Is No Military Solution in Syria"
 tgt_text = "Şeful ONU declară că nu există o soluţie militară în Siria"
 
-model_inputs = tokenizer(src_text, return_tensors="pt")
-with tokenizer.as_target_tokenizer():
-    labels = tokenizer(tgt_text, return_tensors="pt").input_ids
+model_inputs = tokenizer(src_text, text_target=tgt_text, return_tensors="pt")
 
-model(**model_inputs, labels=labels)  # forward pass
+model(**model_inputs)  # forward pass
 ```
 
 - Generation
@@ -154,7 +150,6 @@ tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
 ## MBartTokenizer
 
 [[autodoc]] MBartTokenizer
-    - as_target_tokenizer
     - build_inputs_with_special_tokens
 
 ## MBartTokenizerFast

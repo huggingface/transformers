@@ -18,6 +18,7 @@ import os
 import re
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
+from datetime import date
 from itertools import chain
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
@@ -32,6 +33,7 @@ from . import BaseTransformersCLICommand
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
+CURRENT_YEAR = date.today().year
 TRANSFORMERS_PATH = Path(__file__).parent.parent
 REPO_PATH = TRANSFORMERS_PATH.parent.parent
 
@@ -421,6 +423,7 @@ def duplicate_module(
     with open(module_file, "r", encoding="utf-8") as f:
         content = f.read()
 
+    content = re.sub("# Copyright (\d+)\s", f"# Copyright {CURRENT_YEAR} ", content)
     objects = parse_module_content(content)
 
     # Loop and treat all objects
@@ -554,7 +557,7 @@ def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> 
     ]
     test_files = filter_framework_files(test_files, frameworks=frameworks)
     # Add the test directory
-    test_files = [REPO_PATH / "tests" / module_name / f for f in test_files]
+    test_files = [REPO_PATH / "tests" / "models" / module_name / f for f in test_files]
     # Filter by existing files
     test_files = [f for f in test_files if f.exists()]
 
@@ -766,7 +769,9 @@ def clean_frameworks_in_init(
         return
 
     remove_pattern = "|".join(to_remove)
-    re_conditional_imports = re.compile(rf"^\s*if is_({remove_pattern})_available\(\):\s*$")
+    re_conditional_imports = re.compile(rf"^\s*if not is_({remove_pattern})_available\(\):\s*$")
+    re_try = re.compile(r"\s*try:")
+    re_else = re.compile(r"\s*else:")
     re_is_xxx_available = re.compile(rf"is_({remove_pattern})_available")
 
     with open(init_file, "r", encoding="utf-8") as f:
@@ -776,11 +781,15 @@ def clean_frameworks_in_init(
     new_lines = []
     idx = 0
     while idx < len(lines):
-        # Conditional imports
-        if re_conditional_imports.search(lines[idx]) is not None:
+        # Conditional imports in try-except-else blocks
+        if (re_conditional_imports.search(lines[idx]) is not None) and (re_try.search(lines[idx - 1]) is not None):
+            # Remove the preceding `try:`
+            new_lines.pop()
             idx += 1
-            while is_empty_line(lines[idx]):
+            # Iterate until `else:`
+            while is_empty_line(lines[idx]) or re_else.search(lines[idx]) is None:
                 idx += 1
+            idx += 1
             indent = find_indent(lines[idx])
             while find_indent(lines[idx]) >= indent or is_empty_line(lines[idx]):
                 idx += 1
@@ -790,6 +799,7 @@ def clean_frameworks_in_init(
             for framework in to_remove:
                 line = line.replace(f", is_{framework}_available", "")
                 line = line.replace(f"is_{framework}_available, ", "")
+                line = line.replace(f"is_{framework}_available,", "")
                 line = line.replace(f"is_{framework}_available", "")
 
             if len(line.strip()) > 0:
@@ -834,14 +844,24 @@ def add_model_to_main_init(
     new_lines = []
     framework = None
     while idx < len(lines):
+        new_framework = False
         if not is_empty_line(lines[idx]) and find_indent(lines[idx]) == 0:
             framework = None
-        elif lines[idx].lstrip().startswith("if is_torch_available"):
+        elif lines[idx].lstrip().startswith("if not is_torch_available"):
             framework = "pt"
-        elif lines[idx].lstrip().startswith("if is_tf_available"):
+            new_framework = True
+        elif lines[idx].lstrip().startswith("if not is_tf_available"):
             framework = "tf"
-        elif lines[idx].lstrip().startswith("if is_flax_available"):
+            new_framework = True
+        elif lines[idx].lstrip().startswith("if not is_flax_available"):
             framework = "flax"
+            new_framework = True
+
+        if new_framework:
+            # For a new framework, we need to skip until the else: block to get where the imports are.
+            while lines[idx].strip() != "else:":
+                new_lines.append(lines[idx])
+                idx += 1
 
         # Skip if we are in a framework not wanted.
         if framework is not None and frameworks is not None and framework not in frameworks:
@@ -1055,6 +1075,7 @@ def duplicate_doc_file(
     with open(doc_file, "r", encoding="utf-8") as f:
         content = f.read()
 
+    content = re.sub("<!--\s*Copyright (\d+)\s", f"<!--Copyright {CURRENT_YEAR} ", content)
     if frameworks is None:
         frameworks = get_default_frameworks()
     if dest_file is None:
@@ -1227,7 +1248,7 @@ def create_new_model_like(
 
     disabled_fx_test = False
 
-    tests_folder = REPO_PATH / "tests" / new_model_patterns.model_lower_cased
+    tests_folder = REPO_PATH / "tests" / "models" / new_model_patterns.model_lower_cased
     os.makedirs(tests_folder, exist_ok=True)
     with open(tests_folder / "__init__.py", "w"):
         pass
@@ -1248,8 +1269,8 @@ def create_new_model_like(
 
     if disabled_fx_test:
         print(
-            "The tests for symbolic tracing with torch.fx were disabled, you can add those once symbolic tracing works "
-            "for your new model."
+            "The tests for symbolic tracing with torch.fx were disabled, you can add those once symbolic tracing works"
+            " for your new model."
         )
 
     # 4. Add model to auto classes
@@ -1421,7 +1442,9 @@ def get_user_input():
     # Get old model type
     valid_model_type = False
     while not valid_model_type:
-        old_model_type = input("What is the model you would like to duplicate? ")
+        old_model_type = input(
+            "What is the model you would like to duplicate? Please provide the lowercase `model_type` (e.g. roberta): "
+        )
         if old_model_type in model_types:
             valid_model_type = True
         else:
@@ -1444,38 +1467,42 @@ def get_user_input():
             "We couldn't find the name of the base checkpoint for that model, please enter it here."
         )
 
-    model_name = get_user_field("What is the name for your new model?")
+    model_name = get_user_field(
+        "What is the name (with no special casing) for your new model in the paper (e.g. RoBERTa)? "
+    )
     default_patterns = ModelPatterns(model_name, model_name)
 
     model_type = get_user_field(
-        "What identifier would you like to use for the model type of this model?",
+        "What identifier would you like to use for the `model_type` of this model? ",
         default_value=default_patterns.model_type,
     )
     model_lower_cased = get_user_field(
-        "What name would you like to use for the module of this model?",
+        "What lowercase name would you like to use for the module (folder) of this model? ",
         default_value=default_patterns.model_lower_cased,
     )
     model_camel_cased = get_user_field(
-        "What prefix (camel-cased) would you like to use for the model classes of this model?",
+        "What prefix (camel-cased) would you like to use for the model classes of this model (e.g. Roberta)? ",
         default_value=default_patterns.model_camel_cased,
     )
     model_upper_cased = get_user_field(
-        "What prefix (upper-cased) would you like to use for the constants relative to this model?",
+        "What prefix (upper-cased) would you like to use for the constants relative to this model? ",
         default_value=default_patterns.model_upper_cased,
     )
     config_class = get_user_field(
-        "What will be the name of the config class for this model?", default_value=f"{model_camel_cased}Config"
+        "What will be the name of the config class for this model? ", default_value=f"{model_camel_cased}Config"
     )
-    checkpoint = get_user_field("Please give a checkpoint identifier (on the model Hub) for this new model.")
+    checkpoint = get_user_field(
+        "Please give a checkpoint identifier (on the model Hub) for this new model (e.g. facebook/roberta-base): "
+    )
 
     old_processing_classes = [
         c for c in [old_feature_extractor_class, old_tokenizer_class, old_processor_class] if c is not None
     ]
     old_processing_classes = ", ".join(old_processing_classes)
     keep_processing = get_user_field(
-        f"Will your new model use the same processing class as {old_model_type} ({old_processing_classes})?",
+        f"Will your new model use the same processing class as {old_model_type} ({old_processing_classes}) (yes/no)? ",
         convert_to=convert_to_bool,
-        fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
+        fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
     )
     if keep_processing:
         feature_extractor_class = old_feature_extractor_class
@@ -1484,21 +1511,21 @@ def get_user_input():
     else:
         if old_tokenizer_class is not None:
             tokenizer_class = get_user_field(
-                "What will be the name of the tokenizer class for this model?",
+                "What will be the name of the tokenizer class for this model? ",
                 default_value=f"{model_camel_cased}Tokenizer",
             )
         else:
             tokenizer_class = None
         if old_feature_extractor_class is not None:
             feature_extractor_class = get_user_field(
-                "What will be the name of the feature extractor class for this model?",
+                "What will be the name of the feature extractor class for this model? ",
                 default_value=f"{model_camel_cased}FeatureExtractor",
             )
         else:
             feature_extractor_class = None
         if old_processor_class is not None:
             processor_class = get_user_field(
-                "What will be the name of the processor class for this model?",
+                "What will be the name of the processor class for this model? ",
                 default_value=f"{model_camel_cased}Processor",
             )
         else:
@@ -1518,14 +1545,15 @@ def get_user_input():
     )
 
     add_copied_from = get_user_field(
-        "Should we add # Copied from statements when creating the new modeling file?",
+        "Should we add # Copied from statements when creating the new modeling file (yes/no)? ",
         convert_to=convert_to_bool,
         default_value="yes",
         fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
     )
 
     all_frameworks = get_user_field(
-        f"Should we add a version of your new model in all the frameworks implemented by {old_model_type} ({old_frameworks})?",
+        "Should we add a version of your new model in all the frameworks implemented by"
+        f" {old_model_type} ({old_frameworks}) (yes/no)? ",
         convert_to=convert_to_bool,
         default_value="yes",
         fallback_message="Please answer yes/no, y/n, true/false or 1/0.",

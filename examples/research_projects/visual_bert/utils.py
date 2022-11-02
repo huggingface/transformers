@@ -231,9 +231,10 @@ def compare(in_tensor):
     n2 = out_tensor.numpy()[0]
     print(n1.shape, n1[0, 0, :5])
     print(n2.shape, n2[0, 0, :5])
-    assert np.allclose(
-        n1, n2, rtol=0.01, atol=0.1
-    ), f"{sum([1 for x in np.isclose(n1, n2, rtol=0.01, atol=0.1).flatten() if x == False])/len(n1.flatten())*100:.4f} % element-wise mismatch"
+    assert np.allclose(n1, n2, rtol=0.01, atol=0.1), (
+        f"{sum([1 for x in np.isclose(n1, n2, rtol=0.01, atol=0.1).flatten() if x == False])/len(n1.flatten())*100:.4f} %"
+        " element-wise mismatch"
+    )
     raise Exception("tensors are all good")
 
     # Hugging face functions below

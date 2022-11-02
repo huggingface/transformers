@@ -55,16 +55,19 @@ class LfsCommands(BaseTransformersCLICommand):
     def register_subcommand(parser: ArgumentParser):
         enable_parser = parser.add_parser(
             "lfs-enable-largefiles",
-            help="Deprecated: use `huggingface-cli` instead. "
-            "Configure your repository to enable upload of files > 5GB.",
+            help=(
+                "Deprecated: use `huggingface-cli` instead. Configure your repository to enable upload of files > 5GB."
+            ),
         )
         enable_parser.add_argument("path", type=str, help="Local path to repository you want to configure.")
         enable_parser.set_defaults(func=lambda args: LfsEnableCommand(args))
 
         upload_parser = parser.add_parser(
             LFS_MULTIPART_UPLOAD_COMMAND,
-            help="Deprecated: use `huggingface-cli` instead. "
-            "Command will get called by git-lfs, do not call it directly.",
+            help=(
+                "Deprecated: use `huggingface-cli` instead. "
+                "Command will get called by git-lfs, do not call it directly."
+            ),
         )
         upload_parser.set_defaults(func=lambda args: LfsUploadCommand(args))
 

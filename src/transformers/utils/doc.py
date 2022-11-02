@@ -242,7 +242,7 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> num_labels = len(model.config.id2label)
     >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=num_labels)
 
-    >>> labels = torch.tensor(1)
+    >>> labels = torch.tensor([1])
     >>> loss = model(**inputs, labels=labels).loss
     >>> round(loss.item(), 2)
     {expected_loss}
@@ -428,8 +428,7 @@ PT_SPEECH_CTC_SAMPLE = r"""
     ```
 
     ```python
-    >>> with processor.as_target_processor():
-    ...     inputs["labels"] = processor(dataset[0]["text"], return_tensors="pt").input_ids
+    >>> inputs["labels"] = processor(text=dataset[0]["text"], return_tensors="pt").input_ids
 
     >>> # compute loss
     >>> loss = model(**inputs).loss
@@ -849,8 +848,7 @@ TF_SPEECH_CTC_SAMPLE = r"""
     ```
 
     ```python
-    >>> with processor.as_target_processor():
-    ...     inputs["labels"] = processor(dataset[0]["text"], return_tensors="tf").input_ids
+    >>> inputs["labels"] = processor(text=dataset[0]["text"], return_tensors="tf").input_ids
 
     >>> # compute loss
     >>> loss = model(**inputs).loss

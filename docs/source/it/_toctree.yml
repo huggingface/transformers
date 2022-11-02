@@ -1,0 +1,47 @@
+- sections:
+  - local: index
+    title: 🤗 Transformers
+  - local: quicktour
+    title: Tour rapido
+  - local: installation
+    title: Installazione
+  title: Iniziare
+- sections:
+  - local: pipeline_tutorial
+    title: Pipeline per l'inferenza
+  - local: autoclass_tutorial
+    title: Carica istanze pre-allenate con AutoClass
+  - local: preprocessing
+    title: Preprocess
+  - local: training
+    title: Fine-tuning di un modello pre-addestrato
+  - local: accelerate
+    title: Allenamento distribuito con 🤗 Accelerate
+  - local: model_sharing
+    title: Condividere un modello
+  title: Esercitazione
+- sections:
+  - local: create_a_model
+    title: Crea un'architettura personalizzata
+  - local: custom_models
+    title: Condividere modelli personalizzati
+  - local: run_scripts
+    title: Addestramento con script
+  - local: multilingual
+    title: Modelli multilingua per l'inferenza
+  - local: converting_tensorflow_models
+    title: Convertire modelli tensorflow
+  - local: serialization
+    title: Esporta modelli Transformers
+  - local: debugging
+    title: Debugging
+  title: Guide pratiche
+- sections:
+  - local: add_new_pipeline
+    title: Come aggiungere una pipeline a 🤗 Transformers?
+  - local: add_new_model
+    title: Come aggiungere un modello a 🤗 Transformers?
+  - local: perf_hardware
+    title: Hardware ottimizzato per l'addestramento
+  title: Guide How-to
+  

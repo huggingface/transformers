@@ -79,7 +79,7 @@ def prepare_ref(lines: List[str], ltp_tokenizer: LTP, bert_tokenizer: BertTokeni
     ltp_res = []
 
     for i in range(0, len(lines), 100):
-        res = ltp_tokenizer.seg(lines[i : i + 100])[0]
+        res = ltp_tokenizer.pipeline(lines[i : i + 100], tasks=["cws"]).cws
         res = [get_chinese_word(r) for r in res]
         ltp_res.extend(res)
     assert len(ltp_res) == len(lines)
@@ -92,7 +92,6 @@ def prepare_ref(lines: List[str], ltp_tokenizer: LTP, bert_tokenizer: BertTokeni
 
     ref_ids = []
     for input_ids, chinese_word in zip(bert_res, ltp_res):
-
         input_tokens = []
         for id in input_ids:
             token = bert_tokenizer._convert_id_to_token(id)
@@ -133,15 +132,32 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="prepare_chinese_ref")
     parser.add_argument(
         "--file_name",
+        required=False,
         type=str,
         default="./resources/chinese-demo.txt",
         help="file need process, same as training data in lm",
     )
     parser.add_argument(
-        "--ltp", type=str, default="./resources/ltp", help="resources for LTP tokenizer, usually a path"
+        "--ltp",
+        required=False,
+        type=str,
+        default="./resources/ltp",
+        help="resources for LTP tokenizer, usually a path",
     )
-    parser.add_argument("--bert", type=str, default="./resources/robert", help="resources for Bert tokenizer")
-    parser.add_argument("--save_path", type=str, default="./resources/ref.txt", help="path to save res")
+    parser.add_argument(
+        "--bert",
+        required=False,
+        type=str,
+        default="./resources/robert",
+        help="resources for Bert tokenizer",
+    )
+    parser.add_argument(
+        "--save_path",
+        required=False,
+        type=str,
+        default="./resources/ref.txt",
+        help="path to save res",
+    )
 
     args = parser.parse_args()
     main(args)

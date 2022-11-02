@@ -16,13 +16,19 @@
 """TFRAG model implementation."""
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, shape_list, unpack_inputs
+from ...modeling_tf_utils import (
+    TFCausalLanguageModelingLoss,
+    TFModelInputType,
+    TFPreTrainedModel,
+    shape_list,
+    unpack_inputs,
+)
 from ...utils import ModelOutput, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_rag import RagConfig
 from .retrieval_rag import RagRetriever
@@ -321,9 +327,10 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
         # by the value of the flag `is_generator` that we need to set correctly.
         question_encoder = kwargs_question_encoder.pop("model", None)
         if question_encoder is None:
-            assert (
-                question_encoder_pretrained_model_name_or_path is not None
-            ), "If `model` is not defined as an argument, a `question_encoder_pretrained_model_name_or_path` has to be defined"
+            assert question_encoder_pretrained_model_name_or_path is not None, (
+                "If `model` is not defined as an argument, a `question_encoder_pretrained_model_name_or_path` has to"
+                " be defined"
+            )
 
             from ..auto.modeling_tf_auto import TFAutoModel
 
@@ -343,9 +350,10 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
 
         generator = kwargs_generator.pop("generator", None)
         if generator is None:
-            assert (
-                generator_pretrained_model_name_or_path is not None
-            ), "If `generator_model` is not defined as an argument, a `generator_pretrained_model_name_or_path` has to be defined"
+            assert generator_pretrained_model_name_or_path is not None, (
+                "If `generator_model` is not defined as an argument, a `generator_pretrained_model_name_or_path` has"
+                " to be defined"
+            )
 
             from ..auto.modeling_tf_auto import TFAutoModelForSeq2SeqLM
 
@@ -489,7 +497,7 @@ class TFRagModel(TFRagPreTrainedModel):
         config: Optional[PretrainedConfig] = None,
         question_encoder: Optional[TFPreTrainedModel] = None,
         generator: Optional[TFPreTrainedModel] = None,
-        retriever: Optional = None,
+        retriever: Optional[RagRetriever] = None,
         load_weight_prefix: Optional[str] = None,
         **kwargs,
     ):
@@ -536,22 +544,22 @@ class TFRagModel(TFRagPreTrainedModel):
     @replace_return_docstrings(output_type=TFRetrievAugLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        encoder_outputs=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        past_key_values=None,
-        doc_scores=None,
-        context_input_ids=None,
-        context_attention_mask=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        output_retrieved=None,
-        n_docs=None,
-        return_dict=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_outputs: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        doc_scores: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        context_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        context_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_retrieved: Optional[bool] = None,
+        n_docs: Optional[int] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
         **kwargs
     ):
         r"""
@@ -632,23 +640,27 @@ class TFRagModel(TFRagPreTrainedModel):
                 )
 
             else:
-                assert (
-                    context_input_ids is not None
-                ), "Make sure that `context_input_ids` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
-                assert (
-                    context_attention_mask is not None
-                ), "Make sure that `context_attention_mask` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
-                assert (
-                    doc_scores is not None
-                ), "Make sure that `doc_scores` are passed, if no `retriever` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
+                assert context_input_ids is not None, (
+                    "Make sure that `context_input_ids` are passed, if no `retriever` is set. Alternatively, you can"
+                    " set a retriever using the `set_retriever(...)` function."
+                )
+                assert context_attention_mask is not None, (
+                    "Make sure that `context_attention_mask` are passed, if no `retriever` is set. Alternatively, you"
+                    " can set a retriever using the `set_retriever(...)` function."
+                )
+                assert doc_scores is not None, (
+                    "Make sure that `doc_scores` are passed, if no `retriever` is set. Alternatively, you can set a"
+                    " retriever using the `set_retriever(...)` function."
+                )
 
         assert (
             doc_scores is not None
         ), "Make sure that `doc_scores` are passed when passing `encoder_outputs` to the forward function."
 
-        assert (
-            doc_scores.shape[1] % n_docs
-        ) == 0, f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is {context_input_ids.shape[0]}."
+        assert (doc_scores.shape[1] % n_docs) == 0, (
+            f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is"
+            f" {context_input_ids.shape[0]}."
+        )
 
         # Decoder input without context documents
         if decoder_input_ids is not None:
@@ -720,7 +732,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         config: Optional[PretrainedConfig] = None,
         question_encoder: Optional[TFPreTrainedModel] = None,
         generator: Optional[TFPreTrainedModel] = None,
-        retriever: Optional = None,
+        retriever: Optional[RagRetriever] = None,
         **kwargs,
     ):
         assert config is not None or (
@@ -822,25 +834,25 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     @replace_return_docstrings(output_type=TFRetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        doc_scores=None,
-        context_input_ids=None,
-        context_attention_mask=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        output_retrieved=None,
-        n_docs=None,
-        do_marginalize=None,
-        labels=None,
-        reduce_loss=None,
-        return_dict=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_outputs: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        doc_scores: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        context_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        context_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_retrieved: Optional[bool] = None,
+        n_docs: Optional[int] = None,
+        do_marginalize: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        reduce_loss: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
         **kwargs  # needs kwargs for generation
     ):
         r"""
@@ -974,7 +986,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
     def generate(
         self,
-        input_ids: Optional[tf.Tensor] = None,
+        input_ids: Optional[TFModelInputType] = None,
         attention_mask: Optional[tf.Tensor] = None,
         context_input_ids=None,
         context_attention_mask=None,
@@ -1048,10 +1060,10 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
             length_penalty (`float`, *optional*, defaults to 1.0):
-                Exponential penalty to the length. 1.0 means no penalty.
-
-                Set to values < 1.0 in order to encourage the model to generate shorter sequences, to a value > 1.0 in
-                order to encourage the model to produce longer sequences.
+                Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent
+                to the sequence length, which in turn is used to divide the score of the sequence. Since the score is
+                the log likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences,
+                while `length_penalty` < 0.0 encourages shorter sequences.
             no_repeat_ngram_size (`int`, *optional*, defaults to 0):
                 If set to int > 0, all ngrams of that size can only occur once.
             bad_words_ids(`List[int]`, *optional*):
@@ -1149,9 +1161,10 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             )
             doc_scores = tf.squeeze(doc_scores, axis=1)
 
-        assert (
-            context_input_ids.shape[0] % n_docs
-        ) == 0, f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is {context_input_ids.shape[0]}."
+        assert (context_input_ids.shape[0] % n_docs) == 0, (
+            f" The first dimension of `context_input_ids` should be a multiple of `n_docs`={n_docs}, but is"
+            f" {context_input_ids.shape[0]}."
+        )
 
         batch_size = context_input_ids.shape[0] // n_docs
 
@@ -1249,6 +1262,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 eos_token_id=eos_token_id,
                 forced_bos_token_id=None,
                 forced_eos_token_id=None,
+                input_ids_seq_length=tf.shape(decoder_input_ids)[-1],
             )
             model_kwargs["attention_mask"] = context_attention_mask
 
@@ -1286,24 +1300,26 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
         if start_token_id is None:
             start_token_id = self.generator.config.decoder_start_token_id
-            assert (
-                start_token_id is not None
-            ), "self.generator.config.decoder_start_token_id has to be defined. In Rag we commonly use Bart as generator, see Bart docs for more information"
+            assert start_token_id is not None, (
+                "self.generator.config.decoder_start_token_id has to be defined. In Rag we commonly use Bart as"
+                " generator, see Bart docs for more information"
+            )
 
         pad_token_id = self.generator.config.pad_token_id
         assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
 
-        shifted_input_ids = tf.cast(input_ids, tf.int32)
-        start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), start_token_id)
-        shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, :-1]], -1)
+        start_tokens = tf.fill((shape_list(input_ids)[0], 1), tf.cast(start_token_id, input_ids.dtype))
+        shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
 
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids = tf.where(
-            shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
+            shifted_input_ids == -100,
+            tf.fill(shape_list(shifted_input_ids), tf.cast(pad_token_id, input_ids.dtype)),
+            shifted_input_ids,
         )
 
         # "Verify that `labels` has only positive values and -100"
-        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.cast(0, tf.int32))
+        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.cast(0, shifted_input_ids.dtype))
 
         # Make sure the assertion op is called by wrapping the result in an identity no-op
         with tf.control_dependencies([assert_gte0]):
@@ -1316,7 +1332,10 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         # shift tokens left (from original Pytorch's version)
 
-        target = tf.concat([target[:, 1:], tf.fill([target.shape[0], 1], self.config.generator.pad_token_id)], axis=1)
+        target = tf.concat(
+            [target[:, 1:], tf.fill([target.shape[0], 1], tf.cast(self.config.generator.pad_token_id, target.dtype))],
+            axis=1,
+        )
         rag_logprobs = self.marginalize(seq_logits, doc_scores, n_docs)
         loss = self.hf_compute_loss(target, rag_logprobs, from_logits=True, reduce_loss=reduce_loss)
 
@@ -1325,6 +1344,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     # Adopted modeling_tf_bart + add smooth_loss to match with pytorch version
     def hf_compute_loss(self, labels, y_pred, smooth_epsilon=0.0, from_logits=True, reduce_loss=False):
         """CrossEntropyLoss that ignores pad tokens"""
+        # Matt: As written, this loss is not XLA-compatible, but it's doing some very weird things
+        #       and I don't feel comfortable converting it.
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True,
             reduction=tf.keras.losses.Reduction.SUM,
@@ -1367,7 +1388,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         config: Optional[PretrainedConfig] = None,
         question_encoder: Optional[TFPreTrainedModel] = None,
         generator: Optional[TFPreTrainedModel] = None,
-        retriever: Optional = None,
+        retriever: Optional[RagRetriever] = None,
         **kwargs,
     ):
         assert config is not None or (
@@ -1411,27 +1432,27 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
     @replace_return_docstrings(output_type=TFRetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        doc_scores=None,
-        context_input_ids=None,
-        context_attention_mask=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        output_retrieved=None,
-        n_docs=None,
-        exclude_bos_score=None,
-        labels=None,
-        reduce_loss=None,
-        return_dict=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_outputs: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        doc_scores: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        context_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        context_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_retrieved: Optional[bool] = None,
+        n_docs: Optional[int] = None,
+        exclude_bos_score: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        reduce_loss: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
         **kwargs  # needs kwargs for generation
-    ):
+    ) -> Union[Tuple[tf.Tensor], TFRetrievAugLMMarginOutput]:
         r"""
         exclude_bos_score (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the score of the BOS token is disregarded when computing
@@ -1561,7 +1582,10 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         self, seq_logits, doc_scores, target, reduce_loss=False, epsilon=0.0, exclude_bos_score=False, n_docs=None
     ):
         # shift tokens left
-        target = tf.concat([target[:, 1:], tf.fill([target.shape[0], 1], self.config.generator.pad_token_id)], axis=1)
+        target = tf.concat(
+            [target[:, 1:], tf.fill([target.shape[0], 1], tf.cast(self.config.generator.pad_token_id, target.dtype))],
+            axis=1,
+        )
 
         # bos_token_id is None for T5
         bos_token_id = self.config.bos_token_id or self.config.generator.bos_token_id
@@ -1570,7 +1594,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         use_bos = bos_token_id is not None and equal_bos_token_id_all
 
         def _mask_pads(ll, smooth_obj):
-            pad_mask = tf.equal(target, self.config.generator.pad_token_id)
+            pad_mask = tf.equal(target, tf.cast(self.config.generator.pad_token_id, target.dtype))
             if tf.reduce_any(pad_mask):
                 ll = tf.where(pad_mask, 0.0, ll)
                 smooth_obj = tf.where(pad_mask, 0.0, smooth_obj)
@@ -1601,7 +1625,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         def torch_gather(param, id_tensor):
             # 2d-gather torch equivalent: https://stackoverflow.com/questions/52129909/tensorflow-equivalent-of-torch-gather
             def gather2d(target, id_tensor):
-                idx = tf.stack([tf.range(tf.shape(id_tensor)[0]), id_tensor[:, 0]], axis=-1)
+                idx = tf.stack([tf.range(tf.shape(id_tensor)[0], dtype=id_tensor.dtype), id_tensor[:, 0]], axis=-1)
                 result = tf.gather_nd(target, idx)
                 return tf.expand_dims(result, axis=-1)
 
@@ -1640,7 +1664,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
 
     def generate(
         self,
-        input_ids: Optional[tf.Tensor] = None,
+        input_ids: Optional[TFModelInputType] = None,
         attention_mask: Optional[tf.Tensor] = None,
         context_input_ids=None,
         context_attention_mask=None,
@@ -1745,12 +1769,14 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
                 new_input_ids = tf.tile(input_ids[index : index + 1], (num_candidates, 1))
                 outputs = self(new_input_ids, labels=output_sequences, exclude_bos_score=True)
             else:  # input_ids is None, need context_input_ids/mask and doc_scores
-                assert (
-                    context_attention_mask is not None
-                ), "Make sure that `context_attention_mask` are passed, if no `input_ids` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
-                assert (
-                    doc_scores is not None
-                ), "Make sure that `doc_scores` are passed, if no `input_ids` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
+                assert context_attention_mask is not None, (
+                    "Make sure that `context_attention_mask` are passed, if no `input_ids` is set. Alternatively, you"
+                    " can set a retriever using the `set_retriever(...)` function."
+                )
+                assert doc_scores is not None, (
+                    "Make sure that `doc_scores` are passed, if no `input_ids` is set. Alternatively, you can set a"
+                    " retriever using the `set_retriever(...)` function."
+                )
 
                 individual_input_ids = tf.tile(
                     generator_input_ids, (num_candidates, 1)

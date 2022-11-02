@@ -100,15 +100,19 @@ class FTDataArguments:
     max_length: Optional[int] = dataclasses.field(
         default=128,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            )
         },
     )
     pad_to_max_length: Optional[bool] = dataclasses.field(
         default=False,
         metadata={
-            "help": "Whether to pad all samples to `max_seq_length`. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+            "help": (
+                "Whether to pad all samples to `max_seq_length`. "
+                "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+            )
         },
     )
 
@@ -147,7 +151,10 @@ class FTTrainingArguments:
     weight_decay: Optional[float] = dataclasses.field(
         default=0.0,
         metadata={
-            "help": "The weight decay to apply (if not zero) to all layers except all bias and LayerNorm weights in [`AdamW`] optimizer."
+            "help": (
+                "The weight decay to apply (if not zero) to all layers except all bias and LayerNorm weights in"
+                " [`AdamW`] optimizer."
+            )
         },
     )
     learning_rate: Optional[float] = dataclasses.field(
@@ -157,13 +164,18 @@ class FTTrainingArguments:
     gradient_accumulation_steps: Optional[int] = dataclasses.field(
         default=1,
         metadata={
-            "help": "Number of updates steps to accumulate the gradients for, before performing a backward/update pass."
+            "help": (
+                "Number of updates steps to accumulate the gradients for, before performing a backward/update pass."
+            )
         },
     )
     max_steps: Optional[int] = dataclasses.field(
         default=-1,
         metadata={
-            "help": "If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`."
+            "help": (
+                "If set to a positive number, the total number of training steps to perform. Overrides"
+                " `num_train_epochs`."
+            )
         },
     )
     lr_scheduler_type: Optional[str] = dataclasses.field(
@@ -172,7 +184,10 @@ class FTTrainingArguments:
     warmup_steps: Optional[int] = dataclasses.field(
         default=1,
         metadata={
-            "help": "Number of steps used for a linear warmup from 0 to `learning_rate`. Overrides any effect of `warmup_ratio`."
+            "help": (
+                "Number of steps used for a linear warmup from 0 to `learning_rate`. Overrides any effect of"
+                " `warmup_ratio`."
+            )
         },
     )
     evaluation_strategy: Optional[str] = dataclasses.field(

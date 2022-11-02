@@ -80,7 +80,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config_name_or_path",
         type=str,
-        help="Identifier of the model config to use, if not provided, resolves to a base config for a given ``model_type``",
+        help=(
+            "Identifier of the model config to use, if not provided, resolves to a base config for a given"
+            " ``model_type``"
+        ),
     )
 
     args = parser.parse_args()

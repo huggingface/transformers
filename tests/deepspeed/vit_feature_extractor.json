@@ -1,0 +1,4 @@
+{
+    "feature_extractor_type": "ViTFeatureExtractor",
+    "size": 30
+}

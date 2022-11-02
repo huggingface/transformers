@@ -29,9 +29,15 @@ ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "google/electra-small-generator": "https://huggingface.co/google/electra-small-generator/resolve/main/config.json",
     "google/electra-base-generator": "https://huggingface.co/google/electra-base-generator/resolve/main/config.json",
     "google/electra-large-generator": "https://huggingface.co/google/electra-large-generator/resolve/main/config.json",
-    "google/electra-small-discriminator": "https://huggingface.co/google/electra-small-discriminator/resolve/main/config.json",
-    "google/electra-base-discriminator": "https://huggingface.co/google/electra-base-discriminator/resolve/main/config.json",
-    "google/electra-large-discriminator": "https://huggingface.co/google/electra-large-discriminator/resolve/main/config.json",
+    "google/electra-small-discriminator": (
+        "https://huggingface.co/google/electra-small-discriminator/resolve/main/config.json"
+    ),
+    "google/electra-base-discriminator": (
+        "https://huggingface.co/google/electra-base-discriminator/resolve/main/config.json"
+    ),
+    "google/electra-large-discriminator": (
+        "https://huggingface.co/google/electra-large-discriminator/resolve/main/config.json"
+    ),
 }
 
 
@@ -113,12 +119,12 @@ class ElectraConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import ElectraModel, ElectraConfig
+    >>> from transformers import ElectraConfig, ElectraModel
 
     >>> # Initializing a ELECTRA electra-base-uncased style configuration
     >>> configuration = ElectraConfig()
 
-    >>> # Initializing a model from the electra-base-uncased style configuration
+    >>> # Initializing a model (with random weights) from the electra-base-uncased style configuration
     >>> model = ElectraModel(configuration)
 
     >>> # Accessing the model configuration

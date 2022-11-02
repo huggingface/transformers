@@ -48,9 +48,9 @@ def get_dpt_config(checkpoint_url):
         config.use_batch_norm_in_fusion_residual = True
 
         config.num_labels = 150
-        repo_id = "datasets/huggingface/label-files"
+        repo_id = "huggingface/label-files"
         filename = "ade20k-id2label.json"
-        id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
+        id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename, repo_type="dataset")), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}

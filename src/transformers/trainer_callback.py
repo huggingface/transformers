@@ -262,6 +262,12 @@ class TrainerCallback:
         """
         pass
 
+    def on_predict(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, metrics, **kwargs):
+        """
+        Event called after a successful prediction.
+        """
+        pass
+
     def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called after a checkpoint save.
@@ -371,6 +377,9 @@ class CallbackHandler(TrainerCallback):
     def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, metrics):
         control.should_evaluate = False
         return self.call_event("on_evaluate", args, state, control, metrics=metrics)
+
+    def on_predict(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, metrics):
+        return self.call_event("on_predict", args, state, control, metrics=metrics)
 
     def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
         control.should_save = False
@@ -484,6 +493,12 @@ class ProgressCallback(TrainerCallback):
                 self.prediction_bar.close()
             self.prediction_bar = None
 
+    def on_predict(self, args, state, control, **kwargs):
+        if state.is_local_process_zero:
+            if self.prediction_bar is not None:
+                self.prediction_bar.close()
+            self.prediction_bar = None
+
     def on_log(self, args, state, control, logs=None, **kwargs):
         if state.is_local_process_zero and self.training_bar is not None:
             _ = logs.pop("total_flos", None)
@@ -556,7 +571,8 @@ class EarlyStoppingCallback(TrainerCallback):
 
         if metric_value is None:
             logger.warning(
-                f"early stopping required metric_for_best_model, but did not find {metric_to_check} so early stopping is disabled"
+                f"early stopping required metric_for_best_model, but did not find {metric_to_check} so early stopping"
+                " is disabled"
             )
             return
 
