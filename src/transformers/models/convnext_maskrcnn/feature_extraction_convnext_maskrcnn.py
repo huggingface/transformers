@@ -618,7 +618,7 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
 
     def get_seg_masks(self, mask_pred, det_bboxes, det_labels, rcnn_test_cfg, ori_shape, scale_factor, rescale):
         """Get segmentation masks from mask_pred and bboxes.
-        
+
         Args:
             mask_pred (Tensor or ndarray): shape (n, #class, h, w).
                 For single-scale testing, mask_pred is the direct output of model, whose type is Tensor, while for
@@ -631,7 +631,7 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
                 coordinates are divided by this scale factor to fit `ori_shape`.
             rescale (bool): If True, the resulting masks will be rescaled to
                 `ori_shape`.
-        
+
         Returns:
             list[list]: encoded masks. The c-th item in the outer list
                 corresponds to the c-th class. Given the c-th outer list, the i-th item in that inner list is the mask
