@@ -450,7 +450,7 @@ class ViTPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, nn.Linear):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
             module.weight.data = nn.init.trunc_normal_(
