@@ -1318,14 +1318,13 @@ class ClearMLCallback(TrainerCallback):
 
     def __init__(self):
         has_clearml = is_clearml_available()
-        if not has_clearml:
-            raise RuntimeError("ClearMLCallback requires 'clearml' to be installed. Run `pip install clearml`.")
+
         if has_clearml:
             import clearml
 
             self._clearml = clearml
         else:
-            self._clearml = None
+            raise RuntimeError("ClearMLCallback requires 'clearml' to be installed. Run `pip install clearml`.")
 
         self._initialized = False
         self._clearml_task = None
