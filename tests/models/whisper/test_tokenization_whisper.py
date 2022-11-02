@@ -199,6 +199,28 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
 
         self.assertListEqual(batch_output, EXPECTED_MULTI)
 
+    def test_set_prefix_tokens(self):
+        multilingual_tokenizer = WhisperTokenizer.from_pretrained(
+            "openai/whisper-tiny", language="spanish", task="translate"
+        )
+
+        # change the language prefix token from Spanish to English
+        multilingual_tokenizer.set_prefix_tokens(language="english")
+
+        batch = ["the cat", "the cat sat"]
+        batch_output = multilingual_tokenizer.batch_encode_plus(batch, padding=True).input_ids
+
+        # fmt: off
+        EXPECTED_MULTI = [
+            [START_OF_TRANSCRIPT, EN_CODE, TRANSLATE, NOTIMESTAMPS, 3322, 3857,
+             END_OF_TRANSCRIPT, END_OF_TRANSCRIPT],
+            [START_OF_TRANSCRIPT, EN_CODE, TRANSLATE, NOTIMESTAMPS, 3322, 3857,
+             3227, END_OF_TRANSCRIPT]
+        ]
+        # fmt: on
+
+        self.assertListEqual(batch_output, EXPECTED_MULTI)
+
     def test_batch_encoding_decoding(self):
         multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny", language="spanish")
         batch = ["hola güey", "que onda"]
