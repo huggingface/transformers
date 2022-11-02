@@ -122,17 +122,13 @@ The MInDS-14 dataset has a sampling rate of 8000khz (you can find this informati
 Now create a preprocessing function that:
 
 1. Calls the `audio` column to load and resample the audio file.
-2. Extracts the `input_values` from the audio file.
-3. Tokenize the `transcription` column with the processor and return the `input_ids` as the labels.
+2. Extracts the `input_values` from the audio file and tokenize the `transcription` column with the processor.
 
 ```py
 >>> def prepare_dataset(batch):
 ...     audio = batch["audio"]
-
-...     batch["input_values"] = processor(audio["array"], sampling_rate=audio["sampling_rate"]).input_values[0]
-...     batch["input_length"] = len(batch["input_values"])
-
-...     batch["labels"] = processor(text=batch["transcription"]).input_ids
+...     batch = processor(audio["array"], sampling_rate=audio["sampling_rate"], text=batch["transcription"])
+...     batch["input_length"] = len(batch["input_values"][0])
 ...     return batch
 ```
 
@@ -162,7 +158,7 @@ Unlike other data collators, this specific data collator needs to apply a differ
 ...     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
 ...         # split inputs and labels since they have to be of different lengths and need
 ...         # different padding methods
-...         input_features = [{"input_values": feature["input_values"]} for feature in features]
+...         input_features = [{"input_values": feature["input_values"][0]} for feature in features]
 ...         label_features = [{"input_ids": feature["labels"]} for feature in features]
 
 ...         batch = self.processor.pad(input_features, padding=self.padding, return_tensors="pt")
