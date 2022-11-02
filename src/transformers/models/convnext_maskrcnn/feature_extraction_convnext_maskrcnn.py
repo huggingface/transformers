@@ -623,3 +623,38 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
             )
 
         return results
+
+    def post_process_instance_segmentation(self, det_bboxes, det_labels, mask_pred, img_metas, rescale=True):
+        # split batch mask prediction back to each image
+        num_mask_roi_per_img = [len(det_bbox) for det_bbox in det_bboxes]
+        mask_preds = mask_pred.split(num_mask_roi_per_img, 0)
+
+        num_imgs = len(det_bboxes)
+        ori_shapes = tuple(meta["ori_shape"] for meta in img_metas)
+        scale_factors = tuple(meta["scale_factor"] for meta in img_metas)
+
+        if rescale:
+            scale_factors = [torch.from_numpy(scale_factor).to(det_bboxes[0].device) for scale_factor in scale_factors]
+            _bboxes = [
+                det_bboxes[i][:, :4] * scale_factors[i] if rescale else det_bboxes[i][:, :4]
+                for i in range(len(det_bboxes))
+            ]
+
+        # apply mask post-processing to each image individually
+        segm_results = []
+        for i in range(num_imgs):
+            if det_bboxes[i].shape[0] == 0:
+                segm_results.append([[] for _ in range(self.mask_head.num_classes)])
+            else:
+                segm_result = self.mask_head.get_seg_masks(
+                    mask_preds[i],
+                    _bboxes[i],
+                    det_labels[i],
+                    self.test_cfg,
+                    ori_shapes[i],
+                    scale_factors[i],
+                    rescale,
+                )
+                segm_results.append(segm_result)
+
+        return segm_results

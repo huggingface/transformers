@@ -3044,10 +3044,9 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         mask_results.update(loss_mask=loss_mask, mask_targets=mask_targets)
         return mask_results
 
-    def forward_test_mask(self, x, img_metas, det_bboxes, det_labels, rescale=False):
+    def forward_test_mask(self, x, img_metas, det_bboxes, rescale=False):
         """Simple test for mask head without augmentation."""
         # image shapes of images in the batch
-        ori_shapes = tuple(meta["ori_shape"] for meta in img_metas)
         scale_factors = tuple(meta["scale_factor"] for meta in img_metas)
 
         if isinstance(scale_factors[0], float):
@@ -3060,47 +3059,23 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             )
             scale_factors = np.array([scale_factors] * 4, dtype=np.float32)
 
-        num_imgs = len(det_bboxes)
-        if all(det_bbox.shape[0] == 0 for det_bbox in det_bboxes):
-            segm_results = [[[] for _ in range(self.mask_head.num_classes)] for _ in range(num_imgs)]
-        else:
-            # if det_bboxes is rescaled to the original image size, we need to
-            # rescale it back to the testing scale to obtain RoIs.
-            if rescale:
-                scale_factors = [
-                    torch.from_numpy(scale_factor).to(det_bboxes[0].device) for scale_factor in scale_factors
-                ]
-            _bboxes = [
-                det_bboxes[i][:, :4] * scale_factors[i] if rescale else det_bboxes[i][:, :4]
-                for i in range(len(det_bboxes))
-            ]
-            mask_rois = bbox2roi(_bboxes)
-            mask_results = self._mask_forward(x, mask_rois)
-            mask_pred = mask_results["mask_pred"]
+        # num_imgs = len(det_bboxes)
+        # if all(det_bbox.shape[0] == 0 for det_bbox in det_bboxes):
+        #     segm_results = [[[] for _ in range(self.mask_head.num_classes)] for _ in range(num_imgs)]
+        # else:
+        # if det_bboxes is rescaled to the original image size, we need to
+        # rescale it back to the testing scale to obtain RoIs.
+        if rescale:
+            scale_factors = [torch.from_numpy(scale_factor).to(det_bboxes[0].device) for scale_factor in scale_factors]
+        _bboxes = [
+            det_bboxes[i][:, :4] * scale_factors[i] if rescale else det_bboxes[i][:, :4]
+            for i in range(len(det_bboxes))
+        ]
+        mask_rois = bbox2roi(_bboxes)
+        mask_results = self._mask_forward(x, mask_rois)
+        mask_pred = mask_results["mask_pred"]
 
-            print("Shape of mask_pred:", mask_pred.shape)
-
-            # split batch mask prediction back to each image
-            num_mask_roi_per_img = [len(det_bbox) for det_bbox in det_bboxes]
-            mask_preds = mask_pred.split(num_mask_roi_per_img, 0)
-
-            # apply mask post-processing to each image individually
-            segm_results = []
-            for i in range(num_imgs):
-                if det_bboxes[i].shape[0] == 0:
-                    segm_results.append([[] for _ in range(self.mask_head.num_classes)])
-                else:
-                    segm_result = self.mask_head.get_seg_masks(
-                        mask_preds[i],
-                        _bboxes[i],
-                        det_labels[i],
-                        self.test_cfg,
-                        ori_shapes[i],
-                        scale_factors[i],
-                        rescale,
-                    )
-                    segm_results.append(segm_result)
-        return segm_results
+        return mask_pred
 
     def forward_train(
         self, x, img_metas, proposal_list, gt_bboxes, gt_labels, gt_bboxes_ignore=None, gt_masks=None, **kwargs
@@ -3183,11 +3158,6 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             corresponds to each image, and first element of tuple is bbox results, second element is mask results.
         """
         rois, proposals, logits, pred_boxes = self.forward_test_bboxes(hidden_states, proposal_list, self.test_cfg)
-
-        # TODO do the same for instance segmentation masks
-        # segm_results = self.forward_test_mask(hidden_states, img_metas, det_bboxes, det_labels, rescale=rescale)
-
-        # return list(zip(bbox_results, segm_results))
 
         return rois, proposals, logits, pred_boxes
 
