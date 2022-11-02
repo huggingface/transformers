@@ -460,11 +460,22 @@ def delta2bbox(
 
 def _do_paste_mask(masks, boxes, img_h, img_w, skip_empty=True):
     """Paste instance masks according to boxes.
-    Args:
+
     This implementation is modified from https://github.com/facebookresearch/detectron2/
-        masks (Tensor): N, 1, H, W boxes (Tensor): N, 4 img_h (int): Height of the image to be pasted. img_w (int):
-        Width of the image to be pasted. skip_empty (bool): Only paste masks within the region that
-            tightly bound all boxes, and returns the results this region only. An important optimization for CPU.
+
+    Args:
+        masks (Tensor):
+            N, 1, H, W
+        boxes (Tensor):
+            N, 4
+        img_h (int):
+            Height of the image to be pasted.
+        img_w (int):
+            Width of the image to be pasted.
+        skip_empty (bool):
+            Only paste masks within the region that tightly bound all boxes, and returns the results this region only.
+            An important optimization for CPU.
+
     Returns:
         tuple: (Tensor, tuple). The first item is mask tensor, the second one
             is the slice object.
@@ -523,7 +534,10 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
     should refer to this superclass for more information regarding those methods.
 
     Args:
-        ...
+        test_cfg
+            ...
+        num_classes
+            ...
     """
 
     model_input_names = ["pixel_values"]
@@ -604,6 +618,7 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
 
     def get_seg_masks(self, mask_pred, det_bboxes, det_labels, rcnn_test_cfg, ori_shape, scale_factor, rescale):
         """Get segmentation masks from mask_pred and bboxes.
+        
         Args:
             mask_pred (Tensor or ndarray): shape (n, #class, h, w).
                 For single-scale testing, mask_pred is the direct output of model, whose type is Tensor, while for
@@ -616,6 +631,7 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
                 coordinates are divided by this scale factor to fit `ori_shape`.
             rescale (bool): If True, the resulting masks will be rescaled to
                 `ori_shape`.
+        
         Returns:
             list[list]: encoded masks. The c-th item in the outer list
                 corresponds to the c-th class. Given the c-th outer list, the i-th item in that inner list is the mask
@@ -706,7 +722,7 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
         for i in range(N):
             cls_segms[labels[i]].append(im_mask[i].detach().cpu().numpy())
         return cls_segms
-    
+
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, img_metas: Union[TensorType, List[Tuple]] = None
     ):
@@ -796,9 +812,9 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
         return results
 
     def post_process_instance_segmentation(self, object_detection_results, mask_pred, img_metas, rescale=True):
-        det_bboxes = [result['boxes'] for result in object_detection_results]
-        det_labels = [result['labels'] for result in object_detection_results]
-        
+        det_bboxes = [result["boxes"] for result in object_detection_results]
+        det_labels = [result["labels"] for result in object_detection_results]
+
         # split batch mask prediction back to each image
         num_mask_roi_per_img = [len(det_bbox) for det_bbox in det_bboxes]
         mask_preds = mask_pred.split(num_mask_roi_per_img, 0)
