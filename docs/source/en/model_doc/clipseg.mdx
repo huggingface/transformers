@@ -39,13 +39,13 @@ to generalized queries involving affordances or properties*
 
 Tips:
 
-- [`CLIPSegForImageSegmentation`] adds the decoder on top of [`CLIPSegModel`]. The latter is identical to [`CLIPModel`].
+- [`CLIPSegForImageSegmentation`] adds a decoder on top of [`CLIPSegModel`]. The latter is identical to [`CLIPModel`].
 - [`CLIPSegForImageSegmentation`] can generate image segmentations based on arbitrary prompts at test time. A prompt can be either a text
-(provided to the model as `input_ids`) or an image (provided to the model as `conditional_pixel_values`). One can also provide a custom
+(provided to the model as `input_ids`) or an image (provided to the model as `conditional_pixel_values`). One can also provide custom
 conditional embeddings (provided to the model as `conditional_embeddings`).
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+The original code can be found [here](https://github.com/timojl/clipseg).
 
 
 ## CLIPSegConfig
@@ -60,6 +60,10 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## CLIPSegVisionConfig
 
 [[autodoc]] CLIPSegVisionConfig
+
+## CLIPSegFeatureExtractor
+
+[[autodoc]] CLIPSegFeatureExtractor
 
 ## CLIPSegModel
 

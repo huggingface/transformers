@@ -692,6 +692,7 @@ else:
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
+    _import_structure["models.clipseg"].append("CLIPSegFeatureExtractor")
     _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
     _import_structure["models.deformable_detr"].append("DeformableDetrFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
@@ -3700,6 +3701,7 @@ if TYPE_CHECKING:
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor
         from .models.clip import CLIPFeatureExtractor
+        from .models.clipseg import CLIPSegFeatureExtractor
         from .models.conditional_detr import ConditionalDetrFeatureExtractor
         from .models.convnext import ConvNextFeatureExtractor
         from .models.deformable_detr import DeformableDetrFeatureExtractor

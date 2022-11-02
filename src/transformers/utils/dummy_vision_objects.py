@@ -43,6 +43,13 @@ class CLIPFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class CLIPSegFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class ConditionalDetrFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
