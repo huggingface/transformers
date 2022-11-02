@@ -237,13 +237,13 @@ class WhisperTokenizer(PreTrainedTokenizer):
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word.
-        language (`str`, *optional*, defaults to `None`):
+        language (`str`, *optional*):
             The language of the transcription text. The corresponding language id token is appended to the start of the
             sequence for multilingual speech recognition and speech translation tasks, e.g. for Spanish the token
-            `<|es|>` is appended to the start of sequence. This should be used for multilingual fine-tuning only.
-        task (`str`, *optional*, defaults to `None`):
+            `"<|es|>"` is appended to the start of sequence. This should be used for multilingual fine-tuning only.
+        task (`str`, *optional*):
             Task identifier to append at the start of sequence (if any). This should be used for mulitlingual
-            fine-tuning, with `transcribe` for speech recognition and `translate` for speech translation.
+            fine-tuning, with `"transcribe"` for speech recognition and `"translate"` for speech translation.
         predict_timestamps (`bool`, *optional*, defaults to `False`):
             Whether to omit the `<|notimestamps|>` token at the start of the sequence.
     """
