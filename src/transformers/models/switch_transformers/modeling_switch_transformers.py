@@ -336,12 +336,12 @@ class SwitchTransformersSparseMLP(nn.Module):
         r"""
         Hold on, this will be slightly tricky to understand In the correct order, a MoE layer does the following:
 
-        1- Gets the `router_mask` from the router. The shape of the mask is `(batch_size, sequence_length, num_expert)` and corresponds to the argmax of the `router_probs`.  The probabilities are needed in the computation of the
-        hidden states : they are broadcasted to the hidden states values (can be interpreted
-        as a scaling factor).
+        1- Gets the `router_mask` from the router. The shape of the mask is `(batch_size, sequence_length, num_expert)`
+        and corresponds to the argmax of the `router_probs`. The probabilities are needed in the computation of the
+        hidden states : they are broadcasted to the hidden states values (can be interpreted as a scaling factor).
 
-        2- Dispatch the tokens to its associated experts. We do a classic for loop over the experts and assign for each expert the
-        corresponding hidden states.
+        2- Dispatch the tokens to its associated experts. We do a classic for loop over the experts and assign for each
+        expert the corresponding hidden states.
 
         """
         # Step 1: Get the router_mask from the router as wel as the probabilities
@@ -1811,8 +1811,16 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
                     layer_past_state.index_select(0, beam_idx.to(layer_past_state.device)),
                 )
 
-            assert reordered_layer_past_states[0].shape == layer_past_states[0].shape
-            assert len(reordered_layer_past_states) == len(layer_past_states)
+            if reordered_layer_past_states[0].shape != layer_past_states[0].shape:
+                raise ValueError(
+                    "expected reordered_layer_past_states to have the same shape than layer_past_states"
+                    f"but got {reordered_layer_past_states[0].shape} and {layer_past_states[0].shape}"
+                )
+            if len(reordered_layer_past_states) != len(layer_past_states):
+                raise ValueError(
+                    "expected layer_past_states to have the same length as reordered_layer_past_states"
+                    f"got {len(layer_past_states)} and {len(reordered_layer_past_states)}"
+                )
 
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
         return reordered_decoder_past
