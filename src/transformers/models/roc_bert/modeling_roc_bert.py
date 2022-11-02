@@ -1145,8 +1145,7 @@ class RocBertForPreTraining(RocBertPreTrainedModel):
         >>> inputs.update(attack_inputs)
         >>> outputs = model(**inputs)
 
-        >>> prediction_logits = outputs.prediction_logits
-        >>> seq_relationship_logits = outputs.seq_relationship_logits
+        >>> logits = outputs.logits
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
