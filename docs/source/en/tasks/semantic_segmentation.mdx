@@ -119,6 +119,8 @@ To apply the `jitter` over the entire dataset, use the 🤗 Datasets [`~datasets
 
 ## Train
 
+<frameworkcontent>
+<pt>
 Load SegFormer with [`AutoModelForSemanticSegmentation`], and pass the model the mapping between label ids and label classes:
 
 ```py
@@ -218,69 +220,11 @@ Lastly, call [`~Trainer.train`] to finetune your model:
 ```py
 >>> trainer.train()
 ```
+</pt>
+</frameworkcontent>
 
-## Inference
+<Tip>
 
-Great, now that you've finetuned a model, you can use it for inference!
+For a more in-depth example of how to fine-tune a model for image classification, take a look at [this blog post](https://huggingface.co/blog/fine-tune-segformer).
 
-Load an image for inference:
-
-```py
->>> image = ds[0]["image"]
->>> image
-```
-
-<div class="flex justify-center">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/semantic-seg-image.png" alt="Image of bedroom"/>
-</div>
-
-Process the image with a feature extractor and place the `pixel_values` on a GPU:
-
-```py
->>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # use GPU if available, otherwise use a CPU
->>> encoding = feature_extractor(image, return_tensors="pt")
->>> pixel_values = encoding.pixel_values.to(device)
-```
-
-Pass your input to the model and return the `logits`:
-
-```py
->>> outputs = model(pixel_values=pixel_values)
->>> logits = outputs.logits.cpu()
-```
-
-Next, rescale the logits to the original image size:
-
-```py
->>> upsampled_logits = nn.functional.interpolate(
-...     logits,
-...     size=image.size[::-1],
-...     mode="bilinear",
-...     align_corners=False,
-... )
-
->>> pred_seg = upsampled_logits.argmax(dim=1)[0]
-```
-
-To visualize the results, load the [dataset color palette](https://github.com/tensorflow/models/blob/3f1ca33afe3c1631b733ea7e40c294273b9e406d/research/deeplab/utils/get_dataset_colormap.py#L51) that maps each class to their RGB values. Then you can combine and plot your image and the predicted segmentation map:
-
-```py
->>> import matplotlib.pyplot as plt
-
->>> color_seg = np.zeros((pred_seg.shape[0], pred_seg.shape[1], 3), dtype=np.uint8)
->>> palette = np.array(ade_palette())
->>> for label, color in enumerate(palette):
-...     color_seg[pred_seg == label, :] = color
->>> color_seg = color_seg[..., ::-1]  # convert to BGR
-
->>> img = np.array(image) * 0.5 + color_seg * 0.5  # plot the image with the segmentation map
->>> img = img.astype(np.uint8)
-
->>> plt.figure(figsize=(15, 10))
->>> plt.imshow(img)
->>> plt.show()
-```
-
-<div class="flex justify-center">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/semantic-seg-preds.png" alt="Image of bedroom overlayed with segmentation map"/>
-</div>
+</Tip>
