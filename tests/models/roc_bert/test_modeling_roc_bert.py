@@ -30,6 +30,7 @@ if is_torch_available():
         RocBertForCausalLM,
         RocBertForMaskedLM,
         RocBertForMultipleChoice,
+        RocBertForPreTraining,
         RocBertForQuestionAnswering,
         RocBertForSequenceClassification,
         RocBertForTokenClassification,
@@ -516,6 +517,40 @@ class RocBertModelTester:
         }
         return config, inputs_dict
 
+    def create_and_check_for_pretraining(
+        self,
+        config,
+        input_ids,
+        input_shape_ids,
+        input_pronunciation_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+    ):
+        model = RocBertForPreTraining(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            input_shape_ids,
+            input_pronunciation_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            attack_input_ids=input_ids,
+            attack_input_shape_ids=input_shape_ids,
+            attack_input_pronunciation_ids=input_pronunciation_ids,
+            attack_attention_mask=input_mask,
+            attack_token_type_ids=token_type_ids,
+            labels_input_ids=token_labels,
+            labels_input_shape_ids=input_shape_ids,
+            labels_input_pronunciation_ids=input_pronunciation_ids,
+            labels_attention_mask=input_mask,
+            labels_token_type_ids=token_type_ids,
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
 
 @require_torch
 class RocBertModelTest(ModelTesterMixin, unittest.TestCase):
@@ -574,6 +609,10 @@ class RocBertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
+
+    def test_for_pretraining(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
     def test_model_as_decoder(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()

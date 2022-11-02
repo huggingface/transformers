@@ -49,6 +49,7 @@ else:
         "RocBertLayer",
         "RocBertModel",
         "RocBertPreTrainedModel",
+        "RocBertPreTraining",
         "load_tf_weights_in_roc_bert",
     ]
 
@@ -75,6 +76,7 @@ if TYPE_CHECKING:
             RocBertForCausalLM,
             RocBertForMaskedLM,
             RocBertForMultipleChoice,
+            RocBertForPreTraining,
             RocBertForQuestionAnswering,
             RocBertForSequenceClassification,
             RocBertForTokenClassification,

@@ -853,6 +853,7 @@ else:
             "RocBertForTokenClassification",
             "RocBertLayer",
             "RocBertModel",
+            "RocBertForPreTraining",
             "RocBertPreTrainedModel",
             "load_tf_weights_in_roc_bert",
         ]
@@ -4643,6 +4644,7 @@ if TYPE_CHECKING:
             RocBertForCausalLM,
             RocBertForMaskedLM,
             RocBertForMultipleChoice,
+            RocBertForPreTraining,
             RocBertForQuestionAnswering,
             RocBertForSequenceClassification,
             RocBertForTokenClassification,
