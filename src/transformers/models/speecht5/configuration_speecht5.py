@@ -66,6 +66,8 @@ class SpeechT5Config(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
+        positional_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout probability for the text position encoding layers.
         hidden_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.1):
@@ -183,6 +185,7 @@ class SpeechT5Config(PretrainedConfig):
         decoder_attention_heads=12,
         decoder_layerdrop=0.1,
         hidden_act="gelu",
+        positional_dropout=0.1,
         hidden_dropout=0.1,
         attention_dropout=0.1,
         activation_dropout=0.1,
@@ -240,6 +243,7 @@ class SpeechT5Config(PretrainedConfig):
         self.decoder_attention_heads = decoder_attention_heads
         self.decoder_layerdrop = decoder_layerdrop
         self.hidden_act = hidden_act
+        self.positional_dropout = positional_dropout
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout

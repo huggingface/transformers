@@ -429,6 +429,29 @@ class SpeechT5PositionalConvEmbedding(nn.Module):
         return hidden_states
 
 
+class SpeechT5ScaledPositionalEncoding(nn.Module):
+    """
+    Scaled positional encoding, see §3.2 in https://arxiv.org/abs/1809.08895
+    """
+    def __init__(self, dropout, dim, max_len=5000):
+        pe = torch.zeros(max_len, dim)
+        position = torch.arange(0, max_len).unsqueeze(1)
+        div_term = torch.exp((torch.arange(0, dim, 2, dtype=torch.float) * -(math.log(10000.0) / dim)))
+        pe[:, 0::2] = torch.sin(position.float() * div_term)
+        pe[:, 1::2] = torch.cos(position.float() * div_term)
+        pe = pe.unsqueeze(0)
+        super().__init__()
+        self.register_buffer("pe", pe)
+        self.dropout = nn.Dropout(p=dropout)
+        self.dim = dim
+        self.alpha = torch.nn.Parameter(torch.tensor(1.0))
+
+    def forward(self, emb):
+        emb = emb + self.alpha * self.pe[:, : emb.size(1)]
+        emb = self.dropout(emb)
+        return emb
+
+
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2SamePadLayer with Wav2Vec2->SpeechT5
 class SpeechT5SamePadLayer(nn.Module):
     def __init__(self, num_conv_pos_embeddings):
@@ -676,22 +699,24 @@ class SpeechT5TextEncoderPrenet(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
+        self.encode_positions = SpeechT5ScaledPositionalEncoding(
+            config.positional_dropout,
+            config.hidden_size,
+            config.max_text_positions,
+        )
 
-        # TODO: implement this class
-
-    def forward(
-        self,
-        input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-    ):
-        return input_ids
+    def forward(self, input_ids: torch.Tensor):
+        inputs_embeds = self.embed_tokens(input_ids)
+        inputs_embeds = self.encode_positions(inputs_embeds)
+        return inputs_embeds
 
 
 class SpeechT5TextDecoderPrenet(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.dropout = nn.Dropout(config.hidden_dropout)
+        self.dropout = nn.Dropout(config.positional_dropout)
         self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
@@ -1370,9 +1395,7 @@ class SpeechT5EncoderWithTextPrenet(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
 
-        # TODO: implement this
-        # hidden_states, attention_mask = self.prenet(input_values, attention_mask)
-        hidden_states = input_values
+        hidden_states = self.prenet(input_values)
 
         outputs = self.wrapped_encoder(
             hidden_states=hidden_states,
@@ -2364,6 +2387,161 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
+
+
+@add_start_docstrings(
+    """SpeechT5 Model with a text encoder and a speech decoder.""",
+    SPEECHT5_START_DOCSTRING,
+)
+class SpeechT5ForTTS(SpeechT5PreTrainedModel):
+    _keys_to_ignore_on_load_missing = [
+    ]
+    _keys_to_ignore_on_save = [
+    ]
+
+    def __init__(self, config: SpeechT5Config):
+        super().__init__(config)
+
+        if config.vocab_size is None:
+            raise ValueError(
+                f"You are trying to instantiate {self.__class__} with a configuration that "
+                "does not define the vocabulary size of the language model head. Please "
+                "instantiate the model as follows: `SpeechT5ForTTS.from_pretrained(..., vocab_size=vocab_size)`. "
+                "or define `vocab_size` of your model's configuration."
+            )
+
+        text_encoder = SpeechT5EncoderWithTextPrenet(config)
+        speech_decoder = SpeechT5DecoderWithSpeechPrenet(config)
+        self.speecht5 = SpeechT5Model(config, text_encoder, speech_decoder)
+
+        self.speech_decoder_postnet = SpeechT5SpeechDecoderPostnet(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_encoder(self):
+        return self.speecht5.get_encoder()
+
+    def get_decoder(self):
+        return self.speecht5.get_decoder()
+
+    # def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
+    #     new_embeddings = super().resize_token_embeddings(new_num_tokens)
+    #     return new_embeddings
+
+    # def get_output_embeddings(self):
+    #     return self.text_decoder_postnet.get_output_embeddings()
+
+    # def set_output_embeddings(self, new_embeddings):
+    #     self.text_decoder_postnet.set_output_embeddings(new_embeddings)
+
+    @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_values: Optional[torch.Tensor] = None,
+        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        decoder_head_mask: Optional[torch.FloatTensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+    ) -> Union[Tuple, Seq2SeqLMOutput]:
+        r"""
+        TODO
+
+        Returns:
+
+        Example: TODO
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # if labels is not None:
+        #     if decoder_input_ids is None:
+        #         decoder_input_ids = shift_tokens_right(
+        #             labels, self.config.pad_token_id, self.config.decoder_start_token_id
+        #         )
+
+        outputs = self.speecht5(
+            input_values=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_values=decoder_input_values,
+            decoder_attention_mask=decoder_attention_mask,
+            head_mask=head_mask,
+            decoder_head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            encoder_outputs=encoder_outputs,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+        )
+
+        # logits = self.speech_decoder_postnet(outputs[0])
+
+        # loss = None
+        # if labels is not None:
+        #     loss_fct = CrossEntropyLoss()
+        #     loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
+
+        # if not return_dict:
+        #     output = (logits,) + outputs[1:]
+        #     return ((loss,) + output) if loss is not None else output
+
+        # return Seq2SeqLMOutput(
+        #     loss=loss,
+        #     logits=logits,
+        #     past_key_values=outputs.past_key_values,
+        #     decoder_hidden_states=outputs.decoder_hidden_states,
+        #     decoder_attentions=outputs.decoder_attentions,
+        #     cross_attentions=outputs.cross_attentions,
+        #     encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+        #     encoder_hidden_states=outputs.encoder_hidden_states,
+        #     encoder_attentions=outputs.encoder_attentions,
+        # )
+        return outputs
+
+    # def prepare_inputs_for_generation(
+    #     self,
+    #     decoder_input_ids,
+    #     past=None,
+    #     attention_mask=None,
+    #     head_mask=None,
+    #     decoder_head_mask=None,
+    #     cross_attn_head_mask=None,
+    #     use_cache=None,
+    #     encoder_outputs=None,
+    #     **kwargs
+    # ):
+    #     # cut decoder_input_ids if past is used
+    #     if past is not None:
+    #         decoder_input_ids = decoder_input_ids[:, -1:]
+
+    #     return {
+    #         "encoder_outputs": encoder_outputs,
+    #         "past_key_values": past,
+    #         "decoder_input_ids": decoder_input_ids,
+    #         "attention_mask": attention_mask,
+    #         "head_mask": head_mask,
+    #         "decoder_head_mask": decoder_head_mask,
+    #         "cross_attn_head_mask": cross_attn_head_mask,
+    #         "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
+    #     }
+
+    # @staticmethod
+    # def _reorder_cache(past, beam_idx):
+    #     reordered_past = ()
+    #     for layer_past in past:
+    #         reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+    #     return reordered_past
 
 
 @add_start_docstrings("""SpeechT5 Model with a TODO on top.""", SPEECHT5_START_DOCSTRING)

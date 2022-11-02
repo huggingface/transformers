@@ -26,6 +26,7 @@ from transformers import (
     SpeechT5Config,
     SpeechT5ForConditionalGeneration,
     SpeechT5ForCTC,
+    SpeechT5ForTTS,
     SpeechT5ForPreTraining,
     logging,
 )
@@ -39,6 +40,16 @@ MAPPING_SPEECH_ENCODER_PRENET = {
     "speech_encoder_prenet.post_extract_proj": "speecht5.encoder.prenet.feature_projection.projection",
     "speech_encoder_prenet.pos_conv.0": "speecht5.encoder.prenet.pos_conv_embed.conv",
     "speech_encoder_prenet.mask_emb": "speecht5.encoder.prenet.masked_spec_embed",
+}
+MAPPING_TEXT_ENCODER_PRENET = {
+    "text_encoder_prenet.encoder_prenet.0": "speecht5.encoder.prenet.embed_tokens",
+    "text_encoder_prenet.encoder_prenet.1.alpha": "speecht5.encoder.prenet.encode_positions.alpha",
+}
+MAPPING_SPEECH_DECODER_PRENET = {
+    # "speech_decoder_prenet.*",
+}
+MAPPING_SPEECH_DECODER_POSTNET = {
+    # "speech_decoder_postnet.*",
 }
 MAPPING_TEXT_DECODER_PRENET = {
     "text_decoder_prenet.embed_tokens": "speecht5.decoder.prenet.embed_tokens",
@@ -85,6 +96,13 @@ MAPPING_CTC = {
     **MAPPING_ENCODER,
     "encoder.proj": "lm_head",
 }
+MAPPING_T2S = {
+    **MAPPING_TEXT_ENCODER_PRENET,
+    **MAPPING_ENCODER,
+    **MAPPING_DECODER,
+    **MAPPING_SPEECH_DECODER_PRENET,
+    **MAPPING_SPEECH_DECODER_POSTNET,
+}
 TOP_LEVEL_KEYS = [
 ]
 IGNORE_KEYS = [
@@ -111,6 +129,12 @@ IGNORE_KEYS_CTC = IGNORE_KEYS + [
     "text_decoder_postnet.*",
     "speech_decoder_prenet.*",
     "speech_decoder_postnet.*",
+]
+IGNORE_KEYS_T2S = IGNORE_KEYS + [
+    "encoder.proj",
+    "speech_encoder_prenet.*",
+    "text_decoder_prenet.*",
+    "text_decoder_postnet.*",
 ]
 
 
@@ -164,10 +188,16 @@ def recursively_load_weights(fairseq_dict, hf_model, task):
         feature_encoder = hf_model.speecht5.encoder.prenet.feature_encoder
         MAPPING = MAPPING_S2T
         IGNORE_KEYS = IGNORE_KEYS_S2T
-    else:
+    elif task == "ctc":
         feature_encoder = hf_model.speecht5.encoder.prenet.feature_encoder
         MAPPING = MAPPING_CTC
         IGNORE_KEYS = IGNORE_KEYS_CTC
+    elif task == "t2s":
+        feature_encoder = None
+        MAPPING = MAPPING_T2S
+        IGNORE_KEYS = IGNORE_KEYS_T2S
+    else:
+        raise ValueError(f"Unsupported task: {task}")
 
     for name, value in fairseq_dict.items():
         if should_ignore(name, IGNORE_KEYS):
@@ -323,6 +353,9 @@ def convert_speecht5_checkpoint(
         model = SpeechT5ForConditionalGeneration(config)
     elif task == "ctc":
         model = SpeechT5ForCTC(config)
+    elif task == "t2s":
+        config.max_text_positions = 600
+        model = SpeechT5ForTTS(config)
     elif task == "pretrain":
         model = SpeechT5ForPreTraining(config)
     else:
@@ -340,7 +373,7 @@ if __name__ == "__main__":
         "--task",
         default="s2t",
         type=str,
-        help="Type of the SpeechT5 model you'd like to convert. Should be one of 's2t', 'ctc', 'pretrain'.",
+        help="Type of the SpeechT5 model you'd like to convert. Should be one of 's2t', 'ctc', 't2s', 'pretrain'.",
     )
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to fairseq checkpoint")
     parser.add_argument("--dict_path", default=None, type=str, help="Path to dict of fine-tuned model")
