@@ -47,7 +47,6 @@ VOCAB_FILES_NAMES = {
     "word_pronunciation_file": "word_pronunciation.json",
 }
 
-# todo: change the path
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "weiweishi/roc-bert-base-zh": "https://huggingface.co/weiweishi/roc-bert-base-zh/resolve/main/vocab.txt"
@@ -83,7 +82,7 @@ def load_vocab(vocab_file):
     return vocab
 
 
-# Copied from transformers.models.bert.tokenization_bert.load_vocab
+# Copied from transformers.models.bert.tokenization_bert.whitespace_tokenize
 def whitespace_tokenize(text):
     """Runs basic whitespace cleaning and splitting on a piece of text."""
     text = text.strip()
@@ -198,12 +197,10 @@ class RocBertTokenizer(PreTrainedTokenizer):
             )
         self.wordpiece_tokenizer = RocBertWordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
 
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.do_lower_case
     @property
     def do_lower_case(self):
         return self.basic_tokenizer.do_lower_case
 
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.vocab_size
     @property
     def vocab_size(self):
         return len(self.vocab)
@@ -777,13 +774,12 @@ class RocBertTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.ids_to_tokens.get(index, self.unk_token)
 
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer._convert_tokens_to_string
+    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.convert_tokens_to_string
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         out_string = " ".join(tokens).replace(" ##", "").strip()
         return out_string
 
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
         self,
         token_ids_0: List[int],
@@ -920,7 +916,7 @@ class RocBertTokenizer(PreTrainedTokenizer):
 # Copied from  transformers.models.bert.tokenization_bert.BasicTokenizer with BasicTokenizer->RocBertBasicTokenizer
 class RocBertBasicTokenizer(object):
     """
-    Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
+    Constructs a RocBertBasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
     Args:
         do_lower_case (`bool`, *optional*, defaults to `True`):
