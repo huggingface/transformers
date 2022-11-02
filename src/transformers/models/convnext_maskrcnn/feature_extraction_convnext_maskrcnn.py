@@ -729,7 +729,6 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
         threshold: float = 0.5,
         target_sizes=None,
         scale_factors=None,
-        rescale=True,
     ):
         """
         Converts the output of [`ConvNextForObjectDetection`] into the format expected by the COCO api. Only supports
@@ -795,7 +794,7 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
                     bbox_pred[i],
                     img_shapes[i],
                     scale_factors[i],
-                    rescale=rescale,
+                    rescale=True, # we rescale by default
                     cfg=self.test_cfg,
                 )
             det_bboxes.append(det_bbox)
