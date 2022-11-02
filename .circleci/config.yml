@@ -118,7 +118,9 @@ jobs:
                       - '~/.cache/pip'
             - run:
                 name: Show installed libraries and their versions
-                command: pip freeze
+                command: pip freeze | tee installed.txt
+            - store_artifacts:
+                  path: ~/transformers/installed.txt
             - run: black --check --preview examples tests src utils
             - run: isort --check-only examples tests src utils
             - run: python utils/custom_init_isort.py --check_only
@@ -150,7 +152,9 @@ jobs:
                       - '~/.cache/pip'
             - run:
                 name: Show installed libraries and their versions
-                command: pip freeze
+                command: pip freeze | tee installed.txt
+            - store_artifacts:
+                  path: ~/transformers/installed.txt
             - run: python utils/check_copies.py
             - run: python utils/check_table.py
             - run: python utils/check_dummies.py
