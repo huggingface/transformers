@@ -329,7 +329,7 @@ class BloomAttention(nn.Module):
         input_dtype = attention_scores.dtype
         # `float16` has a minimum value of -65504.0, whereas `bfloat16` and `float32` have a minimum value of `-3.4e+38`
         # compute softmax in fp32, the same as the fused kernel during training
-        # https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/09a35f53abac96903fee50787426b7ee5f63fc62/megatron/fused_kernels/scaled_upper_triang_masked_softmax_cuda.cu#L52)
+        # https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/09a35f53abac96903fee50787426b7ee5f63fc62/megatron/fused_kernels/scaled_upper_triang_masked_softmax_cuda.cu#L52
         if input_dtype == torch.float16 or input_dtype == torch.bfloat16:
             attention_scores = attention_scores.to(torch.float)
         attn_weights = torch.masked_fill(attention_scores, attention_mask, torch.finfo(attention_scores.dtype).min)
