@@ -42,6 +42,8 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
+    from transformers import ConvNextMaskRCNNFeatureExtractor
+
 
 class ConvNextMaskRCNNModelTester:
     def __init__(
@@ -238,7 +240,10 @@ def prepare_img():
 class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_object_detection_head(self):
+        test_cfg = dict(score_thr=0.05, nms=dict(type="nms", iou_threshold=0.5), max_per_img=100, mask_thr_binary=0.5)
+        num_classes = 80
         # TODO update to appropriate organization
+        feature_extractor = ConvNextMaskRCNNFeatureExtractor(test_cfg=test_cfg, num_classes=num_classes)
         model = ConvNextMaskRCNNForObjectDetection.from_pretrained("nielsr/convnext-tiny-maskrcnn").to(torch_device)
 
         # TODO use feature extractor instead?
@@ -257,7 +262,7 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
         img_metas = [
             dict(
                 img_shape=pixel_values.shape[1:],
-                scale_factor=np.array([width_scale, height_scale, width_scale, height_scale], dtype=np.float32),
+                scale_factor=np.array([1.6671875, 1.6666666, 1.6671875, 1.6666666], dtype=np.float32),
                 ori_shape=(3, height, width),
             )
         ]
@@ -265,20 +270,36 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
         # forward pass
         with torch.no_grad():
             outputs = model(pixel_values, img_metas=img_metas)
-            bbox_results = outputs.results[0][0]
 
-        # verify the results
-        self.assertEqual(len(bbox_results), 80)
-
-        print("Bbox results:", bbox_results[15])
-        expected_slice = np.array(
-            [
-                [17.922478, 55.41647, 319.25494, 470.2593, 0.9981325],
-                [337.29407, 18.415943, 633.0128, 381.94666, 0.99591476],
-            ],
-            dtype=np.float32,
+        # verify outputs
+        self.assertListEqual(
+            list(outputs.keys()),
+            ["losses", "rois", "proposals", "logits", "pred_boxes", "fpn_hidden_states", "hidden_states"],
         )
-        self.assertTrue(np.allclose(bbox_results[15], expected_slice, atol=1e-4))
+        expected_slice_logits = torch.tensor(
+            [[-12.4785, -17.4976, -14.7001], [-10.9181, -16.7281, -13.2826], [-10.5053, -18.3817, -15.5554]],
+            device=torch_device,
+        )
+        expected_slice_boxes = torch.tensor(
+            [[-0.8485, 0.6819, -1.1016], [1.4864, -0.1529, -1.2551], [0.0233, 0.4202, 0.2257]],
+            device=torch_device,
+        )
+        self.assertEquals(outputs.logits.shape, torch.Size([1, 1000, 81]))
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits))
+        self.assertEquals(outputs.pred_boxes.shape, torch.Size([1, 1000, 320]))
+        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
+
+        # verify postprocessed results
+        results = feature_extractor.post_process_object_detection(outputs, threshold=0.5, img_metas=img_metas)
+
+        self.assertEqual(len(results), 1)
+        expected_slice = torch.tensor([0.9981, 0.9959, 0.9874, 0.9110, 0.7234, 0.6268], device=torch_device)
+        self.assertTrue(torch.allclose(results[0]["scores"], expected_slice, atol=1e-4))
+        expected_slice = torch.tensor([15, 15, 65, 65, 57, 59], device=torch_device)
+        self.assertTrue(torch.allclose(results[0]["labels"], expected_slice))
+        self.assertEquals(results[0]["boxes"].shape, torch.Size([6, 4]))
+        expected_slice = torch.tensor([17.9057, 55.4164, 318.9557], device=torch_device)
+        self.assertTrue(torch.allclose(results[0]["boxes"][0, :3], expected_slice))
 
     @slow
     def test_training_object_detection_head(self):

@@ -14,13 +14,7 @@
 # limitations under the License.
 """ ConvNextMaskRCNN model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
-
-from packaging import version
-
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -36,7 +30,7 @@ CONVNEXTMASKRCNN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class ConvNextMaskRCNNConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ConvNextMaskRCNNModel`]. It is used to
-    instantiate an ConvNextMaskRCNN model according to the specified arguments, defining the model architecture.
+    instantiate a ConvNextMaskRCNN model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the ConvNextMaskRCNN
     [facebook/convnext-tiny-maskrcnn](https://huggingface.co/facebook/convnext-tiny-maskrcnn) architecture.
 
@@ -217,20 +211,3 @@ class ConvNextMaskRCNNConfig(PretrainedConfig):
         self.rcnn_sampler_pos_fraction = rcnn_sampler_pos_fraction
         self.rcnn_sampler_neg_pos_ub = rcnn_sampler_neg_pos_ub
         self.rcnn_sampler_add_gt_as_proposals = rcnn_sampler_add_gt_as_proposals
-
-
-class ConvNextMaskRCNNOnnxConfig(OnnxConfig):
-
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "sequence"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-5
