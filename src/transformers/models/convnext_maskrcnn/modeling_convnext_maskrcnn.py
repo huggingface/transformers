@@ -97,8 +97,6 @@ class MaskRCNNModelOutput(ModelOutput):
     Args:
         losses (...)
             ...
-        results (...)
-            ...
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -116,11 +114,10 @@ class MaskRCNNModelOutput(ModelOutput):
     proposals: torch.FloatTensor = None
     logits: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
-    results: List[List[np.ndarray]] = None
     last_hidden_state: torch.FloatTensor = None
+    fpn_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    fpn_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 def unmap(data, count, inds, fill=0):
@@ -3200,7 +3197,7 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
         # rpn_outs[1] are the bounding box features for each of the feature maps
 
         losses = dict()
-        results = None
+        rois, proposals, logits, pred_boxes = None, None, None, None
         if labels is not None:
             rpn_outputs = self.rpn_head(
                 hidden_states,
@@ -3236,7 +3233,6 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
             proposals=proposals,
             logits=logits,
             pred_boxes=pred_boxes,
-            results=results,
             fpn_hidden_states=hidden_states,
             hidden_states=outputs.hidden_states,
         )
