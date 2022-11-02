@@ -1636,7 +1636,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
 
         # for each image, we compute valid flags of multi level anchors
         valid_flag_list = []
-        for img_id, img_meta in enumerate(img_metas):
+        for img_meta in img_metas:
             multi_level_flags = self.prior_generator.valid_flags(featmap_sizes, img_meta["pad_shape"], device)
             valid_flag_list.append(multi_level_flags)
 
@@ -2422,9 +2422,9 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
         return cls_score, bbox_pred
 
     def _get_target_single(self, pos_bboxes, neg_bboxes, pos_gt_bboxes, pos_gt_labels, cfg):
-        """Calculate the ground truth for proposals in the single image
-        Args:
-        according to the sampling results.
+        """Calculate the ground truth for proposals in the single image according to the sampling results.
+            
+        Args:    
             pos_bboxes (Tensor): Contains all the positive boxes,
                 has shape (num_pos, 4), the last dimension 4 represents [tl_x, tl_y, br_x, br_y].
             neg_bboxes (Tensor): Contains all the negative boxes,
@@ -2434,6 +2434,7 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
             pos_gt_labels (Tensor): Contains gt_labels for
                 all positive samples, has shape (num_pos, ).
             cfg (obj:`ConfigDict`): `train_cfg` of R-CNN.
+        
         Returns:
             Tuple[Tensor]: Ground truth for proposals in a single image. Containing the following Tensors:
                 - labels(Tensor): Gt_labels for all proposals, has shape (num_proposals,).
@@ -2928,56 +2929,6 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         rois, proposals, logits, pred_boxes = self.forward_test_bboxes(hidden_states, proposal_list, self.test_cfg)
 
         return rois, proposals, logits, pred_boxes
-
-    def forward(self, x, img_metas, proposals, rcnn_test_cfg, rescale=False):
-        """
-        THIS IS A NEW EXPERIMENTAL METHOD to output a general ObjectDetectionOutput class.
-
-        This method replaces `forward_test`, `forward_test_bboxes` and `forward_test_mask`.
-
-        Args:
-            x (tuple[Tensor]):
-                Feature maps of all scale levels.
-            img_metas (list[dict]):
-                Image meta info.
-            proposals (List[Tensor]):
-                Region proposals.
-            rcnn_test_cfg (obj:`ConfigDict`):
-                `test_cfg` of R-CNN.
-            rescale (bool):
-                If True, return boxes in original image space. Default: False.
-
-        Returns:
-            tuple[list[Tensor], list[Tensor]]: The first list contains
-                the boxes of the corresponding image in a batch, each tensor has the shape (num_boxes, 5) and last
-                dimension 5 represent (tl_x, tl_y, br_x, br_y, score). Each Tensor in the second list is the labels
-                with shape (num_boxes, ). The length of both lists should be equal to batch_size.
-        """
-
-        rois = bbox2roi(proposals)
-
-        if rois.shape[0] == 0:
-            batch_size = len(proposals)
-            det_bbox = rois.new_zeros(0, 5)
-            det_label = rois.new_zeros((0,), dtype=torch.long)
-            if rcnn_test_cfg is None:
-                det_bbox = det_bbox[:, :4]
-                det_label = rois.new_zeros((0, self.bbox_head.fc_cls.out_features))
-            # There is no proposal in the whole batch
-            return [det_bbox] * batch_size, [det_label] * batch_size
-
-        bbox_results = self._bbox_forward(x, rois)
-
-        # split batch bbox prediction back to each image
-        cls_score = bbox_results["cls_score"]
-        bbox_pred = bbox_results["bbox_pred"]
-        num_proposals_per_img = tuple(len(p) for p in proposals)
-
-        # TODO for the general ObjectDetectionOutput class, we will need to output the following 2 variables:
-        logits = cls_score.reshape(len(proposals), num_proposals_per_img[0], cls_score.size(-1))
-        pred_boxes = bbox_pred.reshape(len(proposals), num_proposals_per_img[0], bbox_pred.size(-1))
-
-        return logits, pred_boxes
 
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->ConvNextMaskRCNN,convnext->convnext_maskrcnn
