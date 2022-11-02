@@ -301,6 +301,26 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([17.9057, 55.4164, 318.9557], device=torch_device)
         self.assertTrue(torch.allclose(results[0]["boxes"][0, :3], expected_slice))
 
+        # verify mask predictions
+        detected_boxes = [result["boxes"] for result in results]
+        mask_pred = model.roi_head.forward_test_mask(
+            outputs.fpn_hidden_states, img_metas, detected_boxes, rescale=True
+        )
+
+        self.assertEquals(mask_pred.shape, torch.Size([6, 80, 28, 28]))
+        expected_slice = torch.tensor(
+            [[-2.3380, -2.3863, -3.0293], [-2.4269, -2.1714, -2.8495], [-2.8431, -2.8594, -3.0908]],
+            device=torch_device,
+        )
+        self.assertTrue(torch.allclose(mask_pred[0, 0, :3, :3], expected_slice, atol=1e-4))
+
+        # verify postprocessed mask results
+        mask_results = feature_extractor.post_process_instance_segmentation(
+            results, mask_pred, img_metas, rescale=True
+        )
+        self.assertEquals(len(mask_results[0]), 80)
+        self.assertEquals(mask_results[0][15][0].sum(), 52418)
+
     @slow
     def test_training_object_detection_head(self):
         # make random mask reproducible
