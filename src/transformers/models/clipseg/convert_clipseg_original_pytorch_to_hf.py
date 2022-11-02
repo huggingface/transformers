@@ -189,8 +189,6 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     with torch.no_grad():
         outputs = model(input_ids, pixel_values)
 
-    print(outputs.predicted_masks[0, 0, :3, :3])
-
     # verify values
     expected_cond = torch.tensor([0.0548, 0.0067, -0.1543])
     expected_pooled_output = torch.tensor([0.2208, -0.7577, -0.1391])
@@ -203,7 +201,7 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
             [[-4.1992, -4.1912, -4.1523], [-4.1509, -4.1442, -4.1091], [-4.0581, -4.0355, -4.0107]]
         )
 
-    assert torch.allclose(outputs.predicted_masks[0, 0, :3, :3], expected_masks_slice, atol=1e-3)
+    assert torch.allclose(outputs.predicted_masks[0, :3, :3], expected_masks_slice, atol=1e-3)
     assert torch.allclose(outputs.conditional_embeddings[0, :3], expected_cond, atol=1e-3)
     assert torch.allclose(outputs.pooled_output[0, :3], expected_pooled_output, atol=1e-3)
     print("Looks ok!")
