@@ -125,8 +125,8 @@ class GPTJAttention(nn.Module):
             self.rotary_dim = config.rotary_dim
 
         sin, cos = fixed_pos_embedding(x=torch.zeros(1, 1, self.rotary_dim), seq_len=max_positions)
-        self.register_buffer("sin", sin)
-        self.register_buffer("cos", cos)
+        self.register_buffer("sin", sin, persistent=False)
+        self.register_buffer("cos", cos, persistent=False)
 
     def _split_heads(self, tensor, num_attention_heads, attn_head_size, rotary):
         """
