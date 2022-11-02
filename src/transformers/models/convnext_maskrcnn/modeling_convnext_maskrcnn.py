@@ -3044,7 +3044,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         mask_results.update(loss_mask=loss_mask, mask_targets=mask_targets)
         return mask_results
 
-    def forward_test_mask(self, x, img_metas, det_bboxes, rescale=False):
+    def forward_test_mask(self, x, img_metas, det_bboxes, rescale=True):
         """Simple test for mask head without augmentation."""
         # image shapes of images in the batch
         scale_factors = tuple(meta["scale_factor"] for meta in img_metas)
@@ -3068,7 +3068,8 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         if rescale:
             scale_factors = [torch.from_numpy(scale_factor).to(det_bboxes[0].device) for scale_factor in scale_factors]
         _bboxes = [
-            det_bboxes[i][:, :4] * scale_factors[i] if rescale else det_bboxes[i][:, :4]
+            # det_bboxes[i][:, :4] * scale_factors[i] if rescale else det_bboxes[i][:, :4]
+            det_bboxes[i] * scale_factors[i] if rescale else det_bboxes[i]
             for i in range(len(det_bboxes))
         ]
         mask_rois = bbox2roi(_bboxes)

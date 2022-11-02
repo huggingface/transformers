@@ -636,7 +636,8 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
         if rescale:
             scale_factors = [torch.from_numpy(scale_factor).to(det_bboxes[0].device) for scale_factor in scale_factors]
             _bboxes = [
-                det_bboxes[i][:, :4] * scale_factors[i] if rescale else det_bboxes[i][:, :4]
+                # det_bboxes[i][:, :4] * scale_factors[i] if rescale else det_bboxes[i][:, :4]
+                det_bboxes[i] * scale_factors[i] if rescale else det_bboxes[i]
                 for i in range(len(det_bboxes))
             ]
 
