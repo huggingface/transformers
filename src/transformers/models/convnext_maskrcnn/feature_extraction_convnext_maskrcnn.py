@@ -543,6 +543,8 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
         self.bbox_coder = ConvNextMaskRCNNDeltaXYWHBBoxCoder(
             target_means=bbox_head_bbox_coder_target_means, target_stds=bbox_head_bbox_coder_target_stds
         )
+        # TODO remove this attribute
+        self.class_agnostic = False
 
     def __call__(self, **kwargs) -> BatchFeature:
         """
