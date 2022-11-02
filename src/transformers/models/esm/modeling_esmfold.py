@@ -2100,7 +2100,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
 
         >>> model = EsmForProteinFolding.from_pretrained("facebook/esmfold_v1")
         >>> tokenizer = AutoTokenizer.from_pretrained("facebook/esmfold_v1")
-        >>> inputs = tokenizer(["MLKNVQVQLV"], return_tensors="pt")  # A tiny random peptide
+        >>> inputs = tokenizer(["MLKNVQVQLV"], return_tensors="pt", add_special_tokens=False)  # A tiny random peptide
         >>> outputs = model(**inputs)
         >>> folded_positions = outputs.positions
         ```
