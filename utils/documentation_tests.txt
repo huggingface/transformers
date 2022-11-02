@@ -51,6 +51,7 @@ src/transformers/models/data2vec/modeling_data2vec_audio.py
 src/transformers/models/data2vec/modeling_data2vec_vision.py
 src/transformers/models/deberta/configuration_deberta.py
 src/transformers/models/deberta/modeling_deberta.py
+src/transformers/models/deberta_v2/configuration_deberta_v2.py
 src/transformers/models/deberta_v2/modeling_deberta_v2.py
 src/transformers/models/decision_transformer/configuration_decision_transformer.py
 src/transformers/models/deformable_detr/modeling_deformable_detr.py
