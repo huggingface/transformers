@@ -724,7 +724,12 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
         return cls_segms
 
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, img_metas: Union[TensorType, List[Tuple]] = None
+        self,
+        outputs,
+        threshold: float = 0.5,
+        target_sizes=None,
+        scale_factors=None,
+        rescale=True,
     ):
         """
         Converts the output of [`ConvNextForObjectDetection`] into the format expected by the COCO api. Only supports
@@ -765,12 +770,6 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
             bbox_pred = (None,) * len(proposals)
 
         # apply bbox post-processing to each image individually
-        img_shapes = tuple(meta["img_shape"] for meta in img_metas)
-        scale_factors = tuple(meta["scale_factor"] for meta in img_metas)
-
-        # TODO improve this
-        rescale = True
-
         det_bboxes = []
         det_labels = []
         for i in range(len(proposals)):
@@ -787,7 +786,7 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
                     rois[i],
                     cls_score[i],
                     bbox_pred[i],
-                    img_shapes[i],
+                    target_sizes[i],
                     scale_factors[i],
                     rescale=rescale,
                     cfg=self.test_cfg,
@@ -811,7 +810,9 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
 
         return results
 
-    def post_process_instance_segmentation(self, object_detection_results, mask_pred, img_metas, rescale=True):
+    def post_process_instance_segmentation(
+        self, object_detection_results, mask_pred, target_sizes=None, scale_factors=None, rescale=True
+    ):
         det_bboxes = [result["boxes"] for result in object_detection_results]
         det_labels = [result["labels"] for result in object_detection_results]
 
@@ -820,8 +821,6 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
         mask_preds = mask_pred.split(num_mask_roi_per_img, 0)
 
         num_imgs = len(object_detection_results)
-        ori_shapes = tuple(meta["ori_shape"] for meta in img_metas)
-        scale_factors = tuple(meta["scale_factor"] for meta in img_metas)
 
         if rescale:
             scale_factors = [torch.from_numpy(scale_factor).to(det_bboxes[0].device) for scale_factor in scale_factors]
@@ -842,7 +841,7 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
                     _bboxes[i],
                     det_labels[i],
                     self.test_cfg,
-                    ori_shapes[i],
+                    target_sizes[i],
                     scale_factors[i],
                     rescale,
                 )

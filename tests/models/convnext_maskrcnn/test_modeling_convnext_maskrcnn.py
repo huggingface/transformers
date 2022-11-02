@@ -290,7 +290,12 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
         # verify postprocessed results
-        results = feature_extractor.post_process_object_detection(outputs, threshold=0.5, img_metas=img_metas)
+        results = feature_extractor.post_process_object_detection(
+            outputs,
+            threshold=0.5,
+            target_sizes=[meta["img_shape"] for meta in img_metas],
+            scale_factors=[meta["scale_factor"] for meta in img_metas],
+        )
 
         self.assertEqual(len(results), 1)
         expected_slice = torch.tensor([0.9981, 0.9959, 0.9874, 0.9110, 0.7234, 0.6268], device=torch_device)
@@ -316,7 +321,11 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
 
         # verify postprocessed mask results
         mask_results = feature_extractor.post_process_instance_segmentation(
-            results, mask_pred, img_metas, rescale=True
+            results,
+            mask_pred,
+            target_sizes=[meta["ori_shape"] for meta in img_metas],
+            scale_factors=[meta["scale_factor"] for meta in img_metas],
+            rescale=True,
         )
         self.assertEquals(len(mask_results[0]), 80)
         self.assertEquals(mask_results[0][15][0].sum(), 52418)
