@@ -120,6 +120,7 @@ class MaskRCNNModelOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    fpn_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 def unmap(data, count, inds, fill=0):
@@ -3226,7 +3227,7 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
             rois, proposals, logits, pred_boxes = self.roi_head.forward_test(hidden_states, rpn_outputs.proposal_list)
 
         if not return_dict:
-            output = (rois, proposals, logits, pred_boxes) + outputs[2:]
+            output = (rois, proposals, logits, pred_boxes, hidden_states) + outputs[2:]
             return ((losses,) + output) if losses is not None else output
 
         return MaskRCNNModelOutput(
@@ -3236,5 +3237,6 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
             logits=logits,
             pred_boxes=pred_boxes,
             results=results,
+            fpn_hidden_states=hidden_states,
             hidden_states=outputs.hidden_states,
         )
