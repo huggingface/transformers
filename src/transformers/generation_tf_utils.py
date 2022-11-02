@@ -3393,32 +3393,6 @@ class TFGenerationMixin:
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ['DeepMind Company is a company that focuses on the development and commercialization of artificial intelligence (AI). DeepMind’s mission is to help people understand and solve problems that are difficult to solve in the world today.\n\nIn this post, we talk about the benefits of deep learning in business and how it']
         ```"""
-
-        def unflatten_beam_dim(tensor, batch_size, num_beams, batch_axis=0):
-            """Unflattens the first, flat batch*beam dimension of a non-scalar array."""
-            shape = shape_list(tensor)
-            return tf.reshape(tensor, shape[:batch_axis] + [batch_size, num_beams] + shape[batch_axis + 1 :])
-
-        def gather_beams(nested, beam_indices, batch_axis=0):
-            """Gathers the beam slices indexed by beam_indices into new beam array."""
-
-            def gather_fn(tensor):
-                if batch_axis > 0:
-                    # pushes all dimentions before the batch to the end, so we get (batch, beam_id, ...)
-                    perm = tf.concat((tf.range(tf.rank(tensor))[batch_axis:], tf.range(batch_axis)), axis=0)
-                    tensor = tf.transpose(tensor, perm=perm)
-
-                gathered_tensor = tf.gather(params=tensor, indices=beam_indices, axis=1, batch_dims=1)
-                if batch_axis > 0:
-                    # transposes back to the original dimensions
-                    perm = tf.concat((tf.range(tf.rank(tensor))[batch_axis:], tf.range(batch_axis)), axis=0)
-                    perm = tf.math.invert_permutation(perm)
-                    gathered_tensor = tf.transpose(gathered_tensor, perm=perm)
-
-                return gathered_tensor
-
-            return tf.nest.map_structure(gather_fn, nested)
-
         # 1. init greedy_search values
         logits_processor = logits_processor if logits_processor is not None else TFLogitsProcessorList()
         logits_warper = logits_warper if logits_warper is not None else TFLogitsProcessorList()
@@ -3584,12 +3558,15 @@ class TFGenerationMixin:
             # model confidence
             selected_idx = _ranking_fast(context_hidden, next_hidden, top_k_probs, penalty_alpha, top_k)
 
+            # converts indices to a dimension of top_k to the stacked top_k * batch_size dimension, for indexing
+            # without a need to reshape on tensors that have these two dimensions stacked
+            selected_idx_stacked = selected_idx + tf.range(selected_idx.shape[0], dtype=tf.int64) * top_k
+
             # prepare for the next step: (1) next token_id; (2) past_key_values; (3) last_hidden_states for computing
             # the degeneration penalty; (4) logits for selecting next top-k candidates; (5) selected tokens scores
             # (model confidence minus degeneration penalty); (6) decoder hidden_states
             next_tokens = tf.gather(top_k_ids, selected_idx, axis=1, batch_dims=1)
-            next_hidden = unflatten_beam_dim(next_hidden, batch_size, top_k)
-            next_hidden = gather_beams(next_hidden, selected_idx)
+            next_hidden = tf.gather(next_hidden, selected_idx_stacked)
 
             # XLA: last_hidden_states normally grows at each step, but in XLA it is padded so as to be used across
             # iterations (with fixed shapes)
@@ -3600,8 +3577,7 @@ class TFGenerationMixin:
 
             next_decoder_hidden_states = ()
             for layer in full_hidden_states:
-                layer = unflatten_beam_dim(layer, batch_size, top_k)
-                layer = gather_beams(layer, selected_idx)
+                layer = tf.gather(layer, selected_idx_stacked)
                 next_decoder_hidden_states += (layer,)
 
             # select the past_key_value
@@ -3610,14 +3586,12 @@ class TFGenerationMixin:
                 items = ()
                 # item is either the key or the value matrix
                 for item in layer:
-                    item = unflatten_beam_dim(item, batch_size, top_k, cache_batch_axis)
-                    item = gather_beams(item, selected_idx, cache_batch_axis)
+                    item = tf.gather(item, selected_idx_stacked)
                     items += (item,)
                 new_key_values += (items,)
             next_past_key_values = new_key_values
 
-            logit_for_next_step = unflatten_beam_dim(logits, batch_size, top_k)
-            logit_for_next_step = gather_beams(logit_for_next_step, selected_idx)
+            logit_for_next_step = tf.gather(logits, selected_idx_stacked)
 
             # Rebuilds the relevant parts of the model output for the selected token, for use in the next iteration
             if self.config.is_encoder_decoder:
@@ -3625,12 +3599,10 @@ class TFGenerationMixin:
                 next_step_decoder_attentions = ()
                 if output_attentions:
                     for layer in outputs.cross_attentions:
-                        layer = unflatten_beam_dim(layer, batch_size, top_k)
-                        layer = gather_beams(layer, selected_idx)
+                        layer = tf.gather(layer, selected_idx_stacked)
                         next_step_cross_attentions += (layer,)
                     for layer in outputs.decoder_attentions:
-                        layer = unflatten_beam_dim(layer, batch_size, top_k)
-                        layer = gather_beams(layer, selected_idx)
+                        layer = tf.gather(layer, selected_idx_stacked)
                         next_step_decoder_attentions += (layer,)
                 outputs = TFSeq2SeqLMOutput(
                     past_key_values=next_past_key_values,
@@ -3642,8 +3614,7 @@ class TFGenerationMixin:
                 next_step_attentions = ()
                 if output_attentions:
                     for layer in outputs.attentions:
-                        layer = unflatten_beam_dim(layer, batch_size, top_k)
-                        layer = gather_beams(layer, selected_idx)
+                        layer = tf.gather(layer, selected_idx_stacked)
                         next_step_attentions += (layer,)
                 outputs = TFCausalLMOutputWithPast(
                     past_key_values=next_past_key_values,
