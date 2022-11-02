@@ -354,11 +354,7 @@ class SwitchTransformersSparseMLP(nn.Module):
         next_states = hidden_states.clone()
         for idx, expert in enumerate(self.experts.values()):
 
-            # 1. Get the index of the tokens that are routed to the current expert
-            # masked_indices has a shape of `batch_size`, `seq_len`, `num_experts`
             token_indices = router_mask[:, :, idx].bool()
-
-            # 2. Update only the hidden states affected by the routing
             next_states[token_indices] = expert(hidden_states[token_indices])
 
         hidden_states = router_probs * next_states
