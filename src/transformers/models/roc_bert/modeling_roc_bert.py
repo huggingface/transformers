@@ -48,7 +48,7 @@ from .configuration_roc_bert import RocBertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "roc-bert-base-cased"
+_CHECKPOINT_FOR_DOC = "weiweishi/roc-bert-base-zh"
 _CONFIG_FOR_DOC = "RocBertConfig"
 _TOKENIZER_FOR_DOC = "RocBertTokenizer"
 

@@ -49,7 +49,7 @@ else:
         "RocBertLayer",
         "RocBertModel",
         "RocBertPreTrainedModel",
-        "RocBertPreTraining",
+        "RocBertForPreTraining",
         "load_tf_weights_in_roc_bert",
     ]
 
