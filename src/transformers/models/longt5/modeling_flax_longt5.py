@@ -1686,6 +1686,13 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
+    def enable_gradient_checkpointing(self):
+        self._module = self.module_class(
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=True,
+        )
+
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")

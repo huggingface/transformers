@@ -22,15 +22,7 @@ from transformers import (
     is_vision_available,
     pipeline,
 )
-from transformers.testing_utils import (
-    is_pipeline_test,
-    nested_simplify,
-    require_tf,
-    require_timm,
-    require_torch,
-    require_vision,
-    slow,
-)
+from transformers.testing_utils import nested_simplify, require_tf, require_timm, require_torch, require_vision, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -48,7 +40,6 @@ else:
 @require_vision
 @require_timm
 @require_torch
-@is_pipeline_test
 class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING
 

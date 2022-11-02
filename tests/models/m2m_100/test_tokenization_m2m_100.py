@@ -89,7 +89,7 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(vocab_keys[0], "</s>")
         self.assertEqual(vocab_keys[1], "<unk>")
         self.assertEqual(vocab_keys[-1], "<s>")
-        self.assertEqual(len(vocab_keys), 10)
+        self.assertEqual(len(vocab_keys), 110)
 
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 117)
@@ -159,6 +159,9 @@ class M2M100TokenizerIntegrationTest(unittest.TestCase):
         self.assertEqual(self.tokenizer.get_lang_id("en"), 128022)
         self.assertEqual(self.tokenizer.get_lang_id("ro"), 128076)
         self.assertEqual(self.tokenizer.get_lang_id("mr"), 128063)
+
+    def test_get_vocab(self):
+        self.assertIn(self.tokenizer.get_lang_token("en"), self.tokenizer.get_vocab())
 
     def test_tokenizer_batch_encode_plus(self):
         self.tokenizer.src_lang = "en"

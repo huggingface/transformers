@@ -111,7 +111,7 @@ class Speech2Text2SinusoidalPositionalEmbedding(nn.Module):
             emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
         if padding_idx is not None:
             emb[padding_idx, :] = 0
-        return emb
+        return emb.to(torch.get_default_dtype())
 
     @torch.no_grad()
     def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):

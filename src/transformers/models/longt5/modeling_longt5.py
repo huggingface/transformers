@@ -518,7 +518,14 @@ class LongT5Attention(nn.Module):
             if mask is not None:
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
-        scores += position_bias
+        if self.pruned_heads:
+            mask = torch.ones(position_bias.shape[1])
+            mask[list(self.pruned_heads)] = 0
+            position_bias_masked = position_bias[:, mask.bool()]
+        else:
+            position_bias_masked = position_bias
+
+        scores += position_bias_masked
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
             scores
         )  # (batch_size, n_heads, seq_length, key_length)
@@ -1192,6 +1199,11 @@ class LongT5Block(nn.Module):
         hidden_states, present_key_value_state = self_attention_outputs[:2]
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
 
+        # clamp inf values to enable fp16 inference - check https://github.com/huggingface/transformers/pull/19229/
+        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
+            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
         if do_cross_attention:
             # the actual query length is unknown for cross attention
@@ -1214,6 +1226,11 @@ class LongT5Block(nn.Module):
             )
             hidden_states = cross_attention_outputs[0]
 
+            # clamp inf values to enable fp16 inference - check https://github.com/huggingface/transformers/pull/19229/
+            if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
+                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+
             # Combine self attn and cross attn key value states
             if present_key_value_state is not None:
                 present_key_value_state = present_key_value_state + cross_attention_outputs[1]
@@ -1223,6 +1240,11 @@ class LongT5Block(nn.Module):
 
         # Apply Feed Forward layer
         hidden_states = self.layer[-1](hidden_states)
+
+        # clamp inf values to enable fp16 inference - check https://github.com/huggingface/transformers/pull/19229/
+        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
+            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         outputs = (hidden_states,)
 
@@ -1966,13 +1988,12 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
         ... )
 
         >>> # Let's try a very long input.
-        >>> input_ids = tokenizer(
-        ...     "summarize: " + 100 * "studies have shown that owning a dog is good for you ", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
+        >>> inputs = tokenizer(100 * "studies have shown that owning a dog is good for you ", return_tensors="pt")
+        >>> input_ids = inputs.input_ids
 
         >>> outputs = model.generate(input_ids)
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-        abstractthe aim of this article is to summarize the studies have shown that owning a dog
+        abstractthe aim of this article is to provide an overview of the literature on the role of dog
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

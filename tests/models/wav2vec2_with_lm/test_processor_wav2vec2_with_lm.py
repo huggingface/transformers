@@ -23,7 +23,9 @@ from pathlib import Path
 import datasets
 import numpy as np
 from datasets import load_dataset
+from packaging import version
 
+from parameterized import parameterized
 from transformers import AutoProcessor
 from transformers.models.wav2vec2 import Wav2Vec2CTCTokenizer, Wav2Vec2FeatureExtractor
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
@@ -193,7 +195,8 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         self.assertEqual(decoded_decoder[-2], decoded_processor.logit_score)
         self.assertEqual(decoded_decoder[-1], decoded_processor.lm_score)
 
-    def test_decoder_batch(self):
+    @parameterized.expand([[None], ["fork"], ["spawn"]])
+    def test_decoder_batch(self, pool_context):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
         decoder = self.get_decoder()
@@ -202,17 +205,25 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         logits = self._get_dummy_logits()
 
-        decoded_processor = processor.batch_decode(logits)
+        # note: pool should be instantiated *after* Wav2Vec2ProcessorWithLM.
+        #       otherwise, the LM won't be available to the pool's sub-processes.
+        # manual logic used to allow parameterized test for both pool=None and pool=Pool(...)
+        if pool_context is None:
+            decoded_processor = processor.batch_decode(logits)
+        else:
+            with get_context(pool_context).Pool() as pool:
+                decoded_processor = processor.batch_decode(logits, pool)
 
         logits_list = [array for array in logits]
-        pool = get_context("fork").Pool()
-        decoded_beams = decoder.decode_beams_batch(pool, logits_list)
+
+        with get_context("fork").Pool() as p:
+            decoded_beams = decoder.decode_beams_batch(p, logits_list)
+
         texts_decoder, logit_scores_decoder, lm_scores_decoder = [], [], []
         for beams in decoded_beams:
             texts_decoder.append(beams[0][0])
             logit_scores_decoder.append(beams[0][-2])
             lm_scores_decoder.append(beams[0][-1])
-        pool.close()
 
         self.assertListEqual(texts_decoder, decoded_processor.text)
         self.assertListEqual(["<s> <s> </s>", "<s> <s> <s>"], decoded_processor.text)
@@ -241,15 +252,15 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         decoded_processor = decoded_processor_out.text
 
         logits_list = [array for array in logits]
-        pool = get_context("fork").Pool()
-        decoded_decoder_out = decoder.decode_beams_batch(
-            pool,
-            logits_list,
-            beam_width=beam_width,
-            beam_prune_logp=beam_prune_logp,
-            token_min_logp=token_min_logp,
-        )
-        pool.close()
+
+        with get_context("fork").Pool() as pool:
+            decoded_decoder_out = decoder.decode_beams_batch(
+                pool,
+                logits_list,
+                beam_width=beam_width,
+                beam_prune_logp=beam_prune_logp,
+                token_min_logp=token_min_logp,
+            )
 
         decoded_decoder = [d[0][0] for d in decoded_decoder_out]
 
@@ -286,12 +297,12 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
             unk_score_offset=unk_score_offset,
             lm_score_boundary=lm_score_boundary,
         )
-        pool = get_context("fork").Pool()
-        decoded_decoder_out = decoder.decode_beams_batch(
-            pool,
-            logits_list,
-        )
-        pool.close()
+
+        with get_context("fork").Pool() as pool:
+            decoded_decoder_out = decoder.decode_beams_batch(
+                pool,
+                logits_list,
+            )
 
         decoded_decoder = [d[0][0] for d in decoded_decoder_out]
 
@@ -435,21 +446,19 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         self.assertEqual(" ".join(self.get_from_offsets(word_time_stamps, "word")), output.text)
 
         # output times
-        start_times = [round(x, 2) for x in self.get_from_offsets(word_time_stamps, "start_time")]
-        end_times = [round(x, 2) for x in self.get_from_offsets(word_time_stamps, "end_time")]
+        start_times = torch.tensor(self.get_from_offsets(word_time_stamps, "start_time"))
+        end_times = torch.tensor(self.get_from_offsets(word_time_stamps, "end_time"))
 
         # fmt: off
-        self.assertListEqual(
-            start_times,
-            [
-                1.42, 1.64, 2.12, 2.26, 2.54, 3.0, 3.24, 3.6, 3.8, 4.1, 4.26, 4.94, 5.28, 5.66, 5.78, 5.94, 6.32, 6.54, 6.66,
-            ],
-        )
+        expected_start_tensor = torch.tensor([1.42, 1.64, 2.12, 2.26, 2.54, 3.0, 3.24, 3.6, 3.8, 4.1, 4.26, 4.94, 5.28, 5.66, 5.78, 5.94, 6.32, 6.54, 6.66])
 
-        self.assertListEqual(
-            end_times,
-            [
-                1.54, 1.88, 2.14, 2.46, 2.9, 3.18, 3.54, 3.72, 4.02, 4.18, 4.76, 5.16, 5.56, 5.7, 5.86, 6.2, 6.38, 6.62, 6.94,
-            ],
-        )
+        # TODO(Patrick): This if-else version statement should be removed once
+        # https://github.com/huggingface/datasets/issues/4889 is resolved
+        if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.12.0"):
+            expected_end_tensor = torch.tensor([1.54, 1.88, 2.14, 2.46, 2.9, 3.16, 3.54, 3.72, 4.02, 4.18, 4.76, 5.16, 5.56, 5.7, 5.86, 6.2, 6.38, 6.62, 6.94])
+        else:
+            expected_end_tensor = torch.tensor([1.54, 1.88, 2.14, 2.46, 2.9, 3.18, 3.54, 3.72, 4.02, 4.18, 4.76, 5.16, 5.56, 5.7, 5.86, 6.2, 6.38, 6.62, 6.94])
         # fmt: on
+
+        self.assertTrue(torch.allclose(start_times, expected_start_tensor, atol=0.01))
+        self.assertTrue(torch.allclose(end_times, expected_end_tensor, atol=0.01))

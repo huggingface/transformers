@@ -17,7 +17,7 @@
 
 import math
 import random
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -152,7 +152,7 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
         if padding_idx is not None:
             emb[padding_idx, :] = 0
 
-        return emb
+        return emb.to(torch.get_default_dtype())
 
     @torch.no_grad()
     def forward(
@@ -532,6 +532,7 @@ class M2M100PreTrainedModel(PreTrainedModel):
     config_class = M2M100Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["M2M100Attention"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -693,10 +694,10 @@ class M2M100Encoder(M2M100PreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
+        self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+
         if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = M2M100SinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -712,13 +713,13 @@ class M2M100Encoder(M2M100PreTrainedModel):
 
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         r"""
         Args:
@@ -777,6 +778,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         embed_pos = self.embed_positions(input_ids, inputs_embeds)
+        embed_pos = embed_pos.to(inputs_embeds.device)
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -868,10 +870,10 @@ class M2M100Decoder(M2M100PreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+
         if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = M2M100SinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -887,18 +889,18 @@ class M2M100Decoder(M2M100PreTrainedModel):
 
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         r"""
         Args:
@@ -1010,6 +1012,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
 
         # embed positions
         positions = self.embed_positions(input_ids, inputs_embeds, past_key_values_length)
+        positions = positions.to(inputs_embeds.device)
 
         hidden_states = inputs_embeds + positions
 

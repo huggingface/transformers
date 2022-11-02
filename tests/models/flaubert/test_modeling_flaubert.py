@@ -437,7 +437,8 @@ class FlaubertModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head_absolute_embedding(self):
         model = FlaubertModel.from_pretrained("flaubert/flaubert_base_cased")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
-        output = model(input_ids)[0]
+        with torch.no_grad():
+            output = model(input_ids)[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(

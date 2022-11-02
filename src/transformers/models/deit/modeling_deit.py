@@ -402,9 +402,7 @@ class DeiTPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data = nn.init.trunc_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -555,8 +553,15 @@ class DeiTPooler(nn.Module):
 
 
 @add_start_docstrings(
-    "DeiT Model with a decoder on top for masked image modeling, as proposed in"
-    " [SimMIM](https://arxiv.org/abs/2111.09886).",
+    """DeiT Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://arxiv.org/abs/2111.09886).
+
+    <Tip>
+
+    Note that we provide a script to pre-train this model on custom data in our [examples
+    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
+
+    </Tip>
+    """,
     DEIT_START_DOCSTRING,
 )
 class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
@@ -726,7 +731,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        Predicted class: maillot
+        Predicted class: magpie
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

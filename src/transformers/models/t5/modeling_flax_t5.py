@@ -1388,6 +1388,10 @@ FLAX_T5_MODEL_DOCSTRING = """
     ... ).input_ids
     >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="np").input_ids
 
+    >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for T5Model.
+    >>> # This is not needed for torch's T5ForConditionalGeneration as it does this internally using labels arg.
+    >>> decoder_input_ids = model._shift_right(decoder_input_ids)
+
     >>> # forward pass
     >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
     >>> last_hidden_states = outputs.last_hidden_state

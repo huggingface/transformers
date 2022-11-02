@@ -25,10 +25,13 @@ There are two categories of pipeline abstractions to be aware about:
   - [`AudioClassificationPipeline`]
   - [`AutomaticSpeechRecognitionPipeline`]
   - [`ConversationalPipeline`]
+  - [`DepthEstimationPipeline`]
+  - [`DocumentQuestionAnsweringPipeline`]
   - [`FeatureExtractionPipeline`]
   - [`FillMaskPipeline`]
   - [`ImageClassificationPipeline`]
   - [`ImageSegmentationPipeline`]
+  - [`ImageToTextPipeline`]
   - [`ObjectDetectionPipeline`]
   - [`QuestionAnsweringPipeline`]
   - [`SummarizationPipeline`]
@@ -41,6 +44,7 @@ There are two categories of pipeline abstractions to be aware about:
   - [`VisualQuestionAnsweringPipeline`]
   - [`ZeroShotClassificationPipeline`]
   - [`ZeroShotImageClassificationPipeline`]
+  - [`ZeroShotObjectDetectionPipeline`]
 
 ## The pipeline abstraction
 
@@ -87,7 +91,7 @@ pipe = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-96
 dataset = datasets.load_dataset("superb", name="asr", split="test")
 
 # KeyDataset (only *pt*) will simply return the item in the dict returned by the dataset item
-# as we're not interested in the *target* part of the dataset.
+# as we're not interested in the *target* part of the dataset. For sentence pair use KeyPairDataset
 for out in tqdm(pipe(KeyDataset(dataset, "file"))):
     print(out)
     # {"text": "NUMBER TEN FRESH NELLY IS WAITING ON YOU GOOD NIGHT HUSBAND"}
@@ -341,6 +345,16 @@ That should enable you to do all the custom code you want.
     - __call__
     - all
 
+### DepthEstimationPipeline
+[[autodoc]] DepthEstimationPipeline
+    - __call__
+    - all 
+
+### DocumentQuestionAnsweringPipeline
+
+[[autodoc]] DocumentQuestionAnsweringPipeline
+    - __call__
+    - all
 ### FeatureExtractionPipeline
 
 [[autodoc]] FeatureExtractionPipeline
@@ -362,6 +376,12 @@ That should enable you to do all the custom code you want.
 ### ImageSegmentationPipeline
 
 [[autodoc]] ImageSegmentationPipeline
+    - __call__
+    - all
+
+### ImageToTextPipeline
+
+[[autodoc]] ImageToTextPipeline
     - __call__
     - all
 
@@ -439,6 +459,12 @@ See [`TokenClassificationPipeline`] for all details.
 ### ZeroShotImageClassificationPipeline
 
 [[autodoc]] ZeroShotImageClassificationPipeline
+    - __call__
+    - all
+
+### ZeroShotObjectDetectionPipeline
+
+[[autodoc]] ZeroShotObjectDetectionPipeline
     - __call__
     - all
 

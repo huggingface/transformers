@@ -282,9 +282,9 @@ def main():
         config.use_mean_pooling = True
         config.num_labels = 1000
 
-        repo_id = "datasets/huggingface/label-files"
+        repo_id = "huggingface/label-files"
         filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}

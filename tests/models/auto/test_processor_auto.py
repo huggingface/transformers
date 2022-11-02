@@ -202,6 +202,14 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             if CustomConfig in PROCESSOR_MAPPING._extra_content:
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
 
+    def test_auto_processor_creates_tokenizer(self):
+        processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-bert")
+        self.assertEqual(processor.__class__.__name__, "BertTokenizerFast")
+
+    def test_auto_processor_creates_feature_extractor(self):
+        processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-convnext")
+        self.assertEqual(processor.__class__.__name__, "ConvNextFeatureExtractor")
+
 
 @is_staging_test
 class ProcessorPushToHubTester(unittest.TestCase):

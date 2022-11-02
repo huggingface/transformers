@@ -53,7 +53,7 @@ class LayoutXLMProcessor(ProcessorMixin):
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
@@ -88,6 +88,9 @@ class LayoutXLMProcessor(ProcessorMixin):
             raise ValueError(
                 "You cannot provide word labels if you initialized the feature extractor with apply_ocr set to True."
             )
+
+        if return_overflowing_tokens is True and return_offsets_mapping is False:
+            raise ValueError("You cannot return overflowing tokens without returning the offsets mapping.")
 
         # first, apply the feature extractor
         features = self.feature_extractor(images=images, return_tensors=return_tensors)
