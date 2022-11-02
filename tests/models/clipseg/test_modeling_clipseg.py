@@ -389,7 +389,6 @@ class CLIPSegModelTester:
             result.predicted_masks.shape,
             (
                 self.vision_model_tester.batch_size,
-                1,
                 self.vision_model_tester.image_size,
                 self.vision_model_tester.image_size,
             ),
@@ -424,6 +423,17 @@ class CLIPSegModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        # CLIPSegForImageSegmentation requires special treatment
+        if return_labels:
+            if model_class.__name__ == "CLIPSegForImageSegmentation":
+                batch_size, _, height, width = inputs_dict["pixel_values"].shape
+                inputs_dict["labels"] = torch.zeros(
+                    [batch_size, height, width], device=torch_device, dtype=torch.float
+                )
+
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = CLIPSegModelTester(self)
@@ -704,10 +714,11 @@ def prepare_img():
 @require_torch
 class CLIPSegModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference(self):
-        model_name = "organization/clipseg-rd64-uni"
-        model = CLIPSegModel.from_pretrained(model_name).to(torch_device)
+    def test_inference_image_segmentation(self):
+        # TODO update to appropriate organization
+        model_name = "nielsr/clipseg-rd64-refined"
         processor = CLIPProcessor.from_pretrained(model_name)
+        model = CLIPSegModel.from_pretrained(model_name).to(torch_device)
 
         image = prepare_img()
         inputs = processor(
@@ -718,14 +729,10 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        # verify the logits
+        # verify the predicted masks
         self.assertEqual(
-            outputs.logits_per_image.shape,
+            outputs.predicted_masks.shape,
             torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
-        )
-        self.assertEqual(
-            outputs.logits_per_text.shape,
-            torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
         expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)

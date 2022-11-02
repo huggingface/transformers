@@ -227,14 +227,20 @@ if __name__ == "__main__":
         "--model_name",
         default="clipseg",
         type=str,
-        choices=['clipseg', 'clipseg-rd16', 'clipseg-rd64-refined'],
-        help="Name of the model. Supported models are: clipseg-rd64, clipseg-rd16 and clipseg-rd64-refined (rd meaning reduce dimension)",
+        choices=["clipseg", "clipseg-rd16", "clipseg-rd64-refined"],
+        help=(
+            "Name of the model. Supported models are: clipseg-rd64, clipseg-rd16 and clipseg-rd64-refined (rd meaning"
+            " reduce dimension)"
+        ),
     )
     parser.add_argument(
         "--checkpoint_path",
         default="/Users/nielsrogge/Documents/CLIPSeg/clip_plus_rd64-uni.pth",
         type=str,
-        help="Path to the original checkpoint. Note that the script assumes that the checkpoint includes both CLIP and the decoder weights.",
+        help=(
+            "Path to the original checkpoint. Note that the script assumes that the checkpoint includes both CLIP and"
+            " the decoder weights."
+        ),
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."

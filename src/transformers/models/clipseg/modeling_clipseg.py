@@ -1365,15 +1365,14 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
                     " `config.projection_dim`."
                 )
 
-        predicted_masks = self.decoder(activations, conditional_embeddings)
+        predicted_masks = self.decoder(activations, conditional_embeddings).squeeze()
 
         if output_hidden_states:
             raise NotImplementedError("To do")
 
         loss = None
         if labels is not None:
-            # TODO check whether this is correct
-            loss_fn = nn.BCELoss()
+            loss_fn = nn.BCEWithLogitsLoss()
             loss = loss_fn(predicted_masks, labels)
 
         if not return_dict:
