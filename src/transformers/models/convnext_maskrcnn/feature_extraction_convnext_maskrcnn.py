@@ -769,6 +769,13 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
         else:
             bbox_pred = (None,) * len(proposals)
 
+        # calculate img shapes based on target sizes (ori shapes) + scale factors
+        img_shapes = []
+        for target_size, scale_factor in zip(target_sizes, scale_factors):
+            height, width = target_size[-2:]
+            img_shape = (3, height*scale_factor[0], width*scale_factor[1])
+            img_shapes.append(img_shape)
+        
         # apply bbox post-processing to each image individually
         det_bboxes = []
         det_labels = []
@@ -786,7 +793,7 @@ class ConvNextMaskRCNNFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtra
                     rois[i],
                     cls_score[i],
                     bbox_pred[i],
-                    target_sizes[i],
+                    img_shapes[i],
                     scale_factors[i],
                     rescale=rescale,
                     cfg=self.test_cfg,

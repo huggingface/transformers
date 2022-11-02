@@ -293,7 +293,7 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
         results = feature_extractor.post_process_object_detection(
             outputs,
             threshold=0.5,
-            target_sizes=[meta["img_shape"] for meta in img_metas],
+            target_sizes=[meta["ori_shape"] for meta in img_metas],
             scale_factors=[meta["scale_factor"] for meta in img_metas],
         )
 
