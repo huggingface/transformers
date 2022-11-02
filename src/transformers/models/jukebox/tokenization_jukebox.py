@@ -99,14 +99,14 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             Path to the vocabulary file which contain a mapping between genres and ids.
         lyrics_file (`str`):
             Path to the vocabulary file which contains the accepted characters for the lyrics tokenization.
-        version (`List[`str`], `optional`, default to ["v3", "v2", "v2"]) :
+        version (`List[str]`, `optional`, default to `["v3", "v2", "v2"]`) :
             List of the tokenizer versions. The `5b-lyrics`'s top level prior model was trained using `v3` instead of
             `v2`.
         n_genres (`int`, `optional`, defaults to 1):
             Maximum number of genres to use for composition.
         max_n_lyric_tokens (`int`, `optional`, defaults to 512):
             Maximum number of lyric tokens to keep.
-        unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
     """

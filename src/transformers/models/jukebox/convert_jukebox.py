@@ -57,28 +57,42 @@ def replace_key(key):
     elif key.endswith(".model.3.weight") and len(key.split(".")) > 10:
         key = key.replace(".model.3.weight", ".conv1d_2.weight")
 
+
+
+    if "conditioner_blocks.0." in key:
+        key = key.replace("conditioner_blocks.0", "conditioner_blocks")
+
+
     if "prime_prior" in key:
-        key = key.replace("prime_prior", "lyric_encoder")
+        key = key.replace("prime_prior", "encoder")
+
+    if ".emb." in key and not "total" in key and not "absolute" in key and not "relative"  in key:
+        key = key.replace(".emb.", ".")
 
     if key.endswith("k"):  # replace vqvae.X.k with vqvae.X.codebook
         return key.replace(".k", ".codebook")
     if "y_emb." in key:
         return key.replace("y_emb.", "metadata_embedding.")
+
+    if "x_emb.emb." in key:
+        key = key.replace("0.x_emb.emb", "embed_tokens")
+
     if "prime_state_ln" in key:
-        return key.replace("prime_state_ln", "lyric_encoder.final_layer_norm")
+        return key.replace("prime_state_ln", "encoder.final_layer_norm")
     if ".ln" in key:
         return key.replace(".ln", ".layer_norm")
     if "_ln" in key:
         return key.replace("_ln", "_layer_norm")
 
     if "prime_state_proj" in key:
-        return key.replace("prime_state_proj", "lyric_encoder.proj_in")
+        return key.replace("prime_state_proj", "encoder.proj_in")
     if "prime_x_out" in key:
-        return key.replace("prime_x_out", "lyric_encoder.lm_head")
+        return key.replace("prime_x_out", "encoder.lm_head")
     if "prior.x_out" in key:
         return key.replace("x_out", "fc_proj_out")
     if "x_emb" in key:
         return key.replace("x_emb", "embed_tokens")
+
     return key
 
 
@@ -159,7 +173,7 @@ def fix_jukebox_keys(state_dict, model_state_dict, key_prefix, mapping):
             regex_match = re_prior_cond_conv_out.match(original_key)
             groups = regex_match.groups()
             block_index = int(groups[1]) * 2 + int(groups[2]) - 2
-            re_new_key = f"conditioner_blocks.{groups[0]}.upsampler.upsample_block.{block_index}.{groups[-1]}"
+            re_new_key = f"conditioner_blocks.upsampler.upsample_block.{block_index}.{groups[-1]}"
             key = re_prior_cond_conv_out.sub(re_new_key, original_key)
 
         elif re_prior_cond_resnet.fullmatch(original_key):
@@ -167,7 +181,7 @@ def fix_jukebox_keys(state_dict, model_state_dict, key_prefix, mapping):
             groups = regex_match.groups()
             block_index = int(groups[1]) * 2 + int(groups[2]) - 2
             conv_index = {"1": 1, "3": 2}[groups[-2]]
-            prefix = f"conditioner_blocks.{groups[0]}.upsampler.upsample_block.{block_index}."
+            prefix = f"conditioner_blocks.upsampler.upsample_block.{block_index}."
             resnet_block = f"resnet_block.{groups[-3]}.conv1d_{conv_index}.{groups[-1]}"
             re_new_key = prefix + resnet_block
             key = re_prior_cond_resnet.sub(re_new_key, original_key)
@@ -175,7 +189,7 @@ def fix_jukebox_keys(state_dict, model_state_dict, key_prefix, mapping):
         elif re_prior_cond_proj_in.fullmatch(original_key):
             regex_match = re_prior_cond_proj_in.match(original_key)
             groups = regex_match.groups()
-            re_new_key = f"conditioner_blocks.{groups[0]}.upsampler.proj_in.{groups[-1]}"
+            re_new_key = f"conditioner_blocks.upsampler.proj_in.{groups[-1]}"
             key = re_prior_cond_proj_in.sub(re_new_key, original_key)
 
         # keep original key
@@ -216,7 +230,7 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
     # to convert the 5b lyric token model, use : or "openai/jukebox-5b-lyrics"
     # config = JukeboxConfig(
     #     timing_dims=128
-    #     prior_attn_order=[10, 2, 2],
+    #     prior_attention_pattern=[10, 2, 2],
     #     prior_blocks=128,
     #     prime_n_vocab=80,
     #     nb_relevant_lyric_tokens=[512, 0, 0],
@@ -233,7 +247,7 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
     #     prior_depth=[79, 72, 72],
     #     max_nb_genres=1,
     # )
-    config = JukeboxConfig(sample_length=1058304)
+    config = JukeboxConfig.from_pretrained("ArthurZ/new-5b-lyrics")
     model = JukeboxModel(config)
 
     weight_dict = []
@@ -252,18 +266,18 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
             else:
                 new_dic[k] = old_dic[k]
 
-        key_prefix = "vqvae" if i == 0 else f"priors.{i-1}"
+        key_prefix = "vqvae" if i == 0 else f"priors.{3 - i}"
         new_dic = fix_jukebox_keys(new_dic, model.state_dict(), key_prefix, mapping)
         weight_dict.append(new_dic)
 
     vqvae_state_dict = weight_dict.pop(0)
     model.vqvae.load_state_dict(vqvae_state_dict)
     for i in range(len(weight_dict)):
-        model.priors[i].load_state_dict(weight_dict[i])
+        model.priors[i].load_state_dict(weight_dict[2-i])
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     with open(f"{pytorch_dump_folder_path}/mapping.json", "w") as txtfile:
-        json.dump(mapping, txtfile, sep="\n")
+        json.dump(mapping, txtfile)
 
     print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
@@ -276,13 +290,13 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="jukebox-1b-lyrics",
+        default="jukebox-5b-lyrics",
         type=str,
         help="Name of the model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default="jukebox-1b-lyrics-converted",
+        default="jukebox-5b-lyrics-converted",
         type=str,
         help="Path to the output PyTorch model directory.",
     )
