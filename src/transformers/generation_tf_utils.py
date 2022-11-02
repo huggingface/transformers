@@ -3393,6 +3393,19 @@ class TFGenerationMixin:
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ['DeepMind Company is a company that focuses on the development and commercialization of artificial intelligence (AI). DeepMind’s mission is to help people understand and solve problems that are difficult to solve in the world today.\n\nIn this post, we talk about the benefits of deep learning in business and how it']
         ```"""
+
+        def gather_best_candidate(nested, selected_idx_stacked, batch_axis=0):
+            """Gathers the slices indexed by selected_idx_stacked into new beam array."""
+
+            def gather_fn(tensor):
+                if batch_axis == 0:
+                    gathered_tensor = tf.gather(params=tensor, indices=selected_idx_stacked)
+                else:
+                    gathered_tensor = tf.gather(params=tensor, indices=selected_idx_stacked, axis=1, batch_dims=1)
+                return gathered_tensor
+
+            return tf.nest.map_structure(gather_fn, nested)
+
         # 1. init greedy_search values
         logits_processor = logits_processor if logits_processor is not None else TFLogitsProcessorList()
         logits_warper = logits_warper if logits_warper is not None else TFLogitsProcessorList()
@@ -3566,7 +3579,7 @@ class TFGenerationMixin:
             # the degeneration penalty; (4) logits for selecting next top-k candidates; (5) selected tokens scores
             # (model confidence minus degeneration penalty); (6) decoder hidden_states
             next_tokens = tf.gather(top_k_ids, selected_idx, axis=1, batch_dims=1)
-            next_hidden = tf.gather(next_hidden, selected_idx_stacked)
+            next_hidden = gather_best_candidate(next_hidden, selected_idx_stacked)
 
             # XLA: last_hidden_states normally grows at each step, but in XLA it is padded so as to be used across
             # iterations (with fixed shapes)
@@ -3575,35 +3588,21 @@ class TFGenerationMixin:
             else:
                 last_hidden_states = tf.concat([last_hidden_states, next_hidden], axis=1)
 
-            next_decoder_hidden_states = ()
-            for layer in full_hidden_states:
-                layer = tf.gather(layer, selected_idx_stacked)
-                next_decoder_hidden_states += (layer,)
-
-            # select the past_key_value
-            new_key_values = ()
-            for layer in next_past_key_values:
-                items = ()
-                # item is either the key or the value matrix
-                for item in layer:
-                    item = tf.gather(item, selected_idx_stacked)
-                    items += (item,)
-                new_key_values += (items,)
-            next_past_key_values = new_key_values
-
-            logit_for_next_step = tf.gather(logits, selected_idx_stacked)
+            next_decoder_hidden_states = gather_best_candidate(full_hidden_states, selected_idx_stacked)
+            next_past_key_values = gather_best_candidate(
+                next_past_key_values, selected_idx_stacked, batch_axis=cache_batch_axis
+            )
+            logit_for_next_step = gather_best_candidate(logits, selected_idx_stacked)
 
             # Rebuilds the relevant parts of the model output for the selected token, for use in the next iteration
             if self.config.is_encoder_decoder:
                 next_step_cross_attentions = ()
                 next_step_decoder_attentions = ()
                 if output_attentions:
-                    for layer in outputs.cross_attentions:
-                        layer = tf.gather(layer, selected_idx_stacked)
-                        next_step_cross_attentions += (layer,)
-                    for layer in outputs.decoder_attentions:
-                        layer = tf.gather(layer, selected_idx_stacked)
-                        next_step_decoder_attentions += (layer,)
+                    next_step_cross_attentions = gather_best_candidate(outputs.cross_attentions, selected_idx_stacked)
+                    next_step_decoder_attentions = gather_best_candidate(
+                        outputs.decoder_attentions, selected_idx_stacked
+                    )
                 outputs = TFSeq2SeqLMOutput(
                     past_key_values=next_past_key_values,
                     decoder_hidden_states=next_decoder_hidden_states,
@@ -3613,9 +3612,7 @@ class TFGenerationMixin:
             else:
                 next_step_attentions = ()
                 if output_attentions:
-                    for layer in outputs.attentions:
-                        layer = tf.gather(layer, selected_idx_stacked)
-                        next_step_attentions += (layer,)
+                    next_step_attentions = gather_best_candidate(outputs.attentions, selected_idx_stacked)
                 outputs = TFCausalLMOutputWithPast(
                     past_key_values=next_past_key_values,
                     hidden_states=next_decoder_hidden_states,
