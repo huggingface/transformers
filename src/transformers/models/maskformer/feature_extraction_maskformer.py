@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import ImageFeatureExtractionMixin, ImageInput, is_torch_tensor
 from ...utils import TensorType, is_torch_available, logging
@@ -35,15 +37,14 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+# Copied from transformers.models.detr.feature_extraction_detr.binary_mask_to_rle
 def binary_mask_to_rle(mask):
     """
-    Converts given binary mask of shape (height, width) to the run-length encoding (RLE) format.
-
     Args:
+    Converts given binary mask of shape (height, width) to the run-length encoding (RLE) format.
         mask (`torch.Tensor` or `numpy.array`):
             A binary mask tensor of shape `(height, width)` where 0 denotes background and 1 denotes the target
             segment_id or class_id.
-
     Returns:
         `List`: Run-length encoded list of the binary mask. Refer to COCO API for more information about the RLE
         format.
@@ -58,6 +59,7 @@ def binary_mask_to_rle(mask):
     return [x for x in runs]
 
 
+# Copied from transformers.models.detr.feature_extraction_detr.convert_segmentation_to_rle
 def convert_segmentation_to_rle(segmentation):
     """
     Converts given segmentation map of shape (height, width) to the run-length encoding (RLE) format.
@@ -65,7 +67,6 @@ def convert_segmentation_to_rle(segmentation):
     Args:
         segmentation (`torch.Tensor` or `numpy.array`):
             A segmentation map of shape `(height, width)` where each value denotes a segment or class id.
-
     Returns:
         `List[List]`: A list of lists, where each list is the run-length encoding of a segment / class id.
     """
@@ -80,6 +81,7 @@ def convert_segmentation_to_rle(segmentation):
     return run_length_encodings
 
 
+# Copied from transformers.models.detr.feature_extraction_detr.remove_low_and_no_objects
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
     """
     Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
@@ -94,10 +96,8 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
             A tensor of shape `(num_queries)`.
         object_mask_threshold (`float`):
             A number between 0 and 1 used to binarize the masks.
-
     Raises:
         `ValueError`: Raised when the first dimension doesn't match in all input tensors.
-
     Returns:
         `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
         < `object_mask_threshold`.
@@ -106,16 +106,18 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
         raise ValueError("mask, scores and labels must have the same shape!")
 
     to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
+
     return masks[to_keep], scores[to_keep], labels[to_keep]
 
 
-def check_segment_validity(mask_labels, mask_probs, k, overlap_mask_area_threshold=0.8):
+# Copied from transformers.models.detr.feature_extraction_detr.check_segment_validity
+def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
     # Get the mask associated with the k class
     mask_k = mask_labels == k
     mask_k_area = mask_k.sum()
 
     # Compute the area of all the stuff in query k
-    original_area = (mask_probs[k] >= 0.5).sum()
+    original_area = (mask_probs[k] >= mask_threshold).sum()
     mask_exists = mask_k_area > 0 and original_area > 0
 
     # Eliminate disconnected tiny segments
@@ -127,10 +129,12 @@ def check_segment_validity(mask_labels, mask_probs, k, overlap_mask_area_thresho
     return mask_exists, mask_k
 
 
+# Copied from transformers.models.detr.feature_extraction_detr.compute_segments
 def compute_segments(
     mask_probs,
     pred_scores,
     pred_labels,
+    mask_threshold: float = 0.5,
     overlap_mask_area_threshold: float = 0.8,
     label_ids_to_fuse: Optional[Set[int]] = None,
     target_size: Tuple[int, int] = None,
@@ -142,7 +146,9 @@ def compute_segments(
     segments: List[Dict] = []
 
     if target_size is not None:
-        mask_probs = interpolate(mask_probs.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False)[0]
+        mask_probs = nn.functional.interpolate(
+            mask_probs.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
+        )[0]
 
     current_segment_id = 0
 
@@ -157,7 +163,9 @@ def compute_segments(
         should_fuse = pred_class in label_ids_to_fuse
 
         # Check if mask exists and large enough to be a segment
-        mask_exists, mask_k = check_segment_validity(mask_labels, mask_probs, k, overlap_mask_area_threshold)
+        mask_exists, mask_k = check_segment_validity(
+            mask_labels, mask_probs, k, mask_threshold, overlap_mask_area_threshold
+        )
 
         if mask_exists:
             if pred_class in stuff_memory_list:
@@ -201,10 +209,11 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         max_size (`int`, *optional*, defaults to 1333):
             The largest size an image dimension can have (otherwise it's capped). Only has an effect if `do_resize` is
             set to `True`.
-        resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
-            An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
-            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
-            if `do_resize` is set to `True`.
+        resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
+            An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
+            `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
+            `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
+            to `True`.
         size_divisibility (`int`, *optional*, defaults to 32):
             Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
             Swin Transformer.
@@ -232,7 +241,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         do_resize=True,
         size=800,
         max_size=1333,
-        resample=Image.BILINEAR,
+        resample=PILImageResampling.BILINEAR,
         size_divisibility=32,
         do_normalize=True,
         image_mean=None,
@@ -719,6 +728,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         self,
         outputs,
         threshold: float = 0.5,
+        mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
         target_sizes: Optional[List[Tuple[int, int]]] = None,
         return_coco_annotation: Optional[bool] = False,
@@ -732,6 +742,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
                 The overlap mask area threshold to merge or discard small disconnected parts within each binary
                 instance mask.
@@ -783,6 +795,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 mask_probs_item,
                 pred_scores_item,
                 pred_labels_item,
+                mask_threshold,
                 overlap_mask_area_threshold,
                 target_size,
             )
@@ -798,6 +811,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         self,
         outputs,
         threshold: float = 0.5,
+        mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
         label_ids_to_fuse: Optional[Set[int]] = None,
         target_sizes: Optional[List[Tuple[int, int]]] = None,
@@ -811,6 +825,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 The outputs from [`MaskFormerForInstanceSegmentation`].
             threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
                 The overlap mask area threshold to merge or discard small disconnected parts within each binary
                 instance mask.
@@ -872,6 +888,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 mask_probs_item,
                 pred_scores_item,
                 pred_labels_item,
+                mask_threshold,
                 overlap_mask_area_threshold,
                 label_ids_to_fuse,
                 target_size,

@@ -66,7 +66,7 @@ class WhisperFeatureExtractionTester(unittest.TestCase):
         chunk_length=8,
         padding_value=0.0,
         sampling_rate=4_000,
-        return_attention_mask=True,
+        return_attention_mask=False,
         do_normalize=True,
     ):
         self.parent = parent

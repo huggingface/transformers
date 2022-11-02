@@ -667,6 +667,6 @@ class XCLIPModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[14.3819, 20.6031, 15.0526]], device=torch_device)
+        expected_logits = torch.tensor([[14.0181, 20.2771, 14.4776]], device=torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits_per_video, expected_logits, atol=1e-3))

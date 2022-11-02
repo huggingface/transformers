@@ -662,7 +662,7 @@ class CLIPTextTransformer(nn.Module):
         # take features from the eot embedding (eot_token is the highest number in each sequence)
         # casting to torch.int for onnx compatibility: argmax doesn't support int64 inputs with opset 14
         pooled_output = last_hidden_state[
-            torch.arange(last_hidden_state.shape[0]), input_ids.to(torch.int).argmax(dim=-1)
+            torch.arange(last_hidden_state.shape[0], device=input_ids.device), input_ids.to(torch.int).argmax(dim=-1)
         ]
 
         if not return_dict:

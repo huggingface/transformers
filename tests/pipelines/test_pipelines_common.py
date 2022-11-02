@@ -423,6 +423,56 @@ class CommonPipelineTest(unittest.TestCase):
         self.assertEqual(len(outputs), 20)
 
 
+class PipelineScikitCompatTest(unittest.TestCase):
+    @require_torch
+    def test_pipeline_predict_pt(self):
+        data = ["This is a test"]
+
+        text_classifier = pipeline(
+            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
+        )
+
+        expected_output = [{"label": ANY(str), "score": ANY(float)}]
+        actual_output = text_classifier.predict(data)
+        self.assertEqual(expected_output, actual_output)
+
+    @require_tf
+    def test_pipeline_predict_tf(self):
+        data = ["This is a test"]
+
+        text_classifier = pipeline(
+            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="tf"
+        )
+
+        expected_output = [{"label": ANY(str), "score": ANY(float)}]
+        actual_output = text_classifier.predict(data)
+        self.assertEqual(expected_output, actual_output)
+
+    @require_torch
+    def test_pipeline_transform_pt(self):
+        data = ["This is a test"]
+
+        text_classifier = pipeline(
+            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
+        )
+
+        expected_output = [{"label": ANY(str), "score": ANY(float)}]
+        actual_output = text_classifier.transform(data)
+        self.assertEqual(expected_output, actual_output)
+
+    @require_tf
+    def test_pipeline_transform_tf(self):
+        data = ["This is a test"]
+
+        text_classifier = pipeline(
+            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="tf"
+        )
+
+        expected_output = [{"label": ANY(str), "score": ANY(float)}]
+        actual_output = text_classifier.transform(data)
+        self.assertEqual(expected_output, actual_output)
+
+
 class PipelinePadTest(unittest.TestCase):
     @require_torch
     def test_pipeline_padding(self):

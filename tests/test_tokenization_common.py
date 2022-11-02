@@ -120,9 +120,12 @@ def merge_model_tokenizer_mappings(
             tokenizer = tokenizer_mapping[configuration][0]
             tokenizer_fast = tokenizer_mapping[configuration][1]
 
-            model_tokenizer_mapping.update({tokenizer: (configuration, model)})
+            if tokenizer is not None:
+                if configuration.__name__.startswith(tokenizer.__name__.replace("Tokenizer", "")):
+                    model_tokenizer_mapping.update({tokenizer: (configuration, model)})
             if tokenizer_fast is not None:
-                model_tokenizer_mapping.update({tokenizer_fast: (configuration, model)})
+                if configuration.__name__.startswith(tokenizer_fast.__name__.replace("TokenizerFast", "")):
+                    model_tokenizer_mapping.update({tokenizer_fast: (configuration, model)})
 
     return model_tokenizer_mapping
 
@@ -3919,6 +3922,22 @@ class TokenizerUtilTester(unittest.TestCase):
             _ = AlbertTokenizer.from_pretrained(tmp_file)
         finally:
             os.remove(tmp_file)
+
+        # Supporting this legacy load introduced a weird bug where the tokenizer would load local files if they are in
+        # the current folder and have the right name.
+        if os.path.isfile("tokenizer.json"):
+            # We skip the test if the user has a `tokenizer.json` in this folder to avoid deleting it.
+            return
+        try:
+            with open("tokenizer.json", "wb") as f:
+                http_get("https://huggingface.co/hf-internal-testing/tiny-random-bert/blob/main/tokenizer.json", f)
+            tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+            # The tiny random BERT has a vocab size of 1024, tiny gpt2 as a vocab size of 1000
+            self.assertEqual(tokenizer.vocab_size, 1000)
+            # Tokenizer should depend on the remote checkpoint, not the local tokenizer.json file.
+
+        finally:
+            os.remove("tokenizer.json")
 
     def test_legacy_load_from_url(self):
         # This test is for deprecated behavior and can be removed in v5

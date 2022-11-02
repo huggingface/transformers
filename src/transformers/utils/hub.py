@@ -1115,6 +1115,7 @@ if cache_version < 1 and cache_is_not_empty:
             "message and we will do our best to help."
         )
 
+if cache_version < 1:
     try:
         os.makedirs(TRANSFORMERS_CACHE, exist_ok=True)
         with open(cache_version_file, "w") as f:

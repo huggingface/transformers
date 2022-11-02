@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.24.0.dev0"
+__version__ = "4.25.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -336,6 +336,7 @@ _import_structure = {
     "models.swinv2": ["SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swinv2Config"],
     "models.switch_transformers": ["SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwitchTransformersConfig"],
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
+    "models.table_transformer": ["TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TableTransformerConfig"],
     "models.tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig", "TapasTokenizer"],
     "models.tapex": ["TapexTokenizer"],
     "models.time_series_transformer": [
@@ -681,6 +682,8 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_vision_objects) if not name.startswith("_")
     ]
 else:
+    _import_structure["image_processing_utils"] = ["ImageProcessorMixin"]
+    _import_structure["image_transforms"] = ["rescale", "resize", "to_pil_image"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
@@ -735,6 +738,14 @@ else:
             "DetrForSegmentation",
             "DetrModel",
             "DetrPreTrainedModel",
+        ]
+    )
+    _import_structure["models.table_transformer"].extend(
+        [
+            "TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TableTransformerForObjectDetection",
+            "TableTransformerModel",
+            "TableTransformerPreTrainedModel",
         ]
     )
     _import_structure["models.conditional_detr"].extend(
@@ -1255,7 +1266,9 @@ else:
     _import_structure["models.esm"].extend(
         [
             "ESM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "EsmFoldPreTrainedModel",
             "EsmForMaskedLM",
+            "EsmForProteinFolding",
             "EsmForSequenceClassification",
             "EsmForTokenClassification",
             "EsmModel",
@@ -1272,6 +1285,7 @@ else:
             "FlaubertForTokenClassification",
             "FlaubertModel",
             "FlaubertWithLMHeadModel",
+            "FlaubertPreTrainedModel",
         ]
     )
     _import_structure["models.flava"].extend(
@@ -2472,6 +2486,16 @@ else:
         ]
     )
     _import_structure["models.encoder_decoder"].append("TFEncoderDecoderModel")
+    _import_structure["models.esm"].extend(
+        [
+            "ESM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFEsmForMaskedLM",
+            "TFEsmForSequenceClassification",
+            "TFEsmForTokenClassification",
+            "TFEsmModel",
+            "TFEsmPreTrainedModel",
+        ]
+    )
     _import_structure["models.flaubert"].extend(
         [
             "TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3365,6 +3389,7 @@ if TYPE_CHECKING:
     from .models.swinv2 import SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Swinv2Config
     from .models.switch_transformers import SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP, SwitchTransformersConfig
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
+    from .models.table_transformer import TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TableTransformerConfig
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
     from .models.tapex import TapexTokenizer
     from .models.time_series_transformer import (
@@ -3661,6 +3686,8 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_vision_objects import *
     else:
+        from .image_processing_utils import ImageProcessorMixin
+        from .image_transforms import rescale, resize, to_pil_image
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor
         from .models.clip import CLIPFeatureExtractor
@@ -3714,6 +3741,12 @@ if TYPE_CHECKING:
             DetrForSegmentation,
             DetrModel,
             DetrPreTrainedModel,
+        )
+        from .models.table_transformer import (
+            TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TableTransformerForObjectDetection,
+            TableTransformerModel,
+            TableTransformerPreTrainedModel,
         )
 
     try:
@@ -4126,7 +4159,9 @@ if TYPE_CHECKING:
         )
         from .models.esm import (
             ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            EsmFoldPreTrainedModel,
             EsmForMaskedLM,
+            EsmForProteinFolding,
             EsmForSequenceClassification,
             EsmForTokenClassification,
             EsmModel,
@@ -4140,6 +4175,7 @@ if TYPE_CHECKING:
             FlaubertForSequenceClassification,
             FlaubertForTokenClassification,
             FlaubertModel,
+            FlaubertPreTrainedModel,
             FlaubertWithLMHeadModel,
         )
         from .models.flava import (
@@ -5152,6 +5188,14 @@ if TYPE_CHECKING:
             TFElectraPreTrainedModel,
         )
         from .models.encoder_decoder import TFEncoderDecoderModel
+        from .models.esm import (
+            ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFEsmForMaskedLM,
+            TFEsmForSequenceClassification,
+            TFEsmForTokenClassification,
+            TFEsmModel,
+            TFEsmPreTrainedModel,
+        )
         from .models.flaubert import (
             TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFFlaubertForMultipleChoice,

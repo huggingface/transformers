@@ -209,8 +209,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9967, "answer": "1102/2019", "start": 22, "end": 22},
-                {"score": 0.996, "answer": "us-001", "start": 15, "end": 15},
+                {"score": 0.9974, "answer": "1110212019", "start": 23, "end": 23},
+                {"score": 0.9948, "answer": "us-001", "start": 16, "end": 16},
             ],
         )
 
@@ -218,8 +218,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9967, "answer": "1102/2019", "start": 22, "end": 22},
-                {"score": 0.996, "answer": "us-001", "start": 15, "end": 15},
+                {"score": 0.9974, "answer": "1110212019", "start": 23, "end": 23},
+                {"score": 0.9948, "answer": "us-001", "start": 16, "end": 16},
             ],
         )
 
@@ -230,8 +230,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
             nested_simplify(outputs, decimals=4),
             [
                 [
-                    {"score": 0.9967, "answer": "1102/2019", "start": 22, "end": 22},
-                    {"score": 0.996, "answer": "us-001", "start": 15, "end": 15},
+                    {"score": 0.9974, "answer": "1110212019", "start": 23, "end": 23},
+                    {"score": 0.9948, "answer": "us-001", "start": 16, "end": 16},
                 ]
             ]
             * 2,
@@ -320,8 +320,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9999, "answer": "us-001", "start": 15, "end": 15},
-                {"score": 0.9924, "answer": "us-001", "start": 15, "end": 15},
+                {"score": 0.9999, "answer": "us-001", "start": 16, "end": 16},
+                {"score": 0.9998, "answer": "us-001", "start": 16, "end": 16},
             ],
         )
 
@@ -332,8 +332,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
             nested_simplify(outputs, decimals=4),
             [
                 [
-                    {"score": 0.9999, "answer": "us-001", "start": 15, "end": 15},
-                    {"score": 0.9924, "answer": "us-001", "start": 15, "end": 15},
+                    {"score": 0.9999, "answer": "us-001", "start": 16, "end": 16},
+                    {"score": 0.9998, "answer": "us-001", "start": 16, "end": 16},
                 ]
             ]
             * 2,
@@ -346,8 +346,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9999, "answer": "us-001", "start": 15, "end": 15},
-                {"score": 0.9924, "answer": "us-001", "start": 15, "end": 15},
+                {"score": 0.9999, "answer": "us-001", "start": 16, "end": 16},
+                {"score": 0.9998, "answer": "us-001", "start": 16, "end": 16},
             ],
         )
 

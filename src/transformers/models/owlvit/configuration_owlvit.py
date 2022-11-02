@@ -253,15 +253,16 @@ class OwlViTConfig(PretrainedConfig):
     r"""
     [`OwlViTConfig`] is the configuration class to store the configuration of an [`OwlViTModel`]. It is used to
     instantiate an OWL-ViT model according to the specified arguments, defining the text model and vision model
-    configs.
+    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the OWL-ViT
+    [google/owlvit-base-patch32](https://huggingface.co/google/owlvit-base-patch32) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_config_dict (`dict`, *optional*):
+        text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`OwlViTTextConfig`].
-        vision_config_dict (`dict`, *optional*):
+        vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`OwlViTVisionConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
             Dimensionality of text and vision projection layers.
@@ -284,15 +285,15 @@ class OwlViTConfig(PretrainedConfig):
         return_dict=True,
         **kwargs
     ):
-        super().__init__(text_config=text_config, vision_config=vision_config, **kwargs)
+        super().__init__(**kwargs)
 
         if text_config is None:
             text_config = {}
-            logger.info("text_config_dict is None. Initializing the OwlViTTextConfig with default values.")
+            logger.info("text_config is None. Initializing the OwlViTTextConfig with default values.")
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config_dict is None. initializing the OwlViTVisionConfig with default values.")
+            logger.info("vision_config is None. initializing the OwlViTVisionConfig with default values.")
 
         self.text_config = OwlViTTextConfig(**text_config)
         self.vision_config = OwlViTVisionConfig(**vision_config)

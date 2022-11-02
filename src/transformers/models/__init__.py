@@ -139,6 +139,7 @@ from . import (
     swinv2,
     switch_transformers,
     t5,
+    table_transformer,
     tapas,
     tapex,
     time_series_transformer,

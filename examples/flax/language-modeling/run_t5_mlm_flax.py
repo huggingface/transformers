@@ -328,7 +328,6 @@ class FlaxDataCollatorForT5MLM:
     decoder_start_token_id: int
 
     def __call__(self, examples: List[Dict[str, np.ndarray]]) -> BatchEncoding:
-
         # convert list to dict and tensorize input
         batch = BatchEncoding(
             {k: np.array([examples[i][k] for i in range(len(examples))]) for k, v in examples[0].items()}
@@ -397,7 +396,6 @@ class FlaxDataCollatorForT5MLM:
         return input_ids
 
     def random_spans_noise_mask(self, length):
-
         """This function is copy of `random_spans_helper <https://github.com/google-research/text-to-text-transfer-transformer/blob/84f8bcc14b5f2c03de51bd3587609ba8f6bbd1cd/t5/data/preprocessors.py#L2682>`__ .
 
         Noise mask consisting of random spans of noise tokens.

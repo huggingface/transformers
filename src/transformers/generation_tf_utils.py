@@ -360,6 +360,7 @@ class TFGenerationMixin:
 
     @property
     def seed_generator(self):
+        warnings.warn("`seed_generator` is deprecated and will be removed in a future version.", UserWarning)
         if self._seed_generator is None:
             self._seed_generator = tf.random.Generator.from_non_deterministic_state()
         return self._seed_generator
@@ -406,7 +407,7 @@ class TFGenerationMixin:
         forced_eos_token_id=None,
         suppress_tokens: Optional[List[int]] = None,
         begin_suppress_tokens: Optional[List[int]] = None,
-        forced_decoder_ids: Optional[List[int]] = None,
+        forced_decoder_ids: Optional[List[List[int]]] = None,
         **model_kwargs,
     ) -> Union[TFGreedySearchOutput, TFSampleOutput, TFBeamSearchOutput, TFBeamSampleOutput, tf.Tensor]:
         r"""
@@ -506,8 +507,10 @@ class TFGenerationMixin:
             begin_suppress_tokens  (`List[int]`, *optional*, defaults to `model.config.begin_suppress_tokens`):
                 A list of tokens that will be supressed at the begining of the generation. The `SupressBeginTokens`
                 logit processor will set their log probs to `-inf` so that they are not sampled.
-            forced_decoder_ids (`List[int]`, *optional*, defaults to `model.config.forced_decoder_ids`):
-                A list of tokens that will be forced as beginning tokens, before sampling.
+            forced_decoder_ids (`List[List[int]]`, *optional*, defaults to `model.config.forced_decoder_ids`):
+                A list of pairs of integers which indicates a mapping from generation indices to token indices that
+                will be forced before sampling. For example, `[[1, 123]]` means the second generated token will always
+                be a token of index 123.
             model_specific_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model.
 
@@ -1493,9 +1496,10 @@ class TFGenerationMixin:
             begin_suppress_tokens  (`List[int]`, *optional*, defaults to `model.config.begin_suppress_tokens`):
                 A list of tokens that will be supressed at the begining of the generation. The `SupressBeginTokens`
                 logit processor will set their log probs to `-inf` so that they are not sampled.
-            forced_decoder_ids (`List[int]`, *optional*, defaults to `model.config.forced_decoder_ids`):
-                A list of tokens that will be forced as beginning tokens.
-
+            forced_decoder_ids (`List[List[int]]`, *optional*, defaults to `model.config.forced_decoder_ids`):
+                A list of pairs of integers which indicates a mapping from generation indices to token indices that
+                will be forced before sampling. For example, `[[1, 123]]` means the second generated token will always
+                be a token of index 123.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `call` function of the model.
 
@@ -1917,7 +1921,7 @@ class TFGenerationMixin:
         **model_kwargs,
     ) -> Tuple[tf.Tensor, Dict[str, Any]]:
         expanded_return_idx = tf.reshape(
-            tf.tile(tf.reshape(tf.range(input_ids.shape[0]), (-1, 1)), (1, expand_size)), (-1,)
+            tf.tile(tf.reshape(tf.range(tf.shape(input_ids)[0]), (-1, 1)), (1, expand_size)), (-1,)
         )
         input_ids = tf.gather(input_ids, expanded_return_idx, axis=0)
 
@@ -2147,7 +2151,7 @@ class TFGenerationMixin:
         forced_eos_token_id: int,
         suppress_tokens: Optional[List[int]] = None,
         begin_suppress_tokens: Optional[List[int]] = None,
-        forced_decoder_ids: Optional[List[int]] = None,
+        forced_decoder_ids: Optional[List[List[int]]] = None,
     ) -> TFLogitsProcessorList:
         """
         This class returns a [`TFLogitsProcessorList`] list object that contains all relevant [`TFLogitsProcessor`]
@@ -2621,7 +2625,7 @@ class TFGenerationMixin:
             if seed is not None:
                 sample_seed = seed
             else:
-                sample_seed = tf.cast(self.seed_generator.make_seeds(count=1)[:, 0], dtype=tf.int32)
+                sample_seed = tf.experimental.numpy.random.randint(tf.int32.min, tf.int32.max, (2,), dtype=tf.int32)
             next_tokens = tf.squeeze(
                 tf.random.stateless_categorical(
                     logits=next_tokens_scores, num_samples=1, seed=sample_seed, dtype=tf.int32

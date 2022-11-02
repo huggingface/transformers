@@ -127,7 +127,6 @@ torch_and_tf_job = CircleCIJob(
         "pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
         TORCH_SCATTER_INSTALL,
         "pip install tensorflow_probability",
-        "pip install https://github.com/kpu/kenlm/archive/master.zip",
         "pip install git+https://github.com/huggingface/accelerate",
     ],
     marker="is_pt_tf_cross_test",
@@ -143,7 +142,6 @@ torch_and_flax_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]",
         TORCH_SCATTER_INSTALL,
-        "pip install https://github.com/kpu/kenlm/archive/master.zip",
         "pip install git+https://github.com/huggingface/accelerate",
     ],
     marker="is_pt_flax_cross_test",
@@ -158,7 +156,6 @@ torch_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
         TORCH_SCATTER_INSTALL,
-        "pip install https://github.com/kpu/kenlm/archive/master.zip",
         "pip install git+https://github.com/huggingface/accelerate",
     ],
     pytest_num_workers=3,
@@ -172,7 +169,6 @@ tf_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
         "pip install tensorflow_probability",
-        "pip install https://github.com/kpu/kenlm/archive/master.zip",
     ],
     pytest_options={"rA": None},
 )
@@ -184,7 +180,6 @@ flax_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade pip",
         "pip install .[flax,testing,sentencepiece,flax-speech,vision]",
-        "pip install https://github.com/kpu/kenlm/archive/master.zip",
     ],
     pytest_options={"rA": None},
 )
@@ -197,7 +192,6 @@ pipelines_torch_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
         TORCH_SCATTER_INSTALL,
-        "pip install https://github.com/kpu/kenlm/archive/master.zip",
     ],
     pytest_options={"rA": None},
     tests_to_run="tests/pipelines/"
@@ -324,6 +318,18 @@ layoutlm_job = CircleCIJob(
 )
 
 
+repo_utils_job = CircleCIJob(
+    "repo_utils",
+    install_steps=[
+        "pip install --upgrade pip",
+        "pip install .[all,quality,testing]",
+    ],
+    parallelism=None,
+    pytest_num_workers=1,
+    resource_class=None,
+    tests_to_run="tests/repo_utils",
+)
+
 REGULAR_TESTS = [
     torch_and_tf_job,
     torch_and_flax_job,
@@ -344,7 +350,7 @@ PIPELINE_TESTS = [
     pipelines_torch_job,
     pipelines_tf_job,
 ]
-
+REPO_UTIL_TESTS = [repo_utils_job]
 
 def create_circleci_config(folder=None):
     if folder is None:
@@ -371,6 +377,10 @@ def create_circleci_config(folder=None):
     example_file = os.path.join(folder, "examples_test_list.txt")
     if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
         jobs.extend(EXAMPLES_TESTS)
+    
+    repo_util_file = os.path.join(folder, "test_repo_utils.txt")
+    if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
+        jobs.extend(REPO_UTIL_TESTS)
 
     if len(jobs) > 0:
         config = {"version": "2.1"}

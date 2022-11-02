@@ -32,7 +32,7 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import FlavaFeatureExtractor, FlavaProcessor
-    from transformers.models.flava.feature_extraction_flava import (
+    from transformers.models.flava.image_processing_flava import (
         FLAVA_CODEBOOK_MEAN,
         FLAVA_CODEBOOK_STD,
         FLAVA_IMAGE_MEAN,
@@ -69,7 +69,6 @@ class FlavaProcessorTest(unittest.TestCase):
             "mask_group_max_aspect_ratio": None,
             "codebook_do_resize": True,
             "codebook_size": 112,
-            "codebook_resample": None,
             "codebook_do_center_crop": True,
             "codebook_crop_size": 112,
             "codebook_do_map_pixels": True,
