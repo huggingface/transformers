@@ -1251,33 +1251,34 @@ class Trainer:
             if dataloader is None:
                 logger.warning("failed to use PyTorch jit mode due to current dataloader is none.")
                 return model
-            jit_inputs = []
             example_batch = next(iter(dataloader))
             example_batch = self._prepare_inputs(example_batch)
-            for key in example_batch:
-                example_tensor = torch.ones_like(example_batch[key])
-                jit_inputs.append(example_tensor)
-            jit_inputs = tuple(jit_inputs)
             try:
                 jit_model = model.eval()
-                with ContextManagers(
-                    [
-                        torch.cuda.amp.autocast(cache_enabled=False, dtype=self.amp_dtype)
-                        if self.use_cuda_amp
-                        else torch.cpu.amp.autocast(cache_enabled=False, dtype=self.amp_dtype)
-                        if self.use_cpu_amp
-                        else contextlib.nullcontext(),
-                        torch.no_grad(),
-                    ]
-                ):
-                    jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
+                with ContextManagers([self.autocast_smart_context_manager(cache_enabled=False), torch.no_grad()]):
+                    if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.14.0"):
+                        if isinstance(example_batch, dict):
+                            jit_model = torch.jit.trace(jit_model, example_kwarg_inputs=example_batch, strict=False)
+                        else:
+                            jit_model = torch.jit.trace(
+                                jit_model,
+                                example_kwarg_inputs={key: example_batch[key] for key in example_batch},
+                                strict=False,
+                            )
+                    else:
+                        jit_inputs = []
+                        for key in example_batch:
+                            example_tensor = torch.ones_like(example_batch[key])
+                            jit_inputs.append(example_tensor)
+                        jit_inputs = tuple(jit_inputs)
+                        jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
                 jit_model = torch.jit.freeze(jit_model)
                 jit_model(**example_batch)
                 jit_model(**example_batch)
                 model = jit_model
                 self.use_cpu_amp = False
                 self.use_cuda_amp = False
-            except (RuntimeError, TypeError, ValueError) as e:
+            except (RuntimeError, TypeError, ValueError, NameError, IndexError) as e:
                 logger.warning(f"failed to use PyTorch jit mode due to: {e}.")
 
         return model
@@ -2469,7 +2470,7 @@ class Trainer:
         """
         return self.ctx_manager_torchdynamo
 
-    def autocast_smart_context_manager(self):
+    def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = None):
         """
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
         arguments, depending on the situation.
@@ -2477,9 +2478,9 @@ class Trainer:
         if self.use_cuda_amp or self.use_cpu_amp:
             if is_torch_greater_or_equal_than_1_10:
                 ctx_manager = (
-                    torch.cpu.amp.autocast(dtype=self.amp_dtype)
+                    torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
                     if self.use_cpu_amp
-                    else torch.cuda.amp.autocast(dtype=self.amp_dtype)
+                    else torch.cuda.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
                 )
             else:
                 ctx_manager = torch.cuda.amp.autocast()
