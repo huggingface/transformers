@@ -91,6 +91,7 @@ class CircleCIJob:
                 }
             }
         )
+        steps.append({"run": {"name": "Show installed libraries and their versions", "command": "pip freeze"}})
 
         all_options = {**COMMON_PYTEST_OPTIONS, **self.pytest_options}
         pytest_flags = [f"--{key}={value}" if value is not None else f"-{key}" for key, value in all_options.items()]
