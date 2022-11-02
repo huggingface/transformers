@@ -23,8 +23,8 @@ from tempfile import TemporaryDirectory
 import torch
 
 import esm as esm_module
-from esm.esmfold.v1.pretrained import esmfold_v1
 from esm.esmfold.v1.misc import batch_encode_sequences as esmfold_encode_sequences
+from esm.esmfold.v1.pretrained import esmfold_v1
 from transformers.models.esm.configuration_esm import EsmConfig, EsmFoldConfig
 from transformers.models.esm.modeling_esm import (
     EsmForMaskedLM,
@@ -44,7 +44,10 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 SAMPLE_DATA = [
-    ("protein1", "MNGTEGPNFYVPFSNATGVVRSPFEYPQYYLAEPWQFSMLAAYMFLLIVLGFPINFLTLYVTVQHKKLRTPLNYILLNLAVADLFMVLGGFTSTLYTSLHGYFVFGPTGCNLEGFFATLGGEIALWSLVVLAIERYVVVCKPMSNFRFGENHAIMGVAFTWVMALACAAPPLAGWSRYIPEGLQCSCGIDYYTLKPEVNNESFVIYMFVVHFTIPMIIIFFCYGQLVFTVKEAAAQQQESATTQKAEKEVTRMVIIMVIAFLICWVPYASVAFYIFTHQGSNFGPIFMTIPAFFAKSAAIYNPVIYIMMNKQFRNCMLTTICCGKNPLGDDEASATVSKTETSQVAPA"),
+    (
+        "protein1",
+        "MNGTEGPNFYVPFSNATGVVRSPFEYPQYYLAEPWQFSMLAAYMFLLIVLGFPINFLTLYVTVQHKKLRTPLNYILLNLAVADLFMVLGGFTSTLYTSLHGYFVFGPTGCNLEGFFATLGGEIALWSLVVLAIERYVVVCKPMSNFRFGENHAIMGVAFTWVMALACAAPPLAGWSRYIPEGLQCSCGIDYYTLKPEVNNESFVIYMFVVHFTIPMIIIFFCYGQLVFTVKEAAAQQQESATTQKAEKEVTRMVIIMVIAFLICWVPYASVAFYIFTHQGSNFGPIFMTIPAFFAKSAAIYNPVIYIMMNKQFRNCMLTTICCGKNPLGDDEASATVSKTETSQVAPA",
+    ),
     ("protein2", "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLA"),
     ("protein3", "MKTVRQERLKSI<mask>RILERSKEPVSGAQLAEELS<mask>SRQVIVQDIAYLRSLGYN<mask>VATPRGYVLAGG"),
     ("protein4", "MKTVRQERLKSI<mask>RILERSKEPVSGAQLAEELS<mask>SRQVIVQDIAYLRSLGYN<mask>VATPRGYVLA"),
@@ -66,31 +69,11 @@ MODEL_MAPPING = {
     "esmfold_v1": esmfold_v1,
 }
 
-restypes = [
-    "A",
-    "R",
-    "N",
-    "D",
-    "C",
-    "Q",
-    "E",
-    "G",
-    "H",
-    "I",
-    "L",
-    "K",
-    "M",
-    "F",
-    "P",
-    "S",
-    "T",
-    "W",
-    "Y",
-    "V",
-]
+restypes = list("ARNDCQEGHILKMFPSTWYV")
 
 restypes_with_x = restypes + ["X"]
 restypes_with_extras = restypes_with_x + ["<pad>", "<mask>", "<cls>", "<sep>", "<eos>"]
+
 
 def get_esmfold_tokenizer():
     with TemporaryDirectory() as tempdir:
@@ -100,7 +83,6 @@ def get_esmfold_tokenizer():
         hf_tokenizer = EsmTokenizer(vocab_file=str(vocab_file))
     hf_tokenizer.pad_token_id = 0  # Overlaps with 'A' but that seems to be what they want
     return hf_tokenizer
-
 
 
 def transfer_and_check_weights(original_module, our_module):
@@ -311,9 +293,13 @@ def convert_esm_checkpoint_to_pytorch(
 
     if is_folding_model:
         hf_tokenizer = get_esmfold_tokenizer()
-        hf_tokens = hf_tokenizer([row[1] for row in sample_data], return_tensors="pt", padding=True, add_special_tokens=False)
-        esmfold_aas, esmfold_mask, _, _ ,_ = esmfold_encode_sequences([row[1] for row in sample_data])
-        success = torch.all(hf_tokens["input_ids"] == esmfold_aas) and torch.all(hf_tokens["attention_mask"] == esmfold_mask)
+        hf_tokens = hf_tokenizer(
+            [row[1] for row in sample_data], return_tensors="pt", padding=True, add_special_tokens=False
+        )
+        esmfold_aas, esmfold_mask, _, _, _ = esmfold_encode_sequences([row[1] for row in sample_data])
+        success = torch.all(hf_tokens["input_ids"] == esmfold_aas) and torch.all(
+            hf_tokens["attention_mask"] == esmfold_mask
+        )
     else:
         # Let's check that we get the same results.
         batch_converter = alphabet.get_batch_converter()
@@ -341,7 +327,8 @@ def convert_esm_checkpoint_to_pytorch(
             # original and the converted model on the GPU at the same time.
             their_output = esm.cuda().infer([row[1] for row in sample_data])
             our_output = model.cuda()(
-                input_ids=hf_tokens["input_ids"].cuda(), attention_mask=hf_tokens["attention_mask"].cuda())
+                input_ids=hf_tokens["input_ids"].cuda(), attention_mask=hf_tokens["attention_mask"].cuda()
+            )
         else:
             our_output = model(**hf_tokens, output_hidden_states=True)
             our_output = our_output["logits"]
