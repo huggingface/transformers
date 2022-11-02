@@ -1090,7 +1090,10 @@ class RocBertForPreTraining(RocBertPreTrainedModel):
         labels_input_pronunciation_ids: Optional[torch.Tensor] = None,
         labels_attention_mask: Optional[torch.Tensor] = None,
         labels_token_type_ids: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
         r"""
             attack_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1161,6 +1164,8 @@ class RocBertForPreTraining(RocBertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 

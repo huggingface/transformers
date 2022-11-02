@@ -17,6 +17,7 @@
 import unittest
 
 from transformers import RocBertConfig, is_torch_available
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -27,6 +28,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        MODEL_FOR_PRETRAINING_MAPPING,
         RocBertForCausalLM,
         RocBertForMaskedLM,
         RocBertForMultipleChoice,
@@ -563,11 +565,38 @@ class RocBertModelTest(ModelTesterMixin, unittest.TestCase):
             RocBertForQuestionAnswering,
             RocBertForSequenceClassification,
             RocBertForTokenClassification,
+            RocBertForPreTraining,
         )
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (RocBertForCausalLM,) if is_torch_available() else ()
+
+    # special case for ForPreTraining model
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class in get_values(MODEL_FOR_PRETRAINING_MAPPING):
+                inputs_dict["labels_input_ids"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+                inputs_dict["labels_input_shape_ids"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+                inputs_dict["labels_input_pronunciation_ids"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+                inputs_dict["attack_input_ids"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+                inputs_dict["attack_input_shape_ids"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+                inputs_dict["attack_input_pronunciation_ids"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = RocBertModelTester(self)
@@ -661,19 +690,15 @@ class RocBertModelTest(ModelTesterMixin, unittest.TestCase):
 class RocBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = RocBertForMaskedLM.from_pretrained("roc-bert-base-cased")
+        model = RocBertForMaskedLM.from_pretrained("weiweishi/roc-bert-base-zh")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
-        # TODO Replace vocab size
-        vocab_size = 32000
+        vocab_size = 21128
 
         expected_shape = torch.Size((1, 6, vocab_size))
         self.assertEqual(output.shape, expected_shape)
 
-        # TODO Replace values below with what was printed above.
-        expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
-        )
+        expected_slice = torch.tensor([[[0.6248, 0.3013, 0.3739], [0.3544, 0.8086, 0.2427], [0.3244, 0.6589, 0.1711]]])
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))

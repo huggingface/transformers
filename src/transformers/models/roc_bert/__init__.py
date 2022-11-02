@@ -31,6 +31,8 @@ try:
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
+else:
+    pass
 
 try:
     if not is_torch_available():
@@ -40,16 +42,16 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_roc_bert"] = [
         "ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "RocBertForMaskedLM",
         "RocBertForCausalLM",
+        "RocBertForMaskedLM",
         "RocBertForMultipleChoice",
+        "RocBertForPreTraining",
         "RocBertForQuestionAnswering",
         "RocBertForSequenceClassification",
         "RocBertForTokenClassification",
         "RocBertLayer",
         "RocBertModel",
         "RocBertPreTrainedModel",
-        "RocBertForPreTraining",
         "load_tf_weights_in_roc_bert",
     ]
 
