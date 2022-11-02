@@ -27,6 +27,9 @@ _import_structure = {
         "CLIPSegTextConfig",
         "CLIPSegVisionConfig",
     ],
+    "processing_clipseg": [
+        "CLIPSegProcessor",
+    ],
 }
 
 try:
@@ -59,6 +62,8 @@ if TYPE_CHECKING:
         CLIPSegTextConfig,
         CLIPSegVisionConfig,
     )
+
+    from .processing_clipseg import CLIPSegProcessor
 
     try:
         if not is_torch_available():

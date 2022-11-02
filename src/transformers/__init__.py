@@ -176,6 +176,7 @@ _import_structure = {
         "CLIPSegConfig",
         "CLIPSegTextConfig",
         "CLIPSegVisionConfig",
+        "CLIPSegProcessor",
     ],
     "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
     "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
@@ -3237,16 +3238,17 @@ if TYPE_CHECKING:
     from .models.clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPConfig,
-        CLIPProcessor,
         CLIPTextConfig,
         CLIPTokenizer,
         CLIPVisionConfig,
+        CLIPProcessor,
     )
     from .models.clipseg import (
         CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPSegConfig,
         CLIPSegTextConfig,
         CLIPSegVisionConfig,
+        CLIPSegProcessor,
     )
     from .models.codegen import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeGenConfig, CodeGenTokenizer
     from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDetrConfig

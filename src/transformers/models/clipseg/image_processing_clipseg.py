@@ -69,7 +69,7 @@ class CLIPSegImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `(size["height"],
             size["width"])`. Can be overridden by the `do_resize` parameter in the `preprocess` method.
-        size (`dict`, *optional*, defaults to `{"height": 224, "width": 224}`):
+        size (`dict`, *optional*, defaults to `{"height": 352, "width": 352}`):
             Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
             method.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
@@ -92,7 +92,7 @@ class CLIPSegImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
-        size = size if size is not None else {"height": 224, "width": 224}
+        size = size if size is not None else {"height": 352, "width": 352}
         size = get_size_dict(size, default_to_square=False)
 
         self.do_rescale = do_rescale

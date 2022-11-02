@@ -21,7 +21,8 @@ import torch
 from PIL import Image
 from torchvision.transforms import Compose, Resize, ToTensor
 
-from transformers import CLIPSegConfig, CLIPSegForImageSegmentation, CLIPSegTextConfig, CLIPSegVisionConfig
+from transformers import CLIPSegConfig, CLIPSegFeatureExtractor, CLIPTokenizer, CLIPSegProcessor, CLIPSegForImageSegmentation, CLIPSegTextConfig, CLIPSegVisionConfig
+from transformers.models.clip.processing_clip import CLIPProcessor
 
 
 def get_clipseg_config(model_name):
@@ -147,14 +148,6 @@ def convert_state_dict(orig_state_dict, config):
     return orig_state_dict
 
 
-image_transforms = Compose(
-    [
-        ToTensor(),
-        Resize((352, 352)),
-    ]
-)
-
-
 def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub):
     config = get_clipseg_config(model_name)
     model = CLIPSegForImageSegmentation(config)
@@ -176,18 +169,19 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     if unexpected_keys != ["decoder.reduce.weight", "decoder.reduce.bias"]:
         raise ValueError(f"Unexpected keys: {unexpected_keys}")
 
-    # TODO create feature extractor
-    # feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/{}".format(model_name.replace("_", "-")))
+    feature_extractor = CLIPSegFeatureExtractor()
     image = Image.open("/Users/nielsrogge/Documents/cats.jpg").convert("RGB")
-    pixel_values = image_transforms(image).unsqueeze(0).repeat(4, 1, 1, 1)
+    pixel_values = feature_extractor(image, return_tensors="pt").pixel_values
 
-    # prompts = ["a glass", "something to fill", "wood", "a jar"]
-    # tokenizer = CLIPTokenizer.from_pretrained("openai/")
-    # input_ids = CLIPTokenizer(prompts, padding="max_length", return_tensors="pt")
+    prompts = ["a glass", "something to fill", "wood", "a jar"]
+    tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+    input_ids = tokenizer(prompts, padding="max_length", return_tensors="pt").input_ids
     input_ids = torch.tensor([[1, 2] + [9] * 75]).repeat(4, 1)
 
+    processor = CLIPProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+
     with torch.no_grad():
-        outputs = model(input_ids, pixel_values)
+        outputs = model(input_ids, pixel_values.repeat(len(prompts), 1, 1, 1))
 
     # verify values
     expected_cond = torch.tensor([0.0548, 0.0067, -0.1543])
@@ -214,8 +208,9 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
         # feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print(f"Pushing model {model_name} to the hub")
+        print(f"Pushing model and processor for {model_name} to the hub")
         model.push_to_hub(f"nielsr/{model_name}")
+        processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

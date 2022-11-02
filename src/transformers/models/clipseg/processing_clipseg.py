@@ -19,12 +19,12 @@ from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
 
-class CLIPProcessor(ProcessorMixin):
+class CLIPSegProcessor(ProcessorMixin):
     r"""
-    Constructs a CLIP processor which wraps a CLIPSeg feature extractor and a CLIP tokenizer into a single processor.
+    Constructs a CLIPSeg processor which wraps a CLIPSeg feature extractor and a CLIP tokenizer into a single processor.
 
-    [`CLIPProcessor`] offers all the functionalities of [`CLIPSegFeatureExtractor`] and [`CLIPTokenizerFast`]. See the
-    [`~CLIPProcessor.__call__`] and [`~CLIPProcessor.decode`] for more information.
+    [`CLIPSegProcessor`] offers all the functionalities of [`CLIPSegFeatureExtractor`] and [`CLIPTokenizerFast`]. See the
+    [`~CLIPSegProcessor.__call__`] and [`~CLIPSegProcessor.decode`] for more information.
 
     Args:
         feature_extractor ([`CLIPSegFeatureExtractor`]):
