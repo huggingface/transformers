@@ -69,13 +69,11 @@ class SwitchTransformersConfig(PretrainedConfig):
             Whether to add a bias to the router.
         router_jitter_noise (`float`, *optional*, defaults to 0.1):
             Amount of noise to add to the router.
-        router_ignore_padding_tokens (`bool`, *optional*, defaults to `False`):
-            Whether to ignore padding tokens when routing.
         router_dtype (`str`, *optional*, default to `float32`):
             The `dtype` used for the routers. It is preferable to keep the `dtype` to `float32` as specified in the
             "selective precision" discussion in https://arxiv.org/abs/2101.03961.
-        add_router_probs (`bool`, *optional*, defaults to `False`):
-            Whether to output router probabilities to compute router auxiliary loss.
+        router_ignore_padding_tokens (`bool`, *optional*, defaults to `False`):
+            Whether to ignore padding tokens when routing.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
             The number of buckets to use for each attention layer.
         relative_attention_max_distance (`int`, *optional*, defaults to 128):
@@ -94,6 +92,8 @@ class SwitchTransformersConfig(PretrainedConfig):
         feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
             Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. SwitchTransformersv1.1
             uses the `"gated-gelu"` feed forward projection. Original SwitchTransformers uses `"relu"`.
+        add_router_probs (`bool`, *optional*, defaults to `False`):
+            Whether to output router probabilities to compute router auxiliary loss.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
     """
@@ -107,13 +107,13 @@ class SwitchTransformersConfig(PretrainedConfig):
         d_model=768,
         d_kv=64,
         d_ff=2048,
+        expert_capacity=64,
         num_layers=12,
         num_sparse_encoder_layers=3,
         num_decoder_layers=12,
         num_sparse_decoder_layers=3,
         num_heads=12,
         num_experts=8,
-        expert_capacity=64,
         router_type="tokens_masked",
         router_bias=False,
         router_jitter_noise=0.01,
@@ -122,9 +122,9 @@ class SwitchTransformersConfig(PretrainedConfig):
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
         dropout_rate=0.1,
+        layer_norm_epsilon=1e-6,
         router_z_loss_coef=0.001,
         router_aux_loss_coef=0.001,
-        layer_norm_epsilon=1e-6,
         initializer_factor=1.0,
         feed_forward_proj="relu",
         is_encoder_decoder=True,
