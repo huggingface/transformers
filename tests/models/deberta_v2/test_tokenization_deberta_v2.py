@@ -30,7 +30,7 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = DebertaV2Tokenizer
     rust_tokenizer_class = DebertaV2TokenizerFast
-    test_sentencepiece = True
+    test_sentencepiece = False
     test_sentencepiece_ignore_case = True
 
     def setUp(self):

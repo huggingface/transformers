@@ -380,7 +380,6 @@ class TokenizerTesterMixin:
         # check if converting back to original text works
         reverse_text = tokenizer.convert_tokens_to_string(tokens)
 
-        # All tokenizers pass this test without the below commented out code.
         if self.test_sentencepiece_ignore_case:
             reverse_text = reverse_text.lower()
 
