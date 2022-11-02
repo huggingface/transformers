@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ConvNextMaskRCNN model."""
+""" PyTorch ConvNext Mask R-CNN model."""
 
 
 import copy
@@ -33,10 +33,11 @@ from ...activations import ACT2FN
 
 # TODO maybe include these dependencies somewhere else
 from ...assign_result import AssignResult
-from ...losses import CrossEntropyLoss, L1Loss, accuracy
+from ...loss_utils import CrossEntropyLoss, L1Loss, accuracy
 from ...mask_target import mask_target
 from ...modeling_outputs import BaseModelOutputWithNoAttention, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
+from ...nms import batched_nms
 from ...sampling_result import SamplingResult
 from ...utils import (
     ModelOutput,
@@ -46,9 +47,6 @@ from ...utils import (
     logging,
 )
 from .configuration_convnext_maskrcnn import ConvNextMaskRCNNConfig
-
-# TODO remove this
-from .feature_extraction_convnext_maskrcnn import batched_nms, multiclass_nms
 
 
 logger = logging.get_logger(__name__)
@@ -129,8 +127,7 @@ def unmap(data, count, inds, fill=0):
 
 
 def select_single_mlvl(mlvl_tensors, batch_id, detach=True):
-    """Extract a multi-scale single image tensor from a multi-scale batch
-    tensor based on batch index.
+    """Extract a multi-scale single image tensor from a multi-scale batch tensor based on batch index.
 
     Note: The default value of detach is True, because the proposal gradient needs to be detached during the training
     of the two-stage model. E.g Cascade Mask R-CNN.
@@ -333,8 +330,8 @@ def bbox2roi(bbox_list):
     """Convert a list of bboxes to roi format.
 
     Args:
-        bbox_list (list[Tensor]): a list of bboxes corresponding to a batch
-            of images.
+        bbox_list (list[Tensor]):
+            A list of bboxes corresponding to a batch of images.
 
     Returns:
         Tensor: shape (n, 5), [batch_ind, x1, y1, x2, y2]
@@ -349,23 +346,6 @@ def bbox2roi(bbox_list):
         rois_list.append(rois)
     rois = torch.cat(rois_list, 0)
     return rois
-
-
-def bbox2result(bboxes, labels, num_classes):
-    """Convert detection results to a list of numpy arrays.
-    Args:
-        bboxes (torch.Tensor | np.ndarray): shape (n, 5)
-        labels (torch.Tensor | np.ndarray): shape (n, )
-        num_classes (int): class number, including background class
-    Returns:
-        list(ndarray): bbox results of each class
-    """
-    if bboxes.shape[0] == 0:
-        return [np.zeros((0, 5), dtype=np.float32) for i in range(num_classes)]
-    if isinstance(bboxes, torch.Tensor):
-        bboxes = bboxes.detach().cpu().numpy()
-        labels = labels.detach().cpu().numpy()
-    return [bboxes[labels == i, :] for i in range(num_classes)]
 
 
 # Copied from transformers.models.convnext.modeling_convnext.drop_path
@@ -2423,8 +2403,8 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
 
     def _get_target_single(self, pos_bboxes, neg_bboxes, pos_gt_bboxes, pos_gt_labels, cfg):
         """Calculate the ground truth for proposals in the single image according to the sampling results.
-            
-        Args:    
+
+        Args:
             pos_bboxes (Tensor): Contains all the positive boxes,
                 has shape (num_pos, 4), the last dimension 4 represents [tl_x, tl_y, br_x, br_y].
             neg_bboxes (Tensor): Contains all the negative boxes,
@@ -2434,7 +2414,7 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
             pos_gt_labels (Tensor): Contains gt_labels for
                 all positive samples, has shape (num_pos, ).
             cfg (obj:`ConfigDict`): `train_cfg` of R-CNN.
-        
+
         Returns:
             Tuple[Tensor]: Ground truth for proposals in a single image. Containing the following Tensors:
                 - labels(Tensor): Gt_labels for all proposals, has shape (num_proposals,).
@@ -2830,7 +2810,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         # if all(det_bbox.shape[0] == 0 for det_bbox in det_bboxes):
         #     segm_results = [[[] for _ in range(self.mask_head.num_classes)] for _ in range(num_imgs)]
         # else:
-        
+
         # if det_bboxes is rescaled to the original image size, we need to
         # rescale it back to the testing scale to obtain RoIs.
         if rescale:
