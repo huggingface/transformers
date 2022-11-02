@@ -29,7 +29,7 @@ from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, logging
 from ...utils.logging import tqdm
-from .configuration_jukebox import JukeboxConfig, JukeboxPriorConfig, JukeboxVQVAEConfig, ATTENTION_PATTERNS
+from .configuration_jukebox import ATTENTION_PATTERNS, JukeboxConfig, JukeboxPriorConfig, JukeboxVQVAEConfig
 
 
 logger = logging.get_logger(__name__)
@@ -95,7 +95,9 @@ def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, off
     """
     full_tokens = full_tokens[0]
     if len(full_tokens) < max_n_lyric_tokens:
-        tokens = torch.cat([torch.zeros(max_n_lyric_tokens - len(full_tokens), dtype = torch.long).to(full_tokens.device), full_tokens])
+        tokens = torch.cat(
+            [torch.zeros(max_n_lyric_tokens - len(full_tokens), dtype=torch.long).to(full_tokens.device), full_tokens]
+        )
         indices = [-1] * (max_n_lyric_tokens - len(full_tokens)) + list(range(0, len(full_tokens)))
     else:
         midpoint = int(len(full_tokens) * (offset + duration / 2.0) / total_length)
@@ -237,7 +239,7 @@ class JukeboxResConv1DBlock(nn.Module):
     def __init__(self, config, conv_width, depth=1, res_scale=1.0):
         super().__init__()
         hidden_dim = config.res_convolution_multiplier * conv_width
-        dilation = config.res_dilation_growth_rate ** depth
+        dilation = config.res_dilation_growth_rate**depth
         padding = dilation
 
         self.res_scale = res_scale
@@ -283,9 +285,7 @@ class JukeboxEncoderConvBlock(nn.Module):
         pad_t = stride_t // 2
         if down_t > 0:
             for i in range(down_t):
-                blocks.append(
-                    nn.Conv1d(embed_dim if i == 0 else hidden_dim, hidden_dim, filter_t, stride_t, pad_t)
-                )
+                blocks.append(nn.Conv1d(embed_dim if i == 0 else hidden_dim, hidden_dim, filter_t, stride_t, pad_t))
                 blocks.append(JukeboxResnet1D(config, hidden_dim, depth))
         self.proj_out = nn.Conv1d(hidden_dim, config.embed_dim, 3, 1, 1)
         self.downsample_block = nn.ModuleList(blocks)
@@ -305,7 +305,11 @@ class JukeboxEncoder(nn.Module):
 
         iterator = zip(list(range(self.levels)), downs_t, strides_t)
         for i, down_t, stride_t in iterator:
-            self.level_blocks.append(JukeboxEncoderConvBlock(config, config.conv_input_shape if i == 0 else config.embed_dim, width, depth, down_t, stride_t))
+            self.level_blocks.append(
+                JukeboxEncoderConvBlock(
+                    config, config.conv_input_shape if i == 0 else config.embed_dim, width, depth, down_t, stride_t
+                )
+            )
 
     def forward(self, hidden_states):
         all_hidden_states = []
@@ -320,7 +324,7 @@ class JukeboxEncoder(nn.Module):
 
 
 class JukeboxDecoderConvBock(nn.Module):
-    def __init__(self,config,embed_dim,hidden_dim,depth,down_t,stride_t):
+    def __init__(self, config, embed_dim, hidden_dim, depth, down_t, stride_t):
         self.embed_dim = embed_dim
         self.hidden_dim = hidden_dim
         super().__init__()
@@ -331,7 +335,11 @@ class JukeboxDecoderConvBock(nn.Module):
             self.proj_in = nn.Conv1d(embed_dim, hidden_dim, 3, 1, 1)
             for i in range(down_t):
                 blocks.append(JukeboxResnet1D(config, hidden_dim, depth, reverse_dilation=True))
-                blocks.append(nn.ConvTranspose1d(hidden_dim, hidden_dim if i<down_t-1 else embed_dim, filter_t, stride_t, pad_t))
+                blocks.append(
+                    nn.ConvTranspose1d(
+                        hidden_dim, hidden_dim if i < down_t - 1 else embed_dim, filter_t, stride_t, pad_t
+                    )
+                )
         self.upsample_block = nn.ModuleList(blocks)
 
     def forward(self, hidden_states):
@@ -347,7 +355,9 @@ class JukeboxDecoder(nn.Module):
         self.levels = levels
         self.level_blocks = nn.ModuleList()
         for level, down_t, stride_t in zip(list(range(self.levels)), downs_t, strides_t):
-            self.level_blocks.append(JukeboxDecoderConvBock(config, config.embed_dim, hidden_dim, depth, down_t, stride_t))
+            self.level_blocks.append(
+                JukeboxDecoderConvBock(config, config.embed_dim, hidden_dim, depth, down_t, stride_t)
+            )
 
         self.out = nn.Conv1d(config.embed_dim, config.conv_input_shape, 3, 1, 1)
 
@@ -796,7 +806,6 @@ class JukeboxLayerNorm(FusedLayerNorm):
 
 
 class JukeboxAttention(nn.Module):
-
     def __init__(
         self,
         config,
@@ -813,11 +822,11 @@ class JukeboxAttention(nn.Module):
         self.head_dim = hidden_dim // config.n_heads
         self.n_ctx = n_ctx  # NOTE: n_ctx could be different within operations. This is complete n_ctx
         self.hidden_dim = hidden_dim
-        self.scale = self.head_dim**-0.25 #TODO check  1.0 / math.sqrt(math.sqrt(self.hidden_dim // self.n_heads))
+        self.scale = self.head_dim**-0.25  # TODO check  1.0 / math.sqrt(math.sqrt(self.hidden_dim // self.n_heads))
         self.mask = config.mask
 
         if attn_func == "cross_attention":
-            self.c_attn = JukeboxConv1D(self.embed_dim, hidden_dim ) # issue here, for single enc decoder different
+            self.c_attn = JukeboxConv1D(self.embed_dim, hidden_dim)  # issue here, for single enc decoder different
             self.c_enc_kv = JukeboxConv1D(self.embed_dim, hidden_dim * 2)
         else:
             self.c_attn = JukeboxConv1D(self.embed_dim, hidden_dim * 3)
@@ -1156,12 +1165,14 @@ class JukeboxAttention(nn.Module):
             raise NotImplementedError()
 
         REQUIRED_CACHE_LEN = {
-            "dense_attn":self.sample_t,
-            "block_attn":(self.sample_t - 1) % self.block_ctx + 1,
-            "transpose_block_attn":self.sample_t,
-            "prev_block_attn": self.sample_t if self.sample_t <= self.block_ctx  else (self.sample_t - 1) % self.block_ctx + 1 + self.block_ctx,
-            "cross_attn":self.encoder_len,
-            "prime_attn":min(self.sample_t, self._encoder_len)
+            "dense_attn": self.sample_t,
+            "block_attn": (self.sample_t - 1) % self.block_ctx + 1,
+            "transpose_block_attn": self.sample_t,
+            "prev_block_attn": self.sample_t
+            if self.sample_t <= self.block_ctx
+            else (self.sample_t - 1) % self.block_ctx + 1 + self.block_ctx,
+            "cross_attn": self.encoder_len,
+            "prime_attn": min(self.sample_t, self._encoder_len),
         }
 
         return REQUIRED_CACHE_LEN[self.attn_func]
@@ -1250,17 +1261,15 @@ class JukeboxLayerStack(nn.Module):
         self.encoder_len = encoder_len
         self.n_heads = config.n_heads
 
-
         # Orders of attn_func
         attention_pattern = ATTENTION_PATTERNS[self.attention_pattern]
         self._attn_mods = nn.ModuleList()
         for depth in range(self.depth):
             self._attn_mods.append(
-                JukeboxBlock(config, n_ctx, attn_func=attention_pattern(depth),encoder_len=encoder_len)
+                JukeboxBlock(config, n_ctx, attn_func=attention_pattern(depth), encoder_len=encoder_len)
             )
 
         self.saved_attn_weights = []
-
 
     def set_record_attn(self, record_attn):
         """
@@ -1314,8 +1323,8 @@ class JukeboxConditionalAutoregressive(nn.Module):
     def __init__(
         self,
         config,
-        n_ctx = None,
-        embed_dim = None,
+        n_ctx=None,
+        embed_dim=None,
         audio_conditioning=False,
         metadata_conditioning=False,
         encoder_len=0,
@@ -1324,8 +1333,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         """
         - embed_dim : either equals to the dimension of the codebook, or the sum of n_vocab (lyrics) and codeboook
         dimension, if the model combines lyrics and music tokens, or simply n_vocab if the model is a seperate encoder
-        for the lyric tokens.
-        The width corresponds to the number of tokens or lyrics tokens provided in a single pass.
+        for the lyric tokens. The width corresponds to the number of tokens or lyrics tokens provided in a single pass.
         It can be different from the embed dim.
         - audio_conditioning : whether or not the prior supports conditionning on audio.
         - metadata_conditioning : whether or not the prior supports conditionning on artitst, genres, lyrics and
@@ -1349,7 +1357,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         self.pos_emb = JukeboxPositionalEmbedding(self.n_ctx, config.width)
         self.pos_emb_dropout = nn.Dropout(config.emb_dropout)
 
-        self.transformer = JukeboxLayerStack(config,n_ctx=self.n_ctx,encoder_len=encoder_len)
+        self.transformer = JukeboxLayerStack(config, n_ctx=self.n_ctx, encoder_len=encoder_len)
         self.is_encoder = is_encoder
         self.encoder_len = encoder_len
 
@@ -1367,6 +1375,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 self.fc_proj_out.weight = self.embed_tokens.weight
             self.loss = torch.nn.CrossEntropyLoss()
             # nn.init.normal_(self.encoder.lm_head.weight, std=0.02 * decoder_config["init_scale"])
+
     def postprocess(self, tokens, sample_tokens=None):
         # Convert back from NL and long to NHWC
         batch_size = tokens.shape[0]
@@ -1655,10 +1664,14 @@ class JukeboxMusicTokenConditioner(nn.Module):
         super().__init__()
         self.embed_tokens = nn.Embedding(config.embed_dim, config.width)
 
-
         # JukeboxMusicTokenConditioner, takes as input either uper level tokens, upsamples them to feed them to the next level?
         self.upsampler = JukeboxDecoderConvBock(
-            config, config.width, config.res_conv_width, config.res_conv_depth, config.res_downs_t[level], config.res_strides_t[level]
+            config,
+            config.width,
+            config.res_conv_width,
+            config.res_conv_depth,
+            config.res_downs_t[level],
+            config.res_strides_t[level],
         )
         self.layer_norm = JukeboxLayerNorm(config.width)
 
@@ -1867,8 +1880,8 @@ class JukeboxPrior(nn.Module):
 
             self.prior = JukeboxConditionalAutoregressive(
                 config,
-                n_ctx = config.nb_relevant_lyric_tokens + config.n_ctx,
-                embed_dim = config.encoder_n_vocab + config.embed_dim,
+                n_ctx=config.nb_relevant_lyric_tokens + config.n_ctx,
+                embed_dim=config.encoder_n_vocab + config.embed_dim,
                 audio_conditioning=(self.audio_conditioning or self.metadata_conditioning),
                 metadata_conditioning=True,
                 encoder_len=self.lyrics_enc_loss_dims,
@@ -1886,8 +1899,8 @@ class JukeboxPrior(nn.Module):
                 self.encoder_dim = encoder_config.encoder_n_vocab
                 self.encoder = JukeboxConditionalAutoregressive(
                     encoder_config,
-                    n_ctx = self.nb_relevant_lyric_tokens,
-                    embed_dim = self.encoder_dim,
+                    n_ctx=self.nb_relevant_lyric_tokens,
+                    embed_dim=self.encoder_dim,
                     audio_conditioning=False,
                     metadata_conditioning=False,
                     is_encoder=True,
@@ -1902,14 +1915,14 @@ class JukeboxPrior(nn.Module):
             self.prior = JukeboxConditionalAutoregressive(
                 config,
                 audio_conditioning=(self.audio_conditioning or self.metadata_conditioning),
-                metadata_conditioning=self.metadata_conditioning
+                metadata_conditioning=self.metadata_conditioning,
             )
 
         self.next_token_prediction_loss_dims = config.n_ctx
         self.total_loss_dims = self.lyrics_enc_loss_dims + self.next_token_prediction_loss_dims
 
         self.downsamples = [stride**down for stride, down in zip(config.res_strides_t, config.res_downs_t)]
-        self.cond_downsample = self.downsamples[level-1] if level != 0 else None
+        self.cond_downsample = self.downsamples[level - 1] if level != 0 else None
         self.raw_to_tokens = np.prod(self.downsamples[: nb_priors - level])
         self.sample_length = self.n_ctx * self.raw_to_tokens
 
@@ -2352,15 +2365,15 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
     def set_shared_params(self, model_config):
         """
-        Initialises the parameters that are shared. This has to be done here
-        because the list of PiroConfig is nest, and is thus unreachable in the `from_dict` function
+        Initialises the parameters that are shared. This has to be done here because the list of PiroConfig is nest,
+        and is thus unreachable in the `from_dict` function
         """
         for config in model_config.prior_configs:
             config.sampling_rate = model_config.sampling_rate
             config.timing_dims = model_config.timing_dims
             config.min_duration = model_config.min_duration
             config.max_duration = model_config.max_duration
-            config.max_nb_genres =  model_config.max_nb_genres
+            config.max_nb_genres = model_config.max_nb_genres
             config.metadata_conditioning = model_config.metadata_conditioning
 
     def decode(self, music_tokens, start_level=0, end_level=None, bs_chunks=1):

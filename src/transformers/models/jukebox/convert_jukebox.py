@@ -57,16 +57,13 @@ def replace_key(key):
     elif key.endswith(".model.3.weight") and len(key.split(".")) > 10:
         key = key.replace(".model.3.weight", ".conv1d_2.weight")
 
-
-
     if "conditioner_blocks.0." in key:
         key = key.replace("conditioner_blocks.0", "conditioner_blocks")
-
 
     if "prime_prior" in key:
         key = key.replace("prime_prior", "encoder")
 
-    if ".emb." in key and not "total" in key and not "absolute" in key and not "relative"  in key:
+    if ".emb." in key and not "total" in key and not "absolute" in key and not "relative" in key:
         key = key.replace(".emb.", ".")
 
     if key.endswith("k"):  # replace vqvae.X.k with vqvae.X.codebook
@@ -273,7 +270,7 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
     vqvae_state_dict = weight_dict.pop(0)
     model.vqvae.load_state_dict(vqvae_state_dict)
     for i in range(len(weight_dict)):
-        model.priors[i].load_state_dict(weight_dict[2-i])
+        model.priors[i].load_state_dict(weight_dict[2 - i])
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     with open(f"{pytorch_dump_folder_path}/mapping.json", "w") as txtfile:

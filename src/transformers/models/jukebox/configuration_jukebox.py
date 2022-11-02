@@ -255,12 +255,12 @@ class JukeboxPriorConfig(PretrainedConfig):
 
     def __init__(
         self,
-        sampling_rate = 44100,
-        timing_dims = 64,
-        min_duration = 0,
-        max_duration = 600,
-        max_nb_genres =  1,
-        metadata_conditioning = True,
+        sampling_rate=44100,
+        timing_dims=64,
+        min_duration=0,
+        max_duration=600,
+        max_nb_genres=1,
+        metadata_conditioning=True,
         zero_out=False,
         res_conv_depth=3,
         res_conv_width=128,
@@ -374,9 +374,8 @@ class JukeboxPriorConfig(PretrainedConfig):
         self.timing_dims = timing_dims
         self.min_duration = min_duration
         self.max_duration = max_duration
-        self.max_nb_genres =  max_nb_genres
+        self.max_nb_genres = max_nb_genres
         self.metadata_conditioning = metadata_conditioning
-
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -497,6 +496,7 @@ class JukeboxVQVAEConfig(PretrainedConfig):
 
         return cls.from_dict(config_dict, **kwargs)
 
+
 class JukeboxConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`JukeboxModel`].
@@ -575,7 +575,7 @@ class JukeboxConfig(PretrainedConfig):
         min_duration=0,
         max_duration=600.0,
         max_nb_genres=5,
-        metadata_conditioning = True,
+        metadata_conditioning=True,
         init_std=0.2,
         **kwargs,
     ):
@@ -585,7 +585,7 @@ class JukeboxConfig(PretrainedConfig):
             logger.info("vqvae_config is None. initializing the JukeboxVQVAE with default values.")
 
         self.vqvae_config = JukeboxVQVAEConfig(**vqvae_config)
-        if prior_config_list is not None :
+        if prior_config_list is not None:
             self.prior_configs = [JukeboxPriorConfig(**prior_config) for prior_config in prior_config_list]
         else:
             self.prior_configs = []
@@ -593,9 +593,11 @@ class JukeboxConfig(PretrainedConfig):
                 prior_config = kwargs.pop(f"prior_{prior_idx}", None)
                 if prior_config is None:
                     prior_config = {}
-                    logger.info(f"prior_{prior_idx}'s  config is None. Initializing the JukeboxPriorConfig list with default values.")
+                    logger.info(
+                        f"prior_{prior_idx}'s  config is None. Initializing the JukeboxPriorConfig list with default"
+                        " values."
+                    )
                 self.prior_configs.append(JukeboxPriorConfig(**prior_config))
-
 
         self.hop_fraction = self.vqvae_config.hop_fraction
 
@@ -613,9 +615,7 @@ class JukeboxConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
     @classmethod
-    def from_configs(
-        cls, prior_configs: List[JukeboxPriorConfig], vqvae_config: JukeboxVQVAEConfig, **kwargs
-    ):
+    def from_configs(cls, prior_configs: List[JukeboxPriorConfig], vqvae_config: JukeboxVQVAEConfig, **kwargs):
         r"""
         Instantiate a [`CLIPConfig`] (or a derived class) from clip text model configuration and clip vision model
         configuration.
@@ -634,11 +634,9 @@ class JukeboxConfig(PretrainedConfig):
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
-        for i,config in enumerate(output.pop("prior_configs")):
+        for i, config in enumerate(output.pop("prior_configs")):
             output[f"prior_{i}"] = config.to_dict()
 
         output["vqvae_config"] = self.vqvae_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
-
-
