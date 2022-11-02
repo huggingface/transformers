@@ -437,7 +437,7 @@ Depending on your task, you'll typically pass the following parameters to [`Trai
    ```py
    >>> from datasets import load_dataset
 
-   >>> dataset = load_dataset("rotten_tomatoes")
+   >>> dataset = load_dataset("rotten_tomatoes")  # doctest: +IGNORE_RESULT
    ```
 
 5. Create a function to tokenize the dataset, and apply it over the entire dataset with [`~datasets.Dataset.map`]:
