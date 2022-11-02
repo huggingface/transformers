@@ -873,6 +873,11 @@ class BloomForCausalLM(BloomPreTrainedModel):
         hidden_states = transformer_outputs[0]
 
         lm_logits = self.lm_head(hidden_states)
+        input_dtype = lm_logits.dtype
+        # compute softmax in fp32, the same as training
+        # https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/09a35f53abac96903fee50787426b7ee5f63fc62/megatron/model/gpt_model.py#L289-L291
+        if input_dtype == torch.float16 or input_dtype == torch.bfloat16:
+            lm_logits = lm_logits.float()
 
         loss = None
         if labels is not None:
