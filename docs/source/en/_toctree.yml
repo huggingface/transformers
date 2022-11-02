@@ -337,6 +337,8 @@
         title: RetriBERT
       - local: model_doc/roberta
         title: RoBERTa
+      - local: model_doc/roc_bert
+        title: RocBert
       - local: model_doc/roformer
         title: RoFormer
       - local: model_doc/splinter
