@@ -27,7 +27,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class HerbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = HerbertTokenizer
     rust_tokenizer_class = HerbertTokenizerFast
     test_rust_tokenizer = True

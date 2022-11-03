@@ -295,7 +295,6 @@ class XGLMModelTester:
 
 @require_torch
 class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (XGLMModel, XGLMForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (XGLMForCausalLM,) if is_torch_available() else ()
     fx_compatible = True

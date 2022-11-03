@@ -75,7 +75,6 @@ class VideoMAEFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class VideoMAEFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
     feature_extraction_class = VideoMAEFeatureExtractor if is_vision_available() else None
 
     def setUp(self):

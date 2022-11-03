@@ -303,7 +303,8 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
-    """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
+    """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error.
+    """
     if a is None and b is None:
         return True
     try:
@@ -357,9 +358,11 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
     ]
     tgt_text = [
         "Şeful ONU declară că nu există o soluţie militară în Siria",
-        "Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei"
-        ' pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu vor'
-        " face decât să înrăutăţească violenţa şi mizeria pentru milioane de oameni.",
+        (
+            "Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei"
+            ' pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu'
+            " vor face decât să înrăutăţească violenţa şi mizeria pentru milioane de oameni."
+        ),
     ]
     expected_src_tokens = [8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, 250004]
 

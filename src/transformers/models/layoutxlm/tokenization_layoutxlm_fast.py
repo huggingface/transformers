@@ -448,7 +448,6 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         verbose: bool = True,
         **kwargs,
     ) -> BatchEncoding:
-
         if not isinstance(batch_text_or_text_pairs, list):
             raise TypeError(f"batch_text_or_text_pairs has to be a list (got {type(batch_text_or_text_pairs)})")
 
@@ -602,7 +601,6 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-
         # make it a batched input
         # 2 options:
         # 1) only text, in case text must be a list of str

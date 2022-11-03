@@ -745,7 +745,6 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
         training: Optional[bool] = False,
         **kwargs
     ) -> Union[TFBaseModelOutputWithPast, Tuple[tf.Tensor]]:
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -819,7 +818,6 @@ class TFOPTModel(TFOPTPreTrainedModel):
         training: Optional[bool] = False,
         **kwargs
     ) -> Union[TFBaseModelOutputWithPast, Tuple[tf.Tensor]]:
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

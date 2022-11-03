@@ -26,7 +26,6 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_bpe.model")
 
 
 class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = BartphoTokenizer
     test_rust_tokenizer = False
     test_sentencepiece = True

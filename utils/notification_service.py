@@ -388,7 +388,6 @@ class Message:
 
     @staticmethod
     def error_out(title, ci_title="", runner_not_available=False, runner_failed=False, setup_failed=False):
-
         blocks = []
         title_block = {"type": "header", "text": {"type": "plain_text", "text": title}}
         blocks.append(title_block)
@@ -666,7 +665,6 @@ def prepare_reports(title, header, reports, to_truncate=True):
 
 
 if __name__ == "__main__":
-
     runner_status = os.environ.get("RUNNER_STATUS")
     runner_env_status = os.environ.get("RUNNER_ENV_STATUS")
     setup_status = os.environ.get("SETUP_STATUS")
@@ -807,7 +805,6 @@ if __name__ == "__main__":
 
                 for line in artifact["summary_short"].split("\n"):
                     if re.search("FAILED", line):
-
                         line = line.replace("FAILED ", "")
                         line = line.split()[0].replace("\n", "")
 
@@ -872,7 +869,6 @@ if __name__ == "__main__":
     }
 
     for key in additional_results.keys():
-
         # If a whole suite of test fails, the artifact isn't available.
         if additional_files[key] not in available_artifacts:
             additional_results[key]["error"] = True

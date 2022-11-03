@@ -82,7 +82,6 @@ class OwlViTFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class OwlViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
     feature_extraction_class = OwlViTFeatureExtractor if is_vision_available() else None
 
     def setUp(self):

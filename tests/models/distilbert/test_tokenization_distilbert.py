@@ -22,7 +22,6 @@ from ..bert.test_tokenization_bert import BertTokenizationTest
 
 @require_tokenizers
 class DistilBertTokenizationTest(BertTokenizationTest):
-
     tokenizer_class = DistilBertTokenizer
     rust_tokenizer_class = DistilBertTokenizerFast
     test_rust_tokenizer = True

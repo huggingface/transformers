@@ -355,7 +355,6 @@ class TFGPT2ModelTester:
 
 @require_tf
 class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (TFGPT2Model, TFGPT2LMHeadModel, TFGPT2ForSequenceClassification, TFGPT2DoubleHeadsModel)
         if is_tf_available()
@@ -439,7 +438,6 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-
             # Skip these 2 classes which uses `tf.gather` with `batch_dims=1`
             if model_class in [TFGPT2ForSequenceClassification, TFGPT2DoubleHeadsModel]:
                 continue
@@ -620,14 +618,18 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
 
             sentence = ["The dog", "The flying machine"]
             expected_output_string = [
-                "The dog owner asked why did our vet decide there needed to be extra ventilation inside because most"
-                " puppies",
+                (
+                    "The dog owner asked why did our vet decide there needed to be extra ventilation inside because"
+                    " most puppies"
+                ),
                 "The flying machine was made by an artist who found it difficult to control it as it did not use",
             ]
             expected_output_string_xla = [
                 "The dog has been named in connection with the murder of a 20-year-old man in",
-                "The flying machine is a new and improved system to operate and operate a new system and system "
-                "system system",
+                (
+                    "The flying machine is a new and improved system to operate and operate a new system and system "
+                    "system system"
+                ),
             ]
             input_ids = tokenizer(sentence, return_tensors="tf", padding=True)
 

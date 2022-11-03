@@ -78,7 +78,6 @@ def convert_checkpoint_helper(config, orig_state_dict):
 
 
 def convert_nystromformer_checkpoint(checkpoint_path, nystromformer_config_file, pytorch_dump_path):
-
     orig_state_dict = torch.load(checkpoint_path, map_location="cpu")["model_state_dict"]
     config = NystromformerConfig.from_json_file(nystromformer_config_file)
     model = NystromformerForMaskedLM(config)

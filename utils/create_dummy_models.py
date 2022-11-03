@@ -306,7 +306,6 @@ def get_tiny_config(config_class):
 
 
 def convert_tokenizer(tokenizer_fast: PreTrainedTokenizerFast):
-
     new_tokenizer = tokenizer_fast.train_new_from_iterator(training_ds["text"], TARGET_VOCAB_SIZE, show_progress=False)
 
     # Make sure it at least runs
@@ -317,7 +316,6 @@ def convert_tokenizer(tokenizer_fast: PreTrainedTokenizerFast):
 
 
 def convert_feature_extractor(feature_extractor, tiny_config):
-
     to_convert = False
     kwargs = {}
     if hasattr(tiny_config, "image_size"):
@@ -481,7 +479,6 @@ def fill_result_with_error(result, error, models_to_create):
 
 
 def build_composite_models(config_class, output_dir):
-
     import tempfile
 
     from transformers import (
@@ -550,7 +547,6 @@ def build_composite_models(config_class, output_dir):
         tf_model_class = None
 
     with tempfile.TemporaryDirectory() as tmpdir:
-
         try:
             # build encoder
             models_to_create = {"processor": encoder_processor, "pytorch": (encoder_class,), "tensorflow": []}
@@ -776,7 +772,6 @@ def build(config_class, models_to_create, output_dir):
 
 
 def build_failed_report(results, include_warning=True):
-
     failed_results = {}
     for config_name in results:
         if "error" in results[config_name]:
@@ -807,7 +802,6 @@ def build_failed_report(results, include_warning=True):
 
 
 def build_simple_report(results):
-
     text = ""
     failed_text = ""
     for config_name in results:
@@ -826,7 +820,6 @@ def build_simple_report(results):
 
 
 if __name__ == "__main__":
-
     clone_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
     if os.getcwd() != clone_path:
         raise ValueError(f"This script should be run from the root of the clone of `transformers` {clone_path}")

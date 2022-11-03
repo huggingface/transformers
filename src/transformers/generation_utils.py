@@ -1500,7 +1500,6 @@ class GenerationMixin:
             )
 
         elif is_contrastive_search_gen_mode:
-
             if num_return_sequences > 1:
                 raise ValueError(
                     f"num_return_sequences has to be 1, but is {num_return_sequences} when doing contrastive search."

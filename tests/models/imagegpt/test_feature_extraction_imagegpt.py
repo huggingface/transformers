@@ -78,7 +78,6 @@ class ImageGPTFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class ImageGPTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
     feature_extraction_class = ImageGPTFeatureExtractor if is_vision_available() else None
 
     def setUp(self):

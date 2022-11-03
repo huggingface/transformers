@@ -122,7 +122,6 @@ class PoolFormerModelTester:
 
 @require_torch
 class PoolFormerModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (PoolFormerModel, PoolFormerForImageClassification) if is_torch_available() else ()
 
     test_head_masking = False

@@ -754,7 +754,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         return WhisperProcessor.from_pretrained("openai/whisper-base")
 
     def _load_datasamples(self, num_samples):
-
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
@@ -882,7 +881,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_en_generation(self):
-
         torch_device = "cpu"
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
@@ -906,7 +904,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_generation(self):
-
         torch_device = "cpu"
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")

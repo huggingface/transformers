@@ -277,7 +277,6 @@ class TFXLMModelTester:
 
 @require_tf
 class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             TFXLMModel,

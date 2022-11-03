@@ -228,7 +228,6 @@ class TFAlbertModelTester:
 
 @require_tf
 class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             TFAlbertModel,

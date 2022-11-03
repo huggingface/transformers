@@ -31,7 +31,6 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_sentencepiece
 @require_tokenizers
 class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = XLMRobertaTokenizer
     rust_tokenizer_class = XLMRobertaTokenizerFast
     test_rust_tokenizer = True

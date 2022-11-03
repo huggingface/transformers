@@ -275,7 +275,6 @@ class TFFlaubertModelTester:
 
 @require_tf
 class TFFlaubertModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             TFFlaubertModel,

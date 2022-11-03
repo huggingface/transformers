@@ -110,7 +110,6 @@ class LongT5Config(PretrainedConfig):
         eos_token_id=1,
         **kwargs
     ):
-
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv

@@ -132,7 +132,6 @@ class TestTokenizationMvp(TokenizerTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_special_tokens(self):
-
         src_text = ["A long paragraph for summarization."]
         tgt_text = [
             "Summary of the text.",

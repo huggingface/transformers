@@ -33,7 +33,8 @@ class TestMbartCc25Enro(TestCasePlus):
     @slow
     @require_torch_gpu
     def test_model_download(self):
-        """This warms up the cache so that we can time the next test without including download time, which varies between machines."""
+        """This warms up the cache so that we can time the next test without including download time, which varies between machines.
+        """
         MarianMTModel.from_pretrained(MARIAN_MODEL)
 
     # @timeout_decorator.timeout(1200)

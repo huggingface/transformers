@@ -1721,7 +1721,6 @@ class Trainer:
 
             step = -1
             for step, inputs in enumerate(epoch_iterator):
-
                 # Skip past any already trained steps if resuming training
                 if steps_trained_in_current_epoch > 0:
                     steps_trained_in_current_epoch -= 1
@@ -1918,7 +1917,6 @@ class Trainer:
         return run_dir
 
     def _load_from_checkpoint(self, resume_from_checkpoint, model=None):
-
         if model is None:
             model = self.model
 
@@ -1985,7 +1983,6 @@ class Trainer:
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if os.path.exists(best_model_path):
             if self.deepspeed:
-
                 if self.model_wrapped is not None:
                     # this removes the pre-hooks from the previous engine
                     self.model_wrapped.destroy()
@@ -2041,7 +2038,6 @@ class Trainer:
             )
 
     def _issue_warnings_after_load(self, load_result):
-
         if len(load_result.missing_keys) != 0:
             if self.model._keys_to_ignore_on_save is not None and set(load_result.missing_keys) == set(
                 self.model._keys_to_ignore_on_save
@@ -2609,7 +2605,6 @@ class Trainer:
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
         elif self.deepspeed:
-
             # this takes care of everything as long as we aren't under zero3
             if self.args.should_save:
                 self._save(output_dir)
@@ -2904,7 +2899,6 @@ class Trainer:
 
         # if eval is called w/o train init deepspeed here
         if args.deepspeed and not self.deepspeed:
-
             # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
             # from the checkpoint eventually
             deepspeed_engine, _, _ = deepspeed_init(

@@ -301,7 +301,8 @@ def glue_train_data_collator(rng: PRNGKey, dataset: Dataset, batch_size: int):
 
 
 def glue_eval_data_collator(dataset: Dataset, batch_size: int):
-    """Returns batches of size `batch_size` from `eval dataset`. Sharding handled by `pad_shard_unpad` in the eval loop."""
+    """Returns batches of size `batch_size` from `eval dataset`. Sharding handled by `pad_shard_unpad` in the eval loop.
+    """
     batch_idx = np.arange(len(dataset))
 
     steps_per_epoch = math.ceil(len(dataset) / batch_size)
@@ -585,7 +586,6 @@ def main():
     total_steps = steps_per_epoch * num_epochs
     epochs = tqdm(range(num_epochs), desc=f"Epoch ... (0/{num_epochs})", position=0)
     for epoch in epochs:
-
         train_start = time.time()
         train_metrics = []
 
@@ -622,7 +622,6 @@ def main():
                 train_metrics = []
 
             if (cur_step % training_args.eval_steps == 0 or cur_step % steps_per_epoch == 0) and cur_step > 0:
-
                 # evaluate
                 eval_loader = glue_eval_data_collator(eval_dataset, eval_batch_size)
                 for batch in tqdm(

@@ -166,7 +166,6 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def call(self, pixel_values: tf.Tensor, bool_masked_pos: Optional[tf.Tensor] = None) -> tf.Tensor:
-
         embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_len, projection_dim = shape_list(embeddings)
 
@@ -911,7 +910,6 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[tuple, TFData2VecVisionModelOutputWithPooling]:
-
         outputs = self.data2vec_vision(
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,

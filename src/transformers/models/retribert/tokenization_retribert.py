@@ -68,7 +68,6 @@ def whitespace_tokenize(text):
 
 
 class RetriBertTokenizer(PreTrainedTokenizer):
-
     r"""
     Constructs a RetriBERT tokenizer.
 
@@ -183,7 +182,6 @@ class RetriBertTokenizer(PreTrainedTokenizer):
         split_tokens = []
         if self.do_basic_tokenize:
             for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
-
                 # If the token is part of the never_split set
                 if token in self.basic_tokenizer.never_split:
                     split_tokens.append(token)

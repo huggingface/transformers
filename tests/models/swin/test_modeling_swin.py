@@ -186,7 +186,6 @@ class SwinModelTester:
 
 @require_torch
 class SwinModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             SwinModel,

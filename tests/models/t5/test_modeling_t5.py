@@ -59,7 +59,6 @@ class T5ModelTester:
         scope=None,
         decoder_layers=None,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -506,7 +505,6 @@ class T5ModelTester:
 
 @require_torch
 class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (T5ForConditionalGeneration,) if is_torch_available() else ()
     all_parallelizable_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
@@ -689,7 +687,6 @@ class T5EncoderOnlyModelTester:
         pad_token_id=0,
         scope=None,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -1110,19 +1107,27 @@ class T5ModelIntegrationTests(unittest.TestCase):
         )
 
         expected_summaries = [
-            'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found a'
-            " cell phone video of the final seconds . \"one can hear cries of 'My God' in several languages,\" one"
-            " magazine says .",
-            "the formal accession was marked by a ceremony at The Hague, in the Netherlands . the ICC opened a"
-            " preliminary examination into the situation in the occupied Palestinian territory . as members of the"
-            " court, Palestinians may be subject to counter-charges as well .",
-            "the u.s. and its negotiating partners reached a very strong framework agreement with Iran . aaron miller:"
-            " the debate that has already begun since the announcement of the new framework will likely result in more"
-            " heat than light . the deal would reduce Iran's low-enriched uranium stockpile, cut centrifuges and"
-            " implement a rigorous inspection regime .",
-            "prosecutors say the marriages were part of an immigration scam . if convicted, barrientos faces two"
-            ' criminal counts of "offering a false instrument for filing in the first degree" she has been married 10'
-            " times, with nine of her marriages occurring between 1999 and 2002 .",
+            (
+                'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found'
+                " a cell phone video of the final seconds . \"one can hear cries of 'My God' in several languages,\""
+                " one magazine says ."
+            ),
+            (
+                "the formal accession was marked by a ceremony at The Hague, in the Netherlands . the ICC opened a"
+                " preliminary examination into the situation in the occupied Palestinian territory . as members of the"
+                " court, Palestinians may be subject to counter-charges as well ."
+            ),
+            (
+                "the u.s. and its negotiating partners reached a very strong framework agreement with Iran . aaron"
+                " miller: the debate that has already begun since the announcement of the new framework will likely"
+                " result in more heat than light . the deal would reduce Iran's low-enriched uranium stockpile, cut"
+                " centrifuges and implement a rigorous inspection regime ."
+            ),
+            (
+                "prosecutors say the marriages were part of an immigration scam . if convicted, barrientos faces two"
+                ' criminal counts of "offering a false instrument for filing in the first degree" she has been married'
+                " 10 times, with nine of her marriages occurring between 1999 and 2002 ."
+            ),
         ]
 
         use_task_specific_params(model, "summarization")

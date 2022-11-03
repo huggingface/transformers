@@ -26,7 +26,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class FunnelTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = FunnelTokenizer
     rust_tokenizer_class = FunnelTokenizerFast
     test_rust_tokenizer = True

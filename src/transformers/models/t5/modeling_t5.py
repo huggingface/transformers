@@ -246,7 +246,6 @@ class T5LayerNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-
         # T5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
         # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
@@ -513,7 +512,9 @@ class T5Attention(nn.Module):
         if position_bias is None:
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
-                    (1, self.n_heads+len(self.pruned_heads), real_seq_length, key_length), device=scores.device, dtype=scores.dtype
+                    (1, self.n_heads + len(self.pruned_heads), real_seq_length, key_length),
+                    device=scores.device,
+                    dtype=scores.dtype,
                 )
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
@@ -652,7 +653,6 @@ class T5Block(nn.Module):
         output_attentions=False,
         return_dict=True,
     ):
-
         if past_key_value is not None:
             if not self.is_decoder:
                 logger.warning("`past_key_values` is passed to the encoder. Please make sure this is intended.")
@@ -1709,7 +1709,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         encoder_outputs=None,
         **kwargs
     ):
-
         # cut decoder_input_ids if past is used
         if past is not None:
             input_ids = input_ids[:, -1:]

@@ -333,7 +333,6 @@ class XLMModelTester:
 
 @require_torch
 class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             XLMModel,

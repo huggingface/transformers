@@ -62,7 +62,6 @@ if is_librosa_available():
 
 
 def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
-
     error = None
     try:
         _ = in_queue.get(timeout=timeout)
@@ -283,7 +282,6 @@ class TFWav2Vec2ModelTester:
 
 @require_tf
 class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (TFWav2Vec2Model, TFWav2Vec2ForCTC) if is_tf_available() else ()
     test_resize_embeddings = False
     test_head_masking = False
@@ -619,8 +617,10 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = [
             "a man said to the universe sir i exist",
             "sweat covered brion's body trickling into the tight loin cloth that was the only garment he wore",
-            "the cut on his chest still dripping blood the ache of his overstrained eyes even the soaring arena around"
-            " him with the thousands of spectators were trivialities not worth thinking about",
+            (
+                "the cut on his chest still dripping blood the ache of his overstrained eyes even the soaring arena"
+                " around him with the thousands of spectators were trivialities not worth thinking about"
+            ),
             "his instant panic was followed by a small sharp blow high on his chest",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)

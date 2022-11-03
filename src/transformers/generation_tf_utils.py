@@ -818,7 +818,6 @@ class TFGenerationMixin:
             attention_mask = tf.gather(attention_mask, expanded_batch_idxs, axis=0)
 
         if self.config.is_encoder_decoder:
-
             # create empty decoder_input_ids
             input_ids = (
                 tf.ones(
@@ -1098,7 +1097,6 @@ class TFGenerationMixin:
 
             # for each sentence
             for batch_idx in range(batch_size):
-
                 # if we are done with this sentence
                 if done[batch_idx]:
                     assert (
@@ -1875,7 +1873,6 @@ class TFGenerationMixin:
         bos_token_id: int = None,
         model_kwargs: Optional[Dict[str, tf.Tensor]] = None,
     ) -> tf.Tensor:
-
         # prepare `input_ids` for decoder if model is encoder-decoder
         if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
             return model_kwargs.pop("decoder_input_ids")

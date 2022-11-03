@@ -27,7 +27,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = GPT2Tokenizer
     rust_tokenizer_class = GPT2TokenizerFast
     test_rust_tokenizer = True

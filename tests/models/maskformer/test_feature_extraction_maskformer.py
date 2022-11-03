@@ -132,7 +132,6 @@ class MaskFormerFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
     feature_extraction_class = MaskFormerFeatureExtractor if (is_vision_available() and is_torch_available()) else None
 
     def setUp(self):

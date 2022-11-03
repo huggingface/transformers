@@ -62,7 +62,6 @@ if is_tf_available():
 
 @require_tf
 class TFCoreModelTesterMixin:
-
     model_tester = None
     all_model_classes = ()
     all_generative_model_classes = ()

@@ -265,7 +265,6 @@ class ImageGPTModelTester:
 
 @require_torch
 class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (ImageGPTForCausalImageModeling, ImageGPTForImageClassification, ImageGPTModel) if is_torch_available() else ()
     )

@@ -186,7 +186,6 @@ class Data2VecVisionConfig(PretrainedConfig):
 
 # Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
 class Data2VecVisionOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

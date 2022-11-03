@@ -122,7 +122,6 @@ class ServeCommand(BaseTransformersCLICommand):
         serve_parser.set_defaults(func=serve_command_factory)
 
     def __init__(self, pipeline: Pipeline, host: str, port: int, workers: int):
-
         self._pipeline = pipeline
 
         self.host = host

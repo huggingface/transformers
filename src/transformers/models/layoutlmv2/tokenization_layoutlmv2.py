@@ -304,7 +304,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         split_tokens = []
         if self.do_basic_tokenize:
             for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
-
                 # If the token is part of the never_split set
                 if token in self.basic_tokenizer.never_split:
                     split_tokens.append(token)
@@ -598,7 +597,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
             padding=padding,
@@ -657,7 +655,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-
         if return_offsets_mapping:
             raise NotImplementedError(
                 "return_offset_mapping is not available when using Python tokenizers. "

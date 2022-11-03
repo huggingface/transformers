@@ -220,7 +220,6 @@ class LayoutLMModelTester:
 
 @require_torch
 class LayoutLMModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             LayoutLMModel,

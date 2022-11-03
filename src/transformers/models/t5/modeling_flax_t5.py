@@ -1439,7 +1439,6 @@ class FlaxT5EncoderModule(nn.Module):
         return_dict: bool = True,
         deterministic: bool = True,
     ):
-
         # Encode if needed (training, first prediction pass)
         encoder_outputs = self.encoder(
             input_ids=input_ids,

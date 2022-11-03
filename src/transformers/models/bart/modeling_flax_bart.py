@@ -1921,7 +1921,6 @@ class FlaxBartForCausalLMModule(nn.Module):
         return_dict: bool = True,
         deterministic: bool = True,
     ):
-
         outputs = self.model(
             input_ids,
             attention_mask,

@@ -146,7 +146,6 @@ class EsmModelTester:
 
 @require_torch
 class EsmModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     test_mismatched_shapes = False
 
     all_model_classes = (

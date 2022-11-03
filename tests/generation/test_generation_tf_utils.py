@@ -28,7 +28,6 @@ if is_tf_available():
 
 @require_tf
 class UtilsFunctionsTest(unittest.TestCase):
-
     # tests whether the top_k_top_p_filtering function behaves as expected
     def test_top_k_top_p_filtering(self):
         logits = tf.convert_to_tensor(

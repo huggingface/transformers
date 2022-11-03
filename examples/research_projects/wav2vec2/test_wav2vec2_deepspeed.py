@@ -126,7 +126,6 @@ class TestDeepSpeedWav2Vec2(TestCasePlus):
         quality_checks: bool = True,
         fp16: bool = True,
     ):
-
         model_name = models[model]
 
         output_dir = self.run_trainer(
@@ -151,7 +150,6 @@ class TestDeepSpeedWav2Vec2(TestCasePlus):
         distributed: bool = True,
         fp16: bool = True,
     ):
-
         output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
         args = f"""
             --model_name_or_path {model_name}
