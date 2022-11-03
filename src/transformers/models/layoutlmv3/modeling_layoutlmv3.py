@@ -752,8 +752,6 @@ class LayoutLMv3Output(nn.Module):
     LAYOUTLMV3_START_DOCSTRING,
 )
 class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
         self.config = config
@@ -1041,7 +1039,6 @@ class LayoutLMv3ClassificationHead(nn.Module):
 )
 class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1156,7 +1153,6 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
 )
 class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1288,8 +1284,6 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
     LAYOUTLMV3_START_DOCSTRING,
 )
 class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels

@@ -507,7 +507,8 @@ class LayoutLMv2PreTrainedModel(PreTrainedModel):
     config_class = LayoutLMv2Config
     pretrained_model_archive_map = LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST
     base_model_prefix = "layoutlmv2"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
+    # _keys_to_ignore_on_load_missing = [r"position_ids"]
+    # _keys_to_ignore_on_save = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -708,15 +709,6 @@ class LayoutLMv2Pooler(nn.Module):
     LAYOUTLMV2_START_DOCSTRING,
 )
 class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"visual\.backbone\.bottom_up\.res\d+\.\d+\.conv\d+\.norm",
-        r"visual\.backbone\.bottom_up\.res\d+\.\d+\.shortcut\.norm",
-        r"visual\.backbone\.bottom_up\.stem\.conv\d+\.norm",
-        "visual.pixel_std",
-        "visual.pixel_mean",
-        "embeddings.position_ids",
-    ]
-
     def __init__(self, config):
         requires_backends(self, "detectron2")
         super().__init__(config)
@@ -976,15 +968,6 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
     LAYOUTLMV2_START_DOCSTRING,
 )
 class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"visual\.backbone\.bottom_up\.res\d+\.\d+\.conv\d+\.norm",
-        r"visual\.backbone\.bottom_up\.res\d+\.\d+\.shortcut\.norm",
-        r"visual\.backbone\.bottom_up\.stem\.conv\d+\.norm",
-        "visual.pixel_std",
-        "visual.pixel_mean",
-        "embeddings.position_ids",
-    ]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1166,15 +1149,6 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
     LAYOUTLMV2_START_DOCSTRING,
 )
 class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"visual\.backbone\.bottom_up\.res\d+\.\d+\.conv\d+\.norm",
-        r"visual\.backbone\.bottom_up\.res\d+\.\d+\.shortcut\.norm",
-        r"visual\.backbone\.bottom_up\.stem\.conv\d+\.norm",
-        "visual.pixel_std",
-        "visual.pixel_mean",
-        "embeddings.position_ids",
-    ]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1306,15 +1280,6 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
     LAYOUTLMV2_START_DOCSTRING,
 )
 class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"visual\.backbone\.bottom_up\.res\d+\.\d+\.conv\d+\.norm",
-        r"visual\.backbone\.bottom_up\.res\d+\.\d+\.shortcut\.norm",
-        r"visual\.backbone\.bottom_up\.stem\.conv\d+\.norm",
-        "visual.pixel_std",
-        "visual.pixel_mean",
-        "embeddings.position_ids",
-    ]
-
     def __init__(self, config, has_visual_segment_embedding=True):
         super().__init__(config)
         self.num_labels = config.num_labels
