@@ -846,7 +846,7 @@ class MaskFormerSwinOutput(nn.Module):
         return hidden_states
 
 
-class MaskFormerSwinBlock(nn.Module):
+class MaskFormerSwinLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -854,7 +854,7 @@ class MaskFormerSwinBlock(nn.Module):
         self.window_size = config.window_size
         self.input_resolution = input_resolution
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.attention = MaskFormerSwinAttention(config, dim, num_heads)
+        self.attention = MaskFormerSwinAttention(config, dim, num_heads, self.window_size)
         self.drop_path = (
             MaskFormerSwinDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         )
@@ -959,14 +959,15 @@ class MaskFormerSwinBlock(nn.Module):
         return outputs
 
 
-class MaskFormerSwinLayer(nn.Module):
+class MaskFormerSwinStage(nn.Module):
+    # Copied from transformers.models.swin.modeling_swin.SwinStage.__init__ with Swin->MaskFormerSwin
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
         super().__init__()
         self.config = config
         self.dim = dim
         self.blocks = nn.ModuleList(
             [
-                MaskFormerSwinBlock(
+                MaskFormerSwinLayer(
                     config=config,
                     dim=dim,
                     input_resolution=input_resolution,
@@ -1015,6 +1016,7 @@ class MaskFormerSwinLayer(nn.Module):
 
 
 class MaskFormerSwinEncoder(nn.Module):
+    # Copied from transformers.models.swin.modeling_swin.SwinEncoder.__init__ with Swin->MaskFormerSwin
     def __init__(self, config, grid_size):
         super().__init__()
         self.num_layers = len(config.depths)
@@ -1022,7 +1024,7 @@ class MaskFormerSwinEncoder(nn.Module):
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
         self.layers = nn.ModuleList(
             [
-                MaskFormerSwinLayer(
+                MaskFormerSwinStage(
                     config=config,
                     dim=int(config.embed_dim * 2**i_layer),
                     input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
