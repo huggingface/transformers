@@ -310,27 +310,12 @@ class SwitchTransformersSparseMLP(nn.Module):
     def __init__(self, config: SwitchTransformersConfig, expert_class: nn.Module = SwitchTransformersDenseActDense):
         super().__init__()
         # Step 1: Get the correct router according to its class
-        self.router = self._get_router(config)
+        self.router = SwitchTransformersTop1Router(config)
 
         # Step 2: Get the experts
         self.experts = nn.ModuleDict()
         for idx in range(config.num_experts):
             self.experts[f"expert_{idx}"] = expert_class(config)
-
-    def _get_router(self, config):
-        r"""
-        For now two types of Router are supported:
-            - Masked Routers
-            - Scatter Routers
-
-        """
-        if config.router_type.lower() == "tokens_masked":
-            return SwitchTransformersTop1Router(config)
-        else:
-            raise NotImplementedError(
-                f"{config.router_type.lower()} not implemented ! Please chose a router in "
-                "`{'tokens_masked','experts_masked'}`"
-            )
 
     def forward(self, hidden_states):
         r"""
