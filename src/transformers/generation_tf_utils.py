@@ -2059,6 +2059,11 @@ class TFGenerationMixin:
         if model_kwargs.get("attention_mask") is not None:
             model_kwargs["attention_mask"] = tf.repeat(model_kwargs["attention_mask"], expand_size, axis=0)
 
+        if model_kwargs.get("decoder_attention_mask") is not None:
+            model_kwargs["decoder_attention_mask"] = tf.repeat(
+                model_kwargs["decoder_attention_mask"], expand_size, axis=0
+            )
+
         if is_encoder_decoder:
             encoder_outputs = model_kwargs.get("encoder_outputs")
             if encoder_outputs is None:
@@ -3395,13 +3400,10 @@ class TFGenerationMixin:
         ```"""
 
         def gather_best_candidate(nested, selected_idx_stacked, batch_axis=0):
-            """Gathers the slices indexed by selected_idx_stacked into new beam array."""
+            """Gathers the slices indexed by selected_idx_stacked from a potentially nested structure of tensors."""
 
             def gather_fn(tensor):
-                if batch_axis == 0:
-                    gathered_tensor = tf.gather(params=tensor, indices=selected_idx_stacked)
-                else:
-                    gathered_tensor = tf.gather(params=tensor, indices=selected_idx_stacked, axis=1, batch_dims=1)
+                gathered_tensor = tf.gather(params=tensor, indices=selected_idx_stacked, axis=batch_axis)
                 return gathered_tensor
 
             return tf.nest.map_structure(gather_fn, nested)
@@ -3443,14 +3445,14 @@ class TFGenerationMixin:
         # 4. define "xla-compile-able" stop-condition and auto-regressive function
         # define condition fn
         def contrastive_search_cond_fn(
-            generated, finished_sequences, cur_len, model_kwargs, logit_for_next_step, last_hidden_states, outputs
+            generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables
         ):
             """state termination condition fn."""
             return ~tf.reduce_all(finished_sequences)
 
         # define condition fn
         def contrastive_search_body_fn(
-            generated, finished_sequences, cur_len, model_kwargs, logit_for_next_step, last_hidden_states, outputs
+            generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables
         ):
             """state update fn."""
 
@@ -3514,6 +3516,11 @@ class TFGenerationMixin:
                         f"{self.__class__.__name__} does not have a standard cache format and therefore **can't** be "
                         "used for contrastive search without further modifications."
                     )
+            else:
+                logit_for_next_step = next_step_cached_variables["logit_for_next_step"]
+                last_hidden_states = next_step_cached_variables["last_hidden_states"]
+                outputs = next_step_cached_variables["outputs"]
+
             # contrastive_search main logic start:
             # contrastive search decoding consists of two steps: (1) candidate tokens recall; (2) candidate re-rank by
             # degeneration penalty
@@ -3540,14 +3547,9 @@ class TFGenerationMixin:
                     decoder_hidden_states.append(outputs.hidden_states)
 
             # Replicates the new past_key_values to match the `top_k` candidates
-            new_key_values = []
-            for layer in model_kwargs["past"]:
-                items = []
-                # item is either the key or the value matrix
-                for item in layer:
-                    items.append(tf.repeat(item, top_k, axis=0))
-                new_key_values.append(items)
-            model_kwargs["past"] = new_key_values
+            model_kwargs["past"] = tf.nest.map_structure(
+                lambda tensor: tf.repeat(tensor, top_k, axis=cache_batch_axis), model_kwargs["past"]
+            )
 
             # compute the candidate tokens by the language model and collects their hidden_states
             next_model_inputs = self.prepare_inputs_for_generation(tf.reshape(top_k_ids, [-1, 1]), **model_kwargs)
@@ -3633,12 +3635,15 @@ class TFGenerationMixin:
             cur_len += 1
 
             if use_xla:
+                # NOTE: 1) relative to other generation strategies, contrastive search is always running forward
+                # passes one step ahead -- hence the `cur_len=cur_len + 1`; 2) the attention mask here is expanded from
+                # [batch_size, ...] to [batch_size*top_k, ...] -- hence the `batch_size=batch_size * top_k`
                 model_kwargs = self._update_model_kwargs_for_xla_generation(
                     model_outputs=outputs,
                     model_kwargs=model_kwargs,
-                    cur_len=cur_len,
+                    cur_len=cur_len + 1,
                     max_length=max_length,
-                    batch_size=batch_size,
+                    batch_size=batch_size * top_k,
                     is_encoder_decoder=self.config.is_encoder_decoder,
                     batch_axis=cache_batch_axis,
                 )
@@ -3647,46 +3652,29 @@ class TFGenerationMixin:
                     outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
                 )
 
-            return (
-                generated,
-                finished_sequences,
-                cur_len,
-                model_kwargs,
-                logit_for_next_step,
-                last_hidden_states,
-                outputs,
-            )
+            next_step_cached_variables = {
+                "logit_for_next_step": logit_for_next_step,
+                "last_hidden_states": last_hidden_states,
+                "outputs": outputs,
+            }
+            return generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables
 
         # 5. run generation
         # 1st generation step has to be run before to initialize `past`
-        (
-            generated,
-            finished_sequences,
-            cur_len,
-            model_kwargs,
-            logit_for_next_step,
-            last_hidden_states,
-            outputs,
-        ) = contrastive_search_body_fn(generated, finished_sequences, cur_len, model_kwargs, None, None, None)
+        generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables = contrastive_search_body_fn(
+            generated, finished_sequences, cur_len, model_kwargs, None
+        )
 
         # 2-to-n generation steps can then be run in autoregressive fashion
         # only in case 1st generation step does NOT yield EOS token though
         if contrastive_search_cond_fn(
-            generated, finished_sequences, cur_len, model_kwargs, logit_for_next_step, last_hidden_states, outputs
+            generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables
         ):
             maximum_iterations = max_length - cur_len
-            generated, _, cur_len, _, _, _, _ = tf.while_loop(
+            generated, _, cur_len, _, _, = tf.while_loop(
                 contrastive_search_cond_fn,
                 contrastive_search_body_fn,
-                (
-                    generated,
-                    finished_sequences,
-                    cur_len,
-                    model_kwargs,
-                    logit_for_next_step,
-                    last_hidden_states,
-                    outputs,
-                ),
+                (generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables),
                 maximum_iterations=maximum_iterations,
             )
 
