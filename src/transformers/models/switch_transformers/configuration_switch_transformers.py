@@ -63,15 +63,15 @@ class SwitchTransformersConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_experts (`int`, *optional*, defaults to 8):
             Number of experts for each SwitchTransformer layer.
-        router_type (`str`, *optional*, defaults to `tokens_masked`):
-            Router type - choice between `tokens_masked` and `tokens_scatter`, `experts_masked`.
+        router_type (`str`, *optional*, defaults to `"tokens_masked"`):
+            Router type - choose between `"tokens_masked", `"tokens_scatter"` and `"experts_masked"`.
         router_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the router.
         router_jitter_noise (`float`, *optional*, defaults to 0.1):
             Amount of noise to add to the router.
-        router_dtype (`str`, *optional*, default to `float32`):
-            The `dtype` used for the routers. It is preferable to keep the `dtype` to `float32` as specified in the
-            "selective precision" discussion in https://arxiv.org/abs/2101.03961.
+        router_dtype (`str`, *optional*, default to `"float32"`):
+            The `dtype` used for the routers. It is preferable to keep the `dtype` to `"float32"` as specified in the
+            *selective precision* discussion in [the paper](https://arxiv.org/abs/2101.03961).
         router_ignore_padding_tokens (`bool`, *optional*, defaults to `False`):
             Whether to ignore padding tokens when routing.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
