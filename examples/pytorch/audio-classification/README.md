@@ -42,7 +42,7 @@ python run_audio_classification.py \
     --learning_rate 3e-5 \
     --max_length_seconds 1 \
     --attention_mask False \
-    --warmup_ratio 0.1 \
+    --warmup_ratio 0.2 \
     --num_train_epochs 5 \
     --per_device_train_batch_size 32 \
     --gradient_accumulation_steps 4 \
