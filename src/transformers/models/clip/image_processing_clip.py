@@ -237,6 +237,7 @@ class CLIPImageProcessor(BaseImageProcessor):
         do_convert_rgb: bool = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        **kwargs
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
