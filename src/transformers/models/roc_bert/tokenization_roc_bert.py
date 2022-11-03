@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for RocBert."""
+"""Tokenization classes for RoCBert."""
 
 import collections
 import itertools
@@ -92,7 +92,7 @@ def whitespace_tokenize(text):
     return tokens
 
 
-class RocBertTokenizer(PreTrainedTokenizer):
+class RoCBertTokenizer(PreTrainedTokenizer):
     r"""
     Args:
     Construct a RocBERT tokenizer. Based on WordPiece. This tokenizer inherits from [`PreTrainedTokenizer`] which
@@ -174,7 +174,7 @@ class RocBertTokenizer(PreTrainedTokenizer):
             if cur_file is None or not os.path.isfile(cur_file):
                 raise ValueError(
                     f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google "
-                    "pretrained model use `tokenizer = RocBertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                    "pretrained model use `tokenizer = RoCBertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
                 )
 
         self.vocab = load_vocab(vocab_file)
@@ -189,13 +189,13 @@ class RocBertTokenizer(PreTrainedTokenizer):
 
         self.do_basic_tokenize = do_basic_tokenize
         if do_basic_tokenize:
-            self.basic_tokenizer = RocBertBasicTokenizer(
+            self.basic_tokenizer = RoCBertBasicTokenizer(
                 do_lower_case=do_lower_case,
                 never_split=never_split,
                 tokenize_chinese_chars=tokenize_chinese_chars,
                 strip_accents=strip_accents,
             )
-        self.wordpiece_tokenizer = RocBertWordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
+        self.wordpiece_tokenizer = RoCBertWordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
 
     @property
     def do_lower_case(self):
@@ -886,7 +886,7 @@ class RocBertTokenizer(PreTrainedTokenizer):
         else:
             raise ValueError(
                 f"Can't find a directory at path '{save_directory}'. To load the vocabulary from a Google "
-                "pretrained model use `tokenizer = RocBertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                "pretrained model use `tokenizer = RoCBertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
 
         with open(vocab_file, "w", encoding="utf-8") as writer:
@@ -913,10 +913,10 @@ class RocBertTokenizer(PreTrainedTokenizer):
         )
 
 
-# Copied from  transformers.models.bert.tokenization_bert.BasicTokenizer with BasicTokenizer->RocBertBasicTokenizer
-class RocBertBasicTokenizer(object):
+# Copied from  transformers.models.bert.tokenization_bert.BasicTokenizer with BasicTokenizer->RoCBertBasicTokenizer
+class RoCBertBasicTokenizer(object):
     """
-    Constructs a RocBertBasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
+    Constructs a RoCBertBasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
     Args:
         do_lower_case (`bool`, *optional*, defaults to `True`):
@@ -1063,8 +1063,8 @@ class RocBertBasicTokenizer(object):
         return "".join(output)
 
 
-# Copied from  transformers.models.bert.tokenization_bert.WordpieceTokenizer with WordpieceTokenizer->RocBertWordpieceTokenizer
-class RocBertWordpieceTokenizer(object):
+# Copied from  transformers.models.bert.tokenization_bert.WordpieceTokenizer with WordpieceTokenizer->RoCBertWordpieceTokenizer
+class RoCBertWordpieceTokenizer(object):
     """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token, max_input_chars_per_word=100):

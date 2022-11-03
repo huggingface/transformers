@@ -315,7 +315,7 @@ _import_structure = {
     "models.resnet": ["RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ResNetConfig"],
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
-    "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RocBertConfig", "RocBertTokenizer"],
+    "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig", "RoCBertTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
@@ -845,16 +845,16 @@ else:
     _import_structure["models.roc_bert"].extend(
         [
             "ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "RocBertForMaskedLM",
-            "RocBertForCausalLM",
-            "RocBertForMultipleChoice",
-            "RocBertForQuestionAnswering",
-            "RocBertForSequenceClassification",
-            "RocBertForTokenClassification",
-            "RocBertLayer",
-            "RocBertModel",
-            "RocBertForPreTraining",
-            "RocBertPreTrainedModel",
+            "RoCBertForMaskedLM",
+            "RoCBertForCausalLM",
+            "RoCBertForMultipleChoice",
+            "RoCBertForQuestionAnswering",
+            "RoCBertForSequenceClassification",
+            "RoCBertForTokenClassification",
+            "RoCBertLayer",
+            "RoCBertModel",
+            "RoCBertForPreTraining",
+            "RoCBertPreTrainedModel",
             "load_tf_weights_in_roc_bert",
         ]
     )
@@ -3375,7 +3375,7 @@ if TYPE_CHECKING:
     from .models.resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
-    from .models.roc_bert import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RocBertConfig, RocBertTokenizer
+    from .models.roc_bert import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RoCBertConfig, RoCBertTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
@@ -3822,6 +3822,8 @@ if TYPE_CHECKING:
         )
         from .generation_utils import top_k_top_p_filtering
         from .modeling_utils import PreTrainedModel
+
+        # PyTorch model imports
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -4637,20 +4639,18 @@ if TYPE_CHECKING:
             RobertaModel,
             RobertaPreTrainedModel,
         )
-
-        # PyTorch model imports
         from .models.roc_bert import (
             ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            RocBertForCausalLM,
-            RocBertForMaskedLM,
-            RocBertForMultipleChoice,
-            RocBertForPreTraining,
-            RocBertForQuestionAnswering,
-            RocBertForSequenceClassification,
-            RocBertForTokenClassification,
-            RocBertLayer,
-            RocBertModel,
-            RocBertPreTrainedModel,
+            RoCBertForCausalLM,
+            RoCBertForMaskedLM,
+            RoCBertForMultipleChoice,
+            RoCBertForPreTraining,
+            RoCBertForQuestionAnswering,
+            RoCBertForSequenceClassification,
+            RoCBertForTokenClassification,
+            RoCBertLayer,
+            RoCBertModel,
+            RoCBertPreTrainedModel,
             load_tf_weights_in_roc_bert,
         )
         from .models.roformer import (

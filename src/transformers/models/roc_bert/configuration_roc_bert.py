@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" RocBert model configuration"""
+""" RoCBert model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -22,15 +22,15 @@ logger = logging.get_logger(__name__)
 
 ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "weiweishi/roc-bert-base-zh": "https://huggingface.co/weiweishi/roc-bert-base-zh/resolve/main/config.json",
-    # See all RocBert models at https://huggingface.co/models?filter=roc_bert
+    # See all RoCBert models at https://huggingface.co/models?filter=roc_bert
 }
 
 
-class RocBertConfig(PretrainedConfig):
+class RoCBertConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~RocBertModel`]. It is used to instantiate an
-    RocBert model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the RocBert
+    This is the configuration class to store the configuration of a [`RoCBertModel`]. It is used to instantiate an
+    RoCBert model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the RoCBert
     [weiweishi/roc-bert-base-zh](https://huggingface.co/weiweishi/roc-bert-base-zh) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -39,8 +39,8 @@ class RocBertConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the RocBert model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~RocBertModel`] or [`~TFRocBertModel`].
+            Vocabulary size of the RoCBert model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`RoCBertModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -60,7 +60,7 @@ class RocBertConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`~RocBertModel`] or [`~TFRocBertModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`RoCBertModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -77,23 +77,23 @@ class RocBertConfig(PretrainedConfig):
         pronunciation_embed_dim (`int`, *optional*, defaults to 768):
             Dimension of the pronunciation_embed.
         pronunciation_vocab_size (`int`, *optional*, defaults to 910):
-            Pronunciation Vocabulary size of the RocBert model. Defines the number of different tokens that can be
-            represented by the `input_pronunciation_ids` passed when calling [`~RocBertModel`].
+            Pronunciation Vocabulary size of the RoCBert model. Defines the number of different tokens that can be
+            represented by the `input_pronunciation_ids` passed when calling [`RoCBertModel`].
         shape_embed_dim (`int`, *optional*, defaults to 512):
             Dimension of the shape_embed.
         shape_vocab_size (`int`, *optional*, defaults to 24858):
-            Shape Vocabulary size of the RocBert model. Defines the number of different tokens that can be represented
-            by the `input_shape_ids` passed when calling [`~RocBertModel`].
+            Shape Vocabulary size of the RoCBert model. Defines the number of different tokens that can be represented
+            by the `input_shape_ids` passed when calling [`RoCBertModel`].
         Example:
 
     ```python
-    >>> from transformers import RocBertModel, RocBertConfig
+    >>> from transformers import RoCBertModel, RoCBertConfig
 
-    >>> # Initializing a RocBert weiweishi/roc-bert-base-zh style configuration
-    >>> configuration = RocBertConfig()
+    >>> # Initializing a RoCBert weiweishi/roc-bert-base-zh style configuration
+    >>> configuration = RoCBertConfig()
 
     >>> # Initializing a model from the weiweishi/roc-bert-base-zh style configuration
-    >>> model = RocBertModel(configuration)
+    >>> model = RoCBertModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
