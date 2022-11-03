@@ -1521,6 +1521,34 @@ class ModelTesterMixin:
             # # Check that the embedding layer and decoding layer are the same in size and in value
             # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
+            with tempfile.TemporaryDirectory() as d:
+                model_tied.save_pretrained(d)
+                with open(os.path.join(d, "pytorch_model.bin"), "wb") as f:
+                    torch.save({}, f)
+                model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
+
+                prefix = f"{model_reloaded.base_model_prefix}."
+                param_names = set(
+                    k[len(prefix) :] if k.startswith(prefix) else k
+                    for k in dict(model_reloaded.named_parameters()).keys()
+                )
+
+                missing_keys = set(infos["missing_keys"])
+
+                extra_missing = missing_keys - param_names
+                missed_missing = param_names - missing_keys
+
+                self.assertEqual(
+                    extra_missing,
+                    set(),
+                    f"This model {model_class.__name__} might be missing some `keys_to_ignore`: {extra_missing} when tying its weights",
+                )
+
+                self.assertEqual(
+                    missed_missing,
+                    set(),
+                    f"This model {model_class.__name__} ignores keys {missed_missing} but they look like real parameters",
+                )
 
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
