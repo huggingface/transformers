@@ -41,7 +41,21 @@ class CamembertConfig(RobertaConfig):
     This class overrides [`RobertaConfig`]. Please check the superclass for the appropriate documentation alongside
     usage examples. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     Camembert [camembert-base](https://huggingface.co/camembert-base) architecture.
-    """
+
+    Example:
+
+    ```python
+    >>> from transformers import CamembertConfig, CamembertModel
+
+    >>> # Initializing a Camembert camembert-base style configuration
+    >>> configuration = CamembertConfig()
+
+    >>> # Initializing a model (with random weights) from the camembert-base style configuration
+    >>> model = CamembertModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "camembert"
 
