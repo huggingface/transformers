@@ -898,10 +898,11 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
 
-        assert decoder_start_token_id is not None, (
-            "self.model.config.decoder_start_token_id has to be defined. In SwitchTransformers it is usually set to"
-            " the pad_token_id. See SwitchTransformers docs for more information"
-        )
+        if decoder_start_token_id is None:
+            raise ValueError(
+                "self.model.config.decoder_start_token_id has to be defined. In SwitchTransformers it is usually set"
+                " to the pad_token_id. See SwitchTransformers docs for more information"
+            )
 
         # shift inputs to the right
         if is_torch_fx_proxy(input_ids):
@@ -913,7 +914,8 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
             shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
             shifted_input_ids[..., 0] = decoder_start_token_id
 
-        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+        if pad_token_id is None:
+            raise ValueError("self.model.config.pad_token_id has to be defined.")
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
