@@ -1006,6 +1006,13 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
     TRANSFO_XL_START_DOCSTRING,
 )
 class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [
+        r"crit\.out_layers\.\d+\.weight",
+        # out_projs.0 is a real parameter we need to exclude it
+        "crit.out_projs\.[1-9]\d*",
+        "pos_emb.inv_freq",
+    ]
+
     def __init__(self, config):
         super().__init__(config)
         self.transformer = TransfoXLModel(config)
