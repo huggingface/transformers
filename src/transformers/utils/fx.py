@@ -230,6 +230,15 @@ def torch_arange(*args, **kwargs):
     return torch.empty((end - start) // step, dtype=dtype, device="meta")
 
 
+def torch_full(*args, **kwargs):
+    args = list(args)
+    if isinstance(args[1], torch.Tensor) and args[1].device == torch.device("meta"):
+        args[1] = 1  # Any value.
+    kwargs_without_device = dict(kwargs)
+    kwargs_without_device.pop("device", None)
+    return torch.full(*args, **kwargs_without_device)
+
+
 def torch_cat(tensors, dim=None, axis=None, *, out=None):
     if dim is None and axis is None:
         dim = 0
@@ -509,6 +518,7 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.where: torch_where,
     torch.abs: torch_abs,
     torch.arange: torch_arange,
+    torch.full: torch_full,
     torch.cat: torch_cat,
     torch.stack: torch_stack,
     torch.add: torch_add,
@@ -553,12 +563,6 @@ class HFProxy(Proxy):
         return self.tracer.create_proxy("call_method", "size", (self,), {})
 
     @property
-    def dtype(self):
-        if hasattr(self, "_metadata") and self._metadata is not None:
-            return self._metadata.dtype
-        return self.tracer.create_proxy("call_function", builtins.getattr, (self, "dtype"), {})
-
-    @property
     def device(self):
         # Hack so we can track when devices are used. During meta-tensor propagation,
         # replace these values with a constant 'meta'
@@ -597,12 +601,15 @@ class HFAttribute(HFProxy):
         self.tracer = root.tracer
         self._node = None
 
+        if hasattr(self.root, "_metadata"):
+            self.install_metadata(getattr(self.root._metadata, attr))
+
     @property
     def node(self):
         # the node for attributes is added lazily, since most will just be method calls
         # which do not rely on the getitem call
         if self._node is None:
-            self._node = self.tracer.create_proxy("call_function", getattr, (self.root, self.attr), {}).node
+            self._node = self.tracer.create_proxy("call_function", builtins.getattr, (self.root, self.attr), {}).node
         return self._node
 
     def __call__(self, *args, **kwargs):
@@ -663,7 +670,18 @@ class HFTracer(Tracer):
     # Feature flag for proxying accesses to buffer values
     proxy_buffer_attributes: bool = True
     allow_insert_stateless_mods: bool = True
-    _TORCH_METHODS_TO_PATCH = ["arange", "zeros", "ones", "full", "full_like", "eye", "empty", "tensor"]
+    _TORCH_METHODS_TO_PATCH = [
+        "arange",
+        "zeros",
+        "ones",
+        "full",
+        "full_like",
+        "eye",
+        "empty",
+        "tensor",
+        "clamp",
+        "finfo",
+    ]
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
 
@@ -737,6 +755,8 @@ class HFTracer(Tracer):
                 "GPT2DoubleHeadsModel",
             ]:
                 inputs_dict["labels"] = torch.zeros(shape, dtype=torch.long, device=device)
+            elif model_class_name in [*get_values(MODEL_FOR_CTC_MAPPING_NAMES)]:
+                inputs_dict["labels"] = torch.zeros(shape, dtype=torch.float32, device=device)
             else:
                 raise NotImplementedError(
                     f"Generating the dummy input named {input_name} for {model_class_name} is not supported yet."
