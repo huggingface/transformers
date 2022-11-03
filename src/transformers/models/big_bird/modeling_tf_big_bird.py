@@ -2352,8 +2352,8 @@ class TFBigBirdForMaskedLM(TFBigBirdPreTrainedModel, TFMaskedLanguageModelingLos
                 "bi-directional self-attention."
             )
 
-        self.bert = TFBigBirdMainLayer(config, add_pooling_layer=False, name="bert")
-        self.mlm = TFBigBirdMLMHead(config, input_embeddings=self.bert.embeddings, name="mlm___cls")
+        self.bigbird = TFBigBirdMainLayer(config, add_pooling_layer=False, name="bert")
+        self.mlm = TFBigBirdMLMHead(config, input_embeddings=self.bigbird.embeddings, name="mlm___cls")
 
     def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.mlm.predictions
@@ -2392,7 +2392,7 @@ class TFBigBirdForMaskedLM(TFBigBirdPreTrainedModel, TFMaskedLanguageModelingLos
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
-        outputs = self.bert(
+        outputs = self.bigbird(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -2742,7 +2742,7 @@ class TFBigBirdForSequenceClassification(TFBigBirdPreTrainedModel, TFSequenceCla
 
         self.num_labels = config.num_labels
 
-        self.bert = TFBigBirdMainLayer(config, name="bert")
+        self.bigbird = TFBigBirdMainLayer(config, name="bert")
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -2783,7 +2783,7 @@ class TFBigBirdForSequenceClassification(TFBigBirdPreTrainedModel, TFSequenceCla
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        outputs = self.bert(
+        outputs = self.bigbird(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -2833,7 +2833,7 @@ class TFBigBirdForMultipleChoice(TFBigBirdPreTrainedModel, TFMultipleChoiceLoss)
     def __init__(self, config: BigBirdConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.bert = TFBigBirdMainLayer(config, name="bert")
+        self.bigbird = TFBigBirdMainLayer(config, name="bert")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             units=1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
@@ -2900,7 +2900,7 @@ class TFBigBirdForMultipleChoice(TFBigBirdPreTrainedModel, TFMultipleChoiceLoss)
             if inputs_embeds is not None
             else None
         )
-        outputs = self.bert(
+        outputs = self.bigbird(
             input_ids=flat_input_ids,
             attention_mask=flat_attention_mask,
             token_type_ids=flat_token_type_ids,
@@ -2973,7 +2973,7 @@ class TFBigBirdForTokenClassification(TFBigBirdPreTrainedModel, TFTokenClassific
 
         self.num_labels = config.num_labels
 
-        self.bert = TFBigBirdMainLayer(config, add_pooling_layer=False, name="bert")
+        self.bigbird = TFBigBirdMainLayer(config, add_pooling_layer=False, name="bert")
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -3015,7 +3015,7 @@ class TFBigBirdForTokenClassification(TFBigBirdPreTrainedModel, TFTokenClassific
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        outputs = self.bert(
+        outputs = self.bigbird(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -3072,7 +3072,7 @@ class TFBigBirdForQuestionAnswering(TFBigBirdPreTrainedModel, TFQuestionAnswerin
 
         self.num_labels = config.num_labels
 
-        self.bert = TFBigBirdMainLayer(config, add_pooling_layer=False, name="bert")
+        self.bigbird = TFBigBirdMainLayer(config, add_pooling_layer=False, name="bert")
         self.qa_outputs = tf.keras.layers.Dense(
             units=config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -3114,7 +3114,7 @@ class TFBigBirdForQuestionAnswering(TFBigBirdPreTrainedModel, TFQuestionAnswerin
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
         """
-        outputs = self.bert(
+        outputs = self.bigbird(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
