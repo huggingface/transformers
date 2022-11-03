@@ -807,6 +807,7 @@ class CodeHiFiGANModel(HiFiGANModel):
         hidden_states = self.dict(hidden_states).transpose(1, 2)
 
         if self.duration_predictor and duration_prediction:
+            # TODO: handle batched inputs
             assert hidden_states.size(0) == 1, "only support single sample"
             log_dur_pred = self.duration_predictor(hidden_states.transpose(1, 2))
             dur_out = torch.clamp(torch.round((torch.exp(log_dur_pred) - 1)).long(), min=1)
