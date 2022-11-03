@@ -242,6 +242,7 @@ class LevitImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, Iterable[float]]] = None,
         return_tensors: Optional[TensorType] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
+        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess an image or batch of images to be used as input to a LeViT model.
