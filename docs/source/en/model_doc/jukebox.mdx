@@ -29,8 +29,10 @@ The metadata such as *artist, genre and timing* are passed to each prior, in the
 ![JukeboxModel](https://gist.githubusercontent.com/ArthurZucker/92c1acaae62ebf1b6a951710bdd8b6af/raw/c9c517bf4eff61393f6c7dec9366ef02bdd059a3/jukebox.svg)
 
 Tips:
-- This model is very slow, and takes 8h to generate a minute long audio using the 5b top prior on a V100 GPU.
-- Primed sampling (conditionning the sampling on raw audio) requires more memory than ancestral sampling and should be used with `fp16` set to `True`. 
+- This model only supports inference. This is for a few reasons, mostly because it requires a crazy amount of memory.
+- This model is very slow, and takes 8h to generate a minute long audio using the 5b top prior on a V100 GPU. In order automaticallay handle the device on which the model should execute, either use accelerate or refer the the example notbook which should provide a wrapper.
+- Contrary to the paper, the order of the priors goes from `0` to `1` as it felt more intuitive : we sample starting from `0`.
+- Primed sampling (conditionning the sampling on raw audio) requires more memory than ancestral sampling and should be used with `fp16` set to `True`.
 
 This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ).
 The original code can be found [here](https://github.com/openai/jukebox).
@@ -41,21 +43,21 @@ The original code can be found [here](https://github.com/openai/jukebox).
 
 ## JukeboxTokenizer
 
-[[autodoc]] JukeboxTokenizer 
+[[autodoc]] JukeboxTokenizer
     - save_vocabulary
 
 ## JukeboxModel
 
-[[autodoc]] JukeboxModel 
-    - ancestral_sample 
+[[autodoc]] JukeboxModel
+    - ancestral_sample
     - primed_sample
     - continue_sample
     - upsample
     - _sample
 
-## JukeboxVQVAE 
+## JukeboxVQVAE
 
-[[autodoc]] JukeboxVQVAE 
-    - forward 
-    - encode 
+[[autodoc]] JukeboxVQVAE
+    - forward
+    - encode
     - decode
