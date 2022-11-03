@@ -553,9 +553,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
         (SwitchTransformersModel, SwitchTransformersForConditionalGeneration) if is_torch_available() else ()
     )
     all_generative_model_classes = (SwitchTransformersForConditionalGeneration,) if is_torch_available() else ()
-    all_parallelizable_model_classes = (
-        (SwitchTransformersModel, SwitchTransformersForConditionalGeneration) if is_torch_available() else ()
-    )
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -877,18 +874,9 @@ class SwitchTransformersEncoderOnlyModelTester:
             is_encoder_decoder=self.is_encoder_decoder,
         )
 
-        return (
-            config,
-            input_ids,
-            attention_mask,
-        )
+        return config, input_ids, attention_mask
 
-    def create_and_check_model(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-    ):
+    def create_and_check_model(self, config, input_ids, attention_mask):
         model = SwitchTransformersEncoderModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -901,23 +889,14 @@ class SwitchTransformersEncoderOnlyModelTester:
 
         self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
 
-    def create_and_check_model_fp16_forward(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-    ):
+    def create_and_check_model_fp16_forward(self, config, input_ids, attention_mask):
         model = SwitchTransformersEncoderModel(config=config).to(torch_device).half().eval()
         output = model(input_ids, attention_mask=attention_mask)["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            attention_mask,
-        ) = config_and_inputs
+        config, input_ids, attention_mask = config_and_inputs
 
         inputs_dict = {
             "input_ids": input_ids,
@@ -931,7 +910,6 @@ class SwitchTransformersEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase
     test_pruning = False
     test_resize_embeddings = False
     test_model_parallel = True
-    all_parallelizable_model_classes = (SwitchTransformersEncoderModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = SwitchTransformersEncoderOnlyModelTester(self)
