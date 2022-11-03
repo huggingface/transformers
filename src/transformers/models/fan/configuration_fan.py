@@ -32,6 +32,7 @@ original_feature_mapping = {
     "num_heads": "num_attention_heads",
     "dropout_ratio": "decoder_dropout",
     "depth": "num_hidden_layers",
+    "in_channels": "segmentation_in_channels",
 }
 
 # TODO: FANConfig Attributes rewrite
@@ -57,11 +58,17 @@ class FANConfig(PretrainedConfig):
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         se_mlp (`bool`, defaults to False):
-            Wheter or not to use Squeeze-Excite in the FANEncoder layers MLP
+            Wheter or not to use Squeeze-Excite in the FANEncoder layers MLP.
         depths (tuple(int)):
-             Number of blocks at each stage, when using hybrid backbone
+             Number of blocks at each stage, when using hybrid backbone (ConvNeXt).
         num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
+        qkv_bias (`bool`, defaults to True):
+            Whether or not to use bias in Query, Key and Value in attention layers.
+        use_pos_embed ( `bool`, defaults to True):
+            Wheter or not to use positional_encoding in the embeddings.
+        segmentation_in_channels (tuple(int), defaults to (128, 256, 480, 480)):
+            Number of channels in each of the hidden features used for Semantic Segmentation.
         tokens_norm (`bool`, defaults to True):
             Whether or not to apply normalization in the Class Attention block
         intermediate_size (`int`, *optional*, defaults to 3072):
@@ -107,8 +114,8 @@ class FANConfig(PretrainedConfig):
         patch_size=16,
         embed_dim=384,
         num_hidden_layers=12,
-        depths=None,
         num_attention_heads=8,
+        depths=None,
         eta=1.0,
         tokens_norm=True,
         sharpen_attn=False,
@@ -130,14 +137,14 @@ class FANConfig(PretrainedConfig):
         act_layer=None,
         norm_layer=None,
         cls_attn_layers=2,
-        c_head_num=None,
+        # c_head_num=None,
         hybrid_patch_size=2,
         head_init_scale=1.0,
         channel_dims=None,
         feat_downsample=False,
         out_index=-1,
         rounding_mode="floor",
-        in_channels=[128, 256, 480, 480],
+        segmentation_in_channels=[128, 256, 480, 480],
         in_index=[0, 1, 2, 3],
         feature_strides=[4, 8, 16, 32],
         channels=256,
@@ -175,13 +182,13 @@ class FANConfig(PretrainedConfig):
         self.norm_layer = norm_layer
         self.act_layer = act_layer
         self.cls_attn_layers = cls_attn_layers
-        self.c_head_num = c_head_num
+        # self.c_head_num = c_head_num
         self.hybrid_patch_size = hybrid_patch_size
         self.channel_dims = channel_dims
         self.out_index = out_index
         self.feat_downsample = feat_downsample
         self.rounding_mode = rounding_mode
-        self.in_channels = in_channels
+        self.segmentation_in_channels = segmentation_in_channels
         self.in_index = in_index
         self.feature_strides = feature_strides
         self.channels = channels

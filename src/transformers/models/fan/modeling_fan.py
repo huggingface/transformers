@@ -682,7 +682,7 @@ class ChannelProcessing(nn.Module):
         drop=None,
         norm_layer=nn.LayerNorm,
         cha_sr_ratio=1,
-        c_head_num=None,
+        # c_head_num=None,
     ):
         super().__init__()
         assert (
@@ -690,7 +690,7 @@ class ChannelProcessing(nn.Module):
         ), f"dim {dim} should be divided by num_attention_heads {num_attention_heads}."
 
         self.dim = dim
-        num_attention_heads = c_head_num or num_attention_heads
+        # num_attention_heads = c_head_num or num_attention_heads
         self.num_attention_heads = num_attention_heads
         self.temperature = nn.Parameter(torch.ones(num_attention_heads, 1, 1))
 
@@ -773,16 +773,16 @@ class FANBlock_SE(nn.Module):
         drop=0.0,
         attn_drop=0.0,
         sharpen_attn=False,
-        use_se=False,
+        linear=False,
         drop_path=0.0,
         act_layer=nn.GELU,
         norm_layer=nn.LayerNorm,
         eta=1.0,
         # sr_ratio=1.0,
+        use_se=False,
         qk_scale=None,
-        linear=False,
         downsample=None,
-        c_head_num=None,
+        # c_head_num=None,
     ):
         super().__init__()
         self.norm1 = norm_layer(dim)
@@ -837,7 +837,7 @@ class FANBlock(nn.Module):
         eta=1.0,
         # sr_ratio=1.0,
         downsample=None,
-        c_head_num=None,
+        # c_head_num=None,
     ):
         super().__init__()
         self.norm1 = norm_layer(dim)
@@ -864,7 +864,7 @@ class FANBlock(nn.Module):
             drop_path=drop_path,
             drop=drop,
             mlp_hidden_dim=int(dim * mlp_ratio),
-            c_head_num=c_head_num,
+            # c_head_num=c_head_num,
         )
 
         self.weight1 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
@@ -1420,7 +1420,7 @@ class FANEncoderLayer(FANPreTrainedModel):
             norm_layer=norm_layer,
             eta=config.eta,
             downsample=downsample,
-            c_head_num=config.c_head_num[index] if config.c_head_num is not None else None,
+            # c_head_num=config.c_head_num[index] if config.c_head_num is not None else None,
         )
 
     def forward(self, hidden_state, Hp, Wp):
@@ -1809,14 +1809,14 @@ class FANDecodeHead(FANPreTrainedModel):
         mlps = []
         # for i in range(config.num_encoder_blocks):
         #     mlp = SegformerMLP(config, input_dim=config.hidden_sizes[i])
-        for in_channels in config.in_channels:
+        for in_channels in config.segmentation_in_channels:
             mlp = SegformerMLP(config, input_dim=in_channels)
             mlps.append(mlp)
         self.linear_c = nn.ModuleList(mlps)
 
         # the following 3 layers implement the ConvModule of the original implementation
         self.linear_fuse = nn.Conv2d(
-            in_channels=config.decoder_hidden_size * len(config.in_channels),
+            in_channels=config.decoder_hidden_size * len(config.segmentation_in_channels),
             out_channels=config.decoder_hidden_size,
             kernel_size=1,
             bias=False,
