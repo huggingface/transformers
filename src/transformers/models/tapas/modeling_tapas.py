@@ -1004,6 +1004,7 @@ class TapasModel(TapasPreTrainedModel):
 
 @add_start_docstrings("""Tapas Model with a `language modeling` head on top.""", TAPAS_START_DOCSTRING)
 class TapasForMaskedLM(TapasPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
     config_class = TapasConfig
     base_model_prefix = "tapas"
 
