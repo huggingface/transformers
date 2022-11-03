@@ -673,8 +673,6 @@ class XLMPredLayer(nn.Module):
     XLM_START_DOCSTRING,
 )
 class XLMWithLMHeadModel(XLMPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"pred_layer.proj.weight"]
-
     def __init__(self, config):
         super().__init__(config)
         self.transformer = XLMModel(config)
@@ -771,8 +769,6 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
     XLM_START_DOCSTRING,
 )
 class XLMForSequenceClassification(XLMPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -876,8 +872,6 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
     XLM_START_DOCSTRING,
 )
 class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -983,8 +977,6 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
     XLM_START_DOCSTRING,
 )
 class XLMForQuestionAnswering(XLMPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1106,8 +1098,6 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
     XLM_START_DOCSTRING,
 )
 class XLMForTokenClassification(XLMPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1193,8 +1183,6 @@ class XLMForTokenClassification(XLMPreTrainedModel):
     XLM_START_DOCSTRING,
 )
 class XLMForMultipleChoice(XLMPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 

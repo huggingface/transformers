@@ -2262,6 +2262,8 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
 
 class BigBirdForPreTraining(BigBirdPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -2366,6 +2368,8 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
 
 @add_start_docstrings("""BigBird Model with a `language modeling` head on top.""", BIG_BIRD_START_DOCSTRING)
 class BigBirdForMaskedLM(BigBirdPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+
     def __init__(self, config):
         super().__init__(config)
 

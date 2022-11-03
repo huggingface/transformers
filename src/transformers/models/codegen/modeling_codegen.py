@@ -424,8 +424,6 @@ CODEGEN_INPUTS_DOCSTRING = r"""
     CODEGEN_START_DOCSTRING,
 )
 class CodeGenModel(CodeGenPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.causal_mask"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -618,11 +616,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
     CODEGEN_START_DOCSTRING,
 )
 class CodeGenForCausalLM(CodeGenPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"h\.\d+\.attn\.masked_bias",
-        r"h\.\d+\.attn\.bias",
-        r"h\.\d+\.attn\.causal_mask",
-    ]
+    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias"]
 
     def __init__(self, config):
         super().__init__(config)

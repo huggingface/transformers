@@ -261,7 +261,6 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         tesseract_config: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.

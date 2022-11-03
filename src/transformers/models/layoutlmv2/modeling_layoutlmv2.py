@@ -507,8 +507,7 @@ class LayoutLMv2PreTrainedModel(PreTrainedModel):
     config_class = LayoutLMv2Config
     pretrained_model_archive_map = LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST
     base_model_prefix = "layoutlmv2"
-    # _keys_to_ignore_on_load_missing = [r"position_ids"]
-    # _keys_to_ignore_on_save = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
