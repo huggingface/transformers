@@ -128,7 +128,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         do_rescale: Optional[bool] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess the given images.
