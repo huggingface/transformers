@@ -351,7 +351,7 @@ The example script uses the 🤗 Datasets library. You can easily customize them
 To setup all relevant files for training, let's create a directory.
 
 ```bash
-mkdir ./norwegian-roberta-base
+mkdir ./norwegian-bart-base
 ```
 
 ### Train tokenizer

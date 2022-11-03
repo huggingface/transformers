@@ -79,6 +79,7 @@ from .utils import (
     has_file,
     http_user_agent,
     is_apex_available,
+    is_bs4_available,
     is_coloredlogs_available,
     is_datasets_available,
     is_detectron2_available,

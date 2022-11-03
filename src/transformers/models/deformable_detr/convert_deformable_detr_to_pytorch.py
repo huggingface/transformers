@@ -24,7 +24,7 @@ from PIL import Image
 
 import requests
 from huggingface_hub import cached_download, hf_hub_url
-from transformers import DeformableDetrConfig, DeformableDetrForObjectDetection, DetrFeatureExtractor
+from transformers import DeformableDetrConfig, DeformableDetrFeatureExtractor, DeformableDetrForObjectDetection
 from transformers.utils import logging
 
 
@@ -108,15 +108,15 @@ def convert_deformable_detr_checkpoint(
     config.two_stage = two_stage
     # set labels
     config.num_labels = 91
-    repo_id = "datasets/huggingface/label-files"
+    repo_id = "huggingface/label-files"
     filename = "coco-detection-id2label.json"
-    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
+    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename, repo_type="dataset")), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
 
     # load feature extractor
-    feature_extractor = DetrFeatureExtractor(format="coco_detection")
+    feature_extractor = DeformableDetrFeatureExtractor(format="coco_detection")
 
     # prepare image
     img = prepare_img()

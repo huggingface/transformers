@@ -633,7 +633,7 @@ class XCLIPModelTest(ModelTesterMixin, unittest.TestCase):
 # We will verify our results on a spaghetti video
 def prepare_video():
     file = hf_hub_download(
-        repo_id="datasets/hf-internal-testing/spaghetti-video", filename="eating_spaghetti_8_frames.npy"
+        repo_id="hf-internal-testing/spaghetti-video", filename="eating_spaghetti_8_frames.npy", repo_type="dataset"
     )
     video = np.load(file)
     return list(video)
@@ -667,6 +667,6 @@ class XCLIPModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[14.3819, 20.6031, 15.0526]], device=torch_device)
+        expected_logits = torch.tensor([[14.0181, 20.2771, 14.4776]], device=torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits_per_video, expected_logits, atol=1e-3))

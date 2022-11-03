@@ -14,12 +14,19 @@
 # limitations under the License.
 """ Fast Tokenization class for model DeBERTa."""
 
-from typing import List, Optional
+import json
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
-from ...tokenization_utils_base import AddedToken
+from tokenizers import pre_tokenizers
+
+from ...tokenization_utils_base import AddedToken, BatchEncoding
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-from ..gpt2.tokenization_gpt2_fast import GPT2TokenizerFast
 from .tokenization_deberta import DebertaTokenizer
+
+
+if TYPE_CHECKING:
+    from transformers.pipelines.conversational import Conversation
 
 
 logger = logging.get_logger(__name__)
@@ -64,31 +71,67 @@ PRETRAINED_INIT_CONFIGURATION = {
 }
 
 
-class DebertaTokenizerFast(GPT2TokenizerFast):
+class DebertaTokenizerFast(PreTrainedTokenizerFast):
     """
-    Constructs a "fast" DeBERTa tokenizer, which runs end-to-end tokenization: punctuation splitting + wordpiece. It is
-    backed by HuggingFace's *tokenizers* library.
+    Construct a "fast" DeBERTa tokenizer (backed by HuggingFace's *tokenizers* library). Based on byte-level
+    Byte-Pair-Encoding.
+
+    This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
+    be encoded differently whether it is at the beginning of the sentence (without space) or not:
+
+    ```
+    >>> from transformers import DebertaTokenizerFast
+    >>> tokenizer = DebertaTokenizerFast.from_pretrained("microsoft/deberta-base")
+    >>> tokenizer("Hello world")['input_ids']
+    [15496, 995]
+    >>> tokenizer(" Hello world")['input_ids']
+    [18435, 995]
+    ```
+
+    You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer, but since
+    the model was not pretrained this way, it might yield a decrease in performance.
+
+    <Tip>
+
+    When used with `is_split_into_words=True`, this tokenizer needs to be instantiated with `add_prefix_space=True`.
+
+    </Tip>
+
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
-            File containing the vocabulary.
-        do_lower_case (`bool`, *optional*, defaults to `True`):
-            Whether or not to lowercase the input when tokenizing.
-        unk_token (`str`, *optional*, defaults to `"[UNK]"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
+            Path to the vocabulary file.
+        merges_file (`str`):
+            Path to the merges file.
+        tokenizer_file (`str`, *optional*):
+            The path to a tokenizer file to use instead of the vocab file.
+        errors (`str`, *optional*, defaults to `"replace"`):
+            Paradigm to follow when decoding bytes to UTF-8. See
+            [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
+        bos_token (`str`, *optional*, defaults to `"[CLS]"`):
+            The beginning of sequence token.
+        eos_token (`str`, *optional*, defaults to `"[SEP]"`):
+            The end of sequence token.
         sep_token (`str`, *optional*, defaults to `"[SEP]"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
             token of a sequence built with special tokens.
-        pad_token (`str`, *optional*, defaults to `"[PAD]"`):
-            The token used for padding, for example when batching sequences of different lengths.
         cls_token (`str`, *optional*, defaults to `"[CLS]"`):
             The classifier token which is used when doing sequence classification (classification of the whole sequence
             instead of per-token classification). It is the first token of the sequence when built with special tokens.
+        unk_token (`str`, *optional*, defaults to `"[UNK]"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        pad_token (`str`, *optional*, defaults to `"[PAD]"`):
+            The token used for padding, for example when batching sequences of different lengths.
         mask_token (`str`, *optional*, defaults to `"[MASK]"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
+        add_prefix_space (`bool`, *optional*, defaults to `False`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word. (Deberta tokenizer detect beginning of words by the preceding space).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -129,6 +172,15 @@ class DebertaTokenizerFast(GPT2TokenizerFast):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
+        self.add_bos_token = kwargs.pop("add_bos_token", False)
+
+        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
+        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
+            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
+            pre_tok_state["add_prefix_space"] = add_prefix_space
+            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
+
+        self.add_prefix_space = add_prefix_space
 
     @property
     def mask_token(self) -> str:
@@ -209,3 +261,40 @@ class DebertaTokenizerFast(GPT2TokenizerFast):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
+
+    # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast._batch_encode_plus
+    def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
+        is_split_into_words = kwargs.get("is_split_into_words", False)
+        assert self.add_prefix_space or not is_split_into_words, (
+            f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
+            "to use it with pretokenized inputs."
+        )
+
+        return super()._batch_encode_plus(*args, **kwargs)
+
+    # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast._encode_plus
+    def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
+        is_split_into_words = kwargs.get("is_split_into_words", False)
+
+        assert self.add_prefix_space or not is_split_into_words, (
+            f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
+            "to use it with pretokenized inputs."
+        )
+
+        return super()._encode_plus(*args, **kwargs)
+
+    # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast.save_vocabulary
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
+        return tuple(files)
+
+    # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast._build_conversation_input_ids
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
+        """This corresponds to DialoGPT variants of models."""
+        input_ids = []
+        for is_user, text in conversation.iter_texts():
+            input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
+
+        if len(input_ids) > self.model_max_length:
+            input_ids = input_ids[-self.model_max_length :]
+        return input_ids

@@ -23,6 +23,7 @@ import pickle
 import shutil
 import sys
 import tempfile
+from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Optional
 
@@ -168,12 +169,14 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
                     if subdir.startswith(PREFIX_CHECKPOINT_DIR):
                         checkpoint = os.path.join(checkpoint_dir, subdir)
             trainer.objective = None
-            trainer._hp_search_setup(trial)
             if trainer.args.world_size > 1:
                 if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
                     raise RuntimeError("only support DDP optuna HPO for ParallelMode.DISTRIBUTED currently.")
+                trainer._hp_search_setup(trial)
                 torch.distributed.broadcast_object_list(pickle.dumps(trainer.args), src=0)
-            trainer.train(resume_from_checkpoint=checkpoint)
+                trainer.train(resume_from_checkpoint=checkpoint)
+            else:
+                trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
             # If there hasn't been any evaluation during the training loop.
             if getattr(trainer, "objective", None) is None:
                 metrics = trainer.evaluate()
@@ -193,9 +196,10 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
             if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
                 raise RuntimeError("only support DDP optuna HPO for ParallelMode.DISTRIBUTED currently.")
             torch.distributed.broadcast_object_list(args_main_rank, src=0)
-            local_rank = trainer.args.local_rank  # backup the local_rank info
-            trainer.args = pickle.loads(bytes(args_main_rank))
-            trainer.args.local_rank = local_rank
+            args = pickle.loads(bytes(args_main_rank))
+            for key, value in asdict(args).items():
+                if key != "local_rank":
+                    setattr(trainer.args, key, value)
             trainer.train(resume_from_checkpoint=None)
             # If there hasn't been any evaluation during the training loop.
             if getattr(trainer, "objective", None) is None:
@@ -362,12 +366,14 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
             for run in experiment.loop():
                 with run:
                     trainer.objective = None
-                    trainer._hp_search_setup(run.run)
                     if trainer.args.world_size > 1:
                         if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
                             raise RuntimeError("only support DDP Sigopt HPO for ParallelMode.DISTRIBUTED currently.")
+                        trainer._hp_search_setup(run.run)
                         torch.distributed.broadcast_object_list(pickle.dumps(trainer.args), src=0)
-                    trainer.train(resume_from_checkpoint=None)
+                        trainer.train(resume_from_checkpoint=None)
+                    else:
+                        trainer.train(resume_from_checkpoint=None, trial=run.run)
                     # If there hasn't been any evaluation during the training loop.
                     if getattr(trainer, "objective", None) is None:
                         metrics = trainer.evaluate()
@@ -397,12 +403,14 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
             while experiment.progress.observation_count < experiment.observation_budget:
                 suggestion = conn.experiments(experiment.id).suggestions().create()
                 trainer.objective = None
-                trainer._hp_search_setup(suggestion)
                 if trainer.args.world_size > 1:
                     if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
                         raise RuntimeError("only support DDP Sigopt HPO for ParallelMode.DISTRIBUTED currently.")
+                    trainer._hp_search_setup(suggestion)
                     torch.distributed.broadcast_object_list(pickle.dumps(trainer.args), src=0)
-                trainer.train(resume_from_checkpoint=None)
+                    trainer.train(resume_from_checkpoint=None)
+                else:
+                    trainer.train(resume_from_checkpoint=None, trial=suggestion)
                 # If there hasn't been any evaluation during the training loop.
                 if getattr(trainer, "objective", None) is None:
                     metrics = trainer.evaluate()
@@ -423,9 +431,10 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
             if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
                 raise RuntimeError("only support DDP Sigopt HPO for ParallelMode.DISTRIBUTED currently.")
             torch.distributed.broadcast_object_list(args_main_rank, src=0)
-            local_rank = trainer.args.local_rank  # backup the local_rank info
-            trainer.args = pickle.loads(bytes(args_main_rank))
-            trainer.args.local_rank = local_rank
+            args = pickle.loads(bytes(args_main_rank))
+            for key, value in asdict(args).items():
+                if key != "local_rank":
+                    setattr(trainer.args, key, value)
             trainer.train(resume_from_checkpoint=None)
             # If there hasn't been any evaluation during the training loop.
             if getattr(trainer, "objective", None) is None:
@@ -464,7 +473,6 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
         sweep_config["name"] = name
 
     def _objective():
-
         run = wandb.run if wandb.run else wandb.init()
         trainer.state.trial_name = run.name
         run.config.update({"assignments": {}, "metric": metric})

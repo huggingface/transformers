@@ -375,6 +375,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
     # overwrite from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
+    @slow
     def test_save_load(self):
         # make mask reproducible
         np.random.seed(2)

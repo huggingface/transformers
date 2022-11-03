@@ -570,7 +570,8 @@ class TapasModelIntegrationTest(unittest.TestCase):
         table, queries = prepare_tapas_single_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, return_tensors="pt")
         inputs = {k: v.to(torch_device) for k, v in inputs.items()}
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
         # test the sequence output
         expected_slice = torch.tensor(
             [
@@ -608,7 +609,8 @@ class TapasModelIntegrationTest(unittest.TestCase):
         table, queries = prepare_tapas_single_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, return_tensors="pt")
         inputs = {k: v.to(torch_device) for k, v in inputs.items()}
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
         # test the logits
         logits = outputs.logits
         expected_shape = torch.Size((1, 21))
@@ -657,7 +659,8 @@ class TapasModelIntegrationTest(unittest.TestCase):
         table, queries = prepare_tapas_single_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, return_tensors="pt")
         inputs = {k: v.to(torch_device) for k, v in inputs.items()}
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
         # test the logits
         logits = outputs.logits
         expected_shape = torch.Size((1, 21))
@@ -705,7 +708,8 @@ class TapasModelIntegrationTest(unittest.TestCase):
         inputs = tokenizer(table=table, queries=queries, padding="longest", return_tensors="pt")
         inputs_on_device = {k: v.to(torch_device) for k, v in inputs.items()}
 
-        outputs = model(**inputs_on_device)
+        with torch.no_grad():
+            outputs = model(**inputs_on_device)
         # test the logits
         logits = outputs.logits
         expected_shape = torch.Size((2, 28))
@@ -774,15 +778,16 @@ class TapasModelIntegrationTest(unittest.TestCase):
         float_answer = torch.FloatTensor(float_answer).to(torch_device)
 
         # forward pass to get loss + logits:
-        outputs = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            labels=labels,
-            numeric_values=numeric_values,
-            numeric_values_scale=numeric_values_scale,
-            float_answer=float_answer,
-        )
+        with torch.no_grad():
+            outputs = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+                labels=labels,
+                numeric_values=numeric_values,
+                numeric_values_scale=numeric_values_scale,
+                float_answer=float_answer,
+            )
 
         # test the loss
         loss = outputs.loss
@@ -829,7 +834,8 @@ class TapasModelIntegrationTest(unittest.TestCase):
         table, queries = prepare_tapas_single_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, return_tensors="pt")
         inputs = {k: v.to(torch_device) for k, v in inputs.items()}
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
         # test the logits
         logits = outputs.logits
         expected_shape = torch.Size((1, 21))
@@ -884,7 +890,8 @@ class TapasModelIntegrationTest(unittest.TestCase):
         table, queries = prepare_tapas_single_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, padding="longest", return_tensors="pt")
         inputs = {k: v.to(torch_device) for k, v in inputs.items()}
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
 
         # test the classification logits
         logits = outputs.logits

@@ -84,6 +84,8 @@ config_common_kwargs = {
     "sep_token_id": 9,
     "decoder_start_token_id": 10,
     "exponential_decay_length_penalty": (5, 1.01),
+    "suppress_tokens": [0, 1],
+    "begin_suppress_tokens": 2,
     "task_specific_params": {"translation": "some_params"},
     "problem_type": "regression",
 }
@@ -359,6 +361,12 @@ class ConfigTestUtils(unittest.TestCase):
             _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
+
+    def test_legacy_load_from_url(self):
+        # This test is for deprecated behavior and can be removed in v5
+        _ = BertConfig.from_pretrained(
+            "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/config.json"
+        )
 
 
 class ConfigurationVersioningTest(unittest.TestCase):

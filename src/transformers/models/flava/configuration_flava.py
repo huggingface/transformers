@@ -78,12 +78,12 @@ class FlavaImageConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import FlavaImageModel, FlavaImageConfig
+    >>> from transformers import FlavaImageConfig, FlavaImageModel
 
     >>> # Initializing a FlavaImageModel with  style configuration
     >>> configuration = FlavaImageConfig()
 
-    >>> # Initializing a FlavaImageModel model from the style configuration
+    >>> # Initializing a FlavaImageModel model (with random weights) from the style configuration
     >>> model = FlavaImageModel(configuration)
 
     >>> # Accessing the model configuration
@@ -207,12 +207,12 @@ class FlavaTextConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import FlavaTextModel, FlavaTextConfig
+    >>> from transformers import FlavaTextConfig, FlavaTextModel
 
     >>> # Initializing a FlavaTextModel with  style configuration
     >>> configuration = FlavaTextConfig()
 
-    >>> # Initializing a FlavaTextConfig from the style configuration
+    >>> # Initializing a FlavaTextModel model (with random weights) from the style configuration
     >>> model = FlavaTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -316,12 +316,12 @@ class FlavaMultimodalConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import FlavaMultimodalModel, FlavaMultimodalConfig
+    >>> from transformers import FlavaMultimodalConfig, FlavaMultimodalModel
 
     >>> # Initializing a FlavaMultimodalModel with  style configuration
     >>> configuration = FlavaMultimodalConfig()
 
-    >>> # Initializing a FlavaMultimodalModel model from the style configuration
+    >>> # Initializing a FlavaMultimodalModel model (with random weights) from the style configuration
     >>> model = FlavaMultimodalModel(configuration)
 
     >>> # Accessing the model configuration
@@ -410,12 +410,12 @@ class FlavaImageCodebookConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import FlavaImageCodebook, FlavaImageCodebookConfig
+    >>> from transformers import FlavaImageCodebookConfig, FlavaImageCodebook
 
     >>> # Initializing a FlavaImageCodebook with style configuration
     >>> configuration = FlavaImageCodebookConfig()
 
-    >>> # Initializing a FlavaImageCodebook model from the style configuration
+    >>> # Initializing a FlavaImageCodebook model (with random weights) from the style configuration
     >>> model = FlavaImageCodebook(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -471,11 +471,11 @@ class FlavaConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_config_dict (`dict`, *optional*):
+        text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`FlavaTextConfig`].
-        image_config_dict (`dict`, *optional*):
+        image_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`FlavaImageConfig`].
-        multimodal_config_dict (`dict`, *optional*):
+        multimodal_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`FlavaMultimodalConfig`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
@@ -515,12 +515,12 @@ class FlavaConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import FlavaModel, FlavaForPreTraining, FlavaConfig
+    >>> from transformers import FlavaConfig, FlavaModel, FlavaForPreTraining
 
     >>> # Initializing a FlavaConfig with style configuration
     >>> configuration = FlavaConfig()
 
-    >>> # Initializing a FlavaModel and FlavaForPreTraining model from the style configuration
+    >>> # Initializing a FlavaModel and FlavaForPreTraining model (with random weights) from the style configuration
     >>> model = FlavaModel(configuration)
     >>> model_pre = FlavaForPreTraining(configuration)
 
@@ -535,10 +535,10 @@ class FlavaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        image_config_dict: Dict[str, Any] = None,
-        text_config_dict: Dict[str, Any] = None,
-        multimodal_config_dict: Dict[str, Any] = None,
-        image_codebook_config_dict: Dict[str, Any] = None,
+        image_config: Dict[str, Any] = None,
+        text_config: Dict[str, Any] = None,
+        multimodal_config: Dict[str, Any] = None,
+        image_codebook_config: Dict[str, Any] = None,
         hidden_size: int = 768,
         layer_norm_eps: float = 1e-12,
         projection_dim: int = 768,
@@ -559,33 +559,42 @@ class FlavaConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        if image_config_dict is None:
-            image_config_dict = {}
-            logger.info("image_config_dict is None. initializing the FlavaImageConfig with default values.")
+        # If `_config_dict` exist, we use them for the backward compatibility.
+        text_config_dict = kwargs.pop("text_config_dict", None)
+        image_config_dict = kwargs.pop("vision_config_dict", None)
+        multimodal_config_dict = kwargs.pop("multimodal_config_dict", None)
+        image_codebook_config_dict = kwargs.pop("image_codebook_config_dict", None)
+        if text_config_dict is not None:
+            text_config = text_config_dict
+        if image_config_dict is not None:
+            image_config = image_config_dict
+        if multimodal_config_dict is not None:
+            multimodal_config = multimodal_config_dict
+        if image_codebook_config_dict is not None:
+            image_codebook_config = image_codebook_config_dict
 
-        if text_config_dict is None:
-            text_config_dict = {}
-            logger.info("text_config_dict is None. Initializing the FlavaTextConfig with default values.")
+        if image_config is None:
+            image_config = {}
+            logger.info("image_config is None. initializing the FlavaImageConfig with default values.")
 
-        if multimodal_config_dict is None:
-            multimodal_config_dict = {}
-            logger.info("multimodal_config_dict is None. initializing the FlavaMultimodalConfig with default values.")
+        if text_config is None:
+            text_config = {}
+            logger.info("text_config is None. Initializing the FlavaTextConfig with default values.")
 
-        if image_codebook_config_dict is None:
-            image_codebook_config_dict = {}
+        if multimodal_config is None:
+            multimodal_config = {}
+            logger.info("multimodal_config is None. initializing the FlavaMultimodalConfig with default values.")
+
+        if image_codebook_config is None:
+            image_codebook_config = {}
             logger.info(
-                "image_codebook_config_dict is None. initializing the FlavaImageCodebookConfig with default values."
+                "image_codebook_config is None. initializing the FlavaImageCodebookConfig with default values."
             )
 
-        self.image_config_dict = image_config_dict
-        self.text_config_dict = text_config_dict
-        self.multimodal_config_dict = multimodal_config_dict
-        self.image_codebook_config_dict = image_codebook_config_dict
-
-        self.image_config = FlavaImageConfig(**self.image_config_dict)
-        self.text_config = FlavaTextConfig(**self.text_config_dict)
-        self.multimodal_config = FlavaMultimodalConfig(**self.multimodal_config_dict)
-        self.image_codebook_config = FlavaImageCodebookConfig(**self.image_codebook_config_dict)
+        self.image_config = FlavaImageConfig(**image_config)
+        self.text_config = FlavaTextConfig(**text_config)
+        self.multimodal_config = FlavaMultimodalConfig(**multimodal_config)
+        self.image_codebook_config = FlavaImageCodebookConfig(**image_codebook_config)
         self.projection_dim = projection_dim
         self.init_codebook = init_codebook
 
@@ -623,10 +632,10 @@ class FlavaConfig(PretrainedConfig):
         """
 
         return cls(
-            image_config_dict=image_config.to_dict(),
-            text_config_dict=text_config.to_dict(),
-            multimodal_config_dict=multimodal_config.to_dict(),
-            image_codebook_config_dict=image_codebook_config.to_dict(),
+            image_config=image_config.to_dict(),
+            text_config=text_config.to_dict(),
+            multimodal_config=multimodal_config.to_dict(),
+            image_codebook_config=image_codebook_config.to_dict(),
             **kwargs,
         )
 
