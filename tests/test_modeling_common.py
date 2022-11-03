@@ -1471,8 +1471,7 @@ class ModelTesterMixin:
                 with tempfile.TemporaryDirectory() as temp_dir_name:
                     model.base_model.save_pretrained(temp_dir_name)
                     model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
-                    with self.subTest(msg=f"Missing keys for {model.__class__.__name__}"):
-                        self.assertGreater(len(loading_info["missing_keys"]), 0)
+                    self.assertGreater(len(loading_info["missing_keys"]), 0, model.__class__.__name__)
 
     def test_tie_model_weights(self):
         if not self.test_torchscript:
@@ -1536,10 +1535,8 @@ class ModelTesterMixin:
                 model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
 
                 prefix = f"{model_reloaded.base_model_prefix}."
-                param_names = set(
-                    k[len(prefix) :] if k.startswith(prefix) else k
-                    for k in dict(model_reloaded.named_parameters()).keys()
-                )
+                params = dict(model_reloaded.named_parameters()) | dict(model_reloaded.named_buffers())
+                param_names = set(k[len(prefix) :] if k.startswith(prefix) else k for k in params.keys())
 
                 missing_keys = set(infos["missing_keys"])
 
