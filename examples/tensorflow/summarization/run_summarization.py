@@ -516,7 +516,9 @@ def main():
             use_auth_token=True if model_args.use_auth_token else None,
         )
 
-        model.resize_token_embeddings(len(tokenizer))
+        embedding_size = model.get_input_embeddings().weight.shape[0]
+        if len(tokenizer) > embedding_size:
+            model.resize_token_embeddings(len(tokenizer))
         # endregion
 
         # region Prepare TF Dataset objects

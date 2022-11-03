@@ -489,7 +489,9 @@ def main():
             logger.info("Training new model from scratch")
             model = TFAutoModelForMaskedLM.from_config(config)
 
-        model.resize_token_embeddings(len(tokenizer))
+        embedding_size = model.get_input_embeddings().weight.shape[0]
+        if len(tokenizer) > embedding_size:
+            model.resize_token_embeddings(len(tokenizer))
         # endregion
 
         # region TF Dataset preparation
