@@ -218,6 +218,7 @@ PYTORCH_EXPORT_MODELS = {
     ("yolos", "hustvl/yolos-tiny"),
     ("segformer", "nvidia/segformer-b0-finetuned-ade-512-512"),
     ("swin", "microsoft/swin-tiny-patch4-window7-224"),
+    ("whisper", "openai/whisper-tiny.en"),
 }
 
 PYTORCH_EXPORT_ENCODER_DECODER_MODELS = {
@@ -398,7 +399,7 @@ class OnnxExportTestCaseV2(TestCase):
         preprocessor = AutoTokenizer.from_pretrained(model_name)
 
         with NamedTemporaryFile("w") as decoder_output:
-            onnx_inputs, onnx_outputs = export(
+            _, onnx_outputs = export(
                 preprocessor,
                 decoder_model,
                 decoder_onnx_config,

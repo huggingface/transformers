@@ -1334,7 +1334,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
 
         >>> generated_ids = model.generate(inputs=input_features)
 
-        >>> transcription = processor.batch_decode(generated_ids)[0]
+        >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> transcription
         'mister quilter is the apostle of the middle classes and we are glad to welcome his gospel'
         ```"""

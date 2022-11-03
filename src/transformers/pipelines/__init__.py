@@ -21,6 +21,7 @@ import os
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from numpy import isin
@@ -638,6 +639,8 @@ def pipeline(
             " feature_extractor may not be compatible with the default model. Please provide a PreTrainedModel class"
             " or a path/identifier to a pretrained model when providing feature_extractor."
         )
+    if isinstance(model, Path):
+        model = str(model)
 
     # Config is the primordial information item.
     # Instantiate config if needed
