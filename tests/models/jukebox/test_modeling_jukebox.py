@@ -196,7 +196,7 @@ class Jukebox1bModelTester(unittest.TestCase):
 
         model.priors[1].cuda()
         upper_2 = torch.cat((zs[0], torch.zeros(1, 1000000 - zs[0].shape[-1]).cuda()), dim=-1).long()
-        zs = [upper_2, model.vqvae.encode(waveform, start_level=1, bs_chunks=waveform.shape[0])[0].cuda(), None]
+        zs = [upper_2, model.vqvae.encode(waveform.cuda(), start_level=1, bs_chunks=waveform.shape[0])[0].cuda(), None]
         zs = model._sample(
             zs, tokens, sample_levels=[1], save_results=False, sample_length=40 * model.priors[-2].raw_to_tokens
         )
@@ -204,7 +204,7 @@ class Jukebox1bModelTester(unittest.TestCase):
 
         model.priors[2].cuda()
         upper_1 = torch.cat((zs[1], torch.zeros(1, 1000000 - zs[1].shape[-1]).cuda()), dim=-1).long()
-        zs = [model.vqvae.encode(waveform, start_level=0, bs_chunks=waveform.shape[0])[0].cuda(), upper_1, upper_2]
+        zs = [upper_2, upper_1, model.vqvae.encode(waveform.cuda(), start_level=0, bs_chunks=waveform.shape[0])[0].cuda()]
         zs = model._sample(
             zs, tokens, sample_levels=[2], save_results=False, sample_length=40 * model.priors[2].raw_to_tokens
         )
