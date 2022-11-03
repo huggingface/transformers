@@ -878,7 +878,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
         # If no attention mask is provided, make them all ones
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length)), device=device)
+            attention_mask = torch.ones((batch_size, seq_length), device=device)
         # Make the attention mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
         extended_attention_mask = self.invert_attention_mask(attention_mask)
 
@@ -912,7 +912,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
                     "label": 1,
                 }
             else:
-                output_modality_sizes = None
+                output_modality_sizes = modality_sizes
             decoder_query = self.decoder.decoder_query(
                 inputs, modality_sizes, inputs_without_pos, subsampled_points=subsampled_output_points
             )
@@ -953,7 +953,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
 @add_start_docstrings("""Example use of Perceiver for masked language modeling.""", PERCEIVER_START_DOCSTRING)
 class PerceiverForMaskedLM(PerceiverPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PerceiverConfig):
         super().__init__(config)
 
         text_preprocessor = PerceiverTextPreprocessor(config)
@@ -1778,7 +1778,7 @@ Note that, by masking the classification label during evaluation (i.e. simply pr
     PERCEIVER_START_DOCSTRING,
 )
 class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PerceiverConfig):
         super().__init__(config)
 
         n_audio_samples = config.num_frames * config.audio_samples_per_frame
@@ -2850,14 +2850,14 @@ class PerceiverTextPreprocessor(AbstractPreprocessor):
     def num_channels(self) -> int:
         return self.config.d_model
 
-    def forward(self, inputs: torch.LongTensor) -> torch.FloatTensor:
+    def forward(self, inputs: torch.LongTensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True) -> torch.FloatTensor:
         embeddings = self.embeddings(inputs)
 
         seq_length = inputs.shape[1]
         position_ids = torch.arange(0, seq_length, device=inputs.device)
         embeddings = embeddings + self.position_embeddings(position_ids)
 
-        return embeddings, None, None
+        return embeddings, None, embeddings
 
 
 class PerceiverEmbeddingDecoder(nn.Module):
@@ -3362,7 +3362,7 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
         min_padding_size: int = 2,
     ):
         super().__init__()
-        self.modalities = modalities
+        self.modalities = nn.ModuleDict(modalities)
         self.min_padding_size = min_padding_size
         self.mask_probs = mask_probs if mask_probs is not None else dict()
         self.padding = nn.ParameterDict(
