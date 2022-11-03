@@ -1541,13 +1541,15 @@ class ModelTesterMixin:
                 self.assertEqual(
                     extra_missing,
                     set(),
-                    f"This model {model_class.__name__} might be missing some `keys_to_ignore`: {extra_missing} when tying its weights",
+                    f"This model {model_class.__name__} might be missing some `keys_to_ignore`: {extra_missing} when"
+                    " tying its weights",
                 )
 
                 self.assertEqual(
                     missed_missing,
                     set(),
-                    f"This model {model_class.__name__} ignores keys {missed_missing} but they look like real parameters",
+                    f"This model {model_class.__name__} ignores keys {missed_missing} but they look like real"
+                    " parameters",
                 )
 
     def test_model_outputs_equivalence(self):
