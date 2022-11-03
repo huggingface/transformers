@@ -12,11 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch RocBert model. """
+""" Testing suite for the PyTorch RoCBert model. """
 
 import unittest
 
-from transformers import RocBertConfig, is_torch_available
+from transformers import RoCBertConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -29,19 +29,19 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
-        RocBertForCausalLM,
-        RocBertForMaskedLM,
-        RocBertForMultipleChoice,
-        RocBertForPreTraining,
-        RocBertForQuestionAnswering,
-        RocBertForSequenceClassification,
-        RocBertForTokenClassification,
-        RocBertModel,
+        RoCBertForCausalLM,
+        RoCBertForMaskedLM,
+        RoCBertForMultipleChoice,
+        RoCBertForPreTraining,
+        RoCBertForQuestionAnswering,
+        RoCBertForSequenceClassification,
+        RoCBertForTokenClassification,
+        RoCBertModel,
     )
     from transformers.models.roc_bert.modeling_roc_bert import ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
-class RocBertModelTester:
+class RoCBertModelTester:
     def __init__(
         self,
         parent,
@@ -134,7 +134,7 @@ class RocBertModelTester:
         )
 
     def get_config(self):
-        return RocBertConfig(
+        return RoCBertConfig(
             vocab_size=self.vocab_size,
             shape_vocab_size=self.shape_vocab_size,
             pronunciation_vocab_size=self.pronunciation_vocab_size,
@@ -196,7 +196,7 @@ class RocBertModelTester:
         token_labels,
         choice_labels,
     ):
-        model = RocBertModel(config=config)
+        model = RoCBertModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -230,7 +230,7 @@ class RocBertModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = RocBertModel(config)
+        model = RoCBertModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -273,7 +273,7 @@ class RocBertModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = RocBertForCausalLM(config=config)
+        model = RoCBertForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -298,7 +298,7 @@ class RocBertModelTester:
         token_labels,
         choice_labels,
     ):
-        model = RocBertForMaskedLM(config=config)
+        model = RoCBertForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -327,7 +327,7 @@ class RocBertModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = RocBertForCausalLM(config=config)
+        model = RoCBertForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -397,7 +397,7 @@ class RocBertModelTester:
         token_labels,
         choice_labels,
     ):
-        model = RocBertForQuestionAnswering(config=config)
+        model = RoCBertForQuestionAnswering(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -425,7 +425,7 @@ class RocBertModelTester:
         choice_labels,
     ):
         config.num_labels = self.num_labels
-        model = RocBertForSequenceClassification(config)
+        model = RoCBertForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -451,7 +451,7 @@ class RocBertModelTester:
         choice_labels,
     ):
         config.num_labels = self.num_labels
-        model = RocBertForTokenClassification(config=config)
+        model = RoCBertForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -477,7 +477,7 @@ class RocBertModelTester:
         choice_labels,
     ):
         config.num_choices = self.num_choices
-        model = RocBertForMultipleChoice(config=config)
+        model = RoCBertForMultipleChoice(config=config)
         model.to(torch_device)
         model.eval()
         multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
@@ -531,7 +531,7 @@ class RocBertModelTester:
         token_labels,
         choice_labels,
     ):
-        model = RocBertForPreTraining(config=config)
+        model = RoCBertForPreTraining(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -555,22 +555,22 @@ class RocBertModelTester:
 
 
 @require_torch
-class RocBertModelTest(ModelTesterMixin, unittest.TestCase):
+class RoCBertModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            RocBertModel,
-            RocBertForMaskedLM,
-            RocBertForCausalLM,
-            RocBertForMultipleChoice,
-            RocBertForQuestionAnswering,
-            RocBertForSequenceClassification,
-            RocBertForTokenClassification,
-            RocBertForPreTraining,
+            RoCBertModel,
+            RoCBertForMaskedLM,
+            RoCBertForCausalLM,
+            RoCBertForMultipleChoice,
+            RoCBertForQuestionAnswering,
+            RoCBertForSequenceClassification,
+            RoCBertForTokenClassification,
+            RoCBertForPreTraining,
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (RocBertForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (RoCBertForCausalLM,) if is_torch_available() else ()
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -599,8 +599,8 @@ class RocBertModelTest(ModelTesterMixin, unittest.TestCase):
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = RocBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RocBertConfig, hidden_size=37)
+        self.model_tester = RoCBertModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=RoCBertConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -682,15 +682,15 @@ class RocBertModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = RocBertModel.from_pretrained(model_name)
+            model = RoCBertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
 @require_torch
-class RocBertModelIntegrationTest(unittest.TestCase):
+class RoCBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = RocBertForMaskedLM.from_pretrained("weiweishi/roc-bert-base-zh")
+        model = RoCBertForMaskedLM.from_pretrained("weiweishi/roc-bert-base-zh")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 

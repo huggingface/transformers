@@ -4484,70 +4484,70 @@ class RobertaPreTrainedModel(metaclass=DummyObject):
 ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class RocBertForCausalLM(metaclass=DummyObject):
+class RoCBertForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class RocBertForMaskedLM(metaclass=DummyObject):
+class RoCBertForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class RocBertForMultipleChoice(metaclass=DummyObject):
+class RoCBertForMultipleChoice(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class RocBertForPreTraining(metaclass=DummyObject):
+class RoCBertForPreTraining(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class RocBertForQuestionAnswering(metaclass=DummyObject):
+class RoCBertForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class RocBertForSequenceClassification(metaclass=DummyObject):
+class RoCBertForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class RocBertForTokenClassification(metaclass=DummyObject):
+class RoCBertForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class RocBertLayer(metaclass=DummyObject):
+class RoCBertLayer(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class RocBertModel(metaclass=DummyObject):
+class RoCBertModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class RocBertPreTrainedModel(metaclass=DummyObject):
+class RoCBertPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

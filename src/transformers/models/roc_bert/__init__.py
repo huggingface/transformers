@@ -22,8 +22,8 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RocBertConfig"],
-    "tokenization_roc_bert": ["RocBertTokenizer"],
+    "configuration_roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig"],
+    "tokenization_roc_bert": ["RoCBertTokenizer"],
 }
 
 try:
@@ -42,22 +42,22 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_roc_bert"] = [
         "ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "RocBertForCausalLM",
-        "RocBertForMaskedLM",
-        "RocBertForMultipleChoice",
-        "RocBertForPreTraining",
-        "RocBertForQuestionAnswering",
-        "RocBertForSequenceClassification",
-        "RocBertForTokenClassification",
-        "RocBertLayer",
-        "RocBertModel",
-        "RocBertPreTrainedModel",
+        "RoCBertForCausalLM",
+        "RoCBertForMaskedLM",
+        "RoCBertForMultipleChoice",
+        "RoCBertForPreTraining",
+        "RoCBertForQuestionAnswering",
+        "RoCBertForSequenceClassification",
+        "RoCBertForTokenClassification",
+        "RoCBertLayer",
+        "RoCBertModel",
+        "RoCBertPreTrainedModel",
         "load_tf_weights_in_roc_bert",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_roc_bert import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RocBertConfig
-    from .tokenization_roc_bert import RocBertTokenizer
+    from .configuration_roc_bert import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RoCBertConfig
+    from .tokenization_roc_bert import RoCBertTokenizer
 
     try:
         if not is_tokenizers_available():
@@ -75,16 +75,16 @@ if TYPE_CHECKING:
     else:
         from .modeling_roc_bert import (
             ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            RocBertForCausalLM,
-            RocBertForMaskedLM,
-            RocBertForMultipleChoice,
-            RocBertForPreTraining,
-            RocBertForQuestionAnswering,
-            RocBertForSequenceClassification,
-            RocBertForTokenClassification,
-            RocBertLayer,
-            RocBertModel,
-            RocBertPreTrainedModel,
+            RoCBertForCausalLM,
+            RoCBertForMaskedLM,
+            RoCBertForMultipleChoice,
+            RoCBertForPreTraining,
+            RoCBertForQuestionAnswering,
+            RoCBertForSequenceClassification,
+            RoCBertForTokenClassification,
+            RoCBertLayer,
+            RoCBertModel,
+            RoCBertPreTrainedModel,
             load_tf_weights_in_roc_bert,
         )
 

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch RocBert model."""
+""" PyTorch RoCBert model."""
 
 import math
 import os
@@ -43,18 +43,18 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_roc_bert import RocBertConfig
+from .configuration_roc_bert import RoCBertConfig
 
 
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "weiweishi/roc-bert-base-zh"
-_CONFIG_FOR_DOC = "RocBertConfig"
-_TOKENIZER_FOR_DOC = "RocBertTokenizer"
+_CONFIG_FOR_DOC = "RoCBertConfig"
+_TOKENIZER_FOR_DOC = "RoCBertTokenizer"
 
 ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "weiweishi/roc-bert-base-zh",
-    # See all RocBert models at https://huggingface.co/models?filter=roc_bert
+    # See all RoCBert models at https://huggingface.co/models?filter=roc_bert
 ]
 
 
@@ -132,7 +132,7 @@ def load_tf_weights_in_roc_bert(model, config, tf_checkpoint_path):
     return model
 
 
-class RocBertEmbeddings(nn.Module):
+class RoCBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position, shape, pronunciation and token_type embeddings."""
 
     def __init__(self, config):
@@ -261,8 +261,8 @@ class RocBertEmbeddings(nn.Module):
             return embedding_in
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->RocBert
-class RocBertSelfAttention(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->RoCBert
+class RoCBertSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -362,7 +362,7 @@ class RocBertSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in RocBertModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in RoCBertModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -389,8 +389,8 @@ class RocBertSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->RocBert
-class RocBertSelfOutput(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->RoCBert
+class RoCBertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -404,12 +404,12 @@ class RocBertSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->RocBert
-class RocBertAttention(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->RoCBert
+class RoCBertAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = RocBertSelfAttention(config, position_embedding_type=position_embedding_type)
-        self.output = RocBertSelfOutput(config)
+        self.self = RoCBertSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.output = RoCBertSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -454,8 +454,8 @@ class RocBertAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->RocBert
-class RocBertIntermediate(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->RoCBert
+class RoCBertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -470,8 +470,8 @@ class RocBertIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->RocBert
-class RocBertOutput(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->RoCBert
+class RoCBertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -485,21 +485,21 @@ class RocBertOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->RocBert
-class RocBertLayer(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->RoCBert
+class RoCBertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = RocBertAttention(config)
+        self.attention = RoCBertAttention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = RocBertAttention(config, position_embedding_type="absolute")
-        self.intermediate = RocBertIntermediate(config)
-        self.output = RocBertOutput(config)
+            self.crossattention = RoCBertAttention(config, position_embedding_type="absolute")
+        self.intermediate = RoCBertIntermediate(config)
+        self.output = RoCBertOutput(config)
 
     def forward(
         self,
@@ -572,12 +572,12 @@ class RocBertLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->RocBert
-class RocBertEncoder(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->RoCBert
+class RoCBertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([RocBertLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([RoCBertLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -670,8 +670,8 @@ class RocBertEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->RocBert
-class RocBertPooler(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->RoCBert
+class RoCBertPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -686,8 +686,8 @@ class RocBertPooler(nn.Module):
         return pooled_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->RocBert
-class RocBertPredictionHeadTransform(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->RoCBert
+class RoCBertPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -704,11 +704,11 @@ class RocBertPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->RocBert
-class RocBertLMPredictionHead(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->RoCBert
+class RoCBertLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.transform = RocBertPredictionHeadTransform(config)
+        self.transform = RoCBertPredictionHeadTransform(config)
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
@@ -725,25 +725,25 @@ class RocBertLMPredictionHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->RocBert
-class RocBertOnlyMLMHead(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->RoCBert
+class RoCBertOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.predictions = RocBertLMPredictionHead(config)
+        self.predictions = RoCBertLMPredictionHead(config)
 
     def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel with Bert->RocBert,bert->roc_bert
-class RocBertPreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel with Bert->RoCBert,bert->roc_bert
+class RoCBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = RocBertConfig
+    config_class = RoCBertConfig
     load_tf_weights = load_tf_weights_in_roc_bert
     base_model_prefix = "roc_bert"
     supports_gradient_checkpointing = True
@@ -766,7 +766,7 @@ class RocBertPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, RocBertEncoder):
+        if isinstance(module, RoCBertEncoder):
             module.gradient_checkpointing = value
 
 
@@ -776,7 +776,7 @@ ROC_BERT_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`~RocBertConfig`]): Model configuration class with all the parameters of the model.
+        config ([`RoCBertConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -786,21 +786,21 @@ ROC_BERT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`RocBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`RoCBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         input_shape_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the shape vocabulary.
 
-            Indices can be obtained using [`RocBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`RoCBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input_shape_ids)
         input_pronunciation_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the pronunciation vocabulary.
 
-            Indices can be obtained using [`RocBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`RoCBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input_pronunciation_ids)
@@ -846,10 +846,10 @@ ROC_BERT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare RocBert Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare RoCBert Model transformer outputting raw hidden-states without any specific head on top.",
     ROC_BERT_START_DOCSTRING,
 )
-class RocBertModel(RocBertPreTrainedModel):
+class RoCBertModel(RoCBertPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -862,15 +862,15 @@ class RocBertModel(RocBertPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->RocBert
+    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->RoCBert
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = RocBertEmbeddings(config)
-        self.encoder = RocBertEncoder(config)
+        self.embeddings = RoCBertEmbeddings(config)
+        self.encoder = RoCBertEncoder(config)
 
-        self.pooler = RocBertPooler(config) if add_pooling_layer else None
+        self.pooler = RoCBertPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1046,16 +1046,16 @@ class RocBertModel(RocBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    RocBert Model with contrastive loss and masked_lm_loss during the pretraining.
+    RoCBert Model with contrastive loss and masked_lm_loss during the pretraining.
     """,
     ROC_BERT_START_DOCSTRING,
 )
-class RocBertForPreTraining(RocBertPreTrainedModel):
+class RoCBertForPreTraining(RoCBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.roc_bert = RocBertModel(config)
-        self.cls = RocBertOnlyMLMHead(config)
+        self.roc_bert = RoCBertModel(config)
+        self.cls = RoCBertOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1130,11 +1130,11 @@ class RocBertForPreTraining(RocBertPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import RocBertTokenizer, RocBertForPreTraining
+        >>> from transformers import RoCBertTokenizer, RoCBertForPreTraining
         >>> import torch
 
-        >>> tokenizer = RocBertTokenizer.from_pretrained("weiweishi/roc-bert-base-zh")
-        >>> model = RocBertForPreTraining.from_pretrained("weiweishi/roc-bert-base-zh")
+        >>> tokenizer = RoCBertTokenizer.from_pretrained("weiweishi/roc-bert-base-zh")
+        >>> model = RoCBertForPreTraining.from_pretrained("weiweishi/roc-bert-base-zh")
 
         >>> inputs = tokenizer("你好，很高兴认识你", return_tensors="pt")
         >>> attack_inputs = tokenizer("你号，很高兴认识你", return_tensors="pt")
@@ -1232,23 +1232,23 @@ class RocBertForPreTraining(RocBertPreTrainedModel):
         )
 
 
-@add_start_docstrings("""RocBert Model with a `language modeling` head on top.""", ROC_BERT_START_DOCSTRING)
-class RocBertForMaskedLM(RocBertPreTrainedModel):
+@add_start_docstrings("""RoCBert Model with a `language modeling` head on top.""", ROC_BERT_START_DOCSTRING)
+class RoCBertForMaskedLM(RoCBertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
-    # Copied from transformers.models.bert.modeling_bert.BertForMaskedLM.__init__ with Bert->RocBert,bert->roc_bert
+    # Copied from transformers.models.bert.modeling_bert.BertForMaskedLM.__init__ with Bert->RoCBert,bert->roc_bert
     def __init__(self, config):
         super().__init__(config)
 
         if config.is_decoder:
             logger.warning(
-                "If you want to use `RocBertForMaskedLM` make sure `config.is_decoder=False` for "
+                "If you want to use `RoCBertForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
 
-        self.roc_bert = RocBertModel(config, add_pooling_layer=False)
-        self.cls = RocBertOnlyMLMHead(config)
+        self.roc_bert = RoCBertModel(config, add_pooling_layer=False)
+        self.cls = RoCBertOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1355,21 +1355,21 @@ class RocBertForMaskedLM(RocBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """RocBert Model with a `language modeling` head on top for CLM fine-tuning.""", ROC_BERT_START_DOCSTRING
+    """RoCBert Model with a `language modeling` head on top for CLM fine-tuning.""", ROC_BERT_START_DOCSTRING
 )
-class RocBertForCausalLM(RocBertPreTrainedModel):
+class RoCBertForCausalLM(RoCBertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
-    # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.__init__ with BertLMHeadModel->RocBertForCausalLM,Bert->RocBert,bert->roc_bert
+    # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.__init__ with BertLMHeadModel->RoCBertForCausalLM,Bert->RoCBert,bert->roc_bert
     def __init__(self, config):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `RocRocBertForCausalLM` as a standalone, add `is_decoder=True.`")
+            logger.warning("If you want to use `RoCRoCBertForCausalLM` as a standalone, add `is_decoder=True.`")
 
-        self.roc_bert = RocBertModel(config, add_pooling_layer=False)
-        self.cls = RocBertOnlyMLMHead(config)
+        self.roc_bert = RoCBertModel(config, add_pooling_layer=False)
+        self.cls = RoCBertOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1438,13 +1438,13 @@ class RocBertForCausalLM(RocBertPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import RocBertTokenizer, RocBertForCausalLM, RocBertConfig
+        >>> from transformers import RoCBertTokenizer, RoCBertForCausalLM, RoCBertConfig
         >>> import torch
 
-        >>> tokenizer = RocBertTokenizer.from_pretrained("weiweishi/roc-bert-base-zh")
-        >>> config = RocBertConfig.from_pretrained("weiweishi/roc-bert-base-zh")
+        >>> tokenizer = RoCBertTokenizer.from_pretrained("weiweishi/roc-bert-base-zh")
+        >>> config = RoCBertConfig.from_pretrained("weiweishi/roc-bert-base-zh")
         >>> config.is_decoder = True
-        >>> model = RocBertForCausalLM.from_pretrained("weiweishi/roc-bert-base-zh", config=config)
+        >>> model = RoCBertForCausalLM.from_pretrained("weiweishi/roc-bert-base-zh", config=config)
 
         >>> inputs = tokenizer("你好，很高兴认识你", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1535,18 +1535,18 @@ class RocBertForCausalLM(RocBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """RocBert Model transformer with a sequence classification/regression head on top (a linear layer on top of
+    """RoCBert Model transformer with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks.""",
     ROC_BERT_START_DOCSTRING,
 )
-class RocBertForSequenceClassification(RocBertPreTrainedModel):
-    # Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification.__init__ with Bert->RocBert,bert->roc_bert
+class RoCBertForSequenceClassification(RoCBertPreTrainedModel):
+    # Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification.__init__ with Bert->RoCBert,bert->roc_bert
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
 
-        self.roc_bert = RocBertModel(config)
+        self.roc_bert = RoCBertModel(config)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1640,16 +1640,16 @@ class RocBertForSequenceClassification(RocBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """RocBert Model with a multiple choice classification head on top (a linear layer on top of
+    """RoCBert Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks.""",
     ROC_BERT_START_DOCSTRING,
 )
-class RocBertForMultipleChoice(RocBertPreTrainedModel):
-    # Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice.__init__ with Bert->RocBert,bert->roc_bert
+class RoCBertForMultipleChoice(RoCBertPreTrainedModel):
+    # Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice.__init__ with Bert->RoCBert,bert->roc_bert
     def __init__(self, config):
         super().__init__(config)
 
-        self.roc_bert = RocBertModel(config)
+        self.roc_bert = RoCBertModel(config)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1746,19 +1746,19 @@ class RocBertForMultipleChoice(RocBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """RocBert Model with a token classification head on top (a linear layer on top of
+    """RoCBert Model with a token classification head on top (a linear layer on top of
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks.""",
     ROC_BERT_START_DOCSTRING,
 )
-class RocBertForTokenClassification(RocBertPreTrainedModel):
+class RoCBertForTokenClassification(RoCBertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification.__init__ with Bert->RocBert,bert->roc_bert
+    # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification.__init__ with Bert->RoCBert,bert->roc_bert
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.roc_bert = RocBertModel(config, add_pooling_layer=False)
+        self.roc_bert = RoCBertModel(config, add_pooling_layer=False)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1833,19 +1833,19 @@ class RocBertForTokenClassification(RocBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """RocBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    """RoCBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).""",
     ROC_BERT_START_DOCSTRING,
 )
-class RocBertForQuestionAnswering(RocBertPreTrainedModel):
+class RoCBertForQuestionAnswering(RoCBertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering.__init__ with Bert->RocBert,bert->roc_bert
+    # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering.__init__ with Bert->RoCBert,bert->roc_bert
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.roc_bert = RocBertModel(config, add_pooling_layer=False)
+        self.roc_bert = RoCBertModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
