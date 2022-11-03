@@ -165,6 +165,7 @@ class Jukebox1bModelTester(unittest.TestCase):
         self.assertListEqual(y.cpu().numpy()[0][:10].tolist(), self.EXPECTED_Y_COND)
 
         set_seed(0)
+        model.priors[0].cuda()
         zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
         zs = model._sample(zs, labels, [0], sample_length=40 * model.priors[0].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[0][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_2))

@@ -219,7 +219,6 @@ class JukeboxConv1D(nn.Module):
         self.input_width = input_width
         self.output_width = output_width
         weight = torch.empty(input_width, output_width)
-
         bias = torch.zeros(output_width)
         self.weight = nn.Parameter(weight)
         self.bias = nn.Parameter(bias)
@@ -267,7 +266,7 @@ class JukeboxResnet1D(nn.Module):
             block_depth = depth if self.dilation_cycle is None else depth % self.dilation_cycle
             blocks.append(JukeboxResConv1DBlock(config, conv_width, block_depth, res_scale))
 
-        if not reverse_dilation:
+        if reverse_dilation:
             blocks = blocks[::-1]
         self.resnet_block = nn.ModuleList(blocks)
 
@@ -1312,7 +1311,6 @@ class JukeboxPositionalEmbedding(nn.Module):
     def __init__(self, embed_dim, width):
         super().__init__()
         self.pos_emb = nn.Parameter(torch.empty((embed_dim, width)))
-        # nn.init.normal_(self.pos_emb, std=0.01 * init_scale)
 
     def forward(self):
         pos_emb = self.pos_emb
@@ -1347,13 +1345,11 @@ class JukeboxConditionalAutoregressive(nn.Module):
         self.n_ctx = n_ctx if n_ctx is not None else config.n_ctx
         self.embed_dim = embed_dim if embed_dim is not None else config.embed_dim
         self.embed_tokens = nn.Embedding(self.embed_dim, config.width)
-        # nn.init.normal_(self.embed_tokens.weight, std=0.02 * init_scale)
         self.embed_tokens_dropout = nn.Dropout(config.emb_dropout)
         self.metadata_conditioning = metadata_conditioning
         self.audio_conditioning = audio_conditioning
         if not metadata_conditioning:
             self.start_token = nn.Parameter(torch.empty((1, config.width)))
-            # nn.init.normal_(self.start_token, std=0.01 * init_scale)
         self.pos_emb = JukeboxPositionalEmbedding(self.n_ctx, config.width)
         self.pos_emb_dropout = nn.Dropout(config.emb_dropout)
 
@@ -1374,7 +1370,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
             if self.share_embed_tokens_fc_proj_out:
                 self.fc_proj_out.weight = self.embed_tokens.weight
             self.loss = torch.nn.CrossEntropyLoss()
-            # nn.init.normal_(self.encoder.lm_head.weight, std=0.02 * decoder_config["init_scale"])
 
     def postprocess(self, tokens, sample_tokens=None):
         # Convert back from NL and long to NHWC
@@ -1698,17 +1693,6 @@ class JukeboxMusicTokenConditioner(nn.Module):
         hidden_states = self.layer_norm(hidden_states)
         return hidden_states
 
-
-class JukeboxSimpleEmbedding(nn.Module):
-    def __init__(self, embed_dim, out_width):
-        super().__init__()
-        self.embed_dim = embed_dim
-        self.emb = nn.Embedding(embed_dim, out_width)
-
-    def forward(self, y):
-        return self.emb(y)
-
-
 class JukeboxRangeEmbedding(nn.Module):
     # Interpolating
     # Interpolate so that [pos_start, pos_end] <-> position tensor of length n_ctx
@@ -1723,7 +1707,6 @@ class JukeboxRangeEmbedding(nn.Module):
         self.n_time = n_time
         self.embed_dim = embed_dim
         self.emb = nn.Embedding(embed_dim, out_width)
-        # TODO add to init_weights nn.init.normal_(self.emb.weight, std=0.01 * init_scale)
         self.pos_min, self.pos_max = range
         self.clamp = clamp
 
@@ -1769,9 +1752,7 @@ class LabelConditioner(nn.Module):
         music_tokens_shape = config.n_ctx
 
         self.max_nb_genres = config.max_nb_genres
-        # self.bow_genre_emb = JukeboxSimpleEmbedding(nb_genres, out_width)  # TODO check if that does not break anything
-        # self.artist_emb = JukeboxSimpleEmbedding(nb_artists, out_width)
-        self.bow_genre_emb = nn.Embedding(nb_genres, embed_dim)  # TODO maybe test that
+        self.bow_genre_emb = nn.Embedding(nb_genres, embed_dim)
         self.artist_emb = nn.Embedding(nb_artists, embed_dim)
         self.include_time_signal = include_time_signal  # add to config
         if self.include_time_signal:
@@ -1833,7 +1814,7 @@ class JukeboxPrior(nn.Module):
     the primed sample or sample functions. If the model is not trained using these/ uses the forward differently then I
     guess it is fine but otherwise it looks strange.
     """
-
+    config_class = JukeboxPriorConfig
     def __init__(
         self,
         config: JukeboxPriorConfig,
@@ -2281,47 +2262,21 @@ class JukeboxPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+        init_scale = self.config.init_scale
 
-        # TODO handle all the initialisation and zero_out from the rest of the code
+        if isinstance(module, nn.Embedding): # embed_tokens
+            module.weight.data.normal_(mean=0.0, std= 0.02 * init_scale)
+        elif isinstance(module,nn.Parameter):
+            module.pos_emb.data.normal_(mean=0.0, std=0.01 * init_scale)
+        elif isinstance(module,JukeboxPositionalEmbedding):
+            module.pos_emb.data.normal_(mean=0.0, std=0.01 * init_scale)
         elif isinstance(module, JukeboxRangeEmbedding):
-            module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-            module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        elif isinstance(module, JukeboxSimpleEmbedding):
-            factor = self.config.initializer_factor
-            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-            nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-            nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-        elif isinstance(module, JukeboxAttention):
-            factor = self.config.initializer_factor
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
-            nn.init.normal_(module.q_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.k_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.v_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
-        elif isinstance(module, JukeboxMLP):
-            factor = self.config.initializer_factor
-            in_proj_std = (
-                (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            )
-            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            nn.init.normal_(module.fc1.weight, std=fc_std)
-            nn.init.normal_(module.fc2.weight, std=in_proj_std)
-        elif isinstance(module, JukeboxModel):
-            nn.init.normal_(
-                module.text_projection.weight,
-                std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
-            )
-            nn.init.normal_(
-                module.visual_projection.weight,
-                std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
-            )
+            module.emb.weight.data.normal_(mean=0.0, std=0.01 * init_scale)
+        elif isinstance(module,nn.Linear) and "encoder.lm_head" in module.__class__.__name__:
+            module.weight.data.normal_(mean=0.0, std=0.02 * init_scale)
+
+        elif isinstance(module,JukeboxConv1D) and self.config.zero_out:
+            module.weight.data.zero_()
 
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
@@ -2585,7 +2540,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         )
         for level in sample_levels:
             sampling_kwargs = dict(
-                temp=0.99 if level == 0 else sampling_temperature,
+                temp=0.99 if level == len(self.priors) -1 else sampling_temperature,
                 max_batch_size=lower_batch_size if level != sample_levels else max_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
@@ -2604,7 +2559,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             # Decode sample
             with torch.no_grad():
                 raw_audio = self.vqvae.decode(
-                    music_tokens[level:], start_level=level, bs_chunks=music_tokens[level].shape[0]
+                    music_tokens[:level+1], start_level=level, bs_chunks=music_tokens[level].shape[0]
                 )
 
             if save_results:
