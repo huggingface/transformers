@@ -15,28 +15,14 @@
 import contextlib
 import importlib
 import io
-import json
-import tempfile
 import unittest
-from pathlib import Path
 
 import transformers
 
 # Try to import everything from transformers to ensure every object can be loaded.
 from transformers import *  # noqa F406
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
-from transformers.utils import (
-    FLAX_WEIGHTS_NAME,
-    TF2_WEIGHTS_NAME,
-    WEIGHTS_NAME,
-    ContextManagers,
-    find_labels,
-    get_file_from_repo,
-    has_file,
-    is_flax_available,
-    is_tf_available,
-    is_torch_available,
-)
+from transformers.utils import ContextManagers, find_labels, is_flax_available, is_tf_available, is_torch_available
 
 
 MODEL_ID = DUMMY_UNKNOWN_IDENTIFIER
@@ -75,38 +61,6 @@ class TestImportMechanisms(unittest.TestCase):
         # If the spec is missing, importlib would not be able to import the module dynamically.
         assert transformers.__spec__ is not None
         assert importlib.util.find_spec("transformers") is not None
-
-
-class GetFromCacheTests(unittest.TestCase):
-    def test_has_file(self):
-        self.assertTrue(has_file("hf-internal-testing/tiny-bert-pt-only", WEIGHTS_NAME))
-        self.assertFalse(has_file("hf-internal-testing/tiny-bert-pt-only", TF2_WEIGHTS_NAME))
-        self.assertFalse(has_file("hf-internal-testing/tiny-bert-pt-only", FLAX_WEIGHTS_NAME))
-
-    def test_get_file_from_repo_distant(self):
-        # `get_file_from_repo` returns None if the file does not exist
-        self.assertIsNone(get_file_from_repo("bert-base-cased", "ahah.txt"))
-
-        # The function raises if the repository does not exist.
-        with self.assertRaisesRegex(EnvironmentError, "is not a valid model identifier"):
-            get_file_from_repo("bert-base-case", "config.json")
-
-        # The function raises if the revision does not exist.
-        with self.assertRaisesRegex(EnvironmentError, "is not a valid git identifier"):
-            get_file_from_repo("bert-base-cased", "config.json", revision="ahaha")
-
-        resolved_file = get_file_from_repo("bert-base-cased", "config.json")
-        # The name is the cached name which is not very easy to test, so instead we load the content.
-        config = json.loads(open(resolved_file, "r").read())
-        self.assertEqual(config["hidden_size"], 768)
-
-    def test_get_file_from_repo_local(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            filename = Path(tmp_dir) / "a.txt"
-            filename.touch()
-            self.assertEqual(get_file_from_repo(tmp_dir, "a.txt"), str(filename))
-
-            self.assertIsNone(get_file_from_repo(tmp_dir, "b.txt"))
 
 
 class GenericUtilTests(unittest.TestCase):

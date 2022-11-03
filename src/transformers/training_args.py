@@ -17,7 +17,7 @@ import json
 import math
 import os
 import warnings
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from pathlib import Path
@@ -295,7 +295,7 @@ class TrainingArguments:
         local_rank (`int`, *optional*, defaults to -1):
             Rank of the process during distributed training.
         xpu_backend (`str`, *optional*):
-            The backend to use for xpu distributed training. Must be one of `"mpi"` or `"ccl"`.
+            The backend to use for xpu distributed training. Must be one of `"mpi"` or `"ccl"` or `"gloo"`.
         tpu_num_cores (`int`, *optional*):
             When training on TPU, the number of TPU cores (automatically passed by launcher script).
         dataloader_drop_last (`bool`, *optional*, defaults to `False`):
@@ -721,7 +721,10 @@ class TrainingArguments:
     local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
     xpu_backend: Optional[str] = field(
         default=None,
-        metadata={"help": "The backend to be used for distributed training on Intel XPU.", "choices": ["mpi", "ccl"]},
+        metadata={
+            "help": "The backend to be used for distributed training on Intel XPU.",
+            "choices": ["mpi", "ccl", "gloo"],
+        },
     )
     tpu_num_cores: Optional[int] = field(
         default=None, metadata={"help": "TPU: Number of TPU cores (automatically passed by launcher script)"}
@@ -999,10 +1002,6 @@ class TrainingArguments:
         env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
         if env_local_rank != -1 and env_local_rank != self.local_rank:
             self.local_rank = env_local_rank
-
-        # convert to int
-        self.log_level = trainer_log_levels[self.log_level]
-        self.log_level_replica = trainer_log_levels[self.log_level_replica]
 
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
@@ -1337,10 +1336,10 @@ class TrainingArguments:
             )
             if self.local_rank != -1 and not torch.distributed.is_initialized():
                 # Initializes distributed backend for cpu
-                if self.xpu_backend not in ("mpi", "ccl"):
+                if self.xpu_backend not in ("mpi", "ccl", "gloo"):
                     raise ValueError(
                         "CPU distributed training backend is not properly set. "
-                        "Please set '--xpu_backend' to either 'mpi' or 'ccl'."
+                        "Please set '--xpu_backend' to either 'mpi' or 'ccl' or 'gloo'."
                     )
                 if self.xpu_backend == "ccl":
                     requires_backends(self, "oneccl_bind_pt")
@@ -1604,8 +1603,12 @@ class TrainingArguments:
         The choice between the main and replica process settings is made according to the return value of `should_log`.
         """
 
-        log_level_main_node = logging.INFO if self.log_level == -1 else self.log_level
-        log_level_replica_node = logging.WARNING if self.log_level_replica == -1 else self.log_level_replica
+        # convert to int
+        log_level = trainer_log_levels[self.log_level]
+        log_level_replica = trainer_log_levels[self.log_level_replica]
+
+        log_level_main_node = logging.INFO if log_level == -1 else log_level
+        log_level_replica_node = logging.WARNING if log_level_replica == -1 else log_level_replica
         return log_level_main_node if self.should_log else log_level_replica_node
 
     @property
@@ -1691,7 +1694,9 @@ class TrainingArguments:
         Serializes this instance while replace `Enum` by their values (for JSON serialization support). It obfuscates
         the token values by removing their value.
         """
-        d = asdict(self)
+        # filter out fields that are defined as field(init=False)
+        d = dict((field.name, getattr(self, field.name)) for field in fields(self) if field.init)
+
         for k, v in d.items():
             if isinstance(v, Enum):
                 d[k] = v.value

@@ -16,7 +16,7 @@ limitations under the License.
 
 # Generating the documentation
 
-To generate the documentation, you first have to build it. Several packages are necessary to build the doc,
+To generate the documentation, you first have to build it. Several packages are necessary to build the doc, 
 you can install them with the following command, at the root of the code repository:
 
 ```bash
@@ -33,7 +33,7 @@ pip install git+https://github.com/huggingface/doc-builder
 **NOTE**
 
 You only need to generate the documentation to inspect it locally (if you're planning changes and want to
-check how they look like before committing for instance). You don't have to commit the built documentation.
+check how they look before committing for instance). You don't have to commit the built documentation.
 
 ---
 
@@ -88,7 +88,7 @@ the filename without the extension in the [`_toctree.yml`](https://github.com/hu
 
 ## Renaming section headers and moving sections
 
-It helps to keep the old links working when renaming section header and/or moving sections from one document to another. This is because the old links are likely to be used in Issues, Forums and Social media and it'd be make for a much more superior user experience if users reading those months later could still easily navigate to the originally intended information.
+It helps to keep the old links working when renaming the section header and/or moving sections from one document to another. This is because the old links are likely to be used in Issues, Forums, and Social media and it'd make for a much more superior user experience if users reading those months later could still easily navigate to the originally intended information.
 
 Therefore we simply keep a little map of moved sections at the end of the document where the original section was. The key is to preserve the original anchor.
 
@@ -99,7 +99,7 @@ Sections that were moved:
 
 [ <a href="#section-b">Section A</a><a id="section-a"></a> ]
 ```
-and of course if you moved it to another file, then:
+and of course, if you moved it to another file, then:
 
 ```
 Sections that were moved:
@@ -109,7 +109,7 @@ Sections that were moved:
 
 Use the relative style to link to the new file so that the versioned docs continue to work.
 
-For an example of a rich moved sections set please see the very end of [the Trainer doc](https://github.com/huggingface/transformers/blob/main/docs/source/main_classes/trainer.mdx).
+For an example of a rich moved section set please see the very end of [the Trainer doc](https://github.com/huggingface/transformers/blob/main/docs/source/en/main_classes/trainer.mdx).
 
 
 ## Writing Documentation - Specification
@@ -126,7 +126,7 @@ Adding a new tutorial or section is done in two steps:
 - Link that file in `./source/_toctree.yml` on the correct toc-tree.
 
 Make sure to put your new file under the proper section. It's unlikely to go in the first section (*Get Started*), so
-depending on the intended targets (beginners, more advanced users or researchers) it should go in section two, three or
+depending on the intended targets (beginners, more advanced users, or researchers) it should go in sections two, three, or
 four.
 
 ### Translating
@@ -177,8 +177,8 @@ not to be displayed in the documentation, you can do so by specifying which meth
     - save_vocabulary
 ```
 
-If you just want to add a method that is not documented (for instance magic method like `__call__` are not documented
-byt default) you can put the list of methods to add in a list that contains `all`:
+If you just want to add a method that is not documented (for instance magic methods like `__call__` are not documented
+by default) you can put the list of methods to add in a list that contains `all`:
 
 ```
 ## XXXTokenizer
@@ -191,9 +191,9 @@ byt default) you can put the list of methods to add in a list that contains `all
 ### Writing source documentation
 
 Values that should be put in `code` should either be surrounded by backticks: \`like so\`. Note that argument names
-and objects like True, None or any strings should usually be put in `code`.
+and objects like True, None, or any strings should usually be put in `code`.
 
-When mentioning a class, function or method, it is recommended to use our syntax for internal links so that our tool
+When mentioning a class, function, or method, it is recommended to use our syntax for internal links so that our tool
 adds a link to its documentation with this syntax: \[\`XXXClass\`\] or \[\`function\`\]. This requires the class or 
 function to be in the main package.
 
@@ -207,7 +207,7 @@ The same works for methods so you can either use \[\`XXXClass.method\`\] or \[~\
 #### Defining arguments in a method
 
 Arguments should be defined with the `Args:` (or `Arguments:` or `Parameters:`) prefix, followed by a line return and
-an indentation. The argument should be followed by its type, with its shape if it is a tensor, a colon and its
+an indentation. The argument should be followed by its type, with its shape if it is a tensor, a colon, and its
 description:
 
 ```
@@ -216,7 +216,7 @@ description:
 ```
 
 If the description is too long to fit in one line, another indentation is necessary before writing the description
-after th argument.
+after the argument.
 
 Here's an example showcasing everything so far:
 
@@ -266,7 +266,7 @@ Multi-line code blocks can be useful for displaying examples. They are done betw
 ````
 
 We follow the [doctest](https://docs.python.org/3/library/doctest.html) syntax for the examples to automatically test
-the results stay consistent with the library.
+the results to stay consistent with the library.
 
 #### Writing a return block
 
@@ -274,27 +274,27 @@ The return block should be introduced with the `Returns:` prefix, followed by a 
 The first line should be the type of the return, followed by a line return. No need to indent further for the elements
 building the return.
 
-Here's an example for a single value return:
+Here's an example of a single value return:
 
 ```
     Returns:
         `List[int]`: A list of integers in the range [0, 1] --- 1 for a special token, 0 for a sequence token.
 ```
 
-Here's an example for tuple return, comprising several objects:
+Here's an example of a tuple return, comprising several objects:
 
 ```
     Returns:
         `tuple(torch.FloatTensor)` comprising various elements depending on the configuration ([`BertConfig`]) and inputs:
         - ** loss** (*optional*, returned when `masked_lm_labels` is provided) `torch.FloatTensor` of shape `(1,)` --
-          Total loss as the sum of the masked language modeling loss and the next sequence prediction (classification) loss.
+          Total loss is the sum of the masked language modeling loss and the next sequence prediction (classification) loss.
         - **prediction_scores** (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`) --
           Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
 ```
 
 #### Adding an image
 
-Due to the rapidly growing repository, it is important to make sure that no files that would significantly weigh down the repository are added. This includes images, videos and other non-text files. We prefer to leverage a hf.co hosted `dataset` like
+Due to the rapidly growing repository, it is important to make sure that no files that would significantly weigh down the repository are added. This includes images, videos, and other non-text files. We prefer to leverage a hf.co hosted `dataset` like
 the ones hosted on [`hf-internal-testing`](https://huggingface.co/hf-internal-testing) in which to place these files and reference
 them by URL. We recommend putting them in the following dataset: [huggingface/documentation-images](https://huggingface.co/datasets/huggingface/documentation-images).
 If an external contribution, feel free to add the images to your PR and ask a Hugging Face member to migrate your images
@@ -364,7 +364,7 @@ We use pytests' [doctest integration](https://docs.pytest.org/doctest.html) to v
 For Transformers, the doctests are run on a daily basis via GitHub Actions as can be 
 seen [here](https://github.com/huggingface/transformers/actions/workflows/doctests.yml).
 
-To include your example in the daily doctests, you need add the filename that
+To include your example in the daily doctests, you need to add the filename that
 contains the example docstring to the [documentation_tests.txt](../utils/documentation_tests.txt).
 
 ### For Python files
@@ -426,6 +426,6 @@ Here are a few tips to help you debug the doctests and make them pass:
 
 - The outputs of the code need to match the expected output **exactly**, so make sure you have the same outputs. In particular doctest will see a difference between single quotes and double quotes, or a missing parenthesis. The only exceptions to that rule are:
   * whitespace: one give whitespace (space, tabulation, new line) is equivalent to any number of whitespace, so you can add new lines where there are spaces to make your output more readable.
-  * numerical values: you should never put more than 4 or 5 digits to expected results as different setups or library versions might get you slightly different results. `doctest` is configure to ignore any difference lower than the precision to which you wrote (so 1e-4 if you write 4 digits).
+  * numerical values: you should never put more than 4 or 5 digits to expected results as different setups or library versions might get you slightly different results. `doctest` is configured to ignore any difference lower than the precision to which you wrote (so 1e-4 if you write 4 digits).
 - Don't leave a block of code that is very long to execute. If you can't make it fast, you can either not use the doctest syntax on it (so that it's ignored), or if you want to use the doctest syntax to show the results, you can add a comment `# doctest: +SKIP` at the end of the lines of code too long to execute
 - Each line of code that produces a result needs to have that result written below. You can ignore an output if you don't want to show it in your code example by adding a comment ` # doctest: +IGNORE_RESULT` at the end of the line of code producing it.

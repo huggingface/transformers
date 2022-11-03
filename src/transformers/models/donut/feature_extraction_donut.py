@@ -19,6 +19,8 @@ from typing import Optional, Tuple, Union
 import numpy as np
 from PIL import Image, ImageOps
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -46,10 +48,11 @@ class DonutFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         size (`Tuple(int)`, *optional*, defaults to [1920, 2560]):
             Resize the shorter edge of the input to the minimum value of the given size. Should be a tuple of (width,
             height). Only has an effect if `do_resize` is set to `True`.
-        resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
-            An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
-            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
-            if `do_resize` is set to `True`.
+        resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
+            An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
+            `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
+            `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
+            to `True`.
         do_thumbnail (`bool`, *optional*, defaults to `True`):
             Whether to thumbnail the input to the given `size`.
         do_align_long_axis (`bool`, *optional*, defaults to `False`):
@@ -71,7 +74,7 @@ class DonutFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         self,
         do_resize=True,
         size=[1920, 2560],
-        resample=Image.BILINEAR,
+        resample=PILImageResampling.BILINEAR,
         do_thumbnail=True,
         do_align_long_axis=False,
         do_pad=True,

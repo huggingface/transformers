@@ -40,6 +40,7 @@ from transformers import (
     AutoTokenizer,
     BertTokenizer,
     BertTokenizerFast,
+    GPT2TokenizerFast,
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
@@ -119,9 +120,12 @@ def merge_model_tokenizer_mappings(
             tokenizer = tokenizer_mapping[configuration][0]
             tokenizer_fast = tokenizer_mapping[configuration][1]
 
-            model_tokenizer_mapping.update({tokenizer: (configuration, model)})
+            if tokenizer is not None:
+                if configuration.__name__.startswith(tokenizer.__name__.replace("Tokenizer", "")):
+                    model_tokenizer_mapping.update({tokenizer: (configuration, model)})
             if tokenizer_fast is not None:
-                model_tokenizer_mapping.update({tokenizer_fast: (configuration, model)})
+                if configuration.__name__.startswith(tokenizer_fast.__name__.replace("TokenizerFast", "")):
+                    model_tokenizer_mapping.update({tokenizer_fast: (configuration, model)})
 
     return model_tokenizer_mapping
 
@@ -380,6 +384,33 @@ class TokenizerTesterMixin:
             reverse_text = reverse_text.lower()
 
         self.assertEqual(reverse_text, text)
+
+        special_tokens = tokenizer.all_special_tokens
+        special_tokens_string = tokenizer.convert_tokens_to_string(special_tokens)
+        for special_token in special_tokens:
+            self.assertIn(special_token, special_tokens_string)
+
+        if self.test_rust_tokenizer:
+            rust_tokenizer = self.get_rust_tokenizer()
+            special_tokens_string_rust = rust_tokenizer.convert_tokens_to_string(special_tokens)
+            self.assertEqual(special_tokens_string, special_tokens_string_rust)
+
+    def test_sentencepiece_tokenize_and_decode(self):
+        if not self.test_sentencepiece:
+            return
+
+        text = "This is text to test the tokenizer."
+        if self.test_rust_tokenizer:
+            tokenizer = self.get_tokenizer()
+            rust_tokenizer = self.get_rust_tokenizer()
+
+            slow_ids = tokenizer(text).input_ids
+            fast_ids = rust_tokenizer(text).input_ids
+            self.assertEqual(slow_ids, fast_ids)
+
+            slow_decoded = tokenizer.decode(slow_ids)
+            fast_decoded = rust_tokenizer.decode(slow_ids)
+            self.assertEqual(slow_decoded, fast_decoded)
 
     def test_subword_regularization_tokenizer(self) -> None:
         if not self.test_sentencepiece:
@@ -3884,9 +3915,27 @@ class TokenizerUtilTester(unittest.TestCase):
         # Download this model to make sure it's in the cache.
         _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
 
-        # Under the mock environment we get a 500 error when trying to reach the model.
+        # Under the mock environment we get a 500 error when trying to reach the tokenizer.
         with mock.patch("requests.request", return_value=response_mock) as mock_head:
             _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+            # This check we did call the fake head request
+            mock_head.assert_called()
+
+    @require_tokenizers
+    def test_cached_files_are_used_when_internet_is_down_missing_files(self):
+        # A mock response for an HTTP head request to emulate server down
+        response_mock = mock.Mock()
+        response_mock.status_code = 500
+        response_mock.headers = {}
+        response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.json.return_value = {}
+
+        # Download this model to make sure it's in the cache.
+        _ = GPT2TokenizerFast.from_pretrained("gpt2")
+
+        # Under the mock environment we get a 500 error when trying to reach the tokenizer.
+        with mock.patch("requests.request", return_value=response_mock) as mock_head:
+            _ = GPT2TokenizerFast.from_pretrained("gpt2")
             # This check we did call the fake head request
             mock_head.assert_called()
 
@@ -3900,6 +3949,22 @@ class TokenizerUtilTester(unittest.TestCase):
             _ = AlbertTokenizer.from_pretrained(tmp_file)
         finally:
             os.remove(tmp_file)
+
+        # Supporting this legacy load introduced a weird bug where the tokenizer would load local files if they are in
+        # the current folder and have the right name.
+        if os.path.isfile("tokenizer.json"):
+            # We skip the test if the user has a `tokenizer.json` in this folder to avoid deleting it.
+            return
+        try:
+            with open("tokenizer.json", "wb") as f:
+                http_get("https://huggingface.co/hf-internal-testing/tiny-random-bert/blob/main/tokenizer.json", f)
+            tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+            # The tiny random BERT has a vocab size of 1024, tiny gpt2 as a vocab size of 1000
+            self.assertEqual(tokenizer.vocab_size, 1000)
+            # Tokenizer should depend on the remote checkpoint, not the local tokenizer.json file.
+
+        finally:
+            os.remove("tokenizer.json")
 
     def test_legacy_load_from_url(self):
         # This test is for deprecated behavior and can be removed in v5

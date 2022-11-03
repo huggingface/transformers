@@ -898,7 +898,7 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
         return {
             "input_ids": inputs,
             "attention_mask": attention_mask,
-            "past": past,
+            "past_key_values": past,
             "use_cache": use_cache,
         }
 

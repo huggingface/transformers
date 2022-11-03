@@ -922,7 +922,7 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
         >>> from PIL import Image
         >>> import requests
 
-        >>> tf.random.set_seed(3)  # doctest: +IGNORE_RESULT
+        >>> tf.keras.utils.set_random_seed(3)  # doctest: +IGNORE_RESULT
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
@@ -937,7 +937,7 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = tf.math.argmax(logits, axis=-1)[0]
         >>> print("Predicted class:", model.config.id2label[int(predicted_class_idx)])
-        Predicted class: ptarmigan
+        Predicted class: little blue heron, Egretta caerulea
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

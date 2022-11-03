@@ -116,12 +116,12 @@ class RealmConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import RealmEmbedder, RealmConfig
+    >>> from transformers import RealmConfig, RealmEmbedder
 
     >>> # Initializing a REALM realm-cc-news-pretrained-* style configuration
     >>> configuration = RealmConfig()
 
-    >>> # Initializing a model from the google/realm-cc-news-pretrained-embedder style configuration
+    >>> # Initializing a model (with random weights) from the google/realm-cc-news-pretrained-embedder style configuration
     >>> model = RealmEmbedder(configuration)
 
     >>> # Accessing the model configuration

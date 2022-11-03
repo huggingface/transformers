@@ -69,11 +69,14 @@ class TFViTEmbeddings(tf.keras.layers.Layer):
 
         num_patches = self.patch_embeddings.num_patches
         self.cls_token = self.add_weight(
-            shape=(1, 1, self.config.hidden_size), initializer="zeros", trainable=True, name="cls_token"
+            shape=(1, 1, self.config.hidden_size),
+            initializer=get_initializer(self.config.initializer_range),
+            trainable=True,
+            name="cls_token",
         )
         self.position_embeddings = self.add_weight(
             shape=(1, num_patches + 1, self.config.hidden_size),
-            initializer="zeros",
+            initializer=get_initializer(self.config.initializer_range),
             trainable=True,
             name="position_embeddings",
         )

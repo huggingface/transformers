@@ -31,11 +31,13 @@ if is_torch_available():
     from transformers import (
         BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
         BloomForCausalLM,
+        BloomForQuestionAnswering,
         BloomForSequenceClassification,
         BloomForTokenClassification,
         BloomModel,
         BloomTokenizerFast,
     )
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10
 
 
 @require_torch
@@ -274,6 +276,14 @@ class BloomModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
+    def create_and_check_question_answering_model(self, config, input_ids, input_mask, *args):
+        model = BloomForQuestionAnswering(config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(input_ids, attention_mask=input_mask)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, *args, gradient_checkpointing=False
     ):
@@ -314,6 +324,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
             BloomForCausalLM,
             BloomForSequenceClassification,
             BloomForTokenClassification,
+            BloomForQuestionAnswering,
         )
         if is_torch_available()
         else ()
@@ -490,9 +501,14 @@ class BloomEmbeddingTest(unittest.TestCase):
         super().setUp()
         self.path_bigscience_model = "bigscience/bigscience-small-testing"
 
+    @unittest.skipIf(
+        not is_torch_available() or not is_torch_greater_or_equal_than_1_10,
+        "Test failed with torch < 1.10 (`LayerNormKernelImpl` not implemented for `BFloat16`)",
+    )
     @require_torch
     def test_embeddings(self):
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, torch_dtype="auto")  # load in fp32
+        # The config in this checkpoint has `bfloat16` as `torch_dtype` -> model in `bfloat16`
+        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, torch_dtype="auto")
         model.eval()
 
         EMBEDDINGS_DS_BEFORE_LN_BF_16_MEAN = {
@@ -771,8 +787,8 @@ class BloomEmbeddingTest(unittest.TestCase):
 
         output_gpu_1, output_gpu_2 = output.split(125440, dim=-1)
         if cuda_available:
-            self.assertEqual(output_gpu_1.mean().item(), MEAN_LOGITS_GPU_1)
-            self.assertEqual(output_gpu_2.mean().item(), MEAN_LOGITS_GPU_2)
+            self.assertAlmostEqual(output_gpu_1.mean().item(), MEAN_LOGITS_GPU_1, places=6)
+            self.assertAlmostEqual(output_gpu_2.mean().item(), MEAN_LOGITS_GPU_2, places=6)
         else:
             self.assertAlmostEqual(output_gpu_1.mean().item(), MEAN_LOGITS_GPU_1, places=6)  # 1e-06 precision!!
             self.assertAlmostEqual(output_gpu_2.mean().item(), MEAN_LOGITS_GPU_2, places=6)
