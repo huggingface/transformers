@@ -1693,6 +1693,7 @@ class JukeboxMusicTokenConditioner(nn.Module):
         hidden_states = self.layer_norm(hidden_states)
         return hidden_states
 
+
 class JukeboxRangeEmbedding(nn.Module):
     # Interpolating
     # Interpolate so that [pos_start, pos_end] <-> position tensor of length n_ctx
@@ -1814,7 +1815,9 @@ class JukeboxPrior(nn.Module):
     the primed sample or sample functions. If the model is not trained using these/ uses the forward differently then I
     guess it is fine but otherwise it looks strange.
     """
+
     config_class = JukeboxPriorConfig
+
     def __init__(
         self,
         config: JukeboxPriorConfig,
@@ -2022,7 +2025,6 @@ class JukeboxPrior(nn.Module):
 
         # Some of the input tokens might be shifted to take into account the voccabulary fusion
         for i in range(len(tokens)):
-            shape = dims[i]
             bins_shift = int(self.embed_dim_shift[i])
             tokens[i] = (tokens[i] - bins_shift).view(batch_size, -1)
             tokens[i] = torch.clamp(tokens[i], min=0)
@@ -2261,21 +2263,20 @@ class JukeboxPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
 
     def _init_weights(self, module):
-        std = self.config.init_std
         init_scale = self.config.init_scale
 
-        if isinstance(module, nn.Embedding): # embed_tokens
-            module.weight.data.normal_(mean=0.0, std= 0.02 * init_scale)
-        elif isinstance(module,nn.Parameter):
+        if isinstance(module, nn.Embedding):  # embed_tokens
+            module.weight.data.normal_(mean=0.0, std=0.02 * init_scale)
+        elif isinstance(module, nn.Parameter):
             module.pos_emb.data.normal_(mean=0.0, std=0.01 * init_scale)
-        elif isinstance(module,JukeboxPositionalEmbedding):
+        elif isinstance(module, JukeboxPositionalEmbedding):
             module.pos_emb.data.normal_(mean=0.0, std=0.01 * init_scale)
         elif isinstance(module, JukeboxRangeEmbedding):
             module.emb.weight.data.normal_(mean=0.0, std=0.01 * init_scale)
-        elif isinstance(module,nn.Linear) and "encoder.lm_head" in module.__class__.__name__:
+        elif isinstance(module, nn.Linear) and "encoder.lm_head" in module.__class__.__name__:
             module.weight.data.normal_(mean=0.0, std=0.02 * init_scale)
 
-        elif isinstance(module,JukeboxConv1D) and self.config.zero_out:
+        elif isinstance(module, JukeboxConv1D) and self.config.zero_out:
             module.weight.data.zero_()
 
         if isinstance(module, nn.LayerNorm):
@@ -2540,7 +2541,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         )
         for level in sample_levels:
             sampling_kwargs = dict(
-                temp=0.99 if level == len(self.priors) -1 else sampling_temperature,
+                temp=0.99 if level == len(self.priors) - 1 else sampling_temperature,
                 max_batch_size=lower_batch_size if level != sample_levels else max_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
@@ -2559,7 +2560,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             # Decode sample
             with torch.no_grad():
                 raw_audio = self.vqvae.decode(
-                    music_tokens[:level+1], start_level=level, bs_chunks=music_tokens[level].shape[0]
+                    music_tokens[: level + 1], start_level=level, bs_chunks=music_tokens[level].shape[0]
                 )
 
             if save_results:

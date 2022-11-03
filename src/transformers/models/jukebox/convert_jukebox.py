@@ -63,7 +63,7 @@ def replace_key(key):
     if "prime_prior" in key:
         key = key.replace("prime_prior", "encoder")
 
-    if ".emb." in key and not "total" in key and not "absolute" in key and not "relative" in key:
+    if ".emb." in key and "total" not in key and "absolute" not in key and "relative" not in key:
         key = key.replace(".emb.", ".")
 
     if key.endswith("k"):  # replace vqvae.X.k with vqvae.X.codebook
