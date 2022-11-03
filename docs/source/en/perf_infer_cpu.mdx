@@ -35,8 +35,8 @@ To enable JIT-mode in Trainer for evaluaion or prediction, users should add `jit
 
 for PyTorch >= 1.14.0. JIT-mode could benefit any models for prediction and evaluaion since dict input is supported in jit.trace
 
-for PyTorch < 1.14.0. JIT-mode could benefit models like "Question and Answer", whose forward parameter order matches the tuple input order in jit.trace.
-If we meet case like "text classification", whose forward parameter order does not match the tuple input order in jit.trace, jit.trace will fail and we are capturing this with the exception here to make it fallback and logging is used to notify users.
+for PyTorch < 1.14.0. JIT-mode could benefit models whose forward parameter order matches the tuple input order in jit.trace, like question-answering model
+In the case where the forward parameter order does not match the tuple input order in jit.trace, like text-classification models, jit.trace will fail and we are capturing this with the exception here to make it fallback. Logging is used to notify users.
 
 </Tip>
 
