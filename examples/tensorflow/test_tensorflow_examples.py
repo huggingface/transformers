@@ -38,6 +38,7 @@ SRC_DIRS = [
         "question-answering",
         "summarization",
         "translation",
+        "image-classification",
     ]
 ]
 sys.path.extend(SRC_DIRS)
@@ -45,6 +46,7 @@ sys.path.extend(SRC_DIRS)
 
 if SRC_DIRS is not None:
     import run_clm
+    import run_image_classification
     import run_mlm
     import run_ner
     import run_qa as run_squad
@@ -294,3 +296,27 @@ class ExamplesTests(TestCasePlus):
             run_translation.main()
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["bleu"], 30)
+
+    @slow
+    def test_run_image_classification(self):
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_image_classification.py
+            --model_name_or_path google/vit-base-patch16-224-in21k
+            --dataset_name beans
+            --output_dir {tmp_dir}
+            --do_train
+            --do_eval
+            --overwrite_output_dir
+            --learning_rate 2e-5
+            --per_device_train_batch_size 8
+            --per_device_eval_batch_size 8
+            --max_steps 10
+            --seed 1337
+            --ignore_mismatched_sizes True
+            """.split()
+
+        with patch.object(sys, "argv", testargs):
+            run_image_classification.main()
+            result = get_results(tmp_dir)
+            self.assertGreaterEqual(result["accuracy"], 0.7)

@@ -19,6 +19,7 @@ Here is the full list of checkpoints on the hub that can be fine-tuned by this s
 https://huggingface.co/models?filter=image-classification
 """
 
+import json
 import logging
 import os
 import sys
@@ -88,6 +89,13 @@ class DataTrainingArguments:
     validation_dir: Optional[str] = field(default=None, metadata={"help": "A folder containing the validation data."})
     train_val_split: Optional[float] = field(
         default=0.15, metadata={"help": "Percent to split off of train for validation."}
+    )
+    overwrite_cache: bool = field(
+        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+    )
+    preprocessing_num_workers: Optional[int] = field(
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_train_samples: Optional[int] = field(
         default=None,
@@ -324,8 +332,11 @@ def main():
 
     # Define our data preprocessing function. It takes an image file path as input and returns
     # Write a note describing the resizing behaviour.
-    image_size = feature_extractor.size
-    image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
+    if "shortest_edge" in feature_extractor.size:
+        # We instead set the target size as (shortest_edge, shortest_edge) to here to ensure all images are batchable.
+        image_size = (feature_extractor.size["shortest_edge"], feature_extractor.size["shortest_edge"])
+    else:
+        image_size = (feature_extractor.size["height"], feature_extractor.size["width"])
 
     def _train_transforms(image):
         img_size = image_size
@@ -366,7 +377,12 @@ def main():
         train_dataset = dataset["train"]
         if data_args.max_train_samples is not None:
             train_dataset = train_dataset.shuffle(seed=training_args.seed).select(range(data_args.max_train_samples))
-        train_dataset.set_transform(train_transforms)
+        train_dataset = train_dataset.map(
+            train_transforms,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
+            load_from_cache_file=not data_args.overwrite_cache,
+        )
 
     eval_dataset = None
     if training_args.do_eval:
@@ -376,7 +392,12 @@ def main():
         if data_args.max_eval_samples is not None:
             eval_dataset = eval_dataset.shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
         # Set the validation transforms
-        eval_dataset.set_transform(val_transforms)
+        eval_dataset = eval_dataset.map(
+            val_transforms,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
+            load_from_cache_file=not data_args.overwrite_cache,
+        )
 
     predict_dataset = None
     if training_args.do_predict:
@@ -388,7 +409,12 @@ def main():
                 range(data_args.max_predict_samples)
             )
         # Set the test transforms
-        predict_dataset.set_transform(val_transforms)
+        predict_dataset = predict_dataset.map(
+            val_transforms,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
+            load_from_cache_file=not data_args.overwrite_cache,
+        )
 
     collate_fn = DefaultDataCollator(return_tensors="tf")
 
@@ -400,7 +426,9 @@ def main():
     def compute_metrics(p):
         """Computes accuracy on a batch of predictions"""
         logits, label_ids = p
-        return metric.compute(predictions=np.argmax(logits, axis=1), references=label_ids)
+        predictions = np.argmax(logits, axis=-1)
+        metrics = metric.compute(predictions=predictions, references=label_ids)
+        return metrics
 
     with training_args.strategy.scope():
         if checkpoint is None:
@@ -513,12 +541,22 @@ def main():
             )
 
         if training_args.do_eval:
-            model.evaluate(eval_dataset, steps=len(eval_dataset))
+            eval_predictions = model.predict(eval_dataset, steps=len(eval_dataset))
+            eval_metrics = compute_metrics((eval_predictions.logits, dataset["validation"]["labels"]))
+            logging.info("Eval metrics:")
+            for metric, value in eval_metrics.items():
+                logging.info(f"{metric}: {value:.3f}")
+
+        if training_args.output_dir is not None:
+            with open(os.path.join(training_args.output_dir, "all_results.json"), "w") as f:
+                f.write(json.dumps(eval_metrics))
 
         if training_args.do_predict:
-            predictions = model.predict(predict_dataset, steps=len(predict_dataset))
-            test_metrics = compute_metrics(predictions, labels=predict_dataset.map(lambda x, y: y))
-            logging.info(f"Test metrics: {test_metrics}")
+            test_predictions = model.predict(predict_dataset, steps=len(predict_dataset))
+            test_metrics = compute_metrics((test_predictions.logits, dataset["validation"]["labels"]))
+            logging.info("Test metrics:")
+            for metric, value in test_metrics.items():
+                logging.info(f"{metric}: {value:.3f}")
 
         if training_args.output_dir is not None and not training_args.push_to_hub:
             # If we're not pushing to hub, at least save a local copy when we're done
