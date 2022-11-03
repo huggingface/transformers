@@ -1521,8 +1521,16 @@ class ModelTesterMixin:
             # # Check that the embedding layer and decoding layer are the same in size and in value
             # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
+
+    def test_tied_model_weights_key_ignore(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model_tied = model_class(config)
             with tempfile.TemporaryDirectory() as d:
                 model_tied.save_pretrained(d)
+
+                # We are nuking ALL weights on file, so every parameter should
+                # yell on load. We're going to detect if we yell too much, or too little.
                 with open(os.path.join(d, "pytorch_model.bin"), "wb") as f:
                     torch.save({}, f)
                 model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
