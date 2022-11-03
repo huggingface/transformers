@@ -28,7 +28,11 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_roberta_prelayernorm": ["ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaPreLayerNormConfig", "RobertaPreLayerNormOnnxConfig"],
+    "configuration_roberta_prelayernorm": [
+        "ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "RobertaPreLayerNormConfig",
+        "RobertaPreLayerNormOnnxConfig",
+    ],
 }
 
 try:
@@ -87,7 +91,11 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_roberta_prelayernorm import ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaPreLayerNormConfig, RobertaPreLayerNormOnnxConfig
+    from .configuration_roberta_prelayernorm import (
+        ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        RobertaPreLayerNormConfig,
+        RobertaPreLayerNormOnnxConfig,
+    )
 
     try:
         if not is_torch_available():

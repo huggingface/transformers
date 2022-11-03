@@ -992,7 +992,11 @@ class FlaxRobertaPreLayerNormModel(FlaxRobertaPreLayerNormPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxRobertaPreLayerNormModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
+    FlaxRobertaPreLayerNormModel,
+    _TOKENIZER_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
+    FlaxBaseModelOutputWithPooling,
+    _CONFIG_FOR_DOC,
 )
 
 
@@ -1038,7 +1042,9 @@ class FlaxRobertaPreLayerNormForMaskedLMModule(nn.Module):
 
         hidden_states = outputs[0]
         if self.config.tie_word_embeddings:
-            shared_embedding = self.roberta_prelayernorm.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
+            shared_embedding = self.roberta_prelayernorm.variables["params"]["embeddings"]["word_embeddings"][
+                "embedding"
+            ]
         else:
             shared_embedding = None
 
@@ -1055,7 +1061,9 @@ class FlaxRobertaPreLayerNormForMaskedLMModule(nn.Module):
         )
 
 
-@add_start_docstrings("""RoBERTa-PreLayerNorm Model with a `language modeling` head on top.""", ROBERTA_PRELAYERNORM_START_DOCSTRING)
+@add_start_docstrings(
+    """RoBERTa-PreLayerNorm Model with a `language modeling` head on top.""", ROBERTA_PRELAYERNORM_START_DOCSTRING
+)
 # Copied from transformers.models.roberta.modeling_flax_roberta.FlaxRobertaForMaskedLM with Roberta->RobertaPreLayerNorm
 class FlaxRobertaPreLayerNormForMaskedLM(FlaxRobertaPreLayerNormPreTrainedModel):
     module_class = FlaxRobertaPreLayerNormForMaskedLMModule
@@ -1126,8 +1134,8 @@ class FlaxRobertaPreLayerNormForSequenceClassificationModule(nn.Module):
 
 @add_start_docstrings(
     """
-    RobertaPreLayerNorm Model transformer with a sequence classification/regression head on top (a linear layer on top of the
-    pooled output) e.g. for GLUE tasks.
+    RobertaPreLayerNorm Model transformer with a sequence classification/regression head on top (a linear layer on top
+    of the pooled output) e.g. for GLUE tasks.
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
@@ -1209,8 +1217,8 @@ class FlaxRobertaPreLayerNormForMultipleChoiceModule(nn.Module):
 
 @add_start_docstrings(
     """
-    RobertaPreLayerNorm Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
-    softmax) e.g. for RocStories/SWAG tasks.
+    RobertaPreLayerNorm Model with a multiple choice classification head on top (a linear layer on top of the pooled
+    output and a softmax) e.g. for RocStories/SWAG tasks.
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
@@ -1220,7 +1228,8 @@ class FlaxRobertaPreLayerNormForMultipleChoice(FlaxRobertaPreLayerNormPreTrained
 
 
 overwrite_call_docstring(
-    FlaxRobertaPreLayerNormForMultipleChoice, ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    FlaxRobertaPreLayerNormForMultipleChoice,
+    ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"),
 )
 append_call_sample_docstring(
     FlaxRobertaPreLayerNormForMultipleChoice,
@@ -1293,8 +1302,8 @@ class FlaxRobertaPreLayerNormForTokenClassificationModule(nn.Module):
 
 @add_start_docstrings(
     """
-    RobertaPreLayerNorm Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-    Named-Entity-Recognition (NER) tasks.
+    RobertaPreLayerNorm Model with a token classification head on top (a linear layer on top of the hidden-states
+    output) e.g. for Named-Entity-Recognition (NER) tasks.
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
@@ -1372,8 +1381,8 @@ class FlaxRobertaPreLayerNormForQuestionAnsweringModule(nn.Module):
 
 @add_start_docstrings(
     """
-    RobertaPreLayerNorm Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    RobertaPreLayerNorm Model with a span classification head on top for extractive question-answering tasks like SQuAD
+    (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
@@ -1439,7 +1448,9 @@ class FlaxRobertaPreLayerNormForCausalLMModule(nn.Module):
 
         hidden_states = outputs[0]
         if self.config.tie_word_embeddings:
-            shared_embedding = self.roberta_prelayernorm.variables["params"]["embeddings"]["word_embeddings"]["embedding"]
+            shared_embedding = self.roberta_prelayernorm.variables["params"]["embeddings"]["word_embeddings"][
+                "embedding"
+            ]
         else:
             shared_embedding = None
 
@@ -1459,8 +1470,8 @@ class FlaxRobertaPreLayerNormForCausalLMModule(nn.Module):
 
 @add_start_docstrings(
     """
-    RobertaPreLayerNorm Model with a language modeling head on top (a linear layer on top of the hidden-states output) e.g for
-    autoregressive tasks.
+    RobertaPreLayerNorm Model with a language modeling head on top (a linear layer on top of the hidden-states output)
+    e.g for autoregressive tasks.
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )

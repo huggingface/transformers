@@ -58,7 +58,6 @@ ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->RobertaPreLayerNorm
 class RobertaPreLayerNormEmbeddings(nn.Module):
     """
@@ -867,7 +866,8 @@ class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
 
 
 @add_start_docstrings(
-    """RoBERTa-PreLayerNorm Model with a `language modeling` head on top for CLM fine-tuning.""", ROBERTA_PRELAYERNORM_START_DOCSTRING
+    """RoBERTa-PreLayerNorm Model with a `language modeling` head on top for CLM fine-tuning.""",
+    ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm,roberta-base->princeton-nlp/efficient_mlm_m0.40
 class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel):
@@ -879,7 +879,9 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `RobertaPreLayerNormLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning(
+                "If you want to use `RobertaPreLayerNormLMHeadModel` as a standalone, add `is_decoder=True.`"
+            )
 
         self.roberta_prelayernorm = RobertaPreLayerNormModel(config, add_pooling_layer=False)
         self.lm_head = RobertaPreLayerNormLMHead(config)
@@ -1021,7 +1023,9 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel):
         return reordered_past
 
 
-@add_start_docstrings("""RoBERTa-PreLayerNorm Model with a `language modeling` head on top.""", ROBERTA_PRELAYERNORM_START_DOCSTRING)
+@add_start_docstrings(
+    """RoBERTa-PreLayerNorm Model with a `language modeling` head on top.""", ROBERTA_PRELAYERNORM_START_DOCSTRING
+)
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
 class RobertaPreLayerNormForMaskedLM(RobertaPreLayerNormPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
@@ -1154,8 +1158,8 @@ class RobertaPreLayerNormLMHead(nn.Module):
 
 @add_start_docstrings(
     """
-    RoBERTa-PreLayerNorm Model transformer with a sequence classification/regression head on top (a linear layer on top of the
-    pooled output) e.g. for GLUE tasks.
+    RoBERTa-PreLayerNorm Model transformer with a sequence classification/regression head on top (a linear layer on top
+    of the pooled output) e.g. for GLUE tasks.
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
@@ -1255,8 +1259,8 @@ class RobertaPreLayerNormForSequenceClassification(RobertaPreLayerNormPreTrained
 
 @add_start_docstrings(
     """
-    RobertaPreLayerNorm Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
-    softmax) e.g. for RocStories/SWAG tasks.
+    RobertaPreLayerNorm Model with a multiple choice classification head on top (a linear layer on top of the pooled
+    output and a softmax) e.g. for RocStories/SWAG tasks.
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
@@ -1274,7 +1278,9 @@ class RobertaPreLayerNormForMultipleChoice(RobertaPreLayerNormPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1349,8 +1355,8 @@ class RobertaPreLayerNormForMultipleChoice(RobertaPreLayerNormPreTrainedModel):
 
 @add_start_docstrings(
     """
-    RobertaPreLayerNorm Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-    Named-Entity-Recognition (NER) tasks.
+    RobertaPreLayerNorm Model with a token classification head on top (a linear layer on top of the hidden-states
+    output) e.g. for Named-Entity-Recognition (NER) tasks.
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
@@ -1460,8 +1466,8 @@ class RobertaPreLayerNormClassificationHead(nn.Module):
 
 @add_start_docstrings(
     """
-    RobertaPreLayerNorm Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    RobertaPreLayerNorm Model with a span classification head on top for extractive question-answering tasks like SQuAD
+    (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )

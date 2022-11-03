@@ -24,7 +24,11 @@ from fairseq.models.roberta_prelayernorm import RobertaPreLayerNormModel as Fair
 from fairseq.modules import TransformerSentenceEncoderLayer
 from packaging import version
 
-from transformers import RobertaPreLayerNormConfig, RobertaPreLayerNormForMaskedLM, RobertaPreLayerNormForSequenceClassification
+from transformers import (
+    RobertaPreLayerNormConfig,
+    RobertaPreLayerNormForMaskedLM,
+    RobertaPreLayerNormForSequenceClassification,
+)
 from transformers.models.bert.modeling_bert import (
     BertIntermediate,
     BertLayer,
@@ -68,13 +72,21 @@ def convert_roberta_prelayernorm_checkpoint_to_pytorch(
         config.num_labels = roberta_prelayernorm.model.classification_heads["mnli"].out_proj.weight.shape[0]
     print("Our BERT config:", config)
 
-    model = RobertaPreLayerNormForSequenceClassification(config) if classification_head else RobertaPreLayerNormForMaskedLM(config)
+    model = (
+        RobertaPreLayerNormForSequenceClassification(config)
+        if classification_head
+        else RobertaPreLayerNormForMaskedLM(config)
+    )
     model.eval()
 
     # Now let's copy all the weights.
     # Embeddings
-    model.roberta_prelayernorm.embeddings.word_embeddings.weight = roberta_prelayernorm_sent_encoder.embed_tokens.weight
-    model.roberta_prelayernorm.embeddings.position_embeddings.weight = roberta_prelayernorm_sent_encoder.embed_positions.weight
+    model.roberta_prelayernorm.embeddings.word_embeddings.weight = (
+        roberta_prelayernorm_sent_encoder.embed_tokens.weight
+    )
+    model.roberta_prelayernorm.embeddings.position_embeddings.weight = (
+        roberta_prelayernorm_sent_encoder.embed_positions.weight
+    )
     model.roberta_prelayernorm.embeddings.token_type_embeddings.weight.data = torch.zeros_like(
         model.roberta_prelayernorm.embeddings.token_type_embeddings.weight
     )  # just zero them out b/c RoBERTa-PreLayerNorm doesn't use them.
@@ -144,7 +156,9 @@ def convert_roberta_prelayernorm_checkpoint_to_pytorch(
 
     our_output = model(input_ids)[0]
     if classification_head:
-        their_output = roberta_prelayernorm.model.classification_heads["mnli"](roberta_prelayernorm.extract_features(input_ids))
+        their_output = roberta_prelayernorm.model.classification_heads["mnli"](
+            roberta_prelayernorm.extract_features(input_ids)
+        )
     else:
         their_output = roberta_prelayernorm.model(input_ids)[0]
     print(our_output.shape, their_output.shape)
@@ -164,7 +178,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--roberta_prelayernorm_checkpoint_path", default=None, type=str, required=True, help="Path the official PyTorch dump."
+        "--roberta_prelayernorm_checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path the official PyTorch dump.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."

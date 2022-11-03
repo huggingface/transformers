@@ -70,7 +70,6 @@ TF_ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaEmbeddings with Roberta->RobertaPreLayerNorm
 class TFRobertaPreLayerNormEmbeddings(tf.keras.layers.Layer):
     """
@@ -1059,7 +1058,9 @@ class TFRobertaPreLayerNormLMHead(tf.keras.layers.Layer):
         return hidden_states
 
 
-@add_start_docstrings("""RoBERTa-PreLayerNorm Model with a `language modeling` head on top.""", ROBERTA_PRELAYERNORM_START_DOCSTRING)
+@add_start_docstrings(
+    """RoBERTa-PreLayerNorm Model with a `language modeling` head on top.""", ROBERTA_PRELAYERNORM_START_DOCSTRING
+)
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForMaskedLM with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
 class TFRobertaPreLayerNormForMaskedLM(TFRobertaPreLayerNormPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
@@ -1068,7 +1069,9 @@ class TFRobertaPreLayerNormForMaskedLM(TFRobertaPreLayerNormPreTrainedModel, TFM
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.roberta_prelayernorm = TFRobertaPreLayerNormMainLayer(config, add_pooling_layer=False, name="roberta_prelayernorm")
+        self.roberta_prelayernorm = TFRobertaPreLayerNormMainLayer(
+            config, add_pooling_layer=False, name="roberta_prelayernorm"
+        )
         self.lm_head = TFRobertaPreLayerNormLMHead(config, self.roberta_prelayernorm.embeddings, name="lm_head")
 
     def get_lm_head(self):
@@ -1154,10 +1157,16 @@ class TFRobertaPreLayerNormForCausalLM(TFRobertaPreLayerNormPreTrainedModel, TFC
         super().__init__(config, *inputs, **kwargs)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `TFRobertaPreLayerNormLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning(
+                "If you want to use `TFRobertaPreLayerNormLMHeadModel` as a standalone, add `is_decoder=True.`"
+            )
 
-        self.roberta_prelayernorm = TFRobertaPreLayerNormMainLayer(config, add_pooling_layer=False, name="roberta_prelayernorm")
-        self.lm_head = TFRobertaPreLayerNormLMHead(config, input_embeddings=self.roberta_prelayernorm.embeddings, name="lm_head")
+        self.roberta_prelayernorm = TFRobertaPreLayerNormMainLayer(
+            config, add_pooling_layer=False, name="roberta_prelayernorm"
+        )
+        self.lm_head = TFRobertaPreLayerNormLMHead(
+            config, input_embeddings=self.roberta_prelayernorm.embeddings, name="lm_head"
+        )
 
     def get_lm_head(self):
         return self.lm_head
@@ -1319,13 +1328,15 @@ class TFRobertaPreLayerNormClassificationHead(tf.keras.layers.Layer):
 
 @add_start_docstrings(
     """
-    RoBERTa-PreLayerNorm Model transformer with a sequence classification/regression head on top (a linear layer on top of the
-    pooled output) e.g. for GLUE tasks.
+    RoBERTa-PreLayerNorm Model transformer with a sequence classification/regression head on top (a linear layer on top
+    of the pooled output) e.g. for GLUE tasks.
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForSequenceClassification with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm,roberta-base->princeton-nlp/efficient_mlm_m0.40
-class TFRobertaPreLayerNormForSequenceClassification(TFRobertaPreLayerNormPreTrainedModel, TFSequenceClassificationLoss):
+class TFRobertaPreLayerNormForSequenceClassification(
+    TFRobertaPreLayerNormPreTrainedModel, TFSequenceClassificationLoss
+):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
 
@@ -1333,7 +1344,9 @@ class TFRobertaPreLayerNormForSequenceClassification(TFRobertaPreLayerNormPreTra
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.roberta_prelayernorm = TFRobertaPreLayerNormMainLayer(config, add_pooling_layer=False, name="roberta_prelayernorm")
+        self.roberta_prelayernorm = TFRobertaPreLayerNormMainLayer(
+            config, add_pooling_layer=False, name="roberta_prelayernorm"
+        )
         self.classifier = TFRobertaPreLayerNormClassificationHead(config, name="classifier")
 
     @unpack_inputs
@@ -1403,8 +1416,8 @@ class TFRobertaPreLayerNormForSequenceClassification(TFRobertaPreLayerNormPreTra
 
 @add_start_docstrings(
     """
-    RobertaPreLayerNorm Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
-    softmax) e.g. for RocStories/SWAG tasks.
+    RobertaPreLayerNorm Model with a multiple choice classification head on top (a linear layer on top of the pooled
+    output and a softmax) e.g. for RocStories/SWAG tasks.
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
@@ -1434,7 +1447,9 @@ class TFRobertaPreLayerNormForMultipleChoice(TFRobertaPreLayerNormPreTrainedMode
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1524,8 +1539,8 @@ class TFRobertaPreLayerNormForMultipleChoice(TFRobertaPreLayerNormPreTrainedMode
 
 @add_start_docstrings(
     """
-    RoBERTa-PreLayerNorm Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-    Named-Entity-Recognition (NER) tasks.
+    RoBERTa-PreLayerNorm Model with a token classification head on top (a linear layer on top of the hidden-states
+    output) e.g. for Named-Entity-Recognition (NER) tasks.
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
@@ -1539,7 +1554,9 @@ class TFRobertaPreLayerNormForTokenClassification(TFRobertaPreLayerNormPreTraine
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.roberta_prelayernorm = TFRobertaPreLayerNormMainLayer(config, add_pooling_layer=False, name="roberta_prelayernorm")
+        self.roberta_prelayernorm = TFRobertaPreLayerNormMainLayer(
+            config, add_pooling_layer=False, name="roberta_prelayernorm"
+        )
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1615,8 +1632,8 @@ class TFRobertaPreLayerNormForTokenClassification(TFRobertaPreLayerNormPreTraine
 
 @add_start_docstrings(
     """
-    RoBERTa-PreLayerNorm Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    RoBERTa-PreLayerNorm Model with a span classification head on top for extractive question-answering tasks like
+    SQuAD (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
@@ -1629,7 +1646,9 @@ class TFRobertaPreLayerNormForQuestionAnswering(TFRobertaPreLayerNormPreTrainedM
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.roberta_prelayernorm = TFRobertaPreLayerNormMainLayer(config, add_pooling_layer=False, name="roberta_prelayernorm")
+        self.roberta_prelayernorm = TFRobertaPreLayerNormMainLayer(
+            config, add_pooling_layer=False, name="roberta_prelayernorm"
+        )
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
