@@ -46,10 +46,47 @@ MAPPING_TEXT_ENCODER_PRENET = {
     "text_encoder_prenet.encoder_prenet.1.alpha": "speecht5.encoder.prenet.encode_positions.alpha",
 }
 MAPPING_SPEECH_DECODER_PRENET = {
-    # "speech_decoder_prenet.*",
+    "speech_decoder_prenet.decoder_prenet.0.0.prenet.0.0": "speecht5.decoder.prenet.layer1",
+    "speech_decoder_prenet.decoder_prenet.0.0.prenet.1.0": "speecht5.decoder.prenet.layer2",
+    "speech_decoder_prenet.decoder_prenet.0.1": "speecht5.decoder.prenet.layer3",
+    "speech_decoder_prenet.decoder_prenet.1.alpha": "speecht5.decoder.prenet.encode_positions.alpha",
+    "speech_decoder_prenet.spkembs_layer.0": "speecht5.decoder.prenet.speaker_embeds_layer",
 }
 MAPPING_SPEECH_DECODER_POSTNET = {
-    # "speech_decoder_postnet.*",
+    # "speech_decoder_postnet.feat_out.weight"
+    # "speech_decoder_postnet.feat_out.bias"
+    # "speech_decoder_postnet.prob_out.weight"
+    # "speech_decoder_postnet.prob_out.bias"
+    # "speech_decoder_postnet.postnet.postnet.0.0.weight"
+    # "speech_decoder_postnet.postnet.postnet.0.1.weight"
+    # "speech_decoder_postnet.postnet.postnet.0.1.bias"
+    # "speech_decoder_postnet.postnet.postnet.0.1.running_mean"
+    # "speech_decoder_postnet.postnet.postnet.0.1.running_var"
+    # "speech_decoder_postnet.postnet.postnet.0.1.num_batches_tracked"
+    # "speech_decoder_postnet.postnet.postnet.1.0.weight"
+    # "speech_decoder_postnet.postnet.postnet.1.1.weight"
+    # "speech_decoder_postnet.postnet.postnet.1.1.bias"
+    # "speech_decoder_postnet.postnet.postnet.1.1.running_mean"
+    # "speech_decoder_postnet.postnet.postnet.1.1.running_var"
+    # "speech_decoder_postnet.postnet.postnet.1.1.num_batches_tracked"
+    # "speech_decoder_postnet.postnet.postnet.2.0.weight"
+    # "speech_decoder_postnet.postnet.postnet.2.1.weight"
+    # "speech_decoder_postnet.postnet.postnet.2.1.bias"
+    # "speech_decoder_postnet.postnet.postnet.2.1.running_mean"
+    # "speech_decoder_postnet.postnet.postnet.2.1.running_var"
+    # "speech_decoder_postnet.postnet.postnet.2.1.num_batches_tracked"
+    # "speech_decoder_postnet.postnet.postnet.3.0.weight"
+    # "speech_decoder_postnet.postnet.postnet.3.1.weight"
+    # "speech_decoder_postnet.postnet.postnet.3.1.bias"
+    # "speech_decoder_postnet.postnet.postnet.3.1.running_mean"
+    # "speech_decoder_postnet.postnet.postnet.3.1.running_var"
+    # "speech_decoder_postnet.postnet.postnet.3.1.num_batches_tracked"
+    # "speech_decoder_postnet.postnet.postnet.4.0.weight"
+    # "speech_decoder_postnet.postnet.postnet.4.1.weight"
+    # "speech_decoder_postnet.postnet.postnet.4.1.bias"
+    # "speech_decoder_postnet.postnet.postnet.4.1.running_mean"
+    # "speech_decoder_postnet.postnet.postnet.4.1.running_var"
+    # "speech_decoder_postnet.postnet.postnet.4.1.num_batches_tracked"
 }
 MAPPING_TEXT_DECODER_PRENET = {
     "text_decoder_prenet.embed_tokens": "speecht5.decoder.prenet.embed_tokens",
@@ -354,6 +391,7 @@ def convert_speecht5_checkpoint(
     elif task == "ctc":
         model = SpeechT5ForCTC(config)
     elif task == "t2s":
+        config.max_speech_positions = 1876
         config.max_text_positions = 600
         model = SpeechT5ForTTS(config)
     elif task == "pretrain":

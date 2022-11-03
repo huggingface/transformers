@@ -674,14 +674,52 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
         super().__init__()
         self.config = config
 
-        # TODO: implement this class
+        # In the original implementation the number of layers is configurable.
+        self.layer1 = nn.Linear(config.num_mel_bins, config.speech_decoder_prenet_units)
+        self.layer2 = nn.Linear(config.speech_decoder_prenet_units, config.speech_decoder_prenet_units)
+        self.layer3 = nn.Linear(config.speech_decoder_prenet_units, config.hidden_size)
+
+        self.encode_positions = SpeechT5ScaledPositionalEncoding(
+            config.positional_dropout,
+            config.hidden_size,
+            config.max_speech_positions,
+        )
+
+        self.speaker_embeds_layer = nn.Linear(
+            config.speaker_embedding_dim + config.hidden_size, config.hidden_size
+        )
 
     def forward(
         self,
         input_values: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        speaker_embeddings: Optional[torch.Tensor] = None,
     ):
-        return input_values
+        # Dropout is always applied, even when evaluating. https://arxiv.org/abs/1712.05884
+
+        #TODO: remove training=False -- only used for testing!
+
+        inputs_embeds = nn.functional.relu(self.layer1(input_values))
+        inputs_embeds = nn.functional.dropout(inputs_embeds, self.config.speech_decoder_prenet_dropout, training=False)
+        inputs_embeds = nn.functional.relu(self.layer2(inputs_embeds))
+        inputs_embeds = nn.functional.dropout(inputs_embeds, self.config.speech_decoder_prenet_dropout, training=False)
+
+        inputs_embeds = self.layer3(inputs_embeds)
+        inputs_embeds = self.encode_positions(inputs_embeds)
+
+        if speaker_embeddings is not None:
+            speaker_embeddings = nn.functional.normalize(speaker_embeddings)
+            speaker_embeddings = speaker_embeddings.unsqueeze(1)
+            speaker_embeddings = speaker_embeddings.expand(-1, inputs_embeds.size(1), -1)
+            inputs_embeds = torch.cat([inputs_embeds, speaker_embeddings], dim=-1)
+            inputs_embeds = nn.functional.relu(self.speaker_embeds_layer(inputs_embeds))
+
+        #TODO: need to do anything with this?
+        # if tgt_lengths_in is not None:
+        #     tgt_frames_mask = ~(self._source_mask(tgt_lengths_in).squeeze(1))
+        # else:
+        #     tgt_frames_mask = None
+
+        return inputs_embeds
 
 
 class SpeechT5SpeechDecoderPostnet(nn.Module):
@@ -1693,6 +1731,7 @@ class SpeechT5DecoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
+        speaker_embeddings: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -1702,12 +1741,10 @@ class SpeechT5DecoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
 
-        # TODO: implement this
-        # decoder_hidden_states = self.prenet(input_values, past_key_values)
-        decoder_hidden_states = input_values
+        decoder_hidden_states = self.prenet(input_values, speaker_embeddings)
 
         outputs = self.wrapped_decoder(
-            hidden_states=decoder_hidden_states,
+            hidden_states=decoder_hidden_states[:, -1:],  # TODO: ???
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,

@@ -138,6 +138,15 @@ class SpeechT5Config(PretrainedConfig):
             The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
             step, irrespectively of `mask_feature_prob`. Only relevant if
             ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
+        num_mel_bins (`int`, *optional*, defaults to 80):
+            Number of mel features used per input features. Used by the speech decoder pre-net.
+            Should correspond to the value used in the `SpeechT5Processor` class.
+        speech_decoder_prenet_units (`int`, *optional*, defaults to 256):
+            Dimensionality of the layers in the speech decoder pre-net.
+        speech_decoder_prenet_dropout (`float`, *optional*, defaults to 0.5):
+            The dropout probability for the speech decoder pre-net layers.
+        speaker_embedding_dim (`int`, *optional*, defaults to 512):
+            Dimensionality of the *XVector* embedding vectors.
         max_speech_positions (`int`, *optional*, defaults to 4000):
             The maximum sequence length of speech features that this model might ever be used with.
         max_text_positions (`int`, *optional*, defaults to 450):
@@ -213,6 +222,10 @@ class SpeechT5Config(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         decoder_start_token_id=2,
+        num_mel_bins=80,
+        speech_decoder_prenet_units=256,
+        speech_decoder_prenet_dropout=0.5,
+        speaker_embedding_dim=512,
         max_speech_positions=4000,
         max_text_positions=450,
         encoder_max_relative_position=160,
@@ -283,6 +296,11 @@ class SpeechT5Config(PretrainedConfig):
         self.mask_feature_prob = mask_feature_prob
         self.mask_feature_length = mask_feature_length
         self.mask_feature_min_masks = mask_feature_min_masks
+
+        self.num_mel_bins = num_mel_bins
+        self.speech_decoder_prenet_units = speech_decoder_prenet_units
+        self.speech_decoder_prenet_dropout = speech_decoder_prenet_dropout
+        self.speaker_embedding_dim = speaker_embedding_dim
 
         # ctc loss
         self.ctc_loss_reduction = ctc_loss_reduction
