@@ -21,14 +21,21 @@ from packaging import version
 
 import requests
 
-from .utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
+from .utils import (
+    ExplicitEnum,
+    is_jax_tensor,
+    is_tf_tensor,
+    is_torch_available,
+    is_torch_tensor,
+    is_vision_available,
+    to_numpy,
+)
 from .utils.constants import (  # noqa: F401
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
 )
-from .utils.generic import ExplicitEnum, _is_jax, _is_tensorflow, _is_torch, to_numpy
 
 
 if is_vision_available():
@@ -55,18 +62,6 @@ class ChannelDimension(ExplicitEnum):
     LAST = "channels_last"
 
 
-def is_torch_tensor(obj):
-    return _is_torch(obj) if is_torch_available() else False
-
-
-def is_tf_tensor(obj):
-    return _is_tensorflow(obj) if is_tf_available() else False
-
-
-def is_jax_tensor(obj):
-    return _is_jax(obj) if is_flax_available() else False
-
-
 def is_valid_image(img):
     return (
         isinstance(img, (PIL.Image.Image, np.ndarray))
@@ -77,7 +72,15 @@ def is_valid_image(img):
 
 
 def valid_images(imgs):
-    return all(is_valid_image(img) for img in imgs)
+    # If we have an list of images, make sure every image is valid
+    if isinstance(imgs, (list, tuple)):
+        for img in imgs:
+            if not valid_images(img):
+                return False
+    # If not a list of tuple, we have been given a single image or batched tensor of images
+    elif not is_valid_image(imgs):
+        return False
+    return True
 
 
 def is_batched(img):

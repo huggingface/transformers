@@ -357,6 +357,15 @@ class CommonPipelineTest(unittest.TestCase):
         self.assertEqual(pipe._num_workers, 1)
 
     @require_torch
+    def test_pipeline_pathlike(self):
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
+        with tempfile.TemporaryDirectory() as d:
+            pipe.save_pretrained(d)
+            path = Path(d)
+            newpipe = pipeline(task="text-classification", model=path)
+        self.assertIsInstance(newpipe, TextClassificationPipeline)
+
+    @require_torch
     def test_pipeline_override(self):
         class MyPipeline(TextClassificationPipeline):
             pass

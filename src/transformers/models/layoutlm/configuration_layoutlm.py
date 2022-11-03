@@ -81,12 +81,12 @@ class LayoutLMConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import LayoutLMModel, LayoutLMConfig
+    >>> from transformers import LayoutLMConfig, LayoutLMModel
 
     >>> # Initializing a LayoutLM configuration
     >>> configuration = LayoutLMConfig()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = LayoutLMModel(configuration)
 
     >>> # Accessing the model configuration
