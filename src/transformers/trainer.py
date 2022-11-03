@@ -1251,20 +1251,34 @@ class Trainer:
             if dataloader is None:
                 logger.warning("failed to use PyTorch jit mode due to current dataloader is none.")
                 return model
-            jit_inputs = []
             example_batch = next(iter(dataloader))
-            for key in example_batch:
-                example_tensor = torch.ones_like(example_batch[key])
-                jit_inputs.append(example_tensor)
-            jit_inputs = tuple(jit_inputs)
+            example_batch = self._prepare_inputs(example_batch)
             try:
                 jit_model = model.eval()
-                with ContextManagers([self.autocast_smart_context_manager(), torch.no_grad()]):
-                    jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
+                with ContextManagers([self.autocast_smart_context_manager(cache_enabled=False), torch.no_grad()]):
+                    if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.14.0"):
+                        if isinstance(example_batch, dict):
+                            jit_model = torch.jit.trace(jit_model, example_kwarg_inputs=example_batch, strict=False)
+                        else:
+                            jit_model = torch.jit.trace(
+                                jit_model,
+                                example_kwarg_inputs={key: example_batch[key] for key in example_batch},
+                                strict=False,
+                            )
+                    else:
+                        jit_inputs = []
+                        for key in example_batch:
+                            example_tensor = torch.ones_like(example_batch[key])
+                            jit_inputs.append(example_tensor)
+                        jit_inputs = tuple(jit_inputs)
+                        jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
                 jit_model = torch.jit.freeze(jit_model)
                 jit_model(**example_batch)
+                jit_model(**example_batch)
                 model = jit_model
-            except (RuntimeError, TypeError) as e:
+                self.use_cpu_amp = False
+                self.use_cuda_amp = False
+            except (RuntimeError, TypeError, ValueError, NameError, IndexError) as e:
                 logger.warning(f"failed to use PyTorch jit mode due to: {e}.")
 
         return model
@@ -1296,9 +1310,6 @@ class Trainer:
             dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
             model = self.ipex_optimize_model(model, training, dtype=dtype)
 
-        if self.args.jit_mode_eval:
-            model = self.torch_jit_model_eval(model, dataloader, training)
-
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.
             if isinstance(self.model_wrapped, smp.model.DistributedModel):
@@ -1320,6 +1331,9 @@ class Trainer:
         # Multi-gpu training (should be after apex fp16 initialization)
         if self.args.n_gpu > 1:
             model = nn.DataParallel(model)
+
+        if self.args.jit_mode_eval:
+            model = self.torch_jit_model_eval(model, dataloader, training)
 
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
@@ -2460,7 +2474,7 @@ class Trainer:
         """
         return self.ctx_manager_torchdynamo
 
-    def autocast_smart_context_manager(self):
+    def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = None):
         """
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
         arguments, depending on the situation.
@@ -2468,9 +2482,9 @@ class Trainer:
         if self.use_cuda_amp or self.use_cpu_amp:
             if is_torch_greater_or_equal_than_1_10:
                 ctx_manager = (
-                    torch.cpu.amp.autocast(dtype=self.amp_dtype)
+                    torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
                     if self.use_cpu_amp
-                    else torch.cuda.amp.autocast(dtype=self.amp_dtype)
+                    else torch.cuda.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
                 )
             else:
                 ctx_manager = torch.cuda.amp.autocast()
