@@ -1087,6 +1087,8 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
     BLENDERBOT_START_DOCSTRING,
 )
 class BlenderbotModel(BlenderbotPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+
     def __init__(self, config: BlenderbotConfig):
         super().__init__(config)
 
@@ -1231,6 +1233,8 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel):
         r"encoder.version",
         r"decoder.version",
         r"lm_head.weight",
+        "decoder.embed_tokens.weight",
+        "encoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: BlenderbotConfig):

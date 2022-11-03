@@ -1537,6 +1537,7 @@ class ModelTesterMixin:
                 prefix = f"{model_reloaded.base_model_prefix}."
                 params = dict(model_reloaded.named_parameters())
                 params.update(dict(model_reloaded.named_buffers()))
+                # param_names = set(k[len(prefix) :] if k.startswith(prefix) else k for k in params.keys())
                 param_names = set(k[len(prefix) :] if k.startswith(prefix) else k for k in params.keys())
 
                 missing_keys = set(infos["missing_keys"])

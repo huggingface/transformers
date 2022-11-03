@@ -2137,7 +2137,7 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
     LONGT5_START_DOCSTRING,
 )
 class LongT5EncoderModel(LongT5PreTrainedModel):
-    authorized_missing_keys = [
+    _keys_to_ignore_on_load_missing = [
         r"encoder.embed_tokens.weight",
     ]
 
