@@ -29,7 +29,6 @@ from ...modeling_tf_outputs import (
     TFCausalLMOutputWithCrossAttentions,
     TFMaskedLMOutput,
     TFMultipleChoiceModelOutput,
-    TFNextSentencePredictorOutput,
     TFQuestionAnsweringModelOutput,
     TFSequenceClassifierOutput,
     TFTokenClassifierOutput,
@@ -39,7 +38,6 @@ from ...modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
     TFModelInputType,
     TFMultipleChoiceLoss,
-    TFNextSentencePredictionLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
@@ -2724,6 +2722,7 @@ class TFBigBirdForCausalLM(TFBigBirdPreTrainedModel, TFCausalLanguageModelingLos
 #
 #         return TFNextSentencePredictorOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 #
+
 
 @add_start_docstrings(
     """
