@@ -406,6 +406,8 @@
         title: ResNet
       - local: model_doc/segformer
         title: SegFormer
+      - local: model_doc/spa-former
+        title: SpA-Former
       - local: model_doc/swin
         title: Swin Transformer
       - local: model_doc/swinv2
