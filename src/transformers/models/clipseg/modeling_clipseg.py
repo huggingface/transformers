@@ -1277,43 +1277,45 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
 
         activations = hidden_states[::-1]
 
-        a = None
+        output = None
         for i, (activation, layer, reduce) in enumerate(zip(activations, self.layers, self.reduces)):
-            if a is not None:
-                a = reduce(activation) + a
+            if output is not None:
+                output = reduce(activation) + output
             else:
-                a = reduce(activation)
+                output = reduce(activation)
 
             if i == self.conditional_layer:
-                a = self.film_mul(conditional_embeddings) * a.permute(1, 0, 2) + self.film_add(conditional_embeddings)
-                a = a.permute(1, 0, 2)
+                output = self.film_mul(conditional_embeddings) * output.permute(1, 0, 2) + self.film_add(
+                    conditional_embeddings
+                )
+                output = output.permute(1, 0, 2)
 
             layer_outputs = layer(
-                a, attention_mask=None, causal_attention_mask=None, output_attentions=output_attentions
+                output, attention_mask=None, causal_attention_mask=None, output_attentions=output_attentions
             )
 
-            a = layer_outputs[0]
+            output = layer_outputs[0]
 
             if output_hidden_states:
-                all_hidden_states += (a,)
+                all_hidden_states += (output,)
 
             if output_attentions:
                 all_attentions += (layer_outputs[1],)
 
-        a = a[:, 1:, :].permute(0, 2, 1)  # remove cls token and reshape to [batch_size, reduce_dim, seq_len]
+        output = output[:, 1:, :].permute(0, 2, 1)  # remove cls token and reshape to [batch_size, reduce_dim, seq_len]
 
-        size = int(math.sqrt(a.shape[2]))
+        size = int(math.sqrt(output.shape[2]))
 
         batch_size = conditional_embeddings.shape[0]
-        a = a.view(batch_size, a.shape[1], size, size)
+        output = output.view(batch_size, output.shape[1], size, size)
 
-        a = self.transposed_convolution(a).squeeze()
+        output = self.transposed_convolution(output).squeeze()
 
         if not return_dict:
             return tuple(
                 v
                 for v in [
-                    a,
+                    output,
                     all_hidden_states,
                     all_attentions,
                 ]
@@ -1321,7 +1323,7 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
             )
 
         return CLIPSegDecoderOutput(
-            predicted_masks=a,
+            predicted_masks=output,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )
