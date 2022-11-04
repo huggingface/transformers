@@ -14,7 +14,6 @@
 # limitations under the License.
 """Image processor class for PoolFormer."""
 
-import math
 from typing import Dict, List, Optional, Union
 
 import numpy as np
@@ -179,10 +178,10 @@ class PoolFormerImageProcessor(BaseImageProcessor):
             raise ValueError(f"size must contain 'height' and 'width' or 'shortest_edge' as keys. Got {size.keys()}")
         if crop_pct is not None:
             if "shortest_edge" in size:
-                scale_size = int(math.floor(size["shortest_edge"] / crop_pct))
+                scale_size = int(size["shortest_edge"] / crop_pct)
             elif "height" in size and "width" in size:
                 if size["height"] == size["width"]:
-                    scale_size = int(math.floor(size["height"] / crop_pct))
+                    scale_size = int(size["height"] / crop_pct)
                 else:
                     scale_size = (int(size["height"] / crop_pct), int(size["width"] / crop_pct))
             else:
