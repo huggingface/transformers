@@ -53,8 +53,6 @@ class JukeboxTokenizationTest(unittest.TestCase):
         tokens = tokenizer(**self.metas)["input_ids"]
         # fmt: off
         EXPECTED_OUTPUT = [
-            torch.tensor([[0, 0, 0, 1069, 11]]),
-            torch.tensor([[0, 0, 0, 1069, 11]]),
             torch.tensor([[
                 0, 0, 0, 7169, 507, 9, 76, 39, 31, 46, 76, 27,
                 76, 46, 44, 27, 48, 31, 38, 38, 31, 44, 76, 32,
@@ -118,7 +116,9 @@ class JukeboxTokenizationTest(unittest.TestCase):
                 76, 38, 31, 48, 31, 38, 76, 45, 27, 40, 30, 45,
                 76, 45, 46, 44, 31, 46, 29, 34, 76, 32, 27, 44,
                 76, 27, 49, 27, 51, 78, 76, 76, 76, 76, 76, 76,
-                76, 76]])
+                76, 76]]),
+            torch.tensor([[0, 0, 0, 1069, 11]]),
+            torch.tensor([[0, 0, 0, 1069, 11]]),
         ]
         # fmt: on
         self.assertTrue(torch.allclose(tokens[0], EXPECTED_OUTPUT[0]))
@@ -136,8 +136,6 @@ class JukeboxTokenizationTest(unittest.TestCase):
         tokens = tokenizer(**self.metas)["input_ids"]
         # fmt: off
         EXPECTED_OUTPUT = [
-            torch.tensor([[0, 0, 0, 1069, 11, -1, -1, -1, -1]]),
-            torch.tensor([[0, 0, 0, 1069, 11, -1, -1, -1, -1]]),
             torch.tensor([[
                 0, 0, 0, 1069, 11, -1, -1, -1, -1, 9, 77, 39,
                 31, 46, 77, 27, 77, 46, 44, 27, 48, 31, 38, 38,
@@ -201,7 +199,9 @@ class JukeboxTokenizationTest(unittest.TestCase):
                 77, 27, 40, 30, 77, 38, 31, 48, 31, 38, 77, 45,
                 27, 40, 30, 45, 77, 45, 46, 44, 31, 46, 29, 34,
                 77, 32, 27, 44, 77, 27, 49, 27, 51, 79, 77, 77,
-                77, 77, 77, 77, 77, 77]])
+                77, 77, 77, 77, 77, 77]]),
+            torch.tensor([[0, 0, 0, 1069, 11, -1, -1, -1, -1]]),
+            torch.tensor([[0, 0, 0, 1069, 11, -1, -1, -1, -1]]),
         ]
         # fmt: on
         self.assertTrue(torch.allclose(tokens[0], EXPECTED_OUTPUT[0]))

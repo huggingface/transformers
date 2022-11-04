@@ -159,22 +159,26 @@ class Jukebox1bModelTester(unittest.TestCase):
         top_prior = model.priors[0]
         start = 0
         z_conds = top_prior.get_music_tokens_conds(zs, start=start, end=start + top_prior.n_ctx)
-        y = top_prior.get_metadata(labels[-1].clone(), start, 1058304, 0)
+        y = top_prior.get_metadata(labels[0].clone(), start, 1058304, 0)
 
         self.assertIsNone(z_conds)
         self.assertListEqual(y.cpu().numpy()[0][:10].tolist(), self.EXPECTED_Y_COND)
 
         set_seed(0)
-        model.priors[0].cuda()
+        top_prior.cuda()
         zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
         zs = model._sample(zs, labels, [0], sample_length=40 * model.priors[0].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[0][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_2))
+        top_prior.cpu()
 
         set_seed(0)
+        model.priors[1].cuda()
         zs = model._sample(zs, labels, [1], sample_length=40 * model.priors[1].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[1][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_1))
+        model.priors[1].cpu()
 
         set_seed(0)
+        model.priors[2].cuda()
         zs = model._sample(zs, labels, [2], sample_length=40 * model.priors[2].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[2][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_0))
 
@@ -193,21 +197,23 @@ class Jukebox1bModelTester(unittest.TestCase):
             zs, tokens, sample_levels=[0], save_results=False, sample_length=40 * model.priors[0].raw_to_tokens
         )
         assert torch.allclose(zs[0][0][:40].cpu(), torch.tensor(self.EXPECTED_PRIMED_0))
+        model.priors[0].cpu()
 
         model.priors[1].cuda()
         upper_2 = torch.cat((zs[0], torch.zeros(1, 1000000 - zs[0].shape[-1]).cuda()), dim=-1).long()
-        zs = [upper_2, model.vqvae.encode(waveform.cuda(), start_level=1, bs_chunks=waveform.shape[0])[0].cuda(), None]
+        zs = [upper_2, model.vqvae.encode(waveform, start_level=1, bs_chunks=waveform.shape[0])[0].cuda(), None]
         zs = model._sample(
             zs, tokens, sample_levels=[1], save_results=False, sample_length=40 * model.priors[-2].raw_to_tokens
         )
         assert torch.allclose(zs[1][0][:40].cpu(), torch.tensor(self.EXPECTED_PRIMED_1))
+        model.priors[1].cpu()
 
         model.priors[2].cuda()
         upper_1 = torch.cat((zs[1], torch.zeros(1, 1000000 - zs[1].shape[-1]).cuda()), dim=-1).long()
         zs = [
             upper_2,
             upper_1,
-            model.vqvae.encode(waveform.cuda(), start_level=0, bs_chunks=waveform.shape[0])[0].cuda(),
+            model.vqvae.encode(waveform, start_level=0, bs_chunks=waveform.shape[0])[0].cuda(),
         ]
         zs = model._sample(
             zs, tokens, sample_levels=[2], save_results=False, sample_length=40 * model.priors[2].raw_to_tokens
@@ -330,15 +336,20 @@ class Jukebox5bModelTester(unittest.TestCase):
         labels = [i.cuda() for i in self.prepare_inputs(self.model_id)]
 
         set_seed(0)
+        model.priors[0].cuda()
         zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
         zs = model._sample(zs, labels, [0], sample_length=60 * model.priors[0].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[0][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_2))
+        model.priors[0].cpu()
 
         set_seed(0)
-        zs = model._sample(zs, labels, [1], sample_length=60 * model.priors[-2].raw_to_tokens, save_results=False)
-        assert torch.allclose(zs[-2][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_1))
+        model.priors[1].cuda()
+        zs = model._sample(zs, labels, [1], sample_length=60 * model.priors[1].raw_to_tokens, save_results=False)
+        assert torch.allclose(zs[1][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_1))
+        model.priors[1].cpu()
 
         set_seed(0)
+        model.priors[2].cuda()
         zs = model._sample(zs, labels, [2], sample_length=60 * model.priors[2].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[2][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_0))
 

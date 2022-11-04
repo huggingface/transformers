@@ -175,7 +175,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             list_genres[genres] = [self.genres_encoder.get(genre, 0) for genre in list_genres[genres]]
             list_genres[genres] = list_genres[genres] + [-1] * (self.n_genres - len(list_genres[genres]))
 
-        lyric_ids = [[self.lyrics_encoder.get(character, 0) for character in list_lyrics[-1]], [], []]
+        lyric_ids = [[self.lyrics_encoder.get(character, 0) for character in list_lyrics[0]], [], []]
         return artists_id, list_genres, lyric_ids
 
     def _tokenize(self, lyrics):
@@ -229,7 +229,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                     self._normalize(genre) + ".v2" for genre in genres[idx].split("_")
                 ]  # split is for the full dictionnary with combined genres
 
-        if self.version[-1] == "v2":
+        if self.version[0] == "v2":
             self.out_of_vocab = re.compile("[^A-Za-z0-9.,:;!?\-'\"()\[\] \t\n]+")
             vocab = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:;!?-+'\"()[] \t\n"
             self.vocab = {vocab[index]: index + 1 for index in range(len(vocab))}
@@ -243,7 +243,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
 
         lyrics = self._run_strip_accents(lyrics)
         lyrics = lyrics.replace("\\", "\n")
-        lyrics = [], [], self.out_of_vocab.sub("", lyrics)
+        lyrics = self.out_of_vocab.sub("", lyrics), [], []
         return artists, genres, lyrics
 
     def _run_strip_accents(self, text):

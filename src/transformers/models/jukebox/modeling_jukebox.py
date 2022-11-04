@@ -148,16 +148,15 @@ def get_alignment(music_tokens, labels, prior, config):
             w_hop = prior.forward_tokens(tokens_i[:, start:end], [], metadata_i, get_attn_weights=attn_layers)
             w_hops.append(w_hop[0][:, alignment_head])
             del w_hop
-        w = torch.cat(w_hops, dim=0)
+        weights = torch.cat(w_hops, dim=0)
         del w_hops
-        alignment_hop = w.float().cpu().numpy()
+        alignment_hop = weights.float().cpu().numpy()
         del w
 
         # alignment_hop has shape (bs, n_ctx, nb_relevant_lyric_tokens)
         # indices_hop is a list of len=bs, each entry of len hps.nb_relevant_lyric_tokens
         indices_hops[start] = indices_hop
         alignment_hops[start] = alignment_hop
-    prior.cpu()
 
     # Combine attn for each hop into attn for full range
     # Use indices to place them into correct place for corresponding source tokens
@@ -1452,7 +1451,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
     def get_emb(self, sample_t, n_samples, tokens, audio_conditioning, metadata_conditioning):
         if sample_t == 0:
             hidden_states = torch.empty(n_samples, 1, self.width, dtype=self.embed_tokens.weight.dtype).to(
-                audio_conditioning.device
+                self.embed_tokens.weight.device
             )
             if self.metadata_conditioning:
                 hidden_states[:, 0] = metadata_conditioning.view(n_samples, self.width)
@@ -1906,7 +1905,7 @@ class JukeboxPrior(nn.Module):
         self.total_loss_dims = self.lyrics_enc_loss_dims + self.next_token_prediction_loss_dims
 
         self.downsamples = [stride**down for stride, down in zip(config.res_strides_t, config.res_downs_t)]
-        self.cond_downsample = self.downsamples[level - 1] if level != 0 else None
+        self.cond_downsample = self.downsamples[level] if level != 0 else None
         self.raw_to_tokens = np.prod(self.downsamples[: nb_priors - level])
         self.sample_length = self.n_ctx * self.raw_to_tokens
 
@@ -2035,7 +2034,7 @@ class JukeboxPrior(nn.Module):
         """
         Embeds the upper level music tokens and upsamples them to provide as audio conditioning.
         """
-        music_tokens_conds = music_tokens_conds[: self.cond_level]
+        music_tokens_conds = music_tokens_conds[: self.cond_level+1]
         audio_conditioning = None
         for music_tokens_cond, conditioner_block in reversed(list(zip(music_tokens_conds, [self.conditioner_blocks]))):
             audio_conditioning = conditioner_block(music_tokens_cond, audio_conditioning)
@@ -2267,18 +2266,24 @@ class JukeboxPreTrainedModel(PreTrainedModel):
 
         if isinstance(module, nn.Embedding):  # embed_tokens
             module.weight.data.normal_(mean=0.0, std=0.02 * init_scale)
-        elif isinstance(module, nn.Parameter):
-            module.pos_emb.data.normal_(mean=0.0, std=0.01 * init_scale)
+        elif isinstance(module, JukeboxConv1D):
+            if self.config.zero_out:
+                module.weight.data.zero_()
+            else :
+                module.weight.data.normal_(mean=0.0, std=0.02 * init_scale)
         elif isinstance(module, JukeboxPositionalEmbedding):
             module.pos_emb.data.normal_(mean=0.0, std=0.01 * init_scale)
         elif isinstance(module, JukeboxRangeEmbedding):
             module.emb.weight.data.normal_(mean=0.0, std=0.01 * init_scale)
         elif isinstance(module, nn.Linear) and "encoder.lm_head" in module.__class__.__name__:
             module.weight.data.normal_(mean=0.0, std=0.02 * init_scale)
-
-        elif isinstance(module, JukeboxConv1D) and self.config.zero_out:
-            module.weight.data.zero_()
-
+        elif isinstance(module, nn.Parameter) and "pos_emb" in module.__class__.__name__:
+            module.data.normal_(mean=0.0, std=0.01 * init_scale)
+        elif isinstance(module, nn.Parameter) and "start_token" in module.__class__.__name__:
+            module.data.normal_(mean=0.0, std=0.01 * init_scale)
+        elif isinstance(module, JukeboxResConv1DBlock) and self.config.zero_out:
+            module.conv1d_2.weigth.data.zero_()
+            module.conv1d_2.bias.data.zero_()
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -2381,10 +2386,9 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
         else:
             sample_tokens = end - start
-        conditioning_tokens, new_tokens = (
-            previous_sampled_tokens.shape[1],
-            sample_tokens - previous_sampled_tokens.shape[1],
-        )
+
+        conditioning_tokens = previous_sampled_tokens.shape[1]
+        new_tokens = sample_tokens - previous_sampled_tokens.shape[1]
 
         logger.info(
             f"Sampling {sample_tokens} tokens for [{start},{start+sample_tokens}]. Conditioning on"
@@ -2555,15 +2559,13 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 music_tokens, labels[level], offset, sampling_kwargs, level, total_token_to_sample, hop_length
             )
 
-            # todo add wrapper to automatically send to cpu if unused
-            self.vqvae.to(music_tokens[level].device)
-            # Decode sample
-            with torch.no_grad():
-                raw_audio = self.vqvae.decode(
-                    music_tokens[: level + 1], start_level=level, bs_chunks=music_tokens[level].shape[0]
-                )
-
             if save_results:
+                self.vqvae.to(music_tokens[level].device)
+                # Decode sample
+                with torch.no_grad():
+                    raw_audio = self.vqvae.decode(
+                        music_tokens[: level + 1], start_level=level, bs_chunks=music_tokens[level].shape[0]
+                    )
                 logdir = f"jukebox/level_{level}"
                 if not os.path.exists(logdir):
                     os.makedirs(logdir)
