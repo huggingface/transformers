@@ -184,12 +184,20 @@ class SwitchTransformersTop1Router(nn.Module):
             hidden_states *= uniform_distrib
 
         # Shape: [num_groups, tokens_per_group, num_experts]
-        self.classifier = self.classifier.to(self.dtype)
+        self._cast_classifier()
         router_logits = self.classifier(hidden_states)
 
         # Apply Softmax and cast back to the original `dtype`
         router_probabilities = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(self.input_dtype)
         return router_probabilities, router_logits
+
+    def _cast_classifier(self):
+        r"""
+        `bitsandbytes` `Linear8bitLt` layers does not support manual casting Therefore we need to check if they are an
+        instance of the `Linear8bitLt` class by checking special attributes.
+        """
+        if not (hasattr(self.classifier, "SCB") or hasattr(self.classifier, "CB")):
+            self.classifier = self.classifier.to(self.dtype)
 
     def forward(self, hidden_states: torch.Tensor) -> Tuple:
         r"""
@@ -926,7 +934,11 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
 
-        self.embed_tokens = embed_tokens
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
+
+        if embed_tokens is not None:
+            self.embed_tokens.weight = embed_tokens.weight
+
         self.is_decoder = config.is_decoder
 
         sparse_step = config.decoder_sparse_step if self.is_decoder else config.encoder_sparse_step

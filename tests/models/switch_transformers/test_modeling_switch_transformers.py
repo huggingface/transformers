@@ -103,7 +103,7 @@ class SwitchTransformersModelTester:
         self.router_jitter_noise = router_jitter_noise
 
     def get_large_model_config(self):
-        return SwitchTransformersConfig.from_pretrained("HFLAY/switch_base_8")
+        return SwitchTransformersConfig.from_pretrained("google/switch-base-8")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -411,7 +411,7 @@ class SwitchTransformersModelTester:
         This test does not pass for small models due to precision errors. It is therefore only run for slightly larger models.
         """
         model = (
-            SwitchTransformersForConditionalGeneration.from_pretrained("HFLAY/switch_base_8").to(torch_device).eval()
+            SwitchTransformersForConditionalGeneration.from_pretrained("google/switch-base-8").to(torch_device).eval()
         )
         torch.manual_seed(0)
         output_without_past_cache = model.generate(
@@ -558,6 +558,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     test_resize_embeddings = True
     test_model_parallel = False
     is_encoder_decoder = True
+    test_torchscript = False
     # The small SWITCH_TRANSFORMERS model needs higher percentages for CPU/MP tests
     model_split_percents = [0.8, 0.9]
 
@@ -619,7 +620,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
             config.eos_token_id = None
             config.forced_eos_token_id = None
 
-            model = model_class.from_pretrained("HFLAY/switch_base_8").to(torch_device).eval()
+            model = model_class.from_pretrained("google/switch-base-8").to(torch_device).eval()
             logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
 
             num_return_sequences = 2
@@ -671,7 +672,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 
             logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
 
-            model = model_class.from_pretrained("HFLAY/switch_base_8").to(torch_device).eval()
+            model = model_class.from_pretrained("google/switch-base-8").to(torch_device).eval()
 
             # check `generate()` and `beam_search()` are equal
             # change `num_return_sequences = 2` but not for `beam_scorer`
@@ -909,7 +910,8 @@ class SwitchTransformersEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase
     all_model_classes = (SwitchTransformersEncoderModel,) if is_torch_available() else ()
     test_pruning = False
     test_resize_embeddings = False
-    test_model_parallel = True
+    test_model_parallel = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = SwitchTransformersEncoderOnlyModelTester(self)
@@ -1108,7 +1110,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of Switch-C transformers. We only check the logits
         of the first batch.
         """
-        model = SwitchTransformersModel.from_pretrained("HFLAY/switch_base_8", torch_dtype=torch.bfloat16).eval()
+        model = SwitchTransformersModel.from_pretrained("google/switch-base-8", torch_dtype=torch.bfloat16).eval()
         input_ids = torch.ones((32, 64), dtype=torch.long)
         decoder_input_ids = torch.ones((32, 64), dtype=torch.long)
 
@@ -1134,7 +1136,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         # Generate test using the smalled switch-C model.
 
         model = SwitchTransformersForConditionalGeneration.from_pretrained(
-            "HFLAY/switch_base_8", torch_dtype=torch.bfloat16
+            "google/switch-base-8", torch_dtype=torch.bfloat16
         ).eval()
         tokenizer = AutoTokenizer.from_pretrained("t5-small")
         model = model.to(torch_device)
@@ -1159,7 +1161,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
     def test_small_batch_generate(self):
         BATCH_SIZE = 4
         model = SwitchTransformersForConditionalGeneration.from_pretrained(
-            "HFLAY/switch_base_8", torch_dtype=torch.bfloat16
+            "google/switch-base-8", torch_dtype=torch.bfloat16
         ).eval()
         tokenizer = AutoTokenizer.from_pretrained("t5-small")
 
