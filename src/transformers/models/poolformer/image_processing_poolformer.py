@@ -14,7 +14,6 @@
 # limitations under the License.
 """Image processor class for PoolFormer."""
 
-import math
 from typing import Dict, List, Optional, Union
 
 import numpy as np
@@ -59,7 +58,7 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
             `do_resize` in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 256}`):
+        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
             Size of the image after resizing. Can be overridden by `size` in the `preprocess` method. If crop_pct is
             unset:
             - size is `{"height": h, "width": w}`: the image is resized to `(h, w)`.
@@ -82,7 +81,7 @@ class PoolFormerImageProcessor(BaseImageProcessor):
             Whether to center crop the image. If the input size is smaller than `crop_size` along any edge, the image
             is padded with 0's and then center cropped. Can be overridden by `do_center_crop` in the `preprocess`
             method.
-        crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 256, "width": 256}`):
+        crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of the image after applying center crop. Only has an effect if `do_center_crop` is set to `True`. Can
             be overridden by the `crop_size` parameter in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -120,9 +119,9 @@ class PoolFormerImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
-        size = size if size is not None else {"shortest_edge": 256}
+        size = size if size is not None else {"shortest_edge": 224}
         size = get_size_dict(size, default_to_square=False)
-        crop_size = crop_size if crop_size is not None else {"height": 256, "width": 256}
+        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
         crop_size = get_size_dict(crop_size)
 
         self.do_resize = do_resize
@@ -179,15 +178,12 @@ class PoolFormerImageProcessor(BaseImageProcessor):
             raise ValueError(f"size must contain 'height' and 'width' or 'shortest_edge' as keys. Got {size.keys()}")
         if crop_pct is not None:
             if "shortest_edge" in size:
-                scale_size = int(math.floor(size["shortest_edge"] / crop_pct))
+                scale_size = int(size["shortest_edge"] / crop_pct)
             elif "height" in size and "width" in size:
                 if size["height"] == size["width"]:
-                    scale_size = int(math.floor(size["height"] / crop_pct))
+                    scale_size = int(size["height"] / crop_pct)
                 else:
-                    scale_size = (
-                        int(math.floor(size["height"] / crop_pct)),
-                        int(math.floor(size["width"] / crop_pct)),
-                    )
+                    scale_size = (int(size["height"] / crop_pct), int(size["width"] / crop_pct))
             else:
                 raise ValueError("Invalid size for resize: {}".format(size))
 
