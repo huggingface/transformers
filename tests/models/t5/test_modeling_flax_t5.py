@@ -1055,28 +1055,20 @@ class FlaxT5ModelIntegrationTests(unittest.TestCase):
         )
 
         expected_summaries = [
-            (
-                'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found'
-                " a cell phone video of the final seconds . \"one can hear cries of 'My God' in several languages,\""
-                " one magazine says . all 150 on board were killed when germanwings flight 9525 crashed ."
-            ),
-            (
-                "the formal accession was marked by a ceremony at The Hague, in the Netherlands . the ICC opened a"
-                " preliminary examination into the situation in the occupied Palestinian territory . as members of the"
-                " court, Palestinians may be subject to counter-charges as well ."
-            ),
-            (
-                "the u.s. and its negotiating partners reached a very strong framework agreement with Iran . aaron"
-                " miller: the debate that has already begun since the announcement of the new framework will likely"
-                " result in more heat than light . he says the new framework would reduce Iran's low-enriched uranium"
-                " stockpile and cut centrifuges . miller: if it had been, there would have been no Iranian team at the"
-                " table ."
-            ),
-            (
-                "prosecutors say the marriages were part of an immigration scam . if convicted, barrientos faces two"
-                ' criminal counts of "offering a false instrument for filing in the first degree" she has been married'
-                " 10 times, with nine of her marriages occurring between 1999 and 2002 ."
-            ),
+            'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found'
+            " a cell phone video of the final seconds . \"one can hear cries of 'My God' in several languages,\""
+            " one magazine says . all 150 on board were killed when germanwings flight 9525 crashed .",
+            "the formal accession was marked by a ceremony at The Hague, in the Netherlands . the ICC opened a"
+            " preliminary examination into the situation in the occupied Palestinian territory . as members of the"
+            " court, Palestinians may be subject to counter-charges as well .",
+            "the u.s. and its negotiating partners reached a very strong framework agreement with Iran . aaron"
+            " miller: the debate that has already begun since the announcement of the new framework will likely"
+            " result in more heat than light . he says the new framework would reduce Iran's low-enriched uranium"
+            " stockpile and cut centrifuges . miller: if it had been, there would have been no Iranian team at the"
+            " table .",
+            "prosecutors say the marriages were part of an immigration scam . if convicted, barrientos faces two"
+            ' criminal counts of "offering a false instrument for filing in the first degree" she has been married'
+            " 10 times, with nine of her marriages occurring between 1999 and 2002 .",
         ]
 
         dct = tok(

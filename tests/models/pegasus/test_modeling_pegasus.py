@@ -279,8 +279,7 @@ class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
-    """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error.
-    """
+    """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
     if a is None and b is None:
         return True
     try:

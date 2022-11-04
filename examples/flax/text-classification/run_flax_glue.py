@@ -301,8 +301,7 @@ def glue_train_data_collator(rng: PRNGKey, dataset: Dataset, batch_size: int):
 
 
 def glue_eval_data_collator(dataset: Dataset, batch_size: int):
-    """Returns batches of size `batch_size` from `eval dataset`. Sharding handled by `pad_shard_unpad` in the eval loop.
-    """
+    """Returns batches of size `batch_size` from `eval dataset`. Sharding handled by `pad_shard_unpad` in the eval loop."""
     batch_idx = np.arange(len(dataset))
 
     steps_per_epoch = math.ceil(len(dataset) / batch_size)
