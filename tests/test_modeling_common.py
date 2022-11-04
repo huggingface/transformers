@@ -1573,8 +1573,7 @@ class ModelTesterMixin:
                 self.assertEqual(
                     extra_missing,
                     set(),
-                    f"This model {model_class.__name__} might be missing some `keys_to_ignore`: {extra_missing} when"
-                    " tying its weights",
+                    f"This model {model_class.__name__} might be missing some `keys_to_ignore`: {extra_missing}",
                 )
 
                 # self.assertEqual(
