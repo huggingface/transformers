@@ -192,14 +192,11 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
 
     inputs = processor(text=text, images=[image] * len(text), padding="max_length", return_tensors="pt")
 
-    for k, v in inputs.items():
-        print(k, v.shape)
-
     with torch.no_grad():
         outputs = model(**inputs)
 
     # verify values
-    expected_cond = torch.tensor([0.1110, -0.1882, 0.1645])
+    expected_conditional = torch.tensor([0.1110, -0.1882, 0.1645])
     expected_pooled_output = torch.tensor([0.2692, -0.7197, -0.1328])
     if "refined" in model_name:
         expected_masks_slice = torch.tensor(
@@ -211,7 +208,7 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
         )
 
     assert torch.allclose(outputs.predicted_masks[0, :3, :3], expected_masks_slice, atol=1e-3)
-    assert torch.allclose(outputs.conditional_embeddings[0, :3], expected_cond, atol=1e-3)
+    assert torch.allclose(outputs.conditional_embeddings[0, :3], expected_conditional, atol=1e-3)
     assert torch.allclose(outputs.pooled_output[0, :3], expected_pooled_output, atol=1e-3)
     print("Looks ok!")
 

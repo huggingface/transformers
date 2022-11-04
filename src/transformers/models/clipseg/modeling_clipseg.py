@@ -38,10 +38,12 @@ from .configuration_clipseg import CLIPSegConfig, CLIPSegTextConfig, CLIPSegVisi
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "organization/clipseg-rd64-uni"
+
+_CHECKPOINT_FOR_DOC = "nielsr/clipseg-rd64-refined"
 
 CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "organization/clipseg-rd64-uni",
+    # TODO update organziation
+    "nielsr/clipseg-rd64-refined",
     # See all CLIPSeg models at https://huggingface.co/models?filter=clipseg
 ]
 

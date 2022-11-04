@@ -716,12 +716,11 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
         # TODO update to appropriate organization
         model_name = "nielsr/clipseg-rd64-refined"
         processor = CLIPSegProcessor.from_pretrained(model_name)
-        model = CLIPSegModel.from_pretrained(model_name).to(torch_device)
+        model = CLIPSegForImageSegmentation.from_pretrained(model_name).to(torch_device)
 
         image = prepare_img()
-        inputs = processor(
-            text=["a photo of a cat", "a photo of a dog"], images=image, padding=True, return_tensors="pt"
-        ).to(torch_device)
+        texts = ["a cat", "a remote", "a blanket"]
+        inputs = processor(text=texts, images=[image] * len(texts), padding=True, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -730,9 +729,15 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
         # verify the predicted masks
         self.assertEqual(
             outputs.predicted_masks.shape,
-            torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
+            torch.Size((3, 352, 352)),
         )
+        expected_masks_slice = torch.tensor(
+            [[-7.4577, -7.4952, -7.4072], [-7.3115, -7.0969, -7.1624], [-6.9472, -6.7641, -6.8911]]
+        )
+        self.assertTrue(torch.allclose(outputs.predicted_masks[0, :3, :3], expected_masks_slice, atol=1e-3))
 
-        expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+        # verify conditional and pooled output
+        expected_conditional = torch.tensor([0.5601, -0.0314, 0.1980])
+        expected_pooled_output = torch.tensor([0.2692, -0.7197, -0.1328])
+        self.assertTrue(torch.allclose(outputs.conditional_embeddings[0, :3], expected_conditional, atol=1e-3))
+        self.assertTrue(torch.allclose(outputs.pooled_output[0, :3], expected_pooled_output, atol=1e-3))
