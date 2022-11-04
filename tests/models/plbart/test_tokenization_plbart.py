@@ -227,6 +227,7 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             code,
         )
 
+
 @require_torch
 @require_sentencepiece
 @require_tokenizers
