@@ -16,13 +16,20 @@
 """Convert CLIPSeg checkpoints from the original repository. URL: https://github.com/timojl/clipseg."""
 
 import argparse
+import requests
 
 import torch
 from PIL import Image
-from torchvision.transforms import Compose, Resize, ToTensor
 
-from transformers import CLIPSegConfig, CLIPSegFeatureExtractor, CLIPTokenizer, CLIPSegProcessor, CLIPSegForImageSegmentation, CLIPSegTextConfig, CLIPSegVisionConfig
-from transformers.models.clip.processing_clip import CLIPProcessor
+from transformers import (
+    CLIPSegConfig,
+    CLIPSegForImageSegmentation,
+    CLIPSegProcessor,
+    CLIPSegTextConfig,
+    CLIPSegVisionConfig,
+    CLIPTokenizer,
+    ViTFeatureExtractor,
+)
 
 
 def get_clipseg_config(model_name):
@@ -148,6 +155,12 @@ def convert_state_dict(orig_state_dict, config):
     return orig_state_dict
 
 
+# We will verify our results on an image of cute cats
+def prepare_img():
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    image = Image.open(requests.get(url, stream=True).raw)
+    return image
+
 def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub):
     config = get_clipseg_config(model_name)
     model = CLIPSegForImageSegmentation(config)
@@ -169,16 +182,14 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     if unexpected_keys != ["decoder.reduce.weight", "decoder.reduce.bias"]:
         raise ValueError(f"Unexpected keys: {unexpected_keys}")
 
-    feature_extractor = CLIPSegFeatureExtractor()
-    image = Image.open("/Users/nielsrogge/Documents/cats.jpg").convert("RGB")
-    pixel_values = feature_extractor(image, return_tensors="pt").pixel_values
-
-    prompts = ["a glass", "something to fill", "wood", "a jar"]
+    feature_extractor = ViTFeatureExtractor(size=352)
     tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
-    input_ids = tokenizer(prompts, padding="max_length", return_tensors="pt").input_ids
-    input_ids = torch.tensor([[1, 2] + [9] * 75]).repeat(4, 1)
+    processor = CLIPSegProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
-    processor = CLIPProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+    image = prepare_img()
+    text = ["a glass", "something to fill", "wood", "a jar"]
+
+    inputs = processor(text=text, images=image, padding="max_length", return_tensors="pt")
 
     with torch.no_grad():
         outputs = model(input_ids, pixel_values.repeat(len(prompts), 1, 1, 1))

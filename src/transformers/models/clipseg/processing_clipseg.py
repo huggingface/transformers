@@ -21,18 +21,19 @@ from ...tokenization_utils_base import BatchEncoding
 
 class CLIPSegProcessor(ProcessorMixin):
     r"""
-    Constructs a CLIPSeg processor which wraps a CLIPSeg feature extractor and a CLIP tokenizer into a single processor.
+    Constructs a CLIPSeg processor which wraps a CLIPSeg feature extractor and a CLIP tokenizer into a single
+    processor.
 
-    [`CLIPSegProcessor`] offers all the functionalities of [`CLIPSegFeatureExtractor`] and [`CLIPTokenizerFast`]. See the
+    [`CLIPSegProcessor`] offers all the functionalities of [`ViTFeatureExtractor`] and [`CLIPTokenizerFast`]. See the
     [`~CLIPSegProcessor.__call__`] and [`~CLIPSegProcessor.decode`] for more information.
 
     Args:
-        feature_extractor ([`CLIPSegFeatureExtractor`]):
+        feature_extractor ([`ViTFeatureExtractor`]):
             The feature extractor is a required input.
         tokenizer ([`CLIPTokenizerFast`]):
             The tokenizer is a required input.
     """
-    feature_extractor_class = "CLIPSegFeatureExtractor"
+    feature_extractor_class = "ViTFeatureExtractor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(self, feature_extractor, tokenizer):
@@ -44,7 +45,7 @@ class CLIPSegProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        CLIPSegFeatureExtractor's [`~CLIPSegFeatureExtractor.__call__`] if `images` is not `None`. Please refer to the
+        ViTFeatureExtractor's [`~ViTFeatureExtractor.__call__`] if `images` is not `None`. Please refer to the
         doctsring of the above two methods for more information.
 
         Args:

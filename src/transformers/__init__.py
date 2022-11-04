@@ -174,9 +174,9 @@ _import_structure = {
     "models.clipseg": [
         "CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPSegConfig",
+        "CLIPSegProcessor",
         "CLIPSegTextConfig",
         "CLIPSegVisionConfig",
-        "CLIPSegProcessor",
     ],
     "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
     "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
@@ -693,7 +693,6 @@ else:
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
-    _import_structure["models.clipseg"].append("CLIPSegFeatureExtractor")
     _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
     _import_structure["models.deformable_detr"].append("DeformableDetrFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
@@ -3238,17 +3237,17 @@ if TYPE_CHECKING:
     from .models.clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPConfig,
+        CLIPProcessor,
         CLIPTextConfig,
         CLIPTokenizer,
         CLIPVisionConfig,
-        CLIPProcessor,
     )
     from .models.clipseg import (
         CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPSegConfig,
+        CLIPSegProcessor,
         CLIPSegTextConfig,
         CLIPSegVisionConfig,
-        CLIPSegProcessor,
     )
     from .models.codegen import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeGenConfig, CodeGenTokenizer
     from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDetrConfig
@@ -3703,7 +3702,6 @@ if TYPE_CHECKING:
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor
         from .models.clip import CLIPFeatureExtractor
-        from .models.clipseg import CLIPSegFeatureExtractor
         from .models.conditional_detr import ConditionalDetrFeatureExtractor
         from .models.convnext import ConvNextFeatureExtractor
         from .models.deformable_detr import DeformableDetrFeatureExtractor

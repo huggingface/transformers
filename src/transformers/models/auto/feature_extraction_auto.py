@@ -39,7 +39,6 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
         ("beit", "BeitFeatureExtractor"),
         ("clip", "CLIPFeatureExtractor"),
-        ("clipseg", "CLIPSegFeatureExtractor"),
         ("conditional_detr", "ConditionalDetrFeatureExtractor"),
         ("convnext", "ConvNextFeatureExtractor"),
         ("cvt", "ConvNextFeatureExtractor"),

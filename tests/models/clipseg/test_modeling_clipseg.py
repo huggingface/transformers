@@ -24,7 +24,7 @@ import numpy as np
 
 import requests
 import transformers
-from transformers import MODEL_MAPPING, CLIPSegConfig, CLIPSegTextConfig, CLIPSegVisionConfig
+from transformers import MODEL_MAPPING, CLIPSegConfig, CLIPSegProcessor, CLIPSegTextConfig, CLIPSegVisionConfig
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     is_flax_available,
@@ -56,8 +56,6 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
-
-    from transformers import CLIPProcessor
 
 
 if is_flax_available():
@@ -717,7 +715,7 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
     def test_inference_image_segmentation(self):
         # TODO update to appropriate organization
         model_name = "nielsr/clipseg-rd64-refined"
-        processor = CLIPProcessor.from_pretrained(model_name)
+        processor = CLIPSegProcessor.from_pretrained(model_name)
         model = CLIPSegModel.from_pretrained(model_name).to(torch_device)
 
         image = prepare_img()
