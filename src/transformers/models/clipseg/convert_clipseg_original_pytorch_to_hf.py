@@ -16,11 +16,11 @@
 """Convert CLIPSeg checkpoints from the original repository. URL: https://github.com/timojl/clipseg."""
 
 import argparse
-import requests
 
 import torch
 from PIL import Image
 
+import requests
 from transformers import (
     CLIPSegConfig,
     CLIPSegForImageSegmentation,
@@ -161,6 +161,7 @@ def prepare_img():
     image = Image.open(requests.get(url, stream=True).raw)
     return image
 
+
 def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub):
     config = get_clipseg_config(model_name)
     model = CLIPSegForImageSegmentation(config)
@@ -189,21 +190,24 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     image = prepare_img()
     text = ["a glass", "something to fill", "wood", "a jar"]
 
-    inputs = processor(text=text, images=image, padding="max_length", return_tensors="pt")
+    inputs = processor(text=text, images=[image] * len(text), padding="max_length", return_tensors="pt")
+
+    for k, v in inputs.items():
+        print(k, v.shape)
 
     with torch.no_grad():
-        outputs = model(input_ids, pixel_values.repeat(len(prompts), 1, 1, 1))
+        outputs = model(**inputs)
 
     # verify values
-    expected_cond = torch.tensor([0.0548, 0.0067, -0.1543])
-    expected_pooled_output = torch.tensor([0.2208, -0.7577, -0.1391])
+    expected_cond = torch.tensor([0.1110, -0.1882, 0.1645])
+    expected_pooled_output = torch.tensor([0.2692, -0.7197, -0.1328])
     if "refined" in model_name:
         expected_masks_slice = torch.tensor(
-            [[-6.8533, -6.8308, -6.6634], [-6.7272, -6.4926, -6.4597], [-6.4338, -6.2161, -6.2296]]
+            [[-10.0407, -9.9431, -10.2646], [-9.9751, -9.7064, -9.9586], [-9.6891, -9.5645, -9.9618]]
         )
     else:
         expected_masks_slice = torch.tensor(
-            [[-4.1992, -4.1912, -4.1523], [-4.1509, -4.1442, -4.1091], [-4.0581, -4.0355, -4.0107]]
+            [[-7.2877, -7.2711, -7.2463], [-7.2652, -7.2780, -7.2520], [-7.2239, -7.2204, -7.2001]]
         )
 
     assert torch.allclose(outputs.predicted_masks[0, :3, :3], expected_masks_slice, atol=1e-3)
@@ -212,11 +216,9 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving model to {pytorch_dump_folder_path}")
+        print(f"Saving model and processor to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-
-        # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-        # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         print(f"Pushing model and processor for {model_name} to the hub")

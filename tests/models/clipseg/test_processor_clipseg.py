@@ -30,7 +30,7 @@ from transformers.utils import FEATURE_EXTRACTOR_NAME, is_vision_available
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor, CLIPSegProcessor
+    from transformers import CLIPSegProcessor, ViTFeatureExtractor
 
 
 @require_vision
