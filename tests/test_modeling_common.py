@@ -1475,6 +1475,9 @@ class ModelTesterMixin:
                     extra_params.pop(key, None)
 
                 if not extra_params:
+                    # In that case, we *are* on a head model, but every
+                    # single key is not actual parameters and this is
+                    # tested in `test_tied_model_weights_key_ignore` test.
                     continue
 
                 with tempfile.TemporaryDirectory() as temp_dir_name:
