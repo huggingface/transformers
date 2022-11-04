@@ -37,9 +37,13 @@ def get_clipseg_config(model_name):
     vision_config = CLIPSegVisionConfig(patch_size=16)
 
     use_complex_transposed_convolution = True if "refined" in model_name else False
+    reduce_dim = 16 if "rd16" in model_name else 64
 
     config = CLIPSegConfig.from_text_vision_configs(
-        text_config, vision_config, use_complex_transposed_convolution=use_complex_transposed_convolution
+        text_config,
+        vision_config,
+        use_complex_transposed_convolution=use_complex_transposed_convolution,
+        reduce_dim=reduce_dim,
     )
     return config
 
@@ -198,14 +202,20 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     # verify values
     expected_conditional = torch.tensor([0.1110, -0.1882, 0.1645])
     expected_pooled_output = torch.tensor([0.2692, -0.7197, -0.1328])
-    if "refined" in model_name:
+    if model_name == "clipseg-rd64-refined":
         expected_masks_slice = torch.tensor(
             [[-10.0407, -9.9431, -10.2646], [-9.9751, -9.7064, -9.9586], [-9.6891, -9.5645, -9.9618]]
         )
-    else:
+    elif model_name == "clipseg-rd64":
         expected_masks_slice = torch.tensor(
             [[-7.2877, -7.2711, -7.2463], [-7.2652, -7.2780, -7.2520], [-7.2239, -7.2204, -7.2001]]
         )
+    elif model_name == "clipseg-rd16":
+        expected_masks_slice = torch.tensor(
+            [[-6.3955, -6.4055, -6.4151], [-6.3911, -6.4033, -6.4100], [-6.3474, -6.3702, -6.3762]]
+        )
+    else:
+        raise ValueError(f"Model name {model_name} not supported.")
 
     assert torch.allclose(outputs.predicted_masks[0, :3, :3], expected_masks_slice, atol=1e-3)
     assert torch.allclose(outputs.conditional_embeddings[0, :3], expected_conditional, atol=1e-3)
@@ -228,9 +238,9 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="clipseg",
+        default="clipseg-rd64",
         type=str,
-        choices=["clipseg", "clipseg-rd16", "clipseg-rd64-refined"],
+        choices=["clipseg-rd16", "clipseg-rd64", "clipseg-rd64-refined"],
         help=(
             "Name of the model. Supported models are: clipseg-rd64, clipseg-rd16 and clipseg-rd64-refined (rd meaning"
             " reduce dimension)"
