@@ -807,8 +807,8 @@ class CLIPSegTextModel(CLIPSegPreTrainedModel):
         ```python
         >>> from transformers import CLIPTokenizer, CLIPSegTextModel
 
-        >>> model = CLIPSegTextModel.from_pretrained("organization/clipseg-rd64-uni")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("organization/clipseg-rd64-uni")
+        >>> tokenizer = CLIPTokenizer.from_pretrained("nielsr/clipseg-rd64-refined")
+        >>> model = CLIPSegTextModel.from_pretrained("nielsr/clipseg-rd64-refined")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
@@ -916,10 +916,10 @@ class CLIPSegVisionModel(CLIPSegPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, CLIPSegVisionModel
+        >>> from transformers import CLIPSegProcessor, CLIPSegVisionModel
 
-        >>> model = CLIPSegVisionModel.from_pretrained("organization/clipseg-rd64-uni")
-        >>> processor = CLIPProcessor.from_pretrained("organization/clipseg-rd64-uni")
+        >>> processor = CLIPSegProcessor.from_pretrained("nielsr/clipseg-rd64-refined")
+        >>> model = CLIPSegVisionModel.from_pretrained("nielsr/clipseg-rd64-refined")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -994,8 +994,8 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         ```python
         >>> from transformers import CLIPTokenizer, CLIPSegModel
 
-        >>> model = CLIPSegModel.from_pretrained("organization/clipseg-rd64-uni")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("organization/clipseg-rd64-uni")
+        >>> tokenizer = CLIPTokenizer.from_pretrained("nielsr/clipseg-rd64-refined")
+        >>> model = CLIPSegModel.from_pretrained("nielsr/clipseg-rd64-refined")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
@@ -1039,10 +1039,10 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, CLIPSegModel
+        >>> from transformers import CLIPSegProcessor, CLIPSegModel
 
-        >>> model = CLIPSegModel.from_pretrained("organization/clipseg-rd64-uni")
-        >>> processor = CLIPProcessor.from_pretrained("organization/clipseg-rd64-uni")
+        >>> processor = CLIPSegProcessor.from_pretrained("nielsr/clipseg-rd64-refined")
+        >>> model = CLIPSegModel.from_pretrained("nielsr/clipseg-rd64-refined")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1091,10 +1091,10 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, CLIPSegModel
+        >>> from transformers import CLIPSegProcessor, CLIPSegModel
 
-        >>> model = CLIPSegModel.from_pretrained("organization/clipseg-rd64-uni")
-        >>> processor = CLIPProcessor.from_pretrained("organization/clipseg-rd64-uni")
+        >>> processor = CLIPSegProcessor.from_pretrained("nielsr/clipseg-rd64-refined")
+        >>> model = CLIPSegModel.from_pretrained("nielsr/clipseg-rd64-refined")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1327,6 +1327,12 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """
+    CLIPSeg model with a Transformer-based decoder on top for zero-shot and one-shot image segmentation.
+    """,
+    CLIPSEG_START_DOCSTRING,
+)
 class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
     config_class = CLIPSegConfig
 
@@ -1373,6 +1379,8 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
 
         return conditional_embeddings
 
+    @add_start_docstrings_to_model_forward(CLIPSEG_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=CLIPSegImageSegmentationOutput, config_class=CLIPSegTextConfig)
     def forward(
         self,
         input_ids: Optional[torch.FloatTensor] = None,
@@ -1386,7 +1394,35 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CLIPSegOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import CLIPSegProcessor, CLIPSegForImageSegmentation
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> processor = CLIPSegProcessor.from_pretrained("nielsr/clipseg-rd64-refined")
+        >>> model = CLIPSegForImageSegmentation.from_pretrained("nielsr/clipseg-rd64-refined")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> texts = ["a cat", "a remote", "a blanket"]
+        >>> inputs = processor(text=texts, images=[image] * len(texts), padding=True, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+
+        >>> predicted_masks = outputs.predicted_masks
+        >>> print(predicted_masks.shape)
+        torch.Size([3, 352, 352])
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # step 1: forward the query images through the frozen CLIP vision encoder
@@ -1436,6 +1472,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
                     " `config.projection_dim`."
                 )
 
+        # step 3: forward both the pooled output and the activations through the lightweight decoder to predict masks
         decoder_outputs = self.decoder(
             activations,
             conditional_embeddings,
@@ -1443,7 +1480,6 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
         predicted_masks = decoder_outputs.predicted_masks if return_dict else decoder_outputs[0]
 
         loss = None

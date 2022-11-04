@@ -35,6 +35,7 @@ src/transformers/models/bloom/configuration_bloom.py
 src/transformers/models/camembert/configuration_camembert.py
 src/transformers/models/canine/configuration_canine.py
 src/transformers/models/clip/configuration_clip.py
+src/transformers/models/clipseg/modeling_clipseg.py
 src/transformers/models/codegen/configuration_codegen.py
 src/transformers/models/conditional_detr/configuration_conditional_detr.py
 src/transformers/models/conditional_detr/modeling_conditional_detr.py
