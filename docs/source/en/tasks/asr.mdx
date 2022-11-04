@@ -14,11 +14,11 @@ specific language governing permissions and limitations under the License.
 
 <Youtube id="TksaY_FDgnk"/>
 
-Automatic speech recognition (ASR) converts a speech signal to text, going from a sequence of audio inputs to textual outputs. Virtual assistants like Siri and Alexa use ASR models to help users everyday, and there are many other useful user-facing applications like live captioning and note-taking during meetings.
+Automatic speech recognition (ASR) converts a speech signal to text, mapping a sequence of audio inputs to text outputs. Virtual assistants like Siri and Alexa use ASR models to help users everyday, and there are many other useful user-facing applications like live captioning and note-taking during meetings.
 
 This guide will show you how to:
 
-1. Finetune [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) on the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) to transcribe audio to text.
+1. Finetune [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) on the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset to transcribe audio to text.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -43,7 +43,7 @@ We encourage you to login to your Hugging Face account so you can upload and sha
 
 ## Load MInDS-14 dataset
 
-Start by loading a smaller subset of the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset from the 🤗 Datasets library. This'll give you a chance to experiment and make sure everythings works before spending more time training on the full dataset.
+Start by loading a smaller subset of the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset from the 🤗 Datasets library. This'll give you a chance to experiment and make sure everything works before spending more time training on the full dataset.
 
 ```py
 >>> from datasets import load_dataset, Audio
@@ -94,7 +94,7 @@ Take a look at the example again:
 There are two fields:
 
 - `audio`: a 1-dimensional `array` of the speech signal that must be called to load and resample the audio file. 
-- `transcription`: the speech text. 
+- `transcription`: the target text. 
 
 ## Preprocess
 
@@ -106,7 +106,7 @@ The next step is to load a Wav2Vec2 processor to process the audio signal:
 >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base")
 ```
 
-The MInDS-14 dataset has a sampling rate of 8000khz (you can find this information in it's [dataset card](https://huggingface.co/datasets/PolyAI/minds14)) which means you'll need to resample the dataset to 16000kHz to use the pretrained Wav2Vec2 model:
+The MInDS-14 dataset has a sampling rate of 8000khz (you can find this information in its [dataset card](https://huggingface.co/datasets/PolyAI/minds14)), which means you'll need to resample the dataset to 16000kHz to use the pretrained Wav2Vec2 model:
 
 ```py
 >>> minds = minds.cast_column("audio", Audio(sampling_rate=16_000))
@@ -173,7 +173,7 @@ Unlike other data collators, this specific data collator needs to apply a differ
 ...         return batch
 ```
 
-Now create a batch of examples and dynamically pad them with `DataCollatorForCTCWithPadding`:
+Now instantiate your `DataCollatorForCTCWithPadding`:
 
 ```py
 >>> data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)

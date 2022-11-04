@@ -14,11 +14,11 @@ specific language governing permissions and limitations under the License.
 
 <Youtube id="KWwzcmG98Ds"/>
 
-Audio classification assigns a label or class to audio data. It is similar to text classification, except an audio input is continuous and must be discretized, whereas text can be split into tokens. Some practical applications of audio classification include identifying speaker intent, language classification, and even animal species by their sounds.
+Audio classification - just like with text - assigns a class label output from the input data. The only difference is instead of text inputs, you have raw audio waveforms. Some practical applications of audio classification include identifying speaker intent, language classification, and even animal species by their sounds.
 
 This guide will show you how to:
 
-1. Finetune [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) on the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) to classify speaker intent.
+1. Finetune [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) on the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset to classify speaker intent.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -43,7 +43,7 @@ We encourage you to login to your Hugging Face account so you can upload and sha
 
 ## Load MInDS-14 dataset
 
-Start by loading the MInDS-14 from the 🤗 Datasets library:
+Start by loading the MInDS-14 dataset from the 🤗 Datasets library:
 
 ```py
 >>> from datasets import load_dataset, Audio
@@ -258,7 +258,7 @@ Load an audio file you'd like to run inference on. Remember to resample the samp
 ```py
 >>> from datasets import load_dataset, Audio
 
->>> dataset = load_dataset("narad/ravdess", split="train")
+>>> dataset = load_dataset("PolyAI/minds14", name="en-US", split="train")
 >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
 >>> sampling_rate = dataset.features["audio"].sampling_rate
 >>> audio_file = dataset[0]["audio"]["path"]
@@ -272,11 +272,11 @@ The simplest way to try out your finetuned model for inference is to use it in a
 >>> classifier = pipeline("audio-classification", model="stevhliu/my_awesome_minds_model")
 >>> classifier(audio_file)
 [
-    {"score": 0.09616563469171524, "label": "cash_deposit"},
-    {"score": 0.08657706528902054, "label": "app_error"},
-    {"score": 0.07833030819892883, "label": "joint_account"},
-    {"score": 0.07660537213087082, "label": "pay_bill"},
-    {"score": 0.07324142009019852, "label": "balance"},
+    {'score': 0.09766869246959686, 'label': 'cash_deposit'},
+    {'score': 0.07998877018690109, 'label': 'app_error'},
+    {'score': 0.0781070664525032, 'label': 'joint_account'},
+    {'score': 0.07667109370231628, 'label': 'pay_bill'},
+    {'score': 0.0755252093076706, 'label': 'balance'}
 ]
 ```
 
