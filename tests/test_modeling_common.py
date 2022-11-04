@@ -1468,6 +1468,15 @@ class ModelTesterMixin:
             base_model_prefix = model.base_model_prefix
 
             if hasattr(model, base_model_prefix):
+
+                extra_params = {k: v for k, v in model.named_parameters() if not k.startswith(base_model_prefix)}
+                extra_params.update({k: v for k, v in model.named_buffers() if not k.startswith(base_model_prefix)})
+                for key in model._keys_to_ignore_on_load_missing:
+                    extra_params.pop(key, None)
+
+                if not extra_params:
+                    continue
+
                 with tempfile.TemporaryDirectory() as temp_dir_name:
                     model.base_model.save_pretrained(temp_dir_name)
                     model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
