@@ -710,11 +710,7 @@ class ProphetNetAttention(nn.Module):
 
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-        assert attn_weights.size() == (
-            batch_size * self.num_attn_heads,
-            tgt_len,
-            src_len,
-        ), (
+        assert attn_weights.size() == (batch_size * self.num_attn_heads, tgt_len, src_len,), (
             f"`attn_weights` should be of size {batch_size * self.num_attn_heads, tgt_len, src_len}, but is of size"
             f" {attn_weights.shape}"
         )
@@ -722,11 +718,7 @@ class ProphetNetAttention(nn.Module):
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
         if attention_mask is not None and attention_mask.dim() == 0:
             attention_mask = None
-        assert attention_mask is None or attention_mask.size() == (
-            self.num_attn_heads * batch_size,
-            1,
-            src_len,
-        ), (
+        assert attention_mask is None or attention_mask.size() == (self.num_attn_heads * batch_size, 1, src_len,), (
             "`attention_mask` should be `None` or of shape attention_mask.size() =="
             f" {batch_size * self.num_attn_heads, 1, src_len}, but is {attention_mask.shape}"
         )
@@ -766,11 +758,7 @@ class ProphetNetAttention(nn.Module):
         )
 
         attn_output = torch.bmm(attn_probs, value_states)
-        assert attn_output.size() == (
-            batch_size * self.num_attn_heads,
-            tgt_len,
-            self.head_dim,
-        ), (
+        assert attn_output.size() == (batch_size * self.num_attn_heads, tgt_len, self.head_dim,), (
             f"`attn_output` should be of shape {batch_size * self.num_attn_heads, tgt_len, self.head_dim}, but is of"
             f" shape {attn_output.size()}"
         )
@@ -859,11 +847,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
     ):
         batch_size, ngram_sequence_length, hidden_size = hidden_states.size()
 
-        assert list(hidden_states.size()) == [
-            batch_size,
-            ngram_sequence_length,
-            hidden_size,
-        ], (
+        assert list(hidden_states.size()) == [batch_size, ngram_sequence_length, hidden_size], (
             f"`hidden_states` should be of shape {batch_size, ngram_sequence_length, hidden_size}, but is of shape"
             f" {hidden_states.shape}"
         )
@@ -1774,6 +1758,8 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
     PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetModel(ProphetNetPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["decoder.word_embeddings.weight", "encoder.word_embeddings.weight"]
+
     def __init__(self, config: ProphetNetConfig):
         super().__init__(config)
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
@@ -1901,6 +1887,12 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
     PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [
+        "decoder.word_embeddings.weight",
+        "encoder.word_embeddings.weight",
+        "lm_head.weight",
+    ]
+
     def __init__(self, config: ProphetNetConfig):
         super().__init__(config)
         self.prophetnet = ProphetNetModel(config)
@@ -2111,6 +2103,8 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+
     def __init__(self, config: ProphetNetConfig):
         # set config for CLM
         config = copy.deepcopy(config)

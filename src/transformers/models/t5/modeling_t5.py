@@ -1758,7 +1758,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     T5_START_DOCSTRING,
 )
 class T5EncoderModel(T5PreTrainedModel):
-    authorized_missing_keys = [
+    _keys_to_ignore_on_load_missing = [
         r"encoder.embed_tokens.weight",
     ]
 

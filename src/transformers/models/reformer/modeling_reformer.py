@@ -891,12 +891,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         bucket_idx = _stable_argsort(concat_buckets, dim=-1)
 
         # bucket_idx has shape: BatchSize x NumAttnHeads x NumHashes x SequenceLength
-        assert bucket_idx.shape == (
-            batch_size,
-            self.num_attention_heads,
-            num_hashes,
-            sequence_length,
-        ), (
+        assert bucket_idx.shape == (batch_size, self.num_attention_heads, num_hashes, sequence_length,), (
             f"bucket_idx should have shape {(batch_size, self.num_attention_heads, num_hashes, sequence_length)}, but"
             f" has shape {bucket_idx.shape}."
         )
@@ -2192,6 +2187,8 @@ class ReformerModel(ReformerPreTrainedModel):
 
 @add_start_docstrings("""Reformer Model with a `language modeling` head on top.""", REFORMER_START_DOCSTRING)
 class ReformerModelWithLMHead(ReformerPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.decoder.bias"]
+
     def __init__(self, config):
         super().__init__(config)
         assert config.is_decoder, "If you want to use `ReformerModelWithLMHead` make sure that `is_decoder=True`."
