@@ -1099,7 +1099,7 @@ class Swinv2Model(Swinv2PreTrainedModel):
     """,
     SWINV2_START_DOCSTRING,
 )
-# Copied from transformers.models.swin.modeling_swin.SwinForMaskedImageModeling with SWIN->SWINV2,Swin->Swinv2,swin->swinv2,224->256,window7->window8
+# Copied from transformers.models.swin.modeling_swin.SwinForMaskedImageModeling with swin->swinv2, base-simmim-window6-192->tiny-patch4-window8-256, SWIN->SWINV2,Swin->Swinv2, 224->256
 class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
