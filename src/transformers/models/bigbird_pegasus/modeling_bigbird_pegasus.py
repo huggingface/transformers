@@ -2658,10 +2658,7 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
 )
 # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
 class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        "encoder.embed_tokens.weight",
-        "decoder.embed_tokens.weight",
-    ]
+    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: BigBirdPegasusConfig, **kwargs):
         super().__init__(config, **kwargs)
@@ -2791,10 +2788,7 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
 )
 # Copied from transformers.models.bart.modeling_bart.BartForQuestionAnswering with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
 class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        "encoder.embed_tokens.weight",
-        "decoder.embed_tokens.weight",
-    ]
+    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config):
         super().__init__(config)
