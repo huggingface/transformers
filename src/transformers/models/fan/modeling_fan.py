@@ -1305,7 +1305,6 @@ class FANEmbeddings(FANPreTrainedModel):
         super().__init__(config)
 
         img_size = to_2tuple(config.img_size)
-        self.use_checkpoint = config.use_checkpoint
         assert (img_size[0] % config.patch_size == 0) and (
             img_size[0] % config.patch_size == 0
         ), "`patch_size` should divide image dimensions evenly"
@@ -1377,7 +1376,6 @@ class FANEncoderLayer(FANPreTrainedModel):
         super().__init__(config)
 
         img_size = to_2tuple(config.img_size)
-        self.use_checkpoint = config.use_checkpoint
         assert (img_size[0] % config.patch_size == 0) and (
             img_size[0] % config.patch_size == 0
         ), "`patch_size` should divide image dimensions evenly"
@@ -1448,7 +1446,6 @@ class FANEncoder(FANPreTrainedModel):
         super().__init__(config)
 
         img_size = to_2tuple(config.img_size)
-        self.use_checkpoint = config.use_checkpoint
         assert (img_size[0] % config.patch_size == 0) and (
             img_size[0] % config.patch_size == 0
         ), "`patch_size` should divide image dimensions evenly"
@@ -1524,7 +1521,7 @@ class FANEncoder(FANPreTrainedModel):
         for idx, blk in enumerate(self.blocks):
             # blk.H, blk.W = Hp, Wp
 
-            if self.use_checkpoint:
+            if self.config.gradient_checkpointing:
                 current_hidden_state, Hp, Wp = torch.utils.checkpoint.checkpoint(blk, current_hidden_state, Hp, Wp)
             else:
                 (current_hidden_state, Hp, Wp) = blk(current_hidden_state, Hp, Wp)

@@ -59,6 +59,8 @@ class FANConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         se_mlp (`bool`, defaults to False):
             Wheter or not to use Squeeze-Excite in the FANEncoder layers MLP.
+        mlp_ratio (`float`, defaults to 4.0):
+            Expand factor used in MLP blocks.
         num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
         qkv_bias (`bool`, defaults to True):
@@ -86,6 +88,9 @@ class FANConfig(PretrainedConfig):
         feat_downsample (`bool`, defaults to ):
             Whether or not to use a learnable downsample convolution to obtain hidden states for SemanticSegmentation tasks.
             Only appliable with hybrid backbone.
+        channel_dims (`tuple(int)`, *optional*, defaults to None):
+            List of Input channels for each of the encoder layers.
+            If None it defaults to [config.embed_dim] * config.num_hidden_layers.
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
@@ -139,9 +144,9 @@ class FANConfig(PretrainedConfig):
         in_chans=3,  # HASCOMMENTS
         num_classes=1000,  # HASCOMMENTS
         backbone=None,  # HASCOMMENTS
-        use_checkpoint=False,
+        use_checkpoint=False,  # TODO: Rename for HF Consistency
         use_pos_embed=True,  # HASCOMMENTS
-        mlp_ratio=4.0,
+        mlp_ratio=4.0,  # HASCOMMENTS
         qkv_bias=True,  # HASCOMMENTS
         drop_rate=0.0,
         attn_drop_rate=0.0,
@@ -151,7 +156,7 @@ class FANConfig(PretrainedConfig):
         norm_layer=None,
         cls_attn_layers=2,
         hybrid_patch_size=2,
-        channel_dims=None,
+        channel_dims=None,  # HASCOMMENTS
         feat_downsample=False,  # HASCOMMENTS
         out_index=-1,
         rounding_mode="floor",
