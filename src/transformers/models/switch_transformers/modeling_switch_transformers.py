@@ -50,14 +50,14 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "SwitchTransformersConfig"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"
-_CHECKPOINT_FOR_DOC = "HFLAY/switch_base_8"
+_CHECKPOINT_FOR_DOC = "google/switch-base-8"
 
 ####################################################
 # This dict contains ids and associated url
 # for the pretrained weights provided with the models
 ####################################################
 SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "HFLAY/switch_base_8",
+    "google/switch-base-8",
     "google/switch-base-16",
     "google/switch-base-32",
     "google/switch-base-64",
@@ -1342,9 +1342,6 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         r"encoder.embed_tokens.weight",
         r"decoder.embed_tokens.weight",
     ]
-    _keys_to_ignore_on_load_unexpected = [
-        r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
-    ]
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
@@ -1418,8 +1415,8 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, SwitchTransformersModel
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("HFLAY/switch_base_8")
-        >>> model = SwitchTransformersModel.from_pretrained("HFLAY/switch_base_8")
+        >>> tokenizer = T5Tokenizer.from_pretrained("google/switch-base-8")
+        >>> model = SwitchTransformersModel.from_pretrained("google/switch-base-8")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
@@ -1517,9 +1514,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         r"decoder.embed_tokens.weight",
         r"lm_head.weight",
     ]
-    _keys_to_ignore_on_load_unexpected = [
-        r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
-    ]
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
@@ -1605,8 +1599,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         ```python
         >>> from transformers import T5Tokenizer, SwitchTransformersForConditionalGeneration
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("HFLAY/switch_base_8")
-        >>> model = SwitchTransformersForConditionalGeneration.from_pretrained("HFLAY/switch_base_8")
+        >>> tokenizer = T5Tokenizer.from_pretrained("google/switch-base-8")
+        >>> model = SwitchTransformersForConditionalGeneration.from_pretrained("google/switch-base-8")
 
         >>> # training
         >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
@@ -1889,8 +1883,8 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         ```python
         >>> from transformers import T5Tokenizer, SwitchTransformersEncoderModel
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("HFLAY/switch_base_8")
-        >>> model = SwitchTransformersEncoderModel.from_pretrained("HFLAY/switch_base_8")
+        >>> tokenizer = T5Tokenizer.from_pretrained("google/switch-base-8")
+        >>> model = SwitchTransformersEncoderModel.from_pretrained("google/switch-base-8")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1
