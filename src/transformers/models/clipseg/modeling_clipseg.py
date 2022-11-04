@@ -116,6 +116,26 @@ class CLIPSegOutput(ModelOutput):
 
 
 @dataclass
+class CLIPSegDecoderOutput(ModelOutput):
+    """
+    Args:
+        predicted_masks (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+            ...
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
+    """
+
+    predicted_masks: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
 class CLIPSegImageSegmentationOutput(ModelOutput):
     """
     Args:
@@ -131,10 +151,11 @@ class CLIPSegImageSegmentationOutput(ModelOutput):
     conditional_embeddings: torch.FloatTensor = None
     pooled_output: torch.FloatTensor = None
     vision_model_output: BaseModelOutputWithPooling = None
+    decoder_output: CLIPSegDecoderOutput = None
 
     def to_tuple(self) -> Tuple[Any]:
         return tuple(
-            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
+            self[k] if k not in ["vision_model_output", "decoder_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
         )
 
@@ -1243,7 +1264,17 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         decoder_config.hidden_act = "relu"
         self.layers = nn.ModuleList([CLIPSegDecoderLayer(decoder_config) for _ in range(len(config.extract_layers))])
 
-    def forward(self, hidden_states, conditional_embeddings):
+    def forward(
+        self,
+        hidden_states: Tuple[torch.Tensor],
+        conditional_embeddings: torch.Tensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = True,
+    ):
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
         activations = hidden_states[::-1]
 
         a = None
@@ -1257,7 +1288,17 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
                 a = self.film_mul(conditional_embeddings) * a.permute(1, 0, 2) + self.film_add(conditional_embeddings)
                 a = a.permute(1, 0, 2)
 
-            a = layer(a, attention_mask=None, causal_attention_mask=None)[0]
+            layer_outputs = layer(
+                a, attention_mask=None, causal_attention_mask=None, output_attentions=output_attentions
+            )
+
+            a = layer_outputs[0]
+
+            if output_hidden_states:
+                all_hidden_states += (a,)
+
+            if output_attentions:
+                all_attentions += (layer_outputs[1],)
 
         a = a[:, 1:, :].permute(0, 2, 1)  # remove cls token and reshape to [batch_size, reduce_dim, seq_len]
 
@@ -1266,9 +1307,24 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         batch_size = conditional_embeddings.shape[0]
         a = a.view(batch_size, a.shape[1], size, size)
 
-        a = self.transposed_convolution(a)
+        a = self.transposed_convolution(a).squeeze()
 
-        return a
+        if not return_dict:
+            return tuple(
+                v
+                for v in [
+                    a,
+                    all_hidden_states,
+                    all_attentions,
+                ]
+                if v is not None
+            )
+
+        return CLIPSegDecoderOutput(
+            predicted_masks=a,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
+        )
 
 
 class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
@@ -1347,6 +1403,19 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
             # we add +1 here as the hidden states also include the initial embeddings
             activations = [hidden_states[i + 1] for i in self.extract_layers]
 
+            # update vision_outputs
+            if return_dict:
+                vision_outputs = BaseModelOutputWithPooling(
+                    last_hidden_state=vision_outputs.last_hidden_state,
+                    pooler_output=vision_outputs.pooler_output,
+                    hidden_states=vision_outputs.hidden_states if output_hidden_states else None,
+                    attentions=vision_outputs.attentions,
+                )
+            else:
+                vision_outputs = (
+                    vision_outputs[:2] + vision_outputs[3:] if not output_hidden_states else vision_outputs
+                )
+
         # step 2: compute conditional embeddings, either from text, images or an own provided embedding
         if conditional_embeddings is None:
             conditional_embeddings = self.get_conditional_embeddings(
@@ -1367,10 +1436,15 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
                     " `config.projection_dim`."
                 )
 
-        predicted_masks = self.decoder(activations, conditional_embeddings).squeeze()
+        decoder_outputs = self.decoder(
+            activations,
+            conditional_embeddings,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
-        if output_hidden_states:
-            raise NotImplementedError("To do")
+        predicted_masks = decoder_outputs.predicted_masks if return_dict else decoder_outputs[0]
 
         loss = None
         if labels is not None:
@@ -1378,7 +1452,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
             loss = loss_fn(predicted_masks, labels)
 
         if not return_dict:
-            output = (predicted_masks, conditional_embeddings, pooled_output) + vision_outputs
+            output = (predicted_masks, conditional_embeddings, pooled_output, vision_outputs, decoder_outputs)
             return ((loss,) + output) if loss is not None else output
 
         return CLIPSegImageSegmentationOutput(
@@ -1387,4 +1461,5 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
             conditional_embeddings=conditional_embeddings,
             pooled_output=pooled_output,
             vision_model_output=vision_outputs,
+            decoder_output=decoder_outputs,
         )
