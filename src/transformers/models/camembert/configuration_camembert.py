@@ -42,6 +42,9 @@ class CamembertConfig(PretrainedConfig):
     usage examples. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     Camembert [camembert-base](https://huggingface.co/camembert-base) architecture.
 
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
     Example:
 
     ```python
