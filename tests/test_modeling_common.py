@@ -1559,6 +1559,11 @@ class ModelTesterMixin:
                 extra_missing = missing_keys - param_names
                 # missed_missing = param_names - missing_keys
 
+                if extra_missing:
+                    import ipdb
+
+                    ipdb.set_trace()
+
                 self.assertEqual(
                     extra_missing,
                     set(),

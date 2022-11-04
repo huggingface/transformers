@@ -1246,12 +1246,12 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
         r"encoder.version",
         r"decoder.version",
         r"lm_head.weight",
-        r"model.encoder.embed_positions.weights",
-        r"model.decoder.embed_positions.weights",
+        r"encoder.embed_tokens.weight",
+        r"decoder.embed_tokens.weight",
     ]
     _keys_to_ignore_on_save = [
-        r"model.encoder.embed_positions.weights",
-        r"model.decoder.embed_positions.weights",
+        r"model.encoder.embed_tokens.weight",
+        r"model.decoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: M2M100Config):

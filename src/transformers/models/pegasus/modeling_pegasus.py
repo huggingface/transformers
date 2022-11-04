@@ -1298,6 +1298,8 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel):
         r"decoder.version",
         r"lm_head.weight",
         r"embed_positions.weight",
+        "encoder.embed_tokens.weight",
+        "decoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: PegasusConfig):
