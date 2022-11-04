@@ -71,6 +71,8 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, dtype,  
     current_block = {}
     current_block_size = 0
     total_size = 0
+    
+    os.makedirs(dump_path,exist_ok=True)
     with gfile.GFile(switch_checkpoint_path+"/checkpoint",'rb') as fp:
         checkpoint_info = serialization.msgpack_restore(fp.read())["optimizer"]["target"]
         checkpoint_info = flatten_dict(checkpoint_info, sep="/")
@@ -140,10 +142,10 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, dtype,  
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
-    parser.add_argument("--switch_t5x_checkpoint_path",default="/home/younes_huggingface_co/convert_switch/switch-base-8/checkpoint_500100",type=str,required=False,help=("Path to a directory containing a folder per layer. Follows the original Google format."),)
+    parser.add_argument("--switch_t5x_checkpoint_path",default="/mnt/disks/disk_switch/original_checkpoints/switch-xxl-128/checkpoint_634600",type=str,required=False,help=("Path to a directory containing a folder per layer. Follows the original Google format."),)
     parser.add_argument("--max_shard_size", default="10GB", required=False, help="Max shard size")
     parser.add_argument("--dtype", default="bfloat16", type=str, required=False, help="dtype of the saved model")
-    parser.add_argument("--pytorch_dump_folder_path", default="/home/arthur_huggingface_co/transformers/switch_converted", type=str, required=False, help="Path to the output pytorch model.")
+    parser.add_argument("--pytorch_dump_folder_path", default="/mnt/disks/disk_switch/original_checkpoints/switch-xxl-128-converted", type=str, required=False, help="Path to the output pytorch model.")
     args = parser.parse_args()
     shard_on_the_fly(
         args.switch_t5x_checkpoint_path,
