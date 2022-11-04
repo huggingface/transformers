@@ -2049,7 +2049,7 @@ class TFGenerationMixin:
         input_ids: Optional[tf.Tensor] = None,
         **model_kwargs,
     ) -> Tuple[tf.Tensor, Dict[str, Any]]:
-        """Expands tensors from [batch_size, ...] to [batch_size, expand_size, ...]"""
+        """Expands tensors from [batch_size, ...] to [batch_size * expand_size, ...]"""
         if input_ids is not None:
             input_ids = tf.repeat(input_ids, expand_size, axis=0)
 
