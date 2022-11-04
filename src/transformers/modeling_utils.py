@@ -2643,7 +2643,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # torch.nn.ParameterList is a special case where two parameter keywords
         # are appended to the module name, *e.g.* bert.special_embeddings.0
         module_keys = module_keys.union(
-            set([".".join(key.split(".")[:-2]) for key in names if key and key[-1].isdigit()])
+            set([".".join(key.split(".")[:-2]) for key in names if len(key) > 0 and key[-1].isdigit()])
         )
 
         retrieved_modules = []
