@@ -78,10 +78,9 @@ class Wav2Vec2Processor(ProcessorMixin):
         if "raw_speech" in kwargs:
             warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
             audio = kwargs.pop("raw_speech")
-            sampling_rate = kwargs.pop("sampling_rate", None)
         else:
             audio = kwargs.pop("audio", None)
-            sampling_rate = kwargs.pop("sampling_rate", None)
+        sampling_rate = kwargs.pop("sampling_rate", None)
         text = kwargs.pop("text", None)
         if len(args) > 0:
             audio = args[0]
