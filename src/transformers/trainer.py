@@ -3444,7 +3444,8 @@ class Trainer:
         if not hasattr(self, "repo"):
             self.init_git_repo()
 
-        if self.args.should_save:
+        model_name = kwargs.pop("model_name", None)
+        if model_name is None and self.args.should_save:
             if self.args.hub_model_id is None:
                 model_name = Path(self.args.output_dir).name
             else:
