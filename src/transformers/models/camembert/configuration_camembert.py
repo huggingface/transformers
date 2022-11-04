@@ -38,8 +38,9 @@ CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class CamembertConfig(PretrainedConfig):
     """
-    This class overrides [`RobertaConfig`]. Please check the superclass for the appropriate documentation alongside
-    usage examples. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    This is the configuration class to store the configuration of a [`CamembertConfig`] or a [`TFCamembertConfig`]. It is
+    used to instantiate a Camembert model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the
     Camembert [camembert-base](https://huggingface.co/camembert-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
