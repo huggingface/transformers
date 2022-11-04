@@ -1291,14 +1291,8 @@ class MvpDecoder(MvpPreTrainedModel):
     MVP_START_DOCSTRING,
 )
 class MvpModel(MvpPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [
-        r"final_logits_bias",
-        r"lm_head.weight",
-    ]
-    _keys_to_ignore_on_load_missing = [
-        "encoder.embed_tokens.weight",
-        "decoder.embed_tokens.weight",
-    ]
+    _keys_to_ignore_on_load_unexpected = [r"final_logits_bias", r"lm_head.weight"]
+    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: MvpConfig):
         super().__init__(config)
