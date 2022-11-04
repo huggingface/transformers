@@ -150,8 +150,9 @@ embeddings that are computed in parallel and thus defines the trade-off between 
 
 The model head refers to the last layer of a neural network that accepts the raw hidden states and projects them onto a different dimension. There is a different model head for each task. For example:
 
-  * [`GPT2ForSequenceClassification`] is a sequence classification head which is a linear layer on top of the base [`GPT2Model`].
-  * [`GPT2LMHeadModel`] is a language modeling head which is a linear layer with weights tied to the input embeddings on top of the base [`GPT2Model`].
+  * [`GPT2ForSequenceClassification`] is a sequence classification head - a linear layer - on top of the base [`GPT2Model`].
+  * [`ViTForImageClassification`] is an image classification head - a linear layer on top of the final hidden state of the `CLS` token - on top of the base [`ViTModel`].
+  * [`Wav2Vec2ForCTC`] ia a language modeling head with [CTC](#connectionist-temporal-classification-(CTC)) on top of the base [`Wav2Vec2Model`].
 
 ## I
 
@@ -248,8 +249,14 @@ These labels are different according to the model head, for example:
   expects a tensor of dimension `(batch_size, tgt_seq_length)` with each value corresponding to the target sequences
   associated with each input sequence. During training, both BART and T5 will make the appropriate
   `decoder_input_ids` and decoder attention masks internally. They usually do not need to be supplied. This does not
-  apply to models leveraging the Encoder-Decoder framework. See the documentation of each model for more information on
-  each specific model's labels.
+  apply to models leveraging the Encoder-Decoder framework. 
+  
+<Tip>
+
+Each model's labels may be different, so be sure to always check the documentation of each model for more information
+about their specific labels!
+
+</Tip>
 
 The base models ([`BertModel`]) do not accept labels, as these are the base transformer models, simply outputting
 features.
@@ -288,7 +295,7 @@ A tensor of the numerical representations of an image that is passed to a model.
 
 ### pooling
 
-An operation that reduces a matrix into a smaller matrix, either by taking the maximum or average of the pooled area. Pooling is similar to [convolution](#convolution) in the sense that it is repeated over the entire matrix, and each operation is applied to a different segment of the matrix.
+An operation that reduces a matrix into a smaller matrix, either by taking the maximum or average of the pooled dimension(s). Pooling layers are commonly found between convolutional layers to downsample the feature representation.
 
 ### position IDs
 
@@ -308,7 +315,9 @@ other types of positional embeddings, such as sinusoidal position embeddings or 
 A model that has been pretrained on some data (for instance all of Wikipedia). Pretraining methods involve a
 self-supervised objective, which can be reading the text and trying to predict the next word (see [causal language
 modeling](#causal-language-modeling)) or masking some words and trying to predict them (see [masked language
-modeling](#masked-language-modeling)).
+modeling](#masked-language-modeling)). 
+
+  Speech and vision models have their own pretraining objectives. For example, Wav2Vec2 is a speech model pretrained on a contrastive task which requires the model to identify the "true" speech representation from a set of "false" speech representations. On the other hand, BEiT is a vision model pretrained on a masked image modeling task which masks some of the image patches and requires the model to predict the masked patches (similar to the masked language modeling objective).
 
 ## R
 
