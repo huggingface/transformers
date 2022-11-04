@@ -20,6 +20,7 @@ from . import (
     albert,
     auto,
     bart,
+    bart_japanese,
     barthez,
     bartpho,
     beit,

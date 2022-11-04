@@ -503,6 +503,7 @@ SPECIAL_MODEL_NAMES = {
 # Update this list with the models that shouldn't be in the README. This only concerns modular models or those who do
 # not have an associated paper.
 MODELS_NOT_IN_README = [
+    "BartJapanese",
     "BertJapanese",
     "Encoder decoder",
     "FairSeq Machine-Translation",

@@ -134,6 +134,7 @@ _import_structure = {
         "AutoTokenizer",
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
+    "models.bart_japanese": ["BartJapaneseTokenizer"],
     "models.barthez": [],
     "models.bartpho": [],
     "models.beit": ["BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BeitConfig"],
@@ -3194,6 +3195,7 @@ if TYPE_CHECKING:
         AutoTokenizer,
     )
     from .models.bart import BartConfig, BartTokenizer
+    from .models.bart_japanese import BartJapaneseTokenizer
     from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
     from .models.bert import (
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,

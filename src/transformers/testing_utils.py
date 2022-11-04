@@ -86,6 +86,7 @@ from .utils import (
     is_torchaudio_available,
     is_torchdynamo_available,
     is_vision_available,
+    is_zenhan_available,
 )
 
 
@@ -680,6 +681,13 @@ def require_jumanpp(test_case):
     Decorator marking a test that requires jumanpp
     """
     return unittest.skipUnless(is_jumanpp_available(), "test requires jumanpp")(test_case)
+
+
+def require_zenhan(test_case):
+    """
+    Decorator marking a test that requires zenhan
+    """
+    return unittest.skipUnless(is_zenhan_available(), "test requires zenhan")(test_case)
 
 
 def get_gpu_count():

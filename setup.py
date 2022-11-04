@@ -174,6 +174,7 @@ _deps = [
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",
     "pyknp>=0.6.1",
+    "zenhan",
 ]
 
 

@@ -193,6 +193,8 @@
         title: BART
       - local: model_doc/barthez
         title: BARThez
+      - local: model_doc/bart-japanese
+        title: BartJapanese
       - local: model_doc/bartpho
         title: BARTpho
       - local: model_doc/bert

@@ -298,6 +298,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         # Add full (and cased) model names here
         ("albert", "ALBERT"),
         ("bart", "BART"),
+        ("bart-japanese", "BartJapanese"),
         ("barthez", "BARThez"),
         ("bartpho", "BARTpho"),
         ("beit", "BEiT"),

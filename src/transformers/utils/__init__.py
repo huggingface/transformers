@@ -156,6 +156,7 @@ from .import_utils import (
     is_torchdynamo_available,
     is_training_run_on_sagemaker,
     is_vision_available,
+    is_zenhan_available,
     requires_backends,
     tf_required,
     torch_only_method,

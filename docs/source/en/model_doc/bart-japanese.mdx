@@ -1,0 +1,63 @@
+<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# BartJapanese
+
+## Overview
+
+The BART model for Japanese texts is based on the [`MBart`] encoder-decoder (sequence-to-sequence) model. 
+
+This model primarily intended for conditional generation tasks like summarization. 
+The input format is `[bos] X [eos]` where `X` is the text. The forward pass will create the `decoder_input_ids` 
+if they are not passed by shifting tokens to the right and prepending `[eos]` token.
+
+## Mask Filling
+
+The `Formzu/bart-base-japanese` and `Formzu/bart-large-japanese` checkpoints can be used to fill multi-token masks.
+
+```python
+from transformers import MBartForConditionalGeneration, BartJapaneseTokenizer
+
+model = MBartForConditionalGeneration.from_pretrained("Formzu/bart-large-japanese")
+tokenizer = BartJapaneseTokenizer.from_pretrained("Formzu/bart-large-japanese")
+example_japanese_phrase = "天気が<mask>から散歩しましょう。"
+batch = tokenizer(example_japanese_phrase, return_tensors="pt")
+generated_ids = model.generate(batch["input_ids"], max_length=11)
+assert tokenizer.batch_decode(generated_ids, skip_special_tokens=True) == ["天気 が いい から 散歩 し ましょう 。"]
+```
+
+## Supervised training
+
+The model can be trained for text summarization task. The example below uses a sample from [Livedoor news corpus](https://www.rondhuit.com/download.html#news%20corpus).
+
+```python
+from transformers import MBartForConditionalGeneration, BartJapaneseTokenizer
+
+tokenizer = BartJapaneseTokenizer.from_pretrained("Formzu/bart-large-japanese")
+example_japanese_phrase = (
+    "気温が高い日が続く。特に９日は各地で気温が上がった。気温が上がるとどうしても比例するのが電力使用量だ。９日は、全国の電力会社のうち８社の管内で、いずれも最大電力使用量が今夏最高を記録した。"
+)
+expected_summarization = "電力使用量９日が８社管内で今夏最高"
+
+inputs = tokenizer(example_japanese_phrase, text_target=expected_summarization, return_tensors="pt")
+
+model = MBartForConditionalGeneration.from_pretrained("Formzu/bart-large-japanese")
+# forward pass
+model(**inputs)
+```
+
+## BartJapaneseTokenizer
+
+The tokenizer is based on [SentencePiece](https://github.com/google/sentencepiece) and uses [Juman++](https://github.com/ku-nlp/jumanpp) 
+for text segmentation and [zenhan](https://pypi.org/project/zenhan/) for half-width characters conversion.
+
+[[autodoc]] BartJapaneseTokenizer
