@@ -1189,6 +1189,7 @@ class ConvNeXt(nn.Module):
         self.norm_pre = nn.Identity()
         # DONE: Remove Head
 
+    # TODO: Rename Forward Features
     def forward_features(self, x, return_feat=False):
         x = self.stem(x)
         out_list = []
@@ -1428,23 +1429,9 @@ class FANEncoderLayer(FANPreTrainedModel):
 
 # TODO: Update Docstring
 class FANEncoder(FANPreTrainedModel):
-    """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`DetrEncoderLayer`].
-
-    The encoder updates the flattened feature map through multiple self-attention layers.
-
-    Small tweak for DETR:
-
-    - position_embeddings are added to the forward pass.
-
-    Args:
-        config: FANConfig
-    """
-
     def __init__(self, config: FANConfig):
         super().__init__(config)
-
+        self.gradient_checkpointing = False
         img_size = to_2tuple(config.img_size)
         assert (img_size[0] % config.patch_size == 0) and (
             img_size[0] % config.patch_size == 0
@@ -1518,10 +1505,11 @@ class FANEncoder(FANPreTrainedModel):
             out_index = [self.config.out_index]
 
         current_hidden_state = inputs_embeds
+        # TODO: Add all Hidden States, use out_index for segmentation selection
         for idx, blk in enumerate(self.blocks):
             # blk.H, blk.W = Hp, Wp
 
-            if self.config.gradient_checkpointing:
+            if self.gradient_checkpointing:
                 current_hidden_state, Hp, Wp = torch.utils.checkpoint.checkpoint(blk, current_hidden_state, Hp, Wp)
             else:
                 (current_hidden_state, Hp, Wp) = blk(current_hidden_state, Hp, Wp)

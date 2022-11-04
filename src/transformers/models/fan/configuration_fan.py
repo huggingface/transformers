@@ -81,6 +81,12 @@ class FANConfig(PretrainedConfig):
             Wheter or not to use 'hybrid' backbone.
         segmentation_in_channels (tuple(int), defaults to (128, 256, 480, 480)):
             Number of channels in each of the hidden features used for Semantic Segmentation.
+        drop_rate (`float`, defaults to 0):
+            Dropout used in MLP.
+        attn_drop_rate (`float`, defaults to 0):
+            Dropout used in Toxen Mixing after attention.
+        drop_path_rate (`float`, defaults to 0):
+            Dropout used in Toxen Mixing after MLP.
         decoder_dropout (`float`, defaults to 0.1):
             Dropout used in Decode Head for SemanticSegmentation tasks.
         tokens_norm (`bool`, defaults to True):
@@ -91,6 +97,9 @@ class FANConfig(PretrainedConfig):
         channel_dims (`tuple(int)`, *optional*, defaults to None):
             List of Input channels for each of the encoder layers.
             If None it defaults to [config.embed_dim] * config.num_hidden_layers.
+        cls_attn_layers (`int`, defaults to 2):
+            Number of ClassAttentionBlock used.
+            Class Attention Layer as in CaiT https://arxiv.org/abs/2103.17239.
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
@@ -103,9 +112,6 @@ class FANConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with.
             Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`~FANModel`] or
-            [`~TFFANModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -148,20 +154,19 @@ class FANConfig(PretrainedConfig):
         use_pos_embed=True,  # HASCOMMENTS
         mlp_ratio=4.0,  # HASCOMMENTS
         qkv_bias=True,  # HASCOMMENTS
-        drop_rate=0.0,
-        attn_drop_rate=0.0,
-        drop_path_rate=0.0,
+        drop_rate=0.0,  # HASCOMMENTS
+        attn_drop_rate=0.0,  # HASCOMMENTS
+        drop_path_rate=0.0,  # HASCOMMENTS
         decoder_dropout=0.1,  # HASCOMMENTS
-        act_layer=None,
+        act_layer=None,  # TODO: Add Documentation Refactor modeling to include ACT2CLS/ACT2FN from activations
         norm_layer=None,
-        cls_attn_layers=2,
+        cls_attn_layers=2,  # HASCOMMENTS
         hybrid_patch_size=2,
         channel_dims=None,  # HASCOMMENTS
         feat_downsample=False,  # HASCOMMENTS
         out_index=-1,
         rounding_mode="floor",
         segmentation_in_channels=[128, 256, 480, 480],  # HASCOMMENTS
-        in_index=[0, 1, 2, 3],
         feature_strides=[4, 8, 16, 32],
         channels=256,
         decoder_hidden_size=768,
@@ -178,7 +183,6 @@ class FANConfig(PretrainedConfig):
         self.eta = eta
         self.tokens_norm = tokens_norm
         self.se_mlp = se_mlp
-        # self.sr_ratio = sr_ratio if sr_ratio else [1] * (num_hidden_layers // 2) + [1] * (num_hidden_layers // 2)
         self.initializer_range = initializer_range
         self.img_size = img_size
         self.in_chans = in_chans
@@ -196,14 +200,12 @@ class FANConfig(PretrainedConfig):
         self.norm_layer = norm_layer
         self.act_layer = act_layer
         self.cls_attn_layers = cls_attn_layers
-        # self.c_head_num = c_head_num
         self.hybrid_patch_size = hybrid_patch_size
         self.channel_dims = channel_dims
         self.out_index = out_index
         self.feat_downsample = feat_downsample
         self.rounding_mode = rounding_mode
         self.segmentation_in_channels = segmentation_in_channels
-        self.in_index = in_index
         self.feature_strides = feature_strides
         self.channels = channels
 
