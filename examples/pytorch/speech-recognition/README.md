@@ -341,7 +341,6 @@ The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface
 
 ```bash
 python run_speech_recognition_seq2seq.py \
- 	--nproc_per_node 8 run_speech_recognition_seq2seq.py \
 	--dataset_name="librispeech_asr" \
 	--model_name_or_path="./" \
 	--dataset_config_name="clean" \
