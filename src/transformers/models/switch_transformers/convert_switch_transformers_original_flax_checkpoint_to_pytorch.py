@@ -80,12 +80,14 @@ def rename_keys(s_dict):
         print(f"{key} -> {new_key}")
         s_dict[new_key] = s_dict.pop(key)
 
-    s_dict["encoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"] = s_dict[
-        "encoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"
-    ].T
-    s_dict["decoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"] = s_dict[
-        "decoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"
-    ].T
+    if "encoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight" in s_dict:
+        s_dict["encoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"] = s_dict[
+            "encoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"
+        ].T
+    if "decoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight" in s_dict:
+        s_dict["decoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"] = s_dict[
+            "decoder/block/0/layer/0/SelfAttention/relative_attention_bias/weight"
+        ].T
 
     # 3. Take extra care of the EXPERTS layer
     for key in list(s_dict.keys()):
