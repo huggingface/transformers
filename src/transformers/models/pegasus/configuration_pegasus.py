@@ -22,7 +22,6 @@ from ...onnx import OnnxConfig, OnnxConfigWithPast, OnnxSeq2SeqConfigWithPast
 from ...onnx.utils import compute_effective_axis_dimension
 from ...utils import TensorType, is_torch_available, logging
 
-
 logger = logging.get_logger(__name__)
 
 PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -109,32 +108,32 @@ class PegasusConfig(PretrainedConfig):
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
 
     def __init__(
-        self,
-        vocab_size=50265,
-        max_position_embeddings=1024,
-        encoder_layers=12,
-        encoder_ffn_dim=4096,
-        encoder_attention_heads=16,
-        decoder_layers=12,
-        decoder_ffn_dim=4096,
-        decoder_attention_heads=16,
-        encoder_layerdrop=0.0,
-        decoder_layerdrop=0.0,
-        use_cache=True,
-        is_encoder_decoder=True,
-        activation_function="gelu",
-        d_model=1024,
-        dropout=0.1,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        init_std=0.02,
-        decoder_start_token_id=0,
-        classifier_dropout=0.0,
-        scale_embedding=False,
-        pad_token_id=0,
-        eos_token_id=1,
-        forced_eos_token_id=1,
-        **kwargs
+            self,
+            vocab_size=50265,
+            max_position_embeddings=1024,
+            encoder_layers=12,
+            encoder_ffn_dim=4096,
+            encoder_attention_heads=16,
+            decoder_layers=12,
+            decoder_ffn_dim=4096,
+            decoder_attention_heads=16,
+            encoder_layerdrop=0.0,
+            decoder_layerdrop=0.0,
+            use_cache=True,
+            is_encoder_decoder=True,
+            activation_function="gelu",
+            d_model=1024,
+            dropout=0.1,
+            attention_dropout=0.0,
+            activation_dropout=0.0,
+            init_std=0.02,
+            decoder_start_token_id=0,
+            classifier_dropout=0.0,
+            scale_embedding=False,
+            pad_token_id=0,
+            eos_token_id=1,
+            forced_eos_token_id=1,
+            **kwargs
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -239,12 +238,12 @@ class PegasusOnnxConfig(OnnxSeq2SeqConfigWithPast):
         return common_outputs
 
     def _generate_dummy_inputs_for_default_and_seq2seq_lm(
-        self,
-        tokenizer: PreTrainedTokenizer,
-        batch_size: int = -1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-        framework: Optional[TensorType] = None,
+            self,
+            tokenizer: PreTrainedTokenizer,
+            batch_size: int = -1,
+            seq_length: int = -1,
+            is_pair: bool = False,
+            framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         encoder_inputs = self._generate_dummy_inputs_for_sequence_classification_and_question_answering(
             tokenizer, batch_size, seq_length, is_pair, framework
@@ -307,12 +306,12 @@ class PegasusOnnxConfig(OnnxSeq2SeqConfigWithPast):
         return common_inputs
 
     def _generate_dummy_inputs_for_causal_lm(
-        self,
-        tokenizer: PreTrainedTokenizer,
-        batch_size: int = -1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-        framework: Optional[TensorType] = None,
+            self,
+            tokenizer: PreTrainedTokenizer,
+            batch_size: int = -1,
+            seq_length: int = -1,
+            is_pair: bool = False,
+            framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         common_inputs = self._generate_dummy_inputs_for_sequence_classification_and_question_answering(
             tokenizer, batch_size, seq_length, is_pair, framework
@@ -345,12 +344,12 @@ class PegasusOnnxConfig(OnnxSeq2SeqConfigWithPast):
         return common_inputs
 
     def _generate_dummy_inputs_for_sequence_classification_and_question_answering(
-        self,
-        tokenizer: PreTrainedTokenizer,
-        batch_size: int = -1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-        framework: Optional[TensorType] = None,
+            self,
+            tokenizer: PreTrainedTokenizer,
+            batch_size: int = -1,
+            seq_length: int = -1,
+            is_pair: bool = False,
+            framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         # Copied from OnnxConfig.generate_dummy_inputs
         # Did not use super(OnnxConfigWithPast, self).generate_dummy_inputs for code clarity.
@@ -371,12 +370,12 @@ class PegasusOnnxConfig(OnnxSeq2SeqConfigWithPast):
         return common_inputs
 
     def generate_dummy_inputs(
-        self,
-        tokenizer: PreTrainedTokenizer,
-        batch_size: int = -1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-        framework: Optional[TensorType] = None,
+            self,
+            tokenizer: PreTrainedTokenizer,
+            batch_size: int = -1,
+            seq_length: int = -1,
+            is_pair: bool = False,
+            framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
         if self.task in ["default", "seq2seq-lm"]:
             common_inputs = self._generate_dummy_inputs_for_default_and_seq2seq_lm(
