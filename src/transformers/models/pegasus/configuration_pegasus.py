@@ -176,6 +176,10 @@ class PegasusConfig(PretrainedConfig):
 
 # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig with Bart->Pegasus
 class PegasusOnnxConfig(OnnxSeq2SeqConfigWithPast):
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         if self.task in ["default", "seq2seq-lm"]:
