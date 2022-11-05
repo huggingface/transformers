@@ -180,6 +180,7 @@ class PegasusOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def atol_for_validation(self) -> float:
         return 1e-3
+
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         if self.task in ["default", "seq2seq-lm"]:
