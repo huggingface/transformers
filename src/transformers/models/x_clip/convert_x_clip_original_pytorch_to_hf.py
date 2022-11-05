@@ -207,8 +207,9 @@ def prepare_video(num_frames):
     elif num_frames == 32:
         filename = "eating_spaghetti_32_frames.npy"
     file = hf_hub_download(
-        repo_id="datasets/hf-internal-testing/spaghetti-video",
+        repo_id="hf-internal-testing/spaghetti-video",
         filename=filename,
+        repo_type="dataset",
     )
     video = np.load(file)
     return list(video)

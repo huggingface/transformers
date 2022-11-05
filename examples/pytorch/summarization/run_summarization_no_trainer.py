@@ -56,7 +56,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.23.0.dev0")
+check_min_version("4.25.0.dev0")
 
 logger = get_logger(__name__)
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
@@ -439,7 +439,11 @@ def main():
         logger.info("Training new model from scratch")
         model = AutoModelForSeq2SeqLM.from_config(config)
 
-    model.resize_token_embeddings(len(tokenizer))
+    # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
+    # on a small vocab and want a smaller embedding size, remove this test.
+    embedding_size = model.get_input_embeddings().weight.shape[0]
+    if len(tokenizer) > embedding_size:
+        model.resize_token_embeddings(len(tokenizer))
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
 
@@ -669,7 +673,6 @@ def main():
             "max_length": args.val_max_target_length if args is not None else config.max_length,
             "num_beams": args.num_beams,
         }
-        samples_seen = 0
         for step, batch in enumerate(eval_dataloader):
             with torch.no_grad():
                 generated_tokens = accelerator.unwrap_model(model).generate(
@@ -686,7 +689,7 @@ def main():
                     # If we did not pad to max length, we need to pad the labels too
                     labels = accelerator.pad_across_processes(batch["labels"], dim=1, pad_index=tokenizer.pad_token_id)
 
-                generated_tokens, labels = accelerator.gather((generated_tokens, labels))
+                generated_tokens, labels = accelerator.gather_for_metrics((generated_tokens, labels))
                 generated_tokens = generated_tokens.cpu().numpy()
                 labels = labels.cpu().numpy()
 
@@ -699,14 +702,8 @@ def main():
                 decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
                 decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
-                # If we are in a multiprocess environment, the last batch has duplicates
-                if accelerator.num_processes > 1:
-                    if step == len(eval_dataloader) - 1:
-                        decoded_preds = decoded_preds[: len(eval_dataloader.dataset) - samples_seen]
-                        decoded_labels = decoded_labels[: len(eval_dataloader.dataset) - samples_seen]
-                    else:
-                        samples_seen += len(decoded_labels)
 
+                decoded_preds, decoded_labels = accelerator.gather_for_metrics(decoded_preds, decoded_labels)
                 metric.add_batch(
                     predictions=decoded_preds,
                     references=decoded_labels,

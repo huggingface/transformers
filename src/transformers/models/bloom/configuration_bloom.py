@@ -53,14 +53,16 @@ class BloomConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50257):
-            Vocabulary size of the Bloom model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`BloomModel`].
-        hidden_size (`int`, *optional*, defaults to 768):
+        vocab_size (`int`, *optional*, defaults to 250880):
+            Vocabulary size of the Bloom model. Defines the maximum number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`BloomModel`]. Check [this
+            discussion](https://huggingface.co/bigscience/bloom/discussions/120#633d28389addb8530b406c2a) on how the
+            `vocab_size` has been defined.
+        hidden_size (`int`, *optional*, defaults to 64):
             Dimensionality of the embeddings and hidden states.
-        n_layer (`int`, *optional*, defaults to 12):
+        n_layer (`int`, *optional*, defaults to 2):
             Number of hidden layers in the Transformer encoder.
-        n_head (`int`, *optional*, defaults to 12):
+        n_head (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
             The epsilon to use in the layer normalization layers.
@@ -91,12 +93,12 @@ class BloomConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BloomModel, BloomConfig
+    >>> from transformers import BloomConfig, BloomModel
 
     >>> # Initializing a Bloom configuration
     >>> configuration = BloomConfig()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = BloomModel(configuration)
 
     >>> # Accessing the model configuration
@@ -150,7 +152,6 @@ class BloomConfig(PretrainedConfig):
 
 
 class BloomOnnxConfig(OnnxConfigWithPast):
-
     torch_onnx_minimum_version = version.parse("1.12")
 
     def __init__(
@@ -169,7 +170,8 @@ class BloomOnnxConfig(OnnxConfigWithPast):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         common_inputs = OrderedDict({"input_ids": {0: "batch", 1: "sequence"}})
         if self.use_past:
-            self.fill_with_past_key_values_(common_inputs, direction="inputs")
+            # BLOOM stores values on dynamic axis 2. For more details see: https://github.com/huggingface/transformers/pull/18344
+            self.fill_with_past_key_values_(common_inputs, direction="inputs", inverted_values_shape=True)
             common_inputs["attention_mask"] = {0: "batch", 1: "past_sequence + sequence"}
         else:
             common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}

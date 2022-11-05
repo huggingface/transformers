@@ -33,11 +33,9 @@ from ...tokenization_utils_base import (
     TextInput,
     TextInputPair,
     TruncationStrategy,
-    _is_tensorflow,
-    _is_torch,
     to_py_obj,
 )
-from ...utils import add_end_docstrings, is_tf_available, is_torch_available, logging
+from ...utils import add_end_docstrings, is_tf_tensor, is_torch_tensor, logging
 
 
 logger = logging.get_logger(__name__)
@@ -270,7 +268,7 @@ class LukeTokenizer(RobertaTokenizer):
         entities_pair: Optional[Union[EntityInput, List[EntityInput]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         max_entity_length: Optional[int] = None,
         stride: int = 0,
@@ -860,7 +858,7 @@ class LukeTokenizer(RobertaTokenizer):
         pair_entity_token_spans: Optional[List[Tuple[int, int]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         max_entity_length: Optional[int] = None,
         stride: int = 0,
@@ -1174,9 +1172,9 @@ class LukeTokenizer(RobertaTokenizer):
                 first_element = required_input[index][0]
         # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
         if not isinstance(first_element, (int, list, tuple)):
-            if is_tf_available() and _is_tensorflow(first_element):
+            if is_tf_tensor(first_element):
                 return_tensors = "tf" if return_tensors is None else return_tensors
-            elif is_torch_available() and _is_torch(first_element):
+            elif is_torch_tensor(first_element):
                 return_tensors = "pt" if return_tensors is None else return_tensors
             elif isinstance(first_element, np.ndarray):
                 return_tensors = "np" if return_tensors is None else return_tensors

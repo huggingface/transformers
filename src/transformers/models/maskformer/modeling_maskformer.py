@@ -259,7 +259,8 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
     """
     Class for outputs of [`MaskFormerForInstanceSegmentation`].
 
-    This output can be directly passed to [`~MaskFormerFeatureExtractor.post_process_segmentation`] or
+    This output can be directly passed to [`~MaskFormerFeatureExtractor.post_process_semantic_segmentation`] or or
+    [`~MaskFormerFeatureExtractor.post_process_instance_segmentation`] or
     [`~MaskFormerFeatureExtractor.post_process_panoptic_segmentation`] depending on the task. Please, see
     [`~MaskFormerFeatureExtractor] for details regarding usage.
 
@@ -267,11 +268,11 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
         loss (`torch.Tensor`, *optional*):
             The computed loss, returned when labels are present.
         class_queries_logits (`torch.FloatTensor`):
-            A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
-            query.
-        masks_queries_logits (`torch.FloatTensor`):
             A tensor of shape `(batch_size, num_queries, num_labels + 1)` representing the proposed classes for each
             query. Note the `+ 1` is needed because we incorporate the null class.
+        masks_queries_logits (`torch.FloatTensor`):
+            A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
+            query.
         encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Last hidden states (final feature map) of the last stage of the encoder model (backbone).
         pixel_decoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -489,9 +490,9 @@ def window_reverse(windows, window_size, height, width):
     """
     Merges windows to produce higher resolution features.
     """
-    batch_size = math.floor(windows.shape[0] / (height * width / window_size / window_size))
-    windows = windows.view(batch_size, height // window_size, width // window_size, window_size, window_size, -1)
-    windows = windows.permute(0, 1, 3, 2, 4, 5).contiguous().view(batch_size, height, width, -1)
+    num_channels = windows.shape[-1]
+    windows = windows.view(-1, height // window_size, width // window_size, window_size, window_size, num_channels)
+    windows = windows.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, height, width, num_channels)
     return windows
 
 
@@ -664,7 +665,7 @@ class MaskFormerSwinDropPath(nn.Module):
 
 # Copied from transformers.models.swin.modeling_swin.SwinSelfAttention with Swin->MaskFormerSwin
 class MaskFormerSwinSelfAttention(nn.Module):
-    def __init__(self, config, dim, num_heads):
+    def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
         if dim % num_heads != 0:
             raise ValueError(
@@ -674,7 +675,6 @@ class MaskFormerSwinSelfAttention(nn.Module):
         self.num_attention_heads = num_heads
         self.attention_head_size = int(dim / num_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        window_size = config.window_size
         self.window_size = (
             window_size if isinstance(window_size, collections.abc.Iterable) else (window_size, window_size)
         )
@@ -780,9 +780,9 @@ class MaskFormerSwinSelfOutput(nn.Module):
 
 # Copied from transformers.models.swin.modeling_swin.SwinAttention with Swin->MaskFormerSwin
 class MaskFormerSwinAttention(nn.Module):
-    def __init__(self, config, dim, num_heads):
+    def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
-        self.self = MaskFormerSwinSelfAttention(config, dim, num_heads)
+        self.self = MaskFormerSwinSelfAttention(config, dim, num_heads, window_size)
         self.output = MaskFormerSwinSelfOutput(config, dim)
         self.pruned_heads = set()
 
@@ -846,7 +846,7 @@ class MaskFormerSwinOutput(nn.Module):
         return hidden_states
 
 
-class MaskFormerSwinBlock(nn.Module):
+class MaskFormerSwinLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -854,7 +854,7 @@ class MaskFormerSwinBlock(nn.Module):
         self.window_size = config.window_size
         self.input_resolution = input_resolution
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.attention = MaskFormerSwinAttention(config, dim, num_heads)
+        self.attention = MaskFormerSwinAttention(config, dim, num_heads, self.window_size)
         self.drop_path = (
             MaskFormerSwinDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         )
@@ -959,14 +959,15 @@ class MaskFormerSwinBlock(nn.Module):
         return outputs
 
 
-class MaskFormerSwinLayer(nn.Module):
+class MaskFormerSwinStage(nn.Module):
+    # Copied from transformers.models.swin.modeling_swin.SwinStage.__init__ with Swin->MaskFormerSwin
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
         super().__init__()
         self.config = config
         self.dim = dim
         self.blocks = nn.ModuleList(
             [
-                MaskFormerSwinBlock(
+                MaskFormerSwinLayer(
                     config=config,
                     dim=dim,
                     input_resolution=input_resolution,
@@ -1015,6 +1016,7 @@ class MaskFormerSwinLayer(nn.Module):
 
 
 class MaskFormerSwinEncoder(nn.Module):
+    # Copied from transformers.models.swin.modeling_swin.SwinEncoder.__init__ with Swin->MaskFormerSwin
     def __init__(self, config, grid_size):
         super().__init__()
         self.num_layers = len(config.depths)
@@ -1022,7 +1024,7 @@ class MaskFormerSwinEncoder(nn.Module):
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
         self.layers = nn.ModuleList(
             [
-                MaskFormerSwinLayer(
+                MaskFormerSwinStage(
                     config=config,
                     dim=int(config.embed_dim * 2**i_layer),
                     input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
@@ -2102,7 +2104,7 @@ class MaskFormerSinePositionEmbedding(nn.Module):
         self.num_pos_feats = num_pos_feats
         self.temperature = temperature
         self.normalize = normalize
-        self.scale = 2 * torch.pi if scale is None else scale
+        self.scale = 2 * math.pi if scale is None else scale
 
     def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
         if mask is None:
@@ -2547,8 +2549,8 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         >>> masks_queries_logits = outputs.masks_queries_logits
 
         >>> # you can pass them to feature_extractor for postprocessing
-        >>> output = feature_extractor.post_process_segmentation(outputs)
         >>> output = feature_extractor.post_process_semantic_segmentation(outputs)
+        >>> output = feature_extractor.post_process_instance_segmentation(outputs)
         >>> output = feature_extractor.post_process_panoptic_segmentation(outputs)
         ```
         """

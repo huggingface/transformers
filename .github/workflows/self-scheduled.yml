@@ -74,6 +74,10 @@ jobs:
           rm -rf tests/models/__pycache__
           rm -rf reports
 
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
       - id: set-matrix
         name: Identify models to test
         working-directory: /transformers/tests
@@ -120,6 +124,10 @@ jobs:
         working-directory: /transformers
         run: |
           python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
 
       - name: Run all tests on GPU
         working-directory: /transformers
@@ -174,6 +182,10 @@ jobs:
         run: |
           python3 utils/print_env.py
 
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
       - name: Run all tests on GPU
         working-directory: /transformers
         run: python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
@@ -210,6 +222,10 @@ jobs:
         working-directory: /transformers
         run: |
           python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
 
       - name: Run examples tests on GPU
         working-directory: /transformers
@@ -254,12 +270,14 @@ jobs:
         run: |
           python3 utils/print_env.py
 
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
       - name: Run all pipeline tests on GPU
         working-directory: /transformers
-        env:
-          RUN_PIPELINE_TESTS: yes
         run: |
-          python3 -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=${{ matrix.machine_type }}_tests_torch_pipeline_gpu tests
+          python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ matrix.machine_type }}_tests_torch_pipeline_gpu tests/pipelines
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -299,12 +317,14 @@ jobs:
         run: |
           python3 utils/print_env.py
 
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
       - name: Run all pipeline tests on GPU
         working-directory: /transformers
-        env:
-          RUN_PIPELINE_TESTS: yes
         run: |
-          python3 -m pytest -n 1 -v --dist=loadfile -m is_pipeline_test --make-reports=${{ matrix.machine_type }}_tests_tf_pipeline_gpu tests
+          python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ matrix.machine_type }}_tests_tf_pipeline_gpu tests/pipelines
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -352,6 +372,10 @@ jobs:
         working-directory: /workspace/transformers
         run: |
           python utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /workspace/transformers
+        run: pip freeze
 
       - name: Run all tests on GPU
         working-directory: /workspace/transformers
@@ -411,4 +435,5 @@ jobs:
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |
           pip install slack_sdk
+          pip show slack_sdk
           python utils/notification_service.py "${{ needs.setup.outputs.matrix }}"

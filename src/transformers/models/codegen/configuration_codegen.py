@@ -87,12 +87,12 @@ class CodeGenConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CodeGenModel, CodeGenConfig
+    >>> from transformers import CodeGenConfig, CodeGenModel
 
     >>> # Initializing a CodeGen 6B configuration
     >>> configuration = CodeGenConfig()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = CodeGenModel(configuration)
 
     >>> # Accessing the model configuration
