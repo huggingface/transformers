@@ -38,7 +38,7 @@ CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class CamembertConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`CamembertConfig`] or a [`TFCamembertConfig`]. It is
+    This is the configuration class to store the configuration of a [`CamembertModel`] or a [`TFCamembertModel`]. It is
     used to instantiate a Camembert model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
     Camembert [camembert-base](https://huggingface.co/camembert-base) architecture.
