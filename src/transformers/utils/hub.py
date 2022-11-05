@@ -19,10 +19,12 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import traceback
 import warnings
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
+from urllib.parse import urlparse
 from uuid import uuid4
 
 import huggingface_hub
@@ -32,17 +34,18 @@ from huggingface_hub import (
     HfFolder,
     create_commit,
     create_repo,
+    get_hf_file_metadata,
     hf_hub_download,
     hf_hub_url,
     whoami,
 )
-from huggingface_hub.constants import HUGGINGFACE_HEADER_X_LINKED_ETAG, HUGGINGFACE_HEADER_X_REPO_COMMIT
-from huggingface_hub.file_download import REGEX_COMMIT_HASH
+from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
 from huggingface_hub.utils import (
     EntryNotFoundError,
     LocalEntryNotFoundError,
     RepositoryNotFoundError,
     RevisionNotFoundError,
+    hf_raise_for_status,
 )
 from requests.exceptions import HTTPError
 from transformers.utils.logging import tqdm
@@ -122,6 +125,11 @@ HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/api/tele
 
 # Return value when trying to load a file from cache but the file does not exist in the distant repo.
 _CACHED_NO_EXIST = object()
+
+
+def is_remote_url(url_or_filename):
+    parsed = urlparse(url_or_filename)
+    return parsed.scheme in ("http", "https")
 
 
 def get_cached_models(cache_dir: Union[str, Path] = None) -> List[Tuple]:
@@ -214,7 +222,7 @@ def extract_commit_hash(resolved_file: Optional[str], commit_hash: Optional[str]
     """
     if resolved_file is None or commit_hash is not None:
         return commit_hash
-
+    resolved_file = str(Path(resolved_file).as_posix())
     search = re.search(r"snapshots/([^/]+)/", resolved_file)
     if search is None:
         return None
@@ -222,18 +230,27 @@ def extract_commit_hash(resolved_file: Optional[str], commit_hash: Optional[str]
     return commit_hash if REGEX_COMMIT_HASH.match(commit_hash) else None
 
 
-def try_to_load_from_cache(cache_dir, repo_id, filename, revision=None, commit_hash=None):
+def try_to_load_from_cache(
+    repo_id: str,
+    filename: str,
+    cache_dir: Union[str, Path, None] = None,
+    revision: Optional[str] = None,
+) -> Optional[str]:
     """
-    Explores the cache to return the latest cached file for a given revision.
+    Explores the cache to return the latest cached file for a given revision if found.
+
+    This function will not raise any exception if the file in not cached.
 
     Args:
-        cache_dir (`str` or `os.PathLike`): The folder where the cached files lie.
-        repo_id (`str`): The ID of the repo on huggingface.co.
-        filename (`str`): The filename to look for inside `repo_id`.
+        cache_dir (`str` or `os.PathLike`):
+            The folder where the cached files lie.
+        repo_id (`str`):
+            The ID of the repo on huggingface.co.
+        filename (`str`):
+            The filename to look for inside `repo_id`.
         revision (`str`, *optional*):
             The specific model version to use. Will default to `"main"` if it's not provided and no `commit_hash` is
             provided either.
-        commit_hash (`str`, *optional*): The (full) commit hash to look for inside the cache.
 
     Returns:
         `Optional[str]` or `_CACHED_NO_EXIST`:
@@ -242,36 +259,36 @@ def try_to_load_from_cache(cache_dir, repo_id, filename, revision=None, commit_h
             - A special value `_CACHED_NO_EXIST` if the file does not exist at the given commit hash and this fact was
               cached.
     """
-    if commit_hash is not None and revision is not None:
-        raise ValueError("`commit_hash` and `revision` are mutually exclusive, pick one only.")
-    if revision is None and commit_hash is None:
+    if revision is None:
         revision = "main"
 
-    model_id = repo_id.replace("/", "--")
-    model_cache = os.path.join(cache_dir, f"models--{model_id}")
-    if not os.path.isdir(model_cache):
+    if cache_dir is None:
+        cache_dir = TRANSFORMERS_CACHE
+
+    object_id = repo_id.replace("/", "--")
+    repo_cache = os.path.join(cache_dir, f"models--{object_id}")
+    if not os.path.isdir(repo_cache):
         # No cache for this model
         return None
     for subfolder in ["refs", "snapshots"]:
-        if not os.path.isdir(os.path.join(model_cache, subfolder)):
+        if not os.path.isdir(os.path.join(repo_cache, subfolder)):
             return None
 
-    if commit_hash is None:
-        # Resolve refs (for instance to convert main to the associated commit sha)
-        cached_refs = os.listdir(os.path.join(model_cache, "refs"))
-        if revision in cached_refs:
-            with open(os.path.join(model_cache, "refs", revision)) as f:
-                commit_hash = f.read()
+    # Resolve refs (for instance to convert main to the associated commit sha)
+    cached_refs = os.listdir(os.path.join(repo_cache, "refs"))
+    if revision in cached_refs:
+        with open(os.path.join(repo_cache, "refs", revision)) as f:
+            revision = f.read()
 
-    if os.path.isfile(os.path.join(model_cache, ".no_exist", commit_hash, filename)):
+    if os.path.isfile(os.path.join(repo_cache, ".no_exist", revision, filename)):
         return _CACHED_NO_EXIST
 
-    cached_shas = os.listdir(os.path.join(model_cache, "snapshots"))
-    if commit_hash not in cached_shas:
+    cached_shas = os.listdir(os.path.join(repo_cache, "snapshots"))
+    if revision not in cached_shas:
         # No cache for this revision and we won't try to return a random revision
         return None
 
-    cached_file = os.path.join(model_cache, "snapshots", commit_hash, filename)
+    cached_file = os.path.join(repo_cache, "snapshots", revision, filename)
     return cached_file if os.path.isfile(cached_file) else None
 
 
@@ -375,7 +392,9 @@ def cached_file(
 
     if _commit_hash is not None:
         # If the file is cached under that commit hash, we return it directly.
-        resolved_file = try_to_load_from_cache(cache_dir, path_or_repo_id, full_filename, commit_hash=_commit_hash)
+        resolved_file = try_to_load_from_cache(
+            path_or_repo_id, full_filename, cache_dir=cache_dir, revision=_commit_hash
+        )
         if resolved_file is not None:
             if resolved_file is not _CACHED_NO_EXIST:
                 return resolved_file
@@ -416,8 +435,8 @@ def cached_file(
         )
     except LocalEntryNotFoundError:
         # We try to see if we have a cached version (not up to date):
-        resolved_file = try_to_load_from_cache(cache_dir, path_or_repo_id, full_filename, revision=revision)
-        if resolved_file is not None:
+        resolved_file = try_to_load_from_cache(path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision)
+        if resolved_file is not None and resolved_file != _CACHED_NO_EXIST:
             return resolved_file
         if not _raise_exceptions_for_missing_entries or not _raise_exceptions_for_connection_errors:
             return None
@@ -438,8 +457,8 @@ def cached_file(
         )
     except HTTPError as err:
         # First we try to see if we have a cached version (not up to date):
-        resolved_file = try_to_load_from_cache(cache_dir, path_or_repo_id, full_filename, revision=revision)
-        if resolved_file is not None:
+        resolved_file = try_to_load_from_cache(path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision)
+        if resolved_file is not None and resolved_file != _CACHED_NO_EXIST:
             return resolved_file
         if not _raise_exceptions_for_connection_errors:
             return None
@@ -530,6 +549,32 @@ def get_file_from_repo(
     )
 
 
+def download_url(url, proxies=None):
+    """
+    Downloads a given url in a temporary file. This function is not safe to use in multiple processes. Its only use is
+    for deprecated behavior allowing to download config/models with a single url instead of using the Hub.
+
+    Args:
+        url (`str`): The url of the file to download.
+        proxies (`Dict[str, str]`, *optional*):
+            A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+            'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+
+    Returns:
+        `str`: The location of the temporary file where the url was downloaded.
+    """
+    warnings.warn(
+        f"Using `from_pretrained` with the url of a file (here {url}) is deprecated and won't be possible anymore in"
+        " v5 of Transformers. You should host your file on the Hub (hf.co) instead and use the repository ID. Note"
+        " that this is not compatible with the caching system (your file will be downloaded at each execution) or"
+        " multiple processes (each process will download the file in a different temporary file)."
+    )
+    tmp_file = tempfile.mktemp()
+    with open(tmp_file, "wb") as f:
+        http_get(url, f, proxies=proxies)
+    return tmp_file
+
+
 def has_file(
     path_or_repo: Union[str, os.PathLike],
     filename: str,
@@ -563,7 +608,7 @@ def has_file(
 
     r = requests.head(url, headers=headers, allow_redirects=False, proxies=proxies, timeout=10)
     try:
-        huggingface_hub.utils._errors._raise_for_status(r)
+        hf_raise_for_status(r)
         return True
     except RepositoryNotFoundError as e:
         logger.error(e)
@@ -689,7 +734,7 @@ class PushToHubMixin:
             commit_message (`str`, *optional*):
                 Message to commit while pushing. Will default to `"Upload {object}"`.
             private (`bool`, *optional*):
-                Whether or not the repository created should be private (requires a paying subscription).
+                Whether or not the repository created should be private.
             use_auth_token (`bool` or `str`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `huggingface-cli login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
@@ -937,26 +982,6 @@ def get_all_cached_files(cache_dir=None):
     return cached_files
 
 
-def get_hub_metadata(url, token=None):
-    """
-    Returns the commit hash and associated etag for a given url.
-    """
-    if token is None:
-        token = HfFolder.get_token()
-    headers = {"user-agent": http_user_agent()}
-    headers["authorization"] = f"Bearer {token}"
-
-    r = huggingface_hub.file_download._request_with_retry(
-        method="HEAD", url=url, headers=headers, allow_redirects=False
-    )
-    huggingface_hub.file_download._raise_for_status(r)
-    commit_hash = r.headers.get(HUGGINGFACE_HEADER_X_REPO_COMMIT)
-    etag = r.headers.get(HUGGINGFACE_HEADER_X_LINKED_ETAG) or r.headers.get("ETag")
-    if etag is not None:
-        etag = huggingface_hub.file_download._normalize_etag(etag)
-    return etag, commit_hash
-
-
 def extract_info_from_url(url):
     """
     Extract repo_name, revision and filename from an url.
@@ -1024,11 +1049,11 @@ def move_cache(cache_dir=None, new_cache_dir=None, token=None):
         url = file_info.pop("url")
         if url not in hub_metadata:
             try:
-                hub_metadata[url] = get_hub_metadata(url, token=token)
+                hub_metadata[url] = get_hf_file_metadata(url, use_auth_token=token)
             except requests.HTTPError:
                 continue
 
-        etag, commit_hash = hub_metadata[url]
+        etag, commit_hash = hub_metadata[url].etag, hub_metadata[url].commit_hash
         if etag is None or commit_hash is None:
             continue
 
@@ -1060,17 +1085,18 @@ else:
     with open(cache_version_file) as f:
         cache_version = int(f.read())
 
+cache_is_not_empty = os.path.isdir(TRANSFORMERS_CACHE) and len(os.listdir(TRANSFORMERS_CACHE)) > 0
 
-if cache_version < 1:
+if cache_version < 1 and cache_is_not_empty:
     if is_offline_mode():
-        logger.warn(
+        logger.warning(
             "You are offline and the cache for model files in Transformers v4.22.0 has been updated while your local "
             "cache seems to be the one of a previous version. It is very likely that all your calls to any "
             "`from_pretrained()` method will fail. Remove the offline mode and enable internet connection to have "
             "your cache be updated automatically, then you can go back to offline mode."
         )
     else:
-        logger.warn(
+        logger.warning(
             "The cache for model files in Transformers v4.22.0 has been updated. Migrating your old cache. This is a "
             "one-time only operation. You can interrupt this and resume the migration later on by calling "
             "`transformers.utils.move_cache()`."
@@ -1084,17 +1110,18 @@ if cache_version < 1:
     except Exception as e:
         trace = "\n".join(traceback.format_tb(e.__traceback__))
         logger.error(
-            f"There was a problem when trying to move your cache:\n\n{trace}\n\nPlease file an issue at "
-            "https://github.com/huggingface/transformers/issues/new/choose and copy paste this whole message and we "
-            "will do our best to help."
+            f"There was a problem when trying to move your cache:\n\n{trace}\n{e.__class__.__name__}: {e}\n\nPlease "
+            "file an issue at https://github.com/huggingface/transformers/issues/new/choose and copy paste this whole "
+            "message and we will do our best to help."
         )
 
+if cache_version < 1:
     try:
         os.makedirs(TRANSFORMERS_CACHE, exist_ok=True)
         with open(cache_version_file, "w") as f:
             f.write("1")
     except Exception:
-        logger.warn(
+        logger.warning(
             f"There was a problem when trying to write in your cache folder ({TRANSFORMERS_CACHE}). You should set "
             "the environment variable TRANSFORMERS_CACHE to a writable directory."
         )

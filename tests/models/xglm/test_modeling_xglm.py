@@ -18,7 +18,7 @@ import math
 import unittest
 
 from transformers import XGLMConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -468,3 +468,22 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
         duration = datetime.datetime.now() - start
         self.assertGreater(duration, datetime.timedelta(seconds=1.25 * MAX_TIME))
+
+    @require_torch_gpu
+    def test_batched_nan_fp16(self):
+        model_name = "facebook/xglm-564M"
+        tokenizer = XGLMTokenizer.from_pretrained(model_name, use_fast=False, padding_side="left")
+
+        model = XGLMForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, use_cache=True).cuda()
+        model = model.eval()
+
+        batch = tokenizer(["Who are you?", "Joe Biden is the president of"], padding=True, return_tensors="pt")
+
+        input_ids = batch["input_ids"].cuda()
+        attention_mask = batch["attention_mask"].cuda()
+
+        with torch.no_grad():
+            outputs = model(input_ids, attention_mask=attention_mask)
+            self.assertFalse(
+                torch.isnan(outputs.logits[0]).any().item()
+            )  # the first logits could contain NaNs if it fails

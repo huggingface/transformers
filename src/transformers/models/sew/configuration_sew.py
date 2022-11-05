@@ -138,12 +138,12 @@ class SEWConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import SEWModel, SEWConfig
+    >>> from transformers import SEWConfig, SEWModel
 
     >>> # Initializing a SEW asapp/sew-tiny-100k style configuration
     >>> configuration = SEWConfig()
 
-    >>> # Initializing a model from the asapp/sew-tiny-100k style configuration
+    >>> # Initializing a model (with random weights) from the asapp/sew-tiny-100k style configuration
     >>> model = SEWModel(configuration)
 
     >>> # Accessing the model configuration

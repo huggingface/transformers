@@ -451,6 +451,11 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
 
             onnxruntime.InferenceSession(onnx_model_proto.SerializeToString())
 
+    # TODO (Joao): fix me
+    @unittest.skip("Onnx compliancy broke with TF 2.10")
+    def test_onnx_compliancy(self):
+        pass
+
 
 @require_tf
 class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):

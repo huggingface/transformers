@@ -68,6 +68,7 @@ else:
         "XLMRobertaForSequenceClassification",
         "XLMRobertaForTokenClassification",
         "XLMRobertaModel",
+        "XLMRobertaPreTrainedModel",
     ]
 
 try:
@@ -139,6 +140,7 @@ if TYPE_CHECKING:
             XLMRobertaForSequenceClassification,
             XLMRobertaForTokenClassification,
             XLMRobertaModel,
+            XLMRobertaPreTrainedModel,
         )
 
     try:

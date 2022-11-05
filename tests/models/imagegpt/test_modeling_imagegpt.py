@@ -538,7 +538,8 @@ class ImageGPTModelIntegrationTest(unittest.TestCase):
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
 
         # verify the logits
         expected_shape = torch.Size((1, 1024, 512))

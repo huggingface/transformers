@@ -138,9 +138,10 @@ class BeamSearchScorer(BeamScorer):
             Defines the device type (*e.g.*, `"cpu"` or `"cuda"`) on which this instance of `BeamSearchScorer` will be
             allocated.
         length_penalty (`float`, *optional*, defaults to 1.0):
-            Exponential penalty to the length. 1.0 means no penalty. Set to values < 1.0 in order to encourage the
-            model to generate shorter sequences, to a value > 1.0 in order to encourage the model to produce longer
-            sequences.
+            Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent to
+            the sequence length, which in turn is used to divide the score of the sequence. Since the score is the log
+            likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences, while
+            `length_penalty` < 0.0 encourages shorter sequences.
         do_early_stopping (`bool`, *optional*, defaults to `False`):
             Whether to stop the beam search when at least `num_beams` sentences are finished per batch or not.
         num_beam_hyps_to_keep (`int`, *optional*, defaults to 1):
@@ -405,9 +406,10 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             Defines the device type (*e.g.*, `"cpu"` or `"cuda"`) on which this instance of `BeamSearchScorer` will be
             allocated.
         length_penalty (`float`, *optional*, defaults to 1.0):
-            Exponential penalty to the length. 1.0 means no penalty. Set to values < 1.0 in order to encourage the
-            model to generate shorter sequences, to a value > 1.0 in order to encourage the model to produce longer
-            sequences.
+            Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent to
+            the sequence length, which in turn is used to divide the score of the sequence. Since the score is the log
+            likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences, while
+            `length_penalty` < 0.0 encourages shorter sequences.
         do_early_stopping (`bool`, *optional*, defaults to `False`):
             Whether to stop the beam search when at least `num_beams` sentences are finished per batch or not.
         num_beam_hyps_to_keep (`int`, *optional*, defaults to 1):

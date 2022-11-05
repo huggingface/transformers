@@ -318,20 +318,6 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO: Fix head-masking according to PyTorch T5 model
         pass
 
-    @slow
-    def test_resize_embeddings(self):
-        model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
-        original_vocab_size = model.get_input_embeddings().weight.shape[0]
-        # the vocab size is defined in the model config
-        self.assertEqual(original_vocab_size, model.config.vocab_size)
-
-        tokenizer = T5Tokenizer.from_pretrained("t5-small")
-        tokenizer.add_special_tokens({"bos_token": "", "eos_token": ""})
-        model._resize_token_embeddings(len(tokenizer))
-        # the vocab size is now resized to the length of the tokenizer, which is different from the original size
-        self.assertEqual(model.get_input_embeddings().weight.shape[0], len(tokenizer))
-        self.assertNotEqual(model.get_input_embeddings().weight.shape[0], original_vocab_size)
-
     # This test is run in `TFT5EncoderOnlyModelTest`, where the main layer has the same inputs as the model
     @unittest.skip(reason="The inputs of the Main Layer are different.")
     def test_keras_save_load(self):

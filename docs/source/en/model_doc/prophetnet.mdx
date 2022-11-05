@@ -35,6 +35,11 @@ dataset (160GB) respectively. Then we conduct experiments on CNN/DailyMail, Giga
 abstractive summarization and question generation tasks. Experimental results show that ProphetNet achieves new
 state-of-the-art results on all these datasets compared to the models using the same scale pretraining corpus.*
 
+Tips:
+
+- ProphetNet is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
+  the left.
+
 The Authors' code can be found [here](https://github.com/microsoft/ProphetNet).
 
 

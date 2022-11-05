@@ -12,13 +12,6 @@ specific language governing permissions and limitations under the License.
 
 # Vision Transformer (ViT)
 
-<Tip>
-
-This is a recently introduced model so the API hasn't been tested extensively. There may be some bugs or slight
-breaking changes to fix it in the future. If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title).
-
-</Tip>
-
 ## Overview
 
 The Vision Transformer (ViT) model was proposed in [An Image is Worth 16x16 Words: Transformers for Image Recognition
@@ -62,6 +55,11 @@ Tips:
   an experiment with a self-supervised pre-training objective, namely masked patched prediction (inspired by masked
   language modeling). With this approach, the smaller ViT-B/16 model achieves 79.9% accuracy on ImageNet, a significant
   improvement of 2% to training from scratch, but still 4% behind supervised pre-training.
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vit_architecture.jpg"
+alt="drawing" width="600"/> 
+
+<small> ViT architecture. Taken from the <a href="https://arxiv.org/abs/2010.11929">original paper.</a> </small>
 
 Following the original Vision Transformer, some follow-up works have been made:
 

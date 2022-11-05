@@ -173,7 +173,7 @@ class TokenClassificationPipeline(Pipeline):
             the following keys:
 
             - **word** (`str`) -- The token/word classified. This is obtained by decoding the selected tokens. If you
-              want to have the exact string in the original sentence, use `start` and `stop`.
+              want to have the exact string in the original sentence, use `start` and `end`.
             - **score** (`float`) -- The corresponding probability for `entity`.
             - **entity** (`str`) -- The entity predicted for that token/word (it is named *entity_group* when
               *aggregation_strategy* is not `"none"`.
@@ -238,6 +238,10 @@ class TokenClassificationPipeline(Pipeline):
         shifted_exp = np.exp(logits - maxes)
         scores = shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
 
+        if self.framework == "tf":
+            input_ids = input_ids.numpy()
+            offset_mapping = offset_mapping.numpy() if offset_mapping is not None else None
+
         pre_entities = self.gather_pre_entities(
             sentence, input_ids, scores, offset_mapping, special_tokens_mask, aggregation_strategy
         )
@@ -276,9 +280,6 @@ class TokenClassificationPipeline(Pipeline):
                     if self.framework == "pt":
                         start_ind = start_ind.item()
                         end_ind = end_ind.item()
-                    else:
-                        start_ind = int(start_ind.numpy())
-                        end_ind = int(end_ind.numpy())
                 word_ref = sentence[start_ind:end_ind]
                 if getattr(self.tokenizer._tokenizer.model, "continuing_subword_prefix", None):
                     # This is a BPE, word aware tokenizer, there is a correct way

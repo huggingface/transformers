@@ -45,6 +45,7 @@ else:
         "XLMProphetNetForCausalLM",
         "XLMProphetNetForConditionalGeneration",
         "XLMProphetNetModel",
+        "XLMProphetNetPreTrainedModel",
     ]
 
 
@@ -72,6 +73,7 @@ if TYPE_CHECKING:
             XLMProphetNetForCausalLM,
             XLMProphetNetForConditionalGeneration,
             XLMProphetNetModel,
+            XLMProphetNetPreTrainedModel,
         )
 
 else:
