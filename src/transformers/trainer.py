@@ -1762,6 +1762,11 @@ class Trainer:
                 else:
                     tr_loss_step = self.training_step(model, inputs)
 
+                # Reduce gradients first for XLA device to be consistent with native pytorch behavior
+                if is_torch_tpu_available():
+                    gradients = xm._fetch_gradients(self.optimizer)
+                    xm.all_reduce("sum", gradients, scale=1.0 / xm.xrt_world_size())
+
                 if (
                     args.logging_nan_inf_filter
                     and not is_torch_tpu_available()
@@ -1788,10 +1793,6 @@ class Trainer:
                         # deepspeed does its own clipping
 
                         if self.do_grad_scaling:
-                            # Reduce gradients first for XLA
-                            if is_torch_tpu_available():
-                                gradients = xm._fetch_gradients(self.optimizer)
-                                xm.all_reduce("sum", gradients, scale=1.0 / xm.xrt_world_size())
                             # AMP: gradients need unscaling
                             self.scaler.unscale_(self.optimizer)
 
@@ -1819,7 +1820,7 @@ class Trainer:
                             self.scaler.step(self.optimizer)
                             self.scaler.update()
                         else:
-                            xm.optimizer_step(self.optimizer)
+                            self.optimizer.step()
                     elif self.do_grad_scaling:
                         scale_before = self.scaler.get_scale()
                         self.scaler.step(self.optimizer)
