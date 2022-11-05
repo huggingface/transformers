@@ -212,6 +212,13 @@ else:
                 ),
             ),
             (
+                "pegasus_x",
+                (
+                    "PegasusTokenizer" if is_sentencepiece_available() else None,
+                    "PegasusTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
                 "perceiver",
                 (
                     "PerceiverTokenizer",

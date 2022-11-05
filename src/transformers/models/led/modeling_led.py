@@ -17,6 +17,7 @@
 
 import math
 import random
+import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -2528,6 +2529,12 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
 )
 class LEDForSequenceClassification(LEDPreTrainedModel):
     def __init__(self, config: LEDConfig, **kwargs):
+        warnings.warn(
+            "The `transformers.LEDForSequenceClassification` class is deprecated and will be removed in version 5 of"
+            " Transformers. No actual method were provided in the original paper on how to perfom"
+            " sequence classification.",
+            FutureWarning,
+        )
         super().__init__(config, **kwargs)
         self.led = LEDModel(config)
         self.classification_head = LEDClassificationHead(

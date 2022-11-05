@@ -21,6 +21,7 @@ import os
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from numpy import isin
@@ -36,7 +37,14 @@ from ..models.auto.modeling_auto import AutoModelForDepthEstimation
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..tokenization_utils_fast import PreTrainedTokenizerFast
-from ..utils import HUGGINGFACE_CO_RESOLVE_ENDPOINT, is_tf_available, is_torch_available, logging
+from ..utils import (
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
+    is_kenlm_available,
+    is_pyctcdecode_available,
+    is_tf_available,
+    is_torch_available,
+    logging,
+)
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
@@ -631,6 +639,8 @@ def pipeline(
             " feature_extractor may not be compatible with the default model. Please provide a PreTrainedModel class"
             " or a path/identifier to a pretrained model when providing feature_extractor."
         )
+    if isinstance(model, Path):
+        model = str(model)
 
     # Config is the primordial information item.
     # Instantiate config if needed
@@ -837,11 +847,12 @@ def pipeline(
 
                     kwargs["decoder"] = decoder
                 except ImportError as e:
-                    logger.warning(
-                        f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Try to install"
-                        " `pyctcdecode` and `kenlm`: (`pip install pyctcdecode`, `pip install"
-                        f" https://github.com/kpu/kenlm/archive/master.zip`): Error: {e}"
-                    )
+                    logger.warning(f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Error: {e}")
+                    if not is_kenlm_available():
+                        logger.warning("Try to install `kenlm`: `pip install kenlm")
+
+                    if not is_pyctcdecode_available():
+                        logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
 
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:

@@ -79,12 +79,12 @@ class Speech2Text2Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Speech2Text2ForCausalLM, Speech2Text2Config
+    >>> from transformers import Speech2Text2Config, Speech2Text2ForCausalLM
 
     >>> # Initializing a Speech2Text2 s2t_transformer_s style configuration
     >>> configuration = Speech2Text2Config()
 
-    >>> # Initializing a model from the s2t_transformer_s style configuration
+    >>> # Initializing a model (with random weights) from the s2t_transformer_s style configuration
     >>> model = Speech2Text2ForCausalLM(configuration)
 
     >>> # Accessing the model configuration

@@ -405,7 +405,7 @@ class SwinDropPath(nn.Module):
 
 
 class SwinSelfAttention(nn.Module):
-    def __init__(self, config, dim, num_heads):
+    def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
         if dim % num_heads != 0:
             raise ValueError(
@@ -415,7 +415,6 @@ class SwinSelfAttention(nn.Module):
         self.num_attention_heads = num_heads
         self.attention_head_size = int(dim / num_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        window_size = config.window_size
         self.window_size = (
             window_size if isinstance(window_size, collections.abc.Iterable) else (window_size, window_size)
         )
@@ -519,9 +518,9 @@ class SwinSelfOutput(nn.Module):
 
 
 class SwinAttention(nn.Module):
-    def __init__(self, config, dim, num_heads):
+    def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
-        self.self = SwinSelfAttention(config, dim, num_heads)
+        self.self = SwinSelfAttention(config, dim, num_heads, window_size)
         self.output = SwinSelfOutput(config, dim)
         self.pruned_heads = set()
 
@@ -592,7 +591,7 @@ class SwinLayer(nn.Module):
         self.input_resolution = input_resolution
         self.set_shift_and_window_size(input_resolution)
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.attention = SwinAttention(config, dim, num_heads)
+        self.attention = SwinAttention(config, dim, num_heads, window_size=self.window_size)
         self.drop_path = SwinDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.intermediate = SwinIntermediate(config, dim)
@@ -1062,8 +1061,8 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
-        >>> model = SwinForMaskedImageModeling.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/swin-base-simmim-window6-192")
+        >>> model = SwinForMaskedImageModeling.from_pretrained("microsoft/swin-base-simmim-window6-192")
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
         >>> pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values

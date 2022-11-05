@@ -478,13 +478,20 @@ class PretrainedConfig(PushToHubMixin):
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-            use_auth_token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `~/.huggingface`).
+            use_auth_token (`str` or `bool`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
+                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
+
+                <Tip>
+
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+
+                </Tip>
+
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
                 If `False`, then this function returns just the final configuration object.
 
@@ -498,12 +505,6 @@ class PretrainedConfig(PushToHubMixin):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
                 by the `return_unused_kwargs` keyword parameter.
-
-        <Tip>
-
-        Passing `use_auth_token=True` is required when you want to use a private model.
-
-        </Tip>
 
         Returns:
             [`PretrainedConfig`]: The configuration object instantiated from this pretrained model.
