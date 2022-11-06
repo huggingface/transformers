@@ -487,7 +487,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             all_labels = all_labels[all_labels != 0]
 
         # Generate a binary mask for each object instance
-        binary_masks = [np.ma.masked_where(segmentation_map == i, segmentation_map) for i in all_labels]
+        binary_masks = [(segmentation_map == i) for i in all_labels]
         binary_masks = np.stack(binary_masks, axis=0)  # (num_labels, height, width)
 
         # Convert instance ids to class ids
