@@ -1499,7 +1499,7 @@ fp32_model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
 
 <Tip>
 
-Note, that once `load_state_dict_from_zero_checkpoint` was run, the `model` will no longer be useable in the
+Note, that once `load_state_dict_from_zero_checkpoint` was run, the `model` will no longer be usable in the
 DeepSpeed context of the same application. i.e. you will need to re-initialize the deepspeed engine, since
 `model.load_state_dict(state_dict)` will remove all the DeepSpeed magic from it. So do this only at the very end
 of the training.
