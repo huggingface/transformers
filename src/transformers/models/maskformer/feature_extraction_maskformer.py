@@ -482,9 +482,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         # Get unique ids (class or instance ids based on input)
         all_labels = np.unique(segmentation_map)
 
-        # Drop background label if applicable
-        if self.reduce_labels:
-            all_labels = all_labels[all_labels != 0]
+        # Remove ignored region
+        if self.ignore_index is not None:
+            all_labels = all_labels[all_labels != self.ignore_index]
 
         # Generate a binary mask for each object instance
         binary_masks = [(segmentation_map == i) for i in all_labels]
