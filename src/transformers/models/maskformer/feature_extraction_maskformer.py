@@ -492,6 +492,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         # Convert instance ids to class ids
         if instance_id_to_semantic_id is not None:
+            print("All labels:", all_labels)
             labels = np.zeros(all_labels.shape[0])
 
             for label in all_labels:
