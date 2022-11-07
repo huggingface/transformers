@@ -25,7 +25,7 @@ import yaml
 COMMON_ENV_VARIABLES = {"OMP_NUM_THREADS": 1, "TRANSFORMERS_IS_CI": True, "PYTEST_TIMEOUT": 120}
 COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "s": None}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.7.12"}]
-TORCH_SCATTER_INSTALL = "pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html"
+TORCH_SCATTER_INSTALL = "pip install torch-scatter"
 
 
 @dataclass
