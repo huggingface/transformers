@@ -61,8 +61,7 @@ class OwlViTProcessor(ProcessorMixin):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
-            query_images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`,:
-            `List[torch.Tensor]`):
+            query_images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The query image or batch of query images to be prepared. Each image can be a PIL image, NumPy array or
                 PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where
                 C is a number of channels, H and W are image height and width.

@@ -42,7 +42,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import OwlViTForObjectDetection, OwlViTModel, OwlViTTextModel, OwlViTVisionModel
+    from transformers import OwlViTForObjectDetection, OwlViTForImageGuidedObjectDetection, OwlViTModel, OwlViTTextModel, OwlViTVisionModel
     from transformers.models.owlvit.modeling_owlvit import OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -520,7 +520,7 @@ class OwlViTModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class OwlViTForObjectDetectionTester:
-    def __init__(self, parent, is_training=True, query_batch_size=2, query_image_size=16, query_num_channels=3):
+    def __init__(self, parent, is_training=True):
         self.parent = parent
         self.text_model_tester = OwlViTTextModelTester(parent)
         self.vision_model_tester = OwlViTVisionModelTester(parent)
@@ -536,14 +536,6 @@ class OwlViTForObjectDetectionTester:
         vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
         config = self.get_config()
         return config, pixel_values, input_ids, attention_mask
-
-    def prepare_config_and_inputs_image_guided(self):
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
-        query_pixel_values = floats_tensor(
-            [self.query_batch_size, self.query_num_channels, self.query_image_size, self.query_image_size]
-        )
-        config = self.get_config()
-        return config, pixel_values, query_pixel_values
 
     def get_config(self):
         return OwlViTConfig.from_text_vision_configs(self.text_config, self.vision_config, projection_dim=64)
@@ -613,12 +605,6 @@ class OwlViTForObjectDetectionTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
-        return config, inputs_dict
-
-    def prepare_config_and_inputs_for_common_image_guided(self):
-        config_and_inputs = self.prepare_config_and_inputs_image_guided()
-        config, pixel_values, query_pixel_values = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values, "query_pixel_values": query_pixel_values}
         return config, inputs_dict
 
 
@@ -845,7 +831,7 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_one_shot_object_detection(self):
         model_name = "google/owlvit-base-patch32"
-        model = OwlViTForObjectDetection.from_pretrained(model_name).to(torch_device)
+        model = OwlViTForImageGuidedObjectDetection.from_pretrained(model_name).to(torch_device)
 
         processor = OwlViTProcessor.from_pretrained(model_name)
 
