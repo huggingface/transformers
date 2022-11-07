@@ -141,109 +141,125 @@ class JukeboxPriorConfig(PretrainedConfig):
 
 
     Args:
-        metadata_dims (`List[Tuple[int, int]]`, *optional*, defaults to `[(604, 7898), (120, 4111), (120, 4111)]`):
-            List containing the number of genres and the number of artists that were used to train the embedding layers
-            of each of the prior models.
-        is_encoder_decoder (`List[bool]`, *optional*, defaults to `[True, False, False]`):
-            Whether or not to use a single encoder-decoder architecture or split both modules and have a seperate
-            `encoderoder` for each of the priors.
-        merged_decoder (`list`, *optional*, defaults to [True, False, False]):
-            Whether or not the decoder is merged with the encoder.
-        lyric_conditioning (`list`, *optional*, defaults to [True, False, False]):
-            Whether or not to use the lyrics as conditioning.
-        nb_relevant_lyric_tokens (`list`, *optional*, defaults to [384, 0, 0]):
-            Number of tokens that are used when sampling a single window of length `prior_n_ctx`
-        zero_out (`bool`, *optional*, defaults to False):
-            Zero out weights when initialising.
-        depth (`list`, *optional*, defaults to [3, 16, 16]):
-            Number of layers to use for the music conditioner.
-        width (`list`, *optional*, defaults to [128, 1024, 1024]):
-            Width of the audio conditioning layer.
-        dilation_growth_rate (`list`, *optional*, defaults to [1, 3, 3]):
-            Dilation grow rate used between each convolutionnal block.
-        dilation_cycle (`list`, *optional*, defaults to [None, 8, 8]):
-            Cycle of dilation to use. Usually similar to the ones used in the VQVAE.
-        res_scale (`list`, *optional*, defaults to [None, True, False]):
-            Wheter or not to scale the residuals in the audio conditionner block. Since the top level prior doeas not
-            have a conditionner, the default value is to None and should not be modified.
-        convolution_multiplier (`int`, *optional*, defaults to 1):
-            Conditionner multiplier (the input states are mulitplied by that parameter for each convolution.
-        downs_t (`tuple`, *optional*, defaults to (3, 2, 2)):
-            Downsampling rates used in the audio conditioning network
-        strides_t (`tuple`, *optional*, defaults to (2, 2, 2)):
-            Striding used in the audio conditioning network
-        encoder_spread (`bool`, *optional*, defaults to `False`):
-            Spread used in the attention pattern
-        encoder_width (`list`, *optional*, defaults to [128, 128, 128]):
-            Width of the lyric encoder
-        encoder_depth (`list`, *optional*, defaults to [18, 3, 3]):
-            Number of encoder blocks used in the lyric encoder
-        encoder_heads (`int`, *optional*, defaults to 4):
-            Number of heads in the lyric encoder
-        encoder_attention_multiplier (`float`, *optional*, defaults to 0.25):
-            Multiplier coefficient used to define the hidden dimension of the attention layers. 0.25 means that
-            0.25*width of the model will be used.
-        encoder_mlp_multiplier (`float`, *optional*, defaults to 1.0):
-            Multiplier coefficient used to define the hidden dimension of the MLP layers. 0.25 means that 0.25*width of
-            the model will be used.
-        encoder_blocks (`int`, *optional*, defaults to 32):
-            Sequence of length seq_len is factored as [blocks, seq_len // blocks] in the `JukeboxAttention` layer.
-        encoder_init_scale (`list`, *optional*, defaults to [0.1, 0.4, 0.4]):
-            Initialisation scales for the lyric encoder modules.
-        encoder_loss_fraction (`list`, *optional*, defaults to [0.4, 0.0, 0.0]):
-            Multiplication factor used in front of the lyric encoder loss. Each value is for a particular level.
-        encoder_attention_pattern (`list`, *optional*, defaults to [2, 0, 0]):
-            Which attention pattern to use for the lyric encoder.
-        encoder_attn_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for the post-attention layer dropout in the lyric encoder.
-        encoder_resid_dropout (`float`, *optional*, defaults to 0.0):
-            Residual dropout used in the attention pattern of the lyric encoder.
-        encoder_emb_dropout (`float`, *optional*, defaults to 0.0):
-            Embedding dropout used in the lyric encoder.
-        encoder_zero_out (`bool`, *optional*, defaults to `False`):
-            Whether or not to set to zeros the weights the MLPs in the lyric encoder.
-        encoder_res_scale (`bool`, *optional*, defaults to `False`):
-            Residual scaling factor used in the lyric encoder attention patterns.
-        encoder_n_vocab (`int`, *optional*, defaults to 79):
-            Defines the number of different tokens that can be represented by the `inputs_ids` passed to the
-            `encoderoder`
-        init_scale (`list`, *optional*, defaults to [0.2, 1, 1]):
-            Initialisation scales for the prior modules.
-        spread (`bool`, *optional*, defaults to False):
-            Spread used in the attention pattern
-        zero_out (`bool`, *optional*, defaults to False):
-             Whether or not to set to zeros the weights the MLPs of the priors.
-        res_scale (`bool`, *optional*, defaults to False):
-            Residual scaling factor used in every prior's attention layer.
-        n_ctx (`tuple`, *optional*, defaults to (6144, 8192, 8192)):
-            Number of context tokens for each prior. The context tokens are the music tokens that are attended to when
-            generating music tokens.
-        latent_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the latent music token space. Default value match the `vqvae_codebook_dimension`.
-        width (`list`, *optional*, defaults to [2048, 1920, 1920]):
-            Input and output dimension of the attention layers of each prior.
+        act_fn (`str`, *optional*, defaults to "quick_gelu"):
+            Activation function.
+        alignment_head (`int`, *optional*, defaults to 2):
+            Head that is responsible of the alignment between lyrics and music. Only used to compute the lyric to audio alignment
+        alignment_layer (`int`, *optional*, defaults to 68):
+            Index of the layer that is responsible of the alignment between lyrics and music. Only used to compute the lyric to audio alignment
         attention_multiplier (`float`, *optional*, defaults to 0.25):
             Multiplier coefficient used to define the hidden dimension of the attention layers. 0.25 means that
             0.25*width of the model will be used.
-        depth (`list`, *optional*, defaults to [72, 72, 72]):
-            Depth of each prior. Defines the number of `attn_block`.
-        n_heads (`list`, *optional*, defaults to [2, 1, 1]):
-            Number of attention heads per prior.
-        attention_pattern (`list`, *optional*, defaults to [12, 2, 2]):
-            Attention patterns to use in each prior. Depending on the value, cross attention, block attention and
-            sparse attention blocks are stacked.
-        blocks (`int`, *optional*, defaults to 64):
-            Sequence of length seq_len is factored as [blocks, seq_len // blocks] in the `JukeboxAttention` layer.
-        alignment_layer (`list`, *optional*, defaults to [68, None, None]):
-            Layer corresponding to the alignemnt between the lyrics and the audio.
-        alignment_head (`list`, *optional*, defaults to [2, None, None]):
-            Index of the attention head which takes care of the alignemnt between the lyrics and the audio.
+        attention_pattern (`str`, *optional*, defaults to "enc_dec_with_lyrics"):
+            Which attention pattern to use for the decoder/
         attn_dropout (`int`, *optional*, defaults to 0):
-            Dropout probability for the post-attention layer dropout of the prior models.
-        resid_dropout (`int`, *optional*, defaults to 0):
-            Residual dropout probability used in the attention layers of the prior models.
+            Dropout probability for the post-attention layer dropout in the decoder.
+        attn_res_scale (`bool`, *optional*, defaults to False):
+            Wheter or not to scale the residuals in the attention conditionner block.
+        blocks (`int`, *optional*, defaults to 64):
+            Number of blocks used in the `block_attn`. A sequence of length seq_len is factored as [blocks, seq_len // blocks] in the `JukeboxAttention` layer.
+        conv_res_scale (`int`, *optional*, defaults to None):
+            Wheter or not to scale the residuals in the conditionner block. Since the top level prior doeas not
+            have a conditionner, the default value is to None and should not be modified.
+        depth (`int`, *optional*, defaults to 72):
+            Number of layers of the decoder architecture. #TODO replace with num decoder_layers?
         emb_dropout (`int`, *optional*, defaults to 0):
-            Dropout applied to the embedding layer of the priors.
+            Embedding dropout used in the lyric decoder.
+        embed_dim (`int`, *optional*, defaults to 2048):
+            Dimension of the audio embedings. I can be different with the `width` for smaller models. 
+        encoder_attention_multiplier (`float`, *optional*, defaults to 0.25):
+            Multiplier coefficient used to define the hidden dimension of the attention layers. 0.25 means that
+            0.25*width of the model will be used.
+        encoder_attention_pattern (`str`, *optional*, defaults to "RawColumnPreviousRowAttention"):
+            Which attention pattern to use for the lyric encoder.
+        encoder_attn_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability for the post-attention layer dropout in the lyric encoder.
+        encoder_attn_res_scale (`bool`, *optional*, defaults to False):
+            Wheter or not to scale the residuals in the attention conditionner block.
+        encoder_blocks (`int`, *optional*, defaults to 32):
+            Number of blocks used in the `block_attn`. A sequence of length seq_len is factored as [blocks, seq_len // blocks] in the `JukeboxAttention` layer.
+        encoder_depth (`int`, *optional*, defaults to 18):
+            Depth of the encoder model.
+        encoder_emb_dropout (`float`, *optional*, defaults to 0.0):
+            Embedding dropout used in the lyric encoder.
+        encoder_heads (`int`, *optional*, defaults to 4):
+            Number of heads in the lyric encoder
+        encoder_init_scale (`float`, *optional*, defaults to 0.1):
+            Initialisation scales for the lyric encoder modules.
+        encoder_loss_fraction (`list`, *optional*, defaults to [0.4, 0.0, 0.0]):
+            Multiplication factor used in front of the lyric encoder loss. Each value is for a particular level.
+        encoder_mlp_multiplier (`float`, *optional*, defaults to 1.0):
+            Multiplier coefficient used to define the hidden dimension of the MLP layers. 0.25 means that 0.25*width of
+            the model will be used.
+        encoder_n_vocab (`int`, *optional*, defaults to 79):
+            Defines the number of different lyric tokens that can be represented by the `inputs_ids` passed to the
+            `encoder`.
+        encoder_resid_dropout (`float`, *optional*, defaults to 0.0):
+            Residual dropout used in the attention pattern of the lyric encoder.
+        encoder_spread (`int`, *optional*, defaults to None):
+            Spread used in the `summary_spread_attention` pattern
+        encoder_width (`int`, *optional*, defaults to 128):
+            Width of the lyric encoder if `is_encoder_decoder=False` and `nb_relevant_lyric_tokens>0`
+        encoder_zero_out (`bool`, *optional*, defaults to False):
+            Whether or not to set to zeros the weights the convolutions in the lyric encoder.
+        init_scale (`float`, *optional*, defaults to 0.2):
+            Initialisation scales for the prior modules.
+        is_encoder_decoder (`bool`, *optional*, defaults to True):
+            Whether or not the prior is an encoder-decoder model. In case it is not,
+            and `nb_relevant_lyric_tokens` is greater than 0, the `encoder` args
+            should be specified for the lyric encoding.
+        mask (`bool`, *optional*, defaults to False):
+            Whether or not to mask the previous positions in the attention.
+        max_duration (`int`, *optional*, defaults to 600):
+            _description_
+        max_nb_genres (`int`, *optional*, defaults to 1):
+            _description_
+        merged_decoder (`bool`, *optional*, defaults to True):
+            Whether or not the decoder and the encoder inputs are merged. This is used for the seperated encoder-decoder architecture
+        metadata_conditioning (`bool`, *optional*, defaults to True):
+            _description_
+        metadata_dims (`tuple(int)`, *optional*, defaults to (604, 7898)):
+            Number of genres and the number of artists that were used to train the embedding layers
+            of the prior models.
+        min_duration (`int`, *optional*, defaults to 0):
+            _description_
+        mlp_multiplier (`float`, *optional*, defaults to 1.0):
+            Multiplier coefficient used to define the hidden dimension of the MLP layers. 0.25 means that 0.25*width of
+            the model will be used.
+        n_ctx (`int`, *optional*, defaults to 6144):
+            Number of context tokens for each prior. The context tokens are the music tokens that are attended to when
+            generating music tokens.
+        n_heads (`int`, *optional*, defaults to 2):
+             Number of attention heads.
+        nb_relevant_lyric_tokens (`int`, *optional*, defaults to 384):
+            Number of lyric tokens that are used when sampling a single window of length `prior_n_ctx`
+        res_conv_depth (`int`, *optional*, defaults to 3):
+            Depth of the `JukeboxDecoderConvBock` used to upsample the previously sampled audio in the `JukeboxMusicTokenConditioner`.
+        res_conv_width (`int`, *optional*, defaults to 128):
+            Width of the `JukeboxDecoderConvBock` used to upsample the previously sampled audio in the `JukeboxMusicTokenConditioner`.
+        res_convolution_multiplier (`int`, *optional*, defaults to 1):
+            Multiplier used to scale the `hidden_dim` of the `JukeboxResConv1DBlock`.
+        res_dilation_cycle (`int`, *optional*, defaults to None):
+            Dilation cycle used to define the `JukeboxMusicTokenConditioner`. Usually similar to the ones used in the corresponding level of the VQVAE.
+            The first prior does not use it as it is not conditioned on upper level tokens.
+        res_dilation_growth_rate (`int`, *optional*, defaults to 1):
+            Dilation grow rate used between each convolutionnal block of the `JukeboxMusicTokenConditioner`
+        res_downs_t (`tuple(int)`, *optional*, defaults to (3, 2, 2)):
+            Downsampling rates used in the audio conditioning network
+        res_strides_t (`tuple(int)`, *optional*, defaults to (2, 2, 2)):
+            Striding used in the audio conditioning network
+        resid_dropout (`int`, *optional*, defaults to 0):
+            Residual dropout used in the attention pattern.
+        sampling_rate (`int`, *optional*, defaults to 44100):
+            _description_
+        spread (`int`, *optional*, defaults to None):
+            Spread used in the `summary_spread_attention` pattern
+        timing_dims (`int`, *optional*, defaults to 64):
+            _description_
+        width (`int`, *optional*, defaults to 2048):
+           Dimension of the attention layers. # TODO this is a bit confusing
+        zero_out (`bool`, *optional*, defaults to False):
+            Whether or not to zero out convolution weights when initialising.
     """
 
     model_type = "jukebox"
@@ -255,128 +271,119 @@ class JukeboxPriorConfig(PretrainedConfig):
 
     def __init__(
         self,
-        sampling_rate=44100,
-        timing_dims=64,
-        min_duration=0,
-        max_duration=600,
-        max_nb_genres=1,
-        metadata_conditioning=True,
-        zero_out=False,
-        res_conv_depth=3,
-        res_conv_width=128,
-        res_dilation_growth_rate=1,
-        res_dilation_cycle=None,
+        act_fn="quick_gelu",
+        alignment_head=2,
+        alignment_layer=68,
+        attention_multiplier=0.25,
+        attention_pattern="enc_dec_with_lyrics",
+        attn_dropout=0,
+        attn_res_scale=False,
+        blocks=64,
         conv_res_scale=None,
-        res_convolution_multiplier=1,
-        res_downs_t=(3, 2, 2),
-        res_strides_t=(2, 2, 2),
-        encoder_spread=None,
-        encoder_width=128,
-        encoder_depth=18,
-        encoder_heads=4,
+        depth=72,
+        emb_dropout=0,
+        embed_dim=2048,
         encoder_attention_multiplier=0.25,
-        encoder_mlp_multiplier=1.0,
-        encoder_blocks=32,
-        encoder_init_scale=0.1,
-        encoder_loss_fraction=[0.4, 0.0, 0.0],
         encoder_attention_pattern="RawColumnPreviousRowAttention",
         encoder_attn_dropout=0.0,
-        encoder_resid_dropout=0.0,
+        encoder_blocks=32,
+        encoder_depth=18,
         encoder_emb_dropout=0.0,
-        encoder_zero_out=False,
-        encoder_res_scale=False,
+        encoder_heads=4,
+        encoder_init_scale=0.1,
+        encoder_loss_fraction=[0.4, 0.0, 0.0],
+        encoder_mlp_multiplier=1.0,
         encoder_n_vocab=79,
+        encoder_attn_res_scale=False,
+        encoder_resid_dropout=0.0,
+        encoder_spread=None,
+        encoder_width=128,
+        encoder_zero_out=False,
         init_scale=0.2,
-        attn_res_scale=False,
-        n_ctx=6144,
-        width=2048,
-        depth=72,
-        n_heads=2,
-        attention_pattern="enc_dec_with_lyrics",
-        alignment_layer=68,
-        alignment_head=2,
-        metadata_dims=(604, 7898),
         is_encoder_decoder=True,
-        merged_decoder=True,
         lyric_conditioning=True,
-        nb_relevant_lyric_tokens=384,
-        embed_dim=2048,
-        spread=None,
-        blocks=64,
-        attention_multiplier=0.25,
-        mlp_multiplier=1.0,
-        attn_dropout=0,
-        resid_dropout=0,
-        emb_dropout=0,
         mask=False,
-        act_fn="quick_gelu",
+        max_duration=600,
+        max_nb_genres=1,
+        merged_decoder=True,
+        metadata_conditioning=True,
+        metadata_dims=(604, 7898),
+        min_duration=0,
+        mlp_multiplier=1.0,
+        n_ctx=6144,
+        n_heads=2,
+        nb_relevant_lyric_tokens=384,
+        res_conv_depth=3,
+        res_conv_width=128,
+        res_convolution_multiplier=1,
+        res_dilation_cycle=None,
+        res_dilation_growth_rate=1,
+        res_downs_t=(3, 2, 2),
+        res_strides_t=(2, 2, 2),
+        resid_dropout=0,
+        sampling_rate=44100,
+        spread=None,
+        timing_dims=64,
+        width=2048,
+        zero_out=False,
         **kwargs
     ):
-        self.metadata_dims = metadata_dims
-        self.res_conv_depth = res_conv_depth
-        self.res_conv_width = res_conv_width
-        #  Auto regressive (decoder) kwargs :
-        self.attention_pattern = attention_pattern
-        self.n_heads = n_heads
-        self.depth = depth
-        self.width = width
-        self.n_ctx = n_ctx
-        self.embed_dim = embed_dim
-        self.attn_dropout = attn_dropout
-        self.resid_dropout = resid_dropout
-        self.emb_dropout = emb_dropout
-        self.zero_out = zero_out
-        self.conv_res_scale = conv_res_scale
-        self.blocks = blocks
-        self.attention_multiplier = attention_multiplier
-        self.mlp_multiplier = mlp_multiplier
-        self.spread = spread
-        self.alignment_layer = alignment_layer
+
+        self.act_fn = act_fn
         self.alignment_head = alignment_head
-        self.init_scale = init_scale
-
-        # Audio conditioning : upsampler parameters
-        self.depth = depth
-        self.width = width
-        self.res_dilation_growth_rate = res_dilation_growth_rate
-        self.res_dilation_cycle = res_dilation_cycle
-        self.zero_out = zero_out
-        self.res_convolution_multiplier = res_convolution_multiplier
+        self.alignment_layer = alignment_layer
+        self.attention_multiplier = attention_multiplier
+        self.attention_pattern = attention_pattern
+        self.attn_dropout = attn_dropout
         self.attn_res_scale = attn_res_scale
-        self.res_downs_t = res_downs_t
-        self.res_strides_t = res_strides_t
-
-        # Lyric conditioning
-        self.merged_decoder = merged_decoder  # is this equivalent ?
-        self.is_encoder_decoder = is_encoder_decoder
-        self.lyric_conditioning = lyric_conditioning
-        self.nb_relevant_lyric_tokens = nb_relevant_lyric_tokens
-
-        self.encoder_attn_dropout = encoder_attn_dropout
+        self.blocks = blocks
+        self.conv_res_scale = conv_res_scale
+        self.depth = depth
+        self.emb_dropout = emb_dropout
+        self.embed_dim = embed_dim
+        self.encoder_attention_multiplier = encoder_attention_multiplier
         self.encoder_attention_pattern = encoder_attention_pattern
+        self.encoder_attn_dropout = encoder_attn_dropout
+        self.encoder_attn_res_scale = encoder_attn_res_scale
         self.encoder_blocks = encoder_blocks
         self.encoder_depth = encoder_depth
         self.encoder_emb_dropout = encoder_emb_dropout
         self.encoder_heads = encoder_heads
         self.encoder_init_scale = encoder_init_scale
         self.encoder_loss_fraction = encoder_loss_fraction
-        self.encoder_attention_multiplier = encoder_attention_multiplier
         self.encoder_mlp_multiplier = encoder_mlp_multiplier
+        self.encoder_n_vocab = encoder_n_vocab
         self.encoder_resid_dropout = encoder_resid_dropout
-        self.encoder_res_scale = encoder_res_scale
         self.encoder_spread = encoder_spread
         self.encoder_width = encoder_width
         self.encoder_zero_out = encoder_zero_out
-        self.encoder_n_vocab = encoder_n_vocab
+        self.init_scale = init_scale
+        self.is_encoder_decoder = is_encoder_decoder
+        self.lyric_conditioning = lyric_conditioning
         self.mask = mask
-        self.act_fn = act_fn
-
-        self.sampling_rate = sampling_rate
-        self.timing_dims = timing_dims
-        self.min_duration = min_duration
         self.max_duration = max_duration
         self.max_nb_genres = max_nb_genres
+        self.merged_decoder = merged_decoder
         self.metadata_conditioning = metadata_conditioning
+        self.metadata_dims = metadata_dims
+        self.min_duration = min_duration
+        self.mlp_multiplier = mlp_multiplier
+        self.n_ctx = n_ctx
+        self.n_heads = n_heads
+        self.nb_relevant_lyric_tokens = nb_relevant_lyric_tokens
+        self.res_conv_depth = res_conv_depth
+        self.res_conv_width = res_conv_width
+        self.res_convolution_multiplier = res_convolution_multiplier
+        self.res_dilation_cycle = res_dilation_cycle
+        self.res_dilation_growth_rate = res_dilation_growth_rate
+        self.res_downs_t = res_downs_t
+        self.res_strides_t = res_strides_t
+        self.resid_dropout = resid_dropout
+        self.sampling_rate = sampling_rate
+        self.spread = spread
+        self.timing_dims = timing_dims
+        self.width = width
+        self.zero_out = zero_out
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
