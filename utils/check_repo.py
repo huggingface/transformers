@@ -51,6 +51,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TimeSeriesTransformerEncoder",  # Building part of bigger (tested) model.
     "TimeSeriesTransformerDecoder",  # Building part of bigger (tested) model.
     "JukeboxVQVAE",  # Building part of bigger (tested) model.
+    "JukeboxPrior",  # Building part of bigger (tested) model.
     "DeformableDetrEncoder",  # Building part of bigger (tested) model.
     "DeformableDetrDecoder",  # Building part of bigger (tested) model.
     "OPTDecoder",  # Building part of bigger (tested) model.
