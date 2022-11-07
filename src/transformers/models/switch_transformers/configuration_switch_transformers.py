@@ -166,8 +166,6 @@ class SwitchTransformersConfig(PretrainedConfig):
             raise ValueError(f"`router_dtype` must be one of 'float32', 'float16' or 'bfloat16', got {router_dtype}")
         self.router_dtype = router_dtype
 
-        if router_dtype not in ["float16", "float32", "bfloat16"]:
-            raise ValueError("""Please select a correct `router_dtype` from ["float16", "float32", "bfloat16"].""")
 
         self.router_ignore_padding_tokens = router_ignore_padding_tokens
         self.relative_attention_num_buckets = relative_attention_num_buckets
