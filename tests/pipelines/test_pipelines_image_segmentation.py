@@ -262,6 +262,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         for o in output:
             o["mask"] = mask_to_test_readable(o["mask"])
         self.maxDiff = None
+
+        print(nested_simplify(output, decimals=4))
+
         self.assertEqual(
             nested_simplify(output, decimals=4),
             [
