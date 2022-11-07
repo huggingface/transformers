@@ -540,36 +540,33 @@ class JukeboxConfig(PretrainedConfig):
     to get the second level codes. This is mostly true for training the top level prior and the upsamplers.
 
     Args:
-        sampling_rate (`int`, *optional*, defaults to 44100):
-            Sampling rate of the raw audio.
+        vqvae_config (`JukeboxVQVAEConfig`, *optional*, defaults to None):
+            _description_
+        prior_config_list (`List[`JukeboxPriorConfig`]`, *optional*, defaults to None):
+            _description_
         nb_priors (`int`, *optional*, defaults to 3):
             Number of prior models that will sequentialy sample tokens. Each prior is conditional auto regressive
             (decoder) model, apart from the top prior, which can include a lyric encoder. The available models were
             trained using a top prior and 2 upsampler priors.
+        sampling_rate (`int`, *optional*, defaults to 44100):
+            Sampling rate of the raw audio.
         timing_dims (`int`, *optional*, defaults to 64):
             Dimensions of the JukeboxRangeEmbedding layer which is equivalent to traditional positional embedding
             layer. The timing embedding layer converts the absolute and relative position in the currently sampled
             audio to a tensor of lenght `timing_dims` that will be added to the music tokens.
-        metadata_conditioning (`bool`, *optional*, defaults to `True`):
-            Whether or not to use metadata conditioning, corresponding to the artist, the genre and the min/maximum
-            duration.
-        is_encoder_decoder (`List[bool]`, *optional*, defaults to `[True, False, False]`):
-            Whether or not to use a single encoder-decoder architecture or split both modules and have a seperate
-            `encoderoder` for each of the priors.
-        merged_decoder (`list`, *optional*, defaults to [True, False, False]):
-            Whether or not the encoders are merged. This means that the input of.
-        lyric_conditioning (`list`, *optional*, defaults to [True, False, False]):
-            Whether or not to use the lyrics as conditioning.
-        nb_relevant_lyric_tokens (`list`, *optional*, defaults to [384, 0, 0]):
-            Number of tokens that are used when sampling a single window of length `n_ctx`
-        min_duration (`float`, *optional*, defaults to 17.84):
+        min_duration (`int`, *optional*, defaults to 0):
             Minimum duration of the audios to generate
         max_duration (`float`, *optional*, defaults to 600.0):
             Maximum duration of the audios to generate
         max_nb_genres (`int`, *optional*, defaults to 5):
             Maximum number of genres that can be used to condition a single sample.
+        metadata_conditioning (`bool`, *optional*, defaults to True):
+            Whether or not to use metadata conditioning, corresponding to the artist, the genre and the min/maximum
+            duration.
         init_std (`float`, *optional*, defaults to 0.2):
             Standard deviation used to inital the model.
+
+    Example:
 
     ```python
     >>> from transformers import JukeboxModel, JukeboxConfig
@@ -645,11 +642,11 @@ class JukeboxConfig(PretrainedConfig):
     @classmethod
     def from_configs(cls, prior_configs: List[JukeboxPriorConfig], vqvae_config: JukeboxVQVAEConfig, **kwargs):
         r"""
-        Instantiate a [`CLIPConfig`] (or a derived class) from clip text model configuration and clip vision model
+        Instantiate a [`JukeboxConfig`] (or a derived class) from clip text model configuration and clip vision model
         configuration.
 
         Returns:
-            [`CLIPConfig`]: An instance of a configuration object
+            [`JukeboxConfig`]: An instance of a configuration object
         """
         prior_config_list = [config.to_dict() for config in prior_configs]
         return cls(prior_config_list=prior_config_list, vqvae_config_dict=vqvae_config.to_dict(), **kwargs)
