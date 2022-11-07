@@ -1474,7 +1474,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             if get_preds:
                 preds = []
 
-            iter = tqdm(range(0, sample_tokens))
+            iter = tqdm(range(0, sample_tokens), leave = False)
             for sample_t in iter:
                 iter.set_description(f"Ancestral sampling {sample_tokens} music tokens", refresh=True)
                 hidden_states, cond = self.get_emb(
@@ -1589,7 +1589,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             # the input of the encoder and decoder can be merged into (lyrics, music tokens)
             input_tokens = sampled_audio[-1]
 
-            iter = tqdm(range(len(sampled_audio), sample_tokens))
+            iter = tqdm(range(len(sampled_audio), sample_tokens), leave = False)
             for sample_t in iter:
                 iter.set_description(f"Primed sampling {len(iter)} music tokens", refresh=True)
                 hidden_states, cond = self.get_emb(
@@ -2395,7 +2395,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         music_tokens_conds_list = self.split_batch(music_tokens_conds, n_samples, max_batch_size)
         metadata_list = self.split_batch(metadata, n_samples, max_batch_size)
         tokens = []
-        iterator = tqdm(zip(music_tokens_list, music_tokens_conds_list, metadata_list))
+        iterator = tqdm(zip(music_tokens_list, music_tokens_conds_list, metadata_list), leave = False)
         for music_tokens_i, music_tokens_conds_i, metadata_i in iterator:
             iterator.set_description(f"Sampling windows of {sample_tokens}")
             tokens_i = prior.sample(
@@ -2416,7 +2416,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
     # Sample total_length tokens at level=level with hop_length=hop_length
     def sample_level(self, music_tokens, labels, offset, sampling_kwargs, level, total_length, hop_length):
         if total_length >= self.priors[level].n_ctx:
-            iterator = tqdm(get_starts(total_length, self.priors[level].n_ctx, hop_length))
+            iterator = tqdm(get_starts(total_length, self.priors[level].n_ctx, hop_length), leave = False)
             for start in get_starts(total_length, self.priors[level].n_ctx, hop_length):
                 iterator.set_description(
                     f"[prior level {level}] Sampling {self.priors[level].n_ctx}/{total_length} tokens", refresh=True
