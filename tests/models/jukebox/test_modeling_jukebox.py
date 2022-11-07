@@ -189,6 +189,7 @@ class Jukebox1bModelTester(unittest.TestCase):
         torch.testing.assert_allclose(
             lyric_tokens[0, :30].detach(), torch.tensor(self.EXPECTED_LYRIC_COND), atol=1e-4, rtol=1e-4
         )
+
     @slow
     def test_slow_sampling(self):
         torch.backends.cuda.matmul.allow_tf32 = False
@@ -228,15 +229,18 @@ class Jukebox1bModelTester(unittest.TestCase):
         )
         torch.testing.assert_allclose(zs[0][0][:40], torch.tensor(self.EXPECTED_PRIMED_0))
 
-
         upper_2 = torch.cat((zs[0], torch.zeros(1, 2048 - zs[0].shape[-1])), dim=-1).long()
         zs = [upper_2, model.vqvae.encode(waveform, start_level=1, bs_chunks=waveform.shape[0])[0], None]
-        zs = model._sample(zs, tokens, sample_levels=[1], save_results=False, sample_length=40 * model.priors[1].raw_to_tokens)
+        zs = model._sample(
+            zs, tokens, sample_levels=[1], save_results=False, sample_length=40 * model.priors[1].raw_to_tokens
+        )
         torch.testing.assert_allclose(zs[1][0][:40], torch.tensor(self.EXPECTED_PRIMED_1))
 
         upper_1 = torch.cat((zs[1], torch.zeros(1, 2048 - zs[1].shape[-1])), dim=-1).long()
-        zs = [upper_2,upper_1,model.vqvae.encode(waveform, start_level=0, bs_chunks=waveform.shape[0])[0]]
-        zs = model._sample(zs, tokens, sample_levels=[2], save_results=False, sample_length=40 * model.priors[2].raw_to_tokens)
+        zs = [upper_2, upper_1, model.vqvae.encode(waveform, start_level=0, bs_chunks=waveform.shape[0])[0]]
+        zs = model._sample(
+            zs, tokens, sample_levels=[2], save_results=False, sample_length=40 * model.priors[2].raw_to_tokens
+        )
         torch.testing.assert_allclose(zs[2][0][:40].cpu(), torch.tensor(self.EXPECTED_PRIMED_2))
 
     @slow
