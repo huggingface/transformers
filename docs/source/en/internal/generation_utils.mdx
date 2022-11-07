@@ -12,22 +12,22 @@ specific language governing permissions and limitations under the License.
 
 # Utilities for Generation
 
-This page lists all the utility functions used by [`~generation_utils.GenerationMixin.generate`],
-[`~generation_utils.GenerationMixin.greedy_search`],
-[`~generation_utils.GenerationMixin.contrastive_search`],
-[`~generation_utils.GenerationMixin.sample`],
-[`~generation_utils.GenerationMixin.beam_search`],
-[`~generation_utils.GenerationMixin.beam_sample`],
-[`~generation_utils.GenerationMixin.group_beam_search`], and
-[`~generation_utils.GenerationMixin.constrained_beam_search`].
+This page lists all the utility functions used by [`~generation.utils.GenerationMixin.generate`],
+[`~generation.utils.GenerationMixin.greedy_search`],
+[`~generation.utils.GenerationMixin.contrastive_search`],
+[`~generation.utils.GenerationMixin.sample`],
+[`~generation.utils.GenerationMixin.beam_search`],
+[`~generation.utils.GenerationMixin.beam_sample`],
+[`~generation.utils.GenerationMixin.group_beam_search`], and
+[`~generation.utils.GenerationMixin.constrained_beam_search`].
 
 Most of those are only useful if you are studying the code of the generate methods in the library.
 
 ## Generate Outputs
 
-The output of [`~generation_utils.GenerationMixin.generate`] is an instance of a subclass of
+The output of [`~generation.utils.GenerationMixin.generate`] is an instance of a subclass of
 [`~utils.ModelOutput`]. This output is a data structure containing all the information returned
-by [`~generation_utils.GenerationMixin.generate`], but that can also be used as tuple or dictionary.
+by [`~generation.utils.GenerationMixin.generate`], but that can also be used as tuple or dictionary.
 
 Here's an example:
 
@@ -41,7 +41,7 @@ inputs = tokenizer("Hello, my dog is cute and ", return_tensors="pt")
 generation_output = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
 ```
 
-The `generation_output` object is a [`~generation_utils.GreedySearchDecoderOnlyOutput`], as we can
+The `generation_output` object is a [`~generation.utils.GreedySearchDecoderOnlyOutput`], as we can
 see in the documentation of that class below, it means it has the following attributes:
 
 - `sequences`: the generated sequences of tokens
@@ -73,31 +73,31 @@ We document here all output types.
 
 ### GreedySearchOutput
 
-[[autodoc]] generation_utils.GreedySearchDecoderOnlyOutput
+[[autodoc]] generation.utils.GreedySearchDecoderOnlyOutput
 
-[[autodoc]] generation_utils.GreedySearchEncoderDecoderOutput
+[[autodoc]] generation.utils.GreedySearchEncoderDecoderOutput
 
-[[autodoc]] generation_flax_utils.FlaxGreedySearchOutput
+[[autodoc]] generation.flax_utils.FlaxGreedySearchOutput
 
 ### SampleOutput
 
-[[autodoc]] generation_utils.SampleDecoderOnlyOutput
+[[autodoc]] generation.utils.SampleDecoderOnlyOutput
 
-[[autodoc]] generation_utils.SampleEncoderDecoderOutput
+[[autodoc]] generation.utils.SampleEncoderDecoderOutput
 
-[[autodoc]] generation_flax_utils.FlaxSampleOutput
+[[autodoc]] generation.flax_utils.FlaxSampleOutput
 
 ### BeamSearchOutput
 
-[[autodoc]] generation_utils.BeamSearchDecoderOnlyOutput
+[[autodoc]] generation.utils.BeamSearchDecoderOnlyOutput
 
-[[autodoc]] generation_utils.BeamSearchEncoderDecoderOutput
+[[autodoc]] generation.utils.BeamSearchEncoderDecoderOutput
 
 ### BeamSampleOutput
 
-[[autodoc]] generation_utils.BeamSampleDecoderOnlyOutput
+[[autodoc]] generation.utils.BeamSampleDecoderOnlyOutput
 
-[[autodoc]] generation_utils.BeamSampleEncoderDecoderOutput
+[[autodoc]] generation.utils.BeamSampleEncoderDecoderOutput
 
 ## LogitsProcessor
 

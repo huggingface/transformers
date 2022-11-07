@@ -97,6 +97,7 @@ _import_structure = {
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],
+    "generation": [],
     "hf_argparser": ["HfArgumentParser"],
     "integrations": [
         "is_comet_available",
@@ -804,14 +805,15 @@ else:
         "TextDatasetForNextSentencePrediction",
     ]
     _import_structure["deepspeed"] = []
-    _import_structure["generation_beam_constraints"] = [
+    _import_structure["generation_utils"] = []
+    _import_structure["generation.beam_constraints"] = [
         "Constraint",
         "ConstraintListState",
         "DisjunctiveConstraint",
         "PhrasalConstraint",
     ]
-    _import_structure["generation_beam_search"] = ["BeamScorer", "BeamSearchScorer", "ConstrainedBeamSearchScorer"]
-    _import_structure["generation_logits_process"] = [
+    _import_structure["generation.beam_search"] = ["BeamScorer", "BeamSearchScorer", "ConstrainedBeamSearchScorer"]
+    _import_structure["generation.logits_process"] = [
         "ForcedBOSTokenLogitsProcessor",
         "ForcedEOSTokenLogitsProcessor",
         "HammingDiversityLogitsProcessor",
@@ -829,13 +831,13 @@ else:
         "TopPLogitsWarper",
         "TypicalLogitsWarper",
     ]
-    _import_structure["generation_stopping_criteria"] = [
+    _import_structure["generation.stopping_criteria"] = [
         "MaxLengthCriteria",
         "MaxTimeCriteria",
         "StoppingCriteria",
         "StoppingCriteriaList",
     ]
-    _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
+    _import_structure["generation.utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_outputs"] = []
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
@@ -2234,7 +2236,8 @@ else:
     _import_structure["activations_tf"] = []
     _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
     _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
-    _import_structure["generation_tf_logits_process"] = [
+    _import_structure["generation_tf_utils"] = []
+    _import_structure["generation.tf_logits_process"] = [
         "TFForcedBOSTokenLogitsProcessor",
         "TFForcedEOSTokenLogitsProcessor",
         "TFLogitsProcessor",
@@ -2248,7 +2251,7 @@ else:
         "TFTopKLogitsWarper",
         "TFTopPLogitsWarper",
     ]
-    _import_structure["generation_tf_utils"] = ["tf_top_k_top_p_filtering"]
+    _import_structure["generation.tf_utils"] = ["tf_top_k_top_p_filtering"]
     _import_structure["keras_callbacks"] = ["KerasMetricCallback", "PushToHubCallback"]
     _import_structure["modeling_tf_outputs"] = []
     _import_structure["modeling_tf_utils"] = [
@@ -2871,7 +2874,8 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_flax_objects) if not name.startswith("_")
     ]
 else:
-    _import_structure["generation_flax_logits_process"] = [
+    _import_structure["generation_flax_utils"] = []
+    _import_structure["generation.flax_logits_process"] = [
         "FlaxForcedBOSTokenLogitsProcessor",
         "FlaxForcedEOSTokenLogitsProcessor",
         "FlaxLogitsProcessor",
@@ -2882,7 +2886,7 @@ else:
         "FlaxTopKLogitsWarper",
         "FlaxTopPLogitsWarper",
     ]
-    _import_structure["generation_flax_utils"] = []
+    _import_structure["generation.flax_utils"] = []
     _import_structure["modeling_flax_outputs"] = []
     _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
     _import_structure["models.albert"].extend(
@@ -3772,14 +3776,14 @@ if TYPE_CHECKING:
             TextDataset,
             TextDatasetForNextSentencePrediction,
         )
-        from .generation_beam_constraints import (
+        from .generation.beam_constraints import (
             Constraint,
             ConstraintListState,
             DisjunctiveConstraint,
             PhrasalConstraint,
         )
-        from .generation_beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
-        from .generation_logits_process import (
+        from .generation.beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
+        from .generation.logits_process import (
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
             HammingDiversityLogitsProcessor,
@@ -3797,13 +3801,13 @@ if TYPE_CHECKING:
             TopPLogitsWarper,
             TypicalLogitsWarper,
         )
-        from .generation_stopping_criteria import (
+        from .generation.stopping_criteria import (
             MaxLengthCriteria,
             MaxTimeCriteria,
             StoppingCriteria,
             StoppingCriteriaList,
         )
-        from .generation_utils import top_k_top_p_filtering
+        from .generation.utils import top_k_top_p_filtering
         from .modeling_utils import PreTrainedModel
 
         # PyTorch model imports
@@ -4953,7 +4957,7 @@ if TYPE_CHECKING:
 
         # Benchmarks
         from .benchmark.benchmark_tf import TensorFlowBenchmark
-        from .generation_tf_logits_process import (
+        from .generation.tf_logits_process import (
             TFForcedBOSTokenLogitsProcessor,
             TFForcedEOSTokenLogitsProcessor,
             TFLogitsProcessor,
@@ -4967,7 +4971,7 @@ if TYPE_CHECKING:
             TFTopKLogitsWarper,
             TFTopPLogitsWarper,
         )
-        from .generation_tf_utils import tf_top_k_top_p_filtering
+        from .generation.tf_utils import tf_top_k_top_p_filtering
         from .keras_callbacks import KerasMetricCallback, PushToHubCallback
         from .modeling_tf_layoutlm import (
             TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5457,7 +5461,7 @@ if TYPE_CHECKING:
         # They will raise an import error if the user tries to instantiate / use them.
         from .utils.dummy_flax_objects import *
     else:
-        from .generation_flax_logits_process import (
+        from .generation.flax_logits_process import (
             FlaxForcedBOSTokenLogitsProcessor,
             FlaxForcedEOSTokenLogitsProcessor,
             FlaxLogitsProcessor,
