@@ -79,17 +79,49 @@ class AnnotionFormat(ExplicitEnum):
 SUPPORTED_ANNOTATION_FORMATS = (AnnotionFormat.COCO_DETECTION, AnnotionFormat.COCO_PANOPTIC)
 
 
+# FIXME - update once pad transform is added
+# Copied from transformers.models.detr.image_processing_detr.bottom_right_pad
+def bottom_right_pad(
+    image: np.ndarray,
+    output_size: Tuple[int, int],
+    input_channel_dimension: Optional[ChannelDimension] = None,
+    data_format: Optional[ChannelDimension] = None,
+) -> np.ndarray:
+    """
+    Pad the bottom and right of the image with zeros to make it up to the output size.
+    """
+    if input_channel_dimension is None:
+        input_channel_dimension = infer_channel_dimension_format(image)
+
+    output_height, output_width = output_size
+    input_height, input_width = get_image_size(image)
+    pad_bottom = output_height - input_height
+    pad_right = output_width - input_width
+
+    if input_channel_dimension == ChannelDimension.FIRST:
+        padded_image = np.pad(image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=0)
+    elif input_channel_dimension == ChannelDimension.LAST:
+        padded_image = np.pad(image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=0)
+    else:
+        raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
+
+    if data_format is not None:
+        padded_image = to_channel_dimension_format(padded_image, data_format)
+
+    return padded_image
+
+
 # Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
 def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, int]:
     """
     Computes the output image size given the input image size and the desired output size.
 
     Args:
-        image_size (:obj:`Tuple[int, int]`):
+        image_size (`Tuple[int, int]`):
             The input image size.
-        size (:obj:`int`):
+        size (`int`):
             The desired output size.
-        max_size (:obj:`int`, `optional`):
+        max_size (`int`, *optional*):
             The maximum allowed output size.
     """
     height, width = image_size
@@ -121,11 +153,11 @@ def get_resize_output_image_size(
     image size is computed by keeping the aspect ratio of the input image size.
 
     Args:
-        image_size (:obj:`Tuple[int, int]`):
+        image_size (`Tuple[int, int]`):
             The input image size.
-        size (`int`):
+        size (*int*):
             The desired output size.
-        max_size (`int`, *optional*):
+        max_size (*int*, *optional*):
             The maximum allowed output size.
     """
     image_size = get_image_size(input_image)
@@ -142,7 +174,7 @@ def get_numpy_to_framework_fn(arr) -> Callable:
     Returns a function that converts a numpy array to the framework of the input array.
 
     Args:
-        arr (:obj:`np.ndarray`): The array to convert.
+        arr (`np.ndarray`): The array to convert.
     """
     if isinstance(arr, np.ndarray):
         return np.array
@@ -185,6 +217,7 @@ def normalize_annotation(annotation: Dict, image_size: Tuple[int, int]) -> Dict:
             boxes = corners_to_center_format(boxes)
             # FIXME - check height width order
             boxes /= np.asarray([image_width, image_height, image_width, image_height], dtype=np.float32)
+            norm_annotation[key] = boxes
         else:
             norm_annotation[key] = value
     return norm_annotation
@@ -213,37 +246,6 @@ def get_pad_size(images: List[np.ndarray]) -> Tuple[int, int]:
     else:
         raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
     return (max_height, max_width)
-
-
-# Copied from transformers.models.detr.image_processing_detr.bottom_right_pad
-def bottom_right_pad(
-    image: np.ndarray,
-    output_size: Tuple[int, int],
-    input_channel_dimension: Optional[ChannelDimension] = None,
-    data_format: Optional[ChannelDimension] = None,
-) -> np.ndarray:
-    """
-    Pad the bottom and right of the image with zeros to make it up to the output size.
-    """
-    if input_channel_dimension is None:
-        input_channel_dimension = infer_channel_dimension_format(image)
-
-    output_height, output_width = output_size
-    input_height, input_width = get_image_size(image)
-    pad_bottom = output_height - input_height
-    pad_right = output_width - input_width
-
-    if input_channel_dimension == ChannelDimension.FIRST:
-        padded_image = np.pad(image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=0)
-    elif input_channel_dimension == ChannelDimension.LAST:
-        padded_image = np.pad(image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=0)
-    else:
-        raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
-
-    if data_format is not None:
-        padded_image = to_channel_dimension_format(padded_image, data_format)
-
-    return padded_image
 
 
 # Copied from transformers.models.detr.image_processing_detr.make_pixel_mask
@@ -332,6 +334,7 @@ def prepare_coco_detection_annotation(image, target, return_segmentation_masks: 
     new_target["boxes"] = boxes[keep]
     new_target["area"] = area[keep]
     new_target["iscrowd"] = iscrowd[keep]
+    new_target["orig_size"] = np.asarray([int(image_height), int(image_width)], dtype=np.int64)
 
     if annotations and "keypoints" in annotations[0]:
         keypoints = [obj["keypoints"] for obj in annotations]
@@ -477,24 +480,24 @@ def post_process_panoptic_sample(
     threshold=0.85,
 ) -> Dict:
     """
-    Converts the output of [`DetrForSegmentation`] into panoptic segmentation predictions for a single sample.
+    Converts the output of [*DetrForSegmentation*] into panoptic segmentation predictions for a single sample.
 
     Args:
-        out_logits (:obj:`torch.Tensor`):
+        out_logits (`torch.Tensor`):
             The logits for this sample.
-        masks (:obj:`torch.Tensor`):
+        masks (`torch.Tensor`):
             The predicted segmentation masks for this sample.
-        boxes (:obj:`torch.Tensor`):
+        boxes (`torch.Tensor`):
             The prediced bounding boxes for this sample. The boxes are in the normalized format (center_x, center_y,
             width, height) and values between [0, 1], relative to the size the image (disregarding padding).
-        processed_size (:obj:`Tuple[int, int]`):
+        processed_size (`Tuple[int, int]`):
             The processed size of the image (h, w), as returned by the preprocessing step i.e. the size after data
             augmentation but before batching.
-        target_size (:obj:`Tuple[int, int]`):
+        target_size (`Tuple[int, int]`):
             The target size of the image, (h, w) corresponding to the requested final size of the prediction.
-        is_thing_map (:obj:`Dict`):
+        is_thing_map (`Dict`):
             A dictionary mapping class indices to a boolean value indicating whether the class is a thing or not.
-        threshold (:obj:`float`, `optional`, defaults to 0.85):
+        threshold (`float`, *optional*, defaults to 0.85):
             The threshold used to binarize the segmentation masks.
     """
     # we filter empty queries and detection below threshold
@@ -563,15 +566,15 @@ def resize_annotation(
     Resizes an annotation to a target size.
 
     Args:
-        annotation (:obj:`Dict[str, Any]`):
+        annotation (`Dict[str, Any]`):
             The annotation dictionary.
-        orig_size (:obj:`Tuple[int, int]`):
+        orig_size (`Tuple[int, int]`):
             The original size of the input image.
-        target_size (:obj:`Tuple[int, int]`):
-            The target size of the image, as returned by the preprocessing `resize` step.
-        threshold (:obj:`float`, `optional`, defaults to 0.5):
+        target_size (`Tuple[int, int]`):
+            The target size of the image, as returned by the preprocessing *resize* step.
+        threshold (`float`, *optional*, defaults to 0.5):
             The threshold used to binarize the segmentation masks.
-        resample (`PILImageResampling`, defaults to `PILImageResampling.NEAREST`):
+        resample (*PILImageResampling*, defaults to *PILImageResampling.NEAREST*):
             The resampling filter to use when resizing the masks.
     """
     ratios = tuple(float(s) / float(s_orig) for s, s_orig in zip(target_size, orig_size))
@@ -580,7 +583,7 @@ def resize_annotation(
     new_annotation = {}
     new_annotation["size"] = target_size
 
-    for key, value in annotation:
+    for key, value in annotation.items():
         if key == "boxes":
             boxes = value
             # FIXME - is having (w, h) rather than (h, w) correct here?
@@ -593,7 +596,7 @@ def resize_annotation(
             new_annotation["area"] = scaled_area
         elif key == "masks":
             masks = value[:, None].astype(np.float32)
-            masks = resize(masks, target_size, resample=resample)
+            masks = np.array([resize(mask, target_size, resample=resample) for mask in masks])
             masks = masks[:, 0] > threshold
             new_annotation["masks"] = masks
         else:
@@ -837,9 +840,9 @@ class YolosImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         target: Dict,
-        return_segmentation_masks: bool = False,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
         format: Optional[AnnotionFormat] = None,
+        return_segmentation_masks: bool = None,
+        masks_path: Optional[Union[str, pathlib.Path]] = None,
     ) -> Dict:
         """
         Prepare an annotation for feeding into DETR model.
@@ -847,8 +850,10 @@ class YolosImageProcessor(BaseImageProcessor):
         format = format if format is not None else self.format
 
         if format == AnnotionFormat.COCO_DETECTION:
+            return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
             target = prepare_coco_detection_annotation(image, target, return_segmentation_masks)
         elif format == AnnotionFormat.COCO_PANOPTIC:
+            return_segmentation_masks = True if return_segmentation_masks is None else return_segmentation_masks
             target = prepare_coco_panoptic_annotation(
                 image, target, masks_path=masks_path, return_masks=return_segmentation_masks
             )
@@ -918,7 +923,7 @@ class YolosImageProcessor(BaseImageProcessor):
         Resize the annotation to match the resized image. If size is an int, smaller edge of the mask will be matched
         to this number.
         """
-        return resize_annotation(annotation, orig_size=orig_size, size=size, resample=resample)
+        return resize_annotation(annotation, orig_size=orig_size, target_size=size, resample=resample)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.rescale
     def rescale(self, image: np.ndarray, rescale_factor: Union[float, int]) -> np.ndarray:
@@ -943,12 +948,17 @@ class YolosImageProcessor(BaseImageProcessor):
         """
         return normalize_annotation(annotation, image_size=image_size)
 
-
+    # FIXME
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._pad_and_create_pixel_mask
     def _pad_and_create_pixel_mask(
         self, pixel_values_list: List["torch.Tensor"], data_format: Optional[Union[str, ChannelDimension]] = None
     ) -> Dict:
         pad_size = get_pad_size(pixel_values_list)
-        padded_images = self.pad(pixel_values_list=pixel_values_list, output_size=pad_size, data_format=data_format)
+        # padded_images = [
+        #     self.pad(image=image, output_size=pad_size, data_format=data_format) for image in pixel_values_list
+        # ]
+        padded_images = self._pad(pixel_values_list, output_size=pad_size, data_format=data_format)
+        masks = [make_pixel_mask(image=image, output_size=pad_size) for image in pixel_values_list]
         return {"pixel_values": padded_images, "pixel_mask": masks}
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad_and_create_pixel_mask
@@ -981,45 +991,79 @@ class YolosImageProcessor(BaseImageProcessor):
         data = self._pad_and_create_pixel_mask(pixel_values_list, data_format)
         return BatchFeature(data, tensor_type=return_tensors)
 
-    def pad(self, pixel_values_list: List["torch.Tensor"], return_tensors: Optional[Union[str, TensorType]] = None): # FIXME - can be copied from DETR?
+    # FIXME - check logic is consistency
+    def _pad(
+        self,
+        # image: np.ndarray,
+        images: List[np.ndarray],
+        output_size: Tuple[int, int] = None,
+        input_channel_dimension: Optional[ChannelDimension] = None,
+        data_format: Optional[ChannelDimension] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None, # FIXME - write custom pad function
+    ) -> np.ndarray:
         """
-        Pad images up to the largest image in a batch.
-
         Args:
-            pixel_values_list (`List[torch.Tensor]`):
-                List of images (pixel values) to be padded. Each image should be a tensor of shape (C, H, W).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
-                objects.
-
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following field:
-
-            - **pixel_values** -- Pixel values to be fed to a model.
-
+        Pad the bottom and right of the image with zeros to the output size.
+            image (`np.ndarray`):
+                Image to pad.
+            output_size (`Tuple[int, int]`):
+                Output size of the image.
+            input_channel_dimension (`ChannelDimension`, *optional*, defaults to `None`):
+                The channel dimension format of the image. If not provided, it will be inferred from the input image.
+            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+                The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
+        # FIXME - what should the pattern here be?
+        # 1. pad pads an individual image. This matches the behavior of the other transforms e.g. resize.
+        # 2. pad pads a batch of images and returns a mask. This matches the behavior of `pad` tokenizers
+        # (doesn't accept same input as tokenizer call however)
+        # Keep `pad_and_create_pixel_mask` for now
+        # output_size = output_size or self.size
+        output_size = get_pad_size(images)
+        images = [bottom_right_pad(
+            image, output_size=output_size, input_channel_dimension=input_channel_dimension, data_format=data_format
+        ) for image in images]
+        # return BatchFeature({"pixel_values": images}, tensor_type=return_tensors)
+        return images
 
-        max_size = self._max_by_axis([list(image.shape) for image in pixel_values_list])
-        c, h, w = max_size
-        padded_images = []
-        for image in pixel_values_list:
-            # create padded image
-            padded_image = np.zeros((c, h, w), dtype=np.float32)
-            padded_image[: image.shape[0], : image.shape[1], : image.shape[2]] = np.copy(image)
-            padded_images.append(padded_image)
 
-        # return as BatchFeature
-        data = {"pixel_values": padded_images}
-        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
-
-        return encoded_inputs
+    def pad(
+        self,
+        # image: np.ndarray,
+        images: List[np.ndarray],
+        output_size: Tuple[int, int] = None,
+        input_channel_dimension: Optional[ChannelDimension] = None,
+        data_format: Optional[ChannelDimension] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None, # FIXME - write custom pad function
+    ) -> np.ndarray:
+        """
+        Args:
+        Pad the bottom and right of the image with zeros to the output size.
+            image (`np.ndarray`):
+                Image to pad.
+            output_size (`Tuple[int, int]`):
+                Output size of the image.
+            input_channel_dimension (`ChannelDimension`, *optional*, defaults to `None`):
+                The channel dimension format of the image. If not provided, it will be inferred from the input image.
+            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+                The channel dimension format of the image. If not provided, it will be the same as the input image.
+        """
+        # FIXME - what should the pattern here be?
+        # 1. pad pads an individual image. This matches the behavior of the other transforms e.g. resize.
+        # 2. pad pads a batch of images and returns a mask. This matches the behavior of `pad` tokenizers
+        # (doesn't accept same input as tokenizer call however)
+        # Keep `pad_and_create_pixel_mask` for now
+        # output_size = output_size or self.size
+        images = self._pad(images, output_size, input_channel_dimension, data_format, return_tensors)
+        return BatchFeature({"pixel_values": images}, tensor_type=return_tensors)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.preprocess
     def preprocess(
         self,
         images: ImageInput,
         annotations: Optional[Union[List[Dict], List[List[Dict]]]] = None,
-        return_segmentation_masks: bool = False,
+        # return_segmentation_masks: bool = False,
+        return_segmentation_masks: bool = None,  # FIXME
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
@@ -1117,12 +1161,15 @@ class YolosImageProcessor(BaseImageProcessor):
                 f" `pathlib.Path` or string object, but is {type(masks_path)} instead."
             )
 
+        # All transformations expect numpy arrays
+        images = [to_numpy_array(image) for image in images]
+
         # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
         if annotations is not None:
             prepared_images = []
             prepared_annotations = []
             for image, target in zip(images, annotations):
-                image, target = self.prepare_annotation(
+                target = self.prepare_annotation(
                     image, target, format, return_segmentation_masks=return_segmentation_masks, masks_path=masks_path
                 )
                 prepared_images.append(image)
@@ -1130,9 +1177,6 @@ class YolosImageProcessor(BaseImageProcessor):
             images = prepared_images
             annotations = prepared_annotations
             del prepared_images, prepared_annotations
-
-        # All transformations expect numpy arrays
-        images = [to_numpy_array(image) for image in images]
 
         # transformations
         if do_resize:
@@ -1170,7 +1214,9 @@ class YolosImageProcessor(BaseImageProcessor):
 
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
         if annotations is not None:
-            encoded_inputs["labels"] = BatchFeature(data=annotations, tensor_type=return_tensors)
+            encoded_inputs["labels"] = [
+                BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
+            ]
 
         return encoded_inputs
 

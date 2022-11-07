@@ -48,6 +48,9 @@ class YolosFeatureExtractionTester(unittest.TestCase):
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
+        do_rescale=True,
+        rescale_factor=1 / 255,
+        do_pad=True,
     ):
         # by setting size["longest_edge"] > max_resolution we're effectively not testing this :p
         size = size if size is not None else {"shortest_edge": 18, "longest_edge": 1333}
@@ -61,6 +64,9 @@ class YolosFeatureExtractionTester(unittest.TestCase):
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
+        self.do_pad = do_pad
 
     def prepare_feat_extract_dict(self):
         return {
@@ -69,6 +75,9 @@ class YolosFeatureExtractionTester(unittest.TestCase):
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
+            "do_rescale": self.do_rescale,
+            "rescale_factor": self.rescale_factor,
+            "do_pad": self.do_pad,
         }
 
     def get_expected_values(self, image_inputs, batched=False):
@@ -228,7 +237,7 @@ class YolosFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
     def test_equivalence_padding(self):
         # Initialize feature_extractors
         feature_extractor_1 = self.feature_extraction_class(**self.feat_extract_dict)
-        feature_extractor_2 = self.feature_extraction_class(do_resize=False, do_normalize=False)
+        feature_extractor_2 = self.feature_extraction_class(do_resize=False, do_normalize=False, do_rescale=False)
         # create random PyTorch tensors
         image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
         for image in image_inputs:

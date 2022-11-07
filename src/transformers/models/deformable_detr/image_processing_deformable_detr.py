@@ -85,11 +85,11 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, in
     Computes the output image size given the input image size and the desired output size.
 
     Args:
-        image_size (:obj:`Tuple[int, int]`):
+        image_size (`Tuple[int, int]`):
             The input image size.
-        size (:obj:`int`):
+        size (`int`):
             The desired output size.
-        max_size (:obj:`int`, `optional`):
+        max_size (`int`, *optional*):
             The maximum allowed output size.
     """
     height, width = image_size
@@ -121,11 +121,11 @@ def get_resize_output_image_size(
     image size is computed by keeping the aspect ratio of the input image size.
 
     Args:
-        image_size (:obj:`Tuple[int, int]`):
+        image_size (`Tuple[int, int]`):
             The input image size.
-        size (`int`):
+        size (*int*):
             The desired output size.
-        max_size (`int`, *optional*):
+        max_size (*int*, *optional*):
             The maximum allowed output size.
     """
     image_size = get_image_size(input_image)
@@ -142,7 +142,7 @@ def get_numpy_to_framework_fn(arr) -> Callable:
     Returns a function that converts a numpy array to the framework of the input array.
 
     Args:
-        arr (:obj:`np.ndarray`): The array to convert.
+        arr (`np.ndarray`): The array to convert.
     """
     if isinstance(arr, np.ndarray):
         return np.array
@@ -185,6 +185,7 @@ def normalize_annotation(annotation: Dict, image_size: Tuple[int, int]) -> Dict:
             boxes = corners_to_center_format(boxes)
             # FIXME - check height width order
             boxes /= np.asarray([image_width, image_height, image_width, image_height], dtype=np.float32)
+            norm_annotation[key] = boxes
         else:
             norm_annotation[key] = value
     return norm_annotation
@@ -332,6 +333,7 @@ def prepare_coco_detection_annotation(image, target, return_segmentation_masks: 
     new_target["boxes"] = boxes[keep]
     new_target["area"] = area[keep]
     new_target["iscrowd"] = iscrowd[keep]
+    new_target["orig_size"] = np.asarray([int(image_height), int(image_width)], dtype=np.int64)
 
     if annotations and "keypoints" in annotations[0]:
         keypoints = [obj["keypoints"] for obj in annotations]
@@ -477,24 +479,24 @@ def post_process_panoptic_sample(
     threshold=0.85,
 ) -> Dict:
     """
-    Converts the output of [`DetrForSegmentation`] into panoptic segmentation predictions for a single sample.
+    Converts the output of [*DetrForSegmentation*] into panoptic segmentation predictions for a single sample.
 
     Args:
-        out_logits (:obj:`torch.Tensor`):
+        out_logits (`torch.Tensor`):
             The logits for this sample.
-        masks (:obj:`torch.Tensor`):
+        masks (`torch.Tensor`):
             The predicted segmentation masks for this sample.
-        boxes (:obj:`torch.Tensor`):
+        boxes (`torch.Tensor`):
             The prediced bounding boxes for this sample. The boxes are in the normalized format (center_x, center_y,
             width, height) and values between [0, 1], relative to the size the image (disregarding padding).
-        processed_size (:obj:`Tuple[int, int]`):
+        processed_size (`Tuple[int, int]`):
             The processed size of the image (h, w), as returned by the preprocessing step i.e. the size after data
             augmentation but before batching.
-        target_size (:obj:`Tuple[int, int]`):
+        target_size (`Tuple[int, int]`):
             The target size of the image, (h, w) corresponding to the requested final size of the prediction.
-        is_thing_map (:obj:`Dict`):
+        is_thing_map (`Dict`):
             A dictionary mapping class indices to a boolean value indicating whether the class is a thing or not.
-        threshold (:obj:`float`, `optional`, defaults to 0.85):
+        threshold (`float`, *optional*, defaults to 0.85):
             The threshold used to binarize the segmentation masks.
     """
     # we filter empty queries and detection below threshold
@@ -563,15 +565,15 @@ def resize_annotation(
     Resizes an annotation to a target size.
 
     Args:
-        annotation (:obj:`Dict[str, Any]`):
+        annotation (`Dict[str, Any]`):
             The annotation dictionary.
-        orig_size (:obj:`Tuple[int, int]`):
+        orig_size (`Tuple[int, int]`):
             The original size of the input image.
-        target_size (:obj:`Tuple[int, int]`):
-            The target size of the image, as returned by the preprocessing `resize` step.
-        threshold (:obj:`float`, `optional`, defaults to 0.5):
+        target_size (`Tuple[int, int]`):
+            The target size of the image, as returned by the preprocessing *resize* step.
+        threshold (`float`, *optional*, defaults to 0.5):
             The threshold used to binarize the segmentation masks.
-        resample (`PILImageResampling`, defaults to `PILImageResampling.NEAREST`):
+        resample (*PILImageResampling*, defaults to *PILImageResampling.NEAREST*):
             The resampling filter to use when resizing the masks.
     """
     ratios = tuple(float(s) / float(s_orig) for s, s_orig in zip(target_size, orig_size))
@@ -580,7 +582,7 @@ def resize_annotation(
     new_annotation = {}
     new_annotation["size"] = target_size
 
-    for key, value in annotation:
+    for key, value in annotation.items():
         if key == "boxes":
             boxes = value
             # FIXME - is having (w, h) rather than (h, w) correct here?
@@ -593,7 +595,7 @@ def resize_annotation(
             new_annotation["area"] = scaled_area
         elif key == "masks":
             masks = value[:, None].astype(np.float32)
-            masks = resize(masks, target_size, resample=resample)
+            masks = np.array([resize(mask, target_size, resample=resample) for mask in masks])
             masks = masks[:, 0] > threshold
             new_annotation["masks"] = masks
         else:
@@ -837,9 +839,9 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         target: Dict,
-        return_segmentation_masks: bool = False,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
         format: Optional[AnnotionFormat] = None,
+        return_segmentation_masks: bool = None,
+        masks_path: Optional[Union[str, pathlib.Path]] = None,
     ) -> Dict:
         """
         Prepare an annotation for feeding into DETR model.
@@ -847,8 +849,10 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         format = format if format is not None else self.format
 
         if format == AnnotionFormat.COCO_DETECTION:
+            return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
             target = prepare_coco_detection_annotation(image, target, return_segmentation_masks)
         elif format == AnnotionFormat.COCO_PANOPTIC:
+            return_segmentation_masks = True if return_segmentation_masks is None else return_segmentation_masks
             target = prepare_coco_panoptic_annotation(
                 image, target, masks_path=masks_path, return_masks=return_segmentation_masks
             )
@@ -857,7 +861,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         return target
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare
-    def prepare(self, image, target, return_segmentation_masks=False, masks_path=None):
+    def prepare(self, image, target, return_segmentation_masks=None, masks_path=None):
         warnings.warn(
             "The `prepare` method is deprecated and will be removed in a future version. "
             "Please use `prepare_annotation` instead. Note: the `prepare_annotation` method "
@@ -918,7 +922,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         Resize the annotation to match the resized image. If size is an int, smaller edge of the mask will be matched
         to this number.
         """
-        return resize_annotation(annotation, orig_size=orig_size, size=size, resample=resample)
+        return resize_annotation(annotation, orig_size=orig_size, target_size=size, resample=resample)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.rescale
     def rescale(self, image: np.ndarray, rescale_factor: Union[float, int]) -> np.ndarray:
@@ -1018,7 +1022,8 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         annotations: Optional[Union[List[Dict], List[List[Dict]]]] = None,
-        return_segmentation_masks: bool = False,
+        # return_segmentation_masks: bool = False,
+        return_segmentation_masks: bool = None,  # FIXME
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
@@ -1116,12 +1121,15 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
                 f" `pathlib.Path` or string object, but is {type(masks_path)} instead."
             )
 
+        # All transformations expect numpy arrays
+        images = [to_numpy_array(image) for image in images]
+
         # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
         if annotations is not None:
             prepared_images = []
             prepared_annotations = []
             for image, target in zip(images, annotations):
-                image, target = self.prepare_annotation(
+                target = self.prepare_annotation(
                     image, target, format, return_segmentation_masks=return_segmentation_masks, masks_path=masks_path
                 )
                 prepared_images.append(image)
@@ -1129,9 +1137,6 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
             images = prepared_images
             annotations = prepared_annotations
             del prepared_images, prepared_annotations
-
-        # All transformations expect numpy arrays
-        images = [to_numpy_array(image) for image in images]
 
         # transformations
         if do_resize:
@@ -1169,7 +1174,9 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
 
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
         if annotations is not None:
-            encoded_inputs["labels"] = BatchFeature(data=annotations, tensor_type=return_tensors)
+            encoded_inputs["labels"] = [
+                BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
+            ]
 
         return encoded_inputs
 

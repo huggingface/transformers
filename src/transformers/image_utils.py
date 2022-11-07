@@ -188,7 +188,7 @@ def is_valid_annotation_coco_panoptic(annotation: Dict[str, Union[List, Tuple]])
         and "file_name" in annotation
         and isinstance(annotation["segments_info"], (list, tuple))
         and (
-            # an image can have no segments FIXME - check with Niels
+            # an image can have no segments
             len(annotation["segments_info"]) == 0
             or isinstance(annotation["segments_info"][0], dict)
         )
