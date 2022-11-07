@@ -39,14 +39,10 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("beit", "BeitImageProcessor"),
         ("clip", "CLIPImageProcessor"),
-        ("conditional_detr", "ConditionalDetrImageProcessor"),
         ("convnext", "ConvNextImageProcessor"),
         ("cvt", "ConvNextImageProcessor"),
         ("data2vec-vision", "BeitImageProcessor"),
-        ("deformable_detr", "DeformableDetrImageProcessor"),
         ("deit", "DeiTImageProcessor"),
-        ("detr", "DetrImageProcessor"),
-        ("donut-swin", "DonutImageProcessor"),
         ("dpt", "DPTImageProcessor"),
         ("flava", "FlavaImageProcessor"),
         ("glpn", "GLPNImageProcessor"),
@@ -55,10 +51,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("layoutlmv2", "LayoutLMv2ImageProcessor"),
         ("layoutlmv3", "LayoutLMv3ImageProcessor"),
         ("levit", "LevitImageProcessor"),
-        ("maskformer", "MaskFormerImageProcessor"),
-        ("mctct", "MCTCTImageProcessor"),
         ("mobilevit", "MobileViTImageProcessor"),
-        ("owlvit", "OwlViTImageProcessor"),
         ("perceiver", "PerceiverImageProcessor"),
         ("poolformer", "PoolFormerImageProcessor"),
         ("regnet", "ConvNextImageProcessor"),
@@ -66,7 +59,6 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("segformer", "SegformerImageProcessor"),
         ("swin", "ViTImageProcessor"),
         ("swinv2", "ViTImageProcessor"),
-        ("table-transformer", "DetrImageProcessor"),
         ("van", "ConvNextImageProcessor"),
         ("videomae", "VideoMAEImageProcessor"),
         ("vilt", "ViltImageProcessor"),
@@ -74,7 +66,6 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("vit_mae", "ViTImageProcessor"),
         ("vit_msn", "ViTImageProcessor"),
         ("xclip", "CLIPImageProcessor"),
-        ("yolos", "YolosImageProcessor"),
     ]
 )
 

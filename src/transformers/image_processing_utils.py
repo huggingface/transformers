@@ -13,11 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, Iterable, Optional, Union
+import json
+import os
+from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
 from .feature_extraction_utils import FeatureExtractionMixin
-from .utils import logging
+from .utils import IMAGE_PROCESSOR_NAME, cached_file, download_url, is_offline_mode, is_remote_url, logging
 
 
 logger = logging.get_logger(__name__)
@@ -40,9 +42,113 @@ class BatchFeature(BaseBatchFeature):
     """
 
 
-# We use aliasing whilst we phase out the old API. Once feature extractors for vision models
-# are deprecated, ImageProcessor mixin will be implemented. Any shared logic will be abstracted out.
-ImageProcessorMixin = FeatureExtractionMixin
+# We using a quick and simple inheritance whilst we phase out the old API. Once image processors for vision models
+# are fully deprecated, ImageProcessor mixin will be implemented. Any shared logic will be abstracted out.
+class ImageProcessorMixin(FeatureExtractionMixin):
+    """
+    This is an image processor mixin used to provide saving/loading functionality for sequential and image feature
+    extractors.
+    """
+
+    @classmethod
+    def get_image_processor_dict(
+        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """
+        From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
+        image processor of type [`~image_processor_utils.ImageProcessorMixin`] using `from_dict`.
+
+        Parameters:
+            pretrained_model_name_or_path (`str` or `os.PathLike`):
+                The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
+
+        Returns:
+            `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the image processor object.
+        """
+        cache_dir = kwargs.pop("cache_dir", None)
+        force_download = kwargs.pop("force_download", False)
+        resume_download = kwargs.pop("resume_download", False)
+        proxies = kwargs.pop("proxies", None)
+        use_auth_token = kwargs.pop("use_auth_token", None)
+        local_files_only = kwargs.pop("local_files_only", False)
+        revision = kwargs.pop("revision", None)
+
+        from_pipeline = kwargs.pop("_from_pipeline", None)
+        from_auto_class = kwargs.pop("_from_auto", False)
+
+        user_agent = {"file_type": "image processor", "from_auto_class": from_auto_class}
+        if from_pipeline is not None:
+            user_agent["using_pipeline"] = from_pipeline
+
+        if is_offline_mode() and not local_files_only:
+            logger.info("Offline mode: forcing local_files_only=True")
+            local_files_only = True
+
+        pretrained_model_name_or_path = str(pretrained_model_name_or_path)
+        is_local = os.path.isdir(pretrained_model_name_or_path)
+        if os.path.isdir(pretrained_model_name_or_path):
+            image_processor_file = os.path.join(pretrained_model_name_or_path, IMAGE_PROCESSOR_NAME)
+        if os.path.isfile(pretrained_model_name_or_path):
+            resolved_image_processor_file = pretrained_model_name_or_path
+            is_local = True
+        elif is_remote_url(pretrained_model_name_or_path):
+            image_processor_file = pretrained_model_name_or_path
+            resolved_image_processor_file = download_url(pretrained_model_name_or_path)
+        else:
+            image_processor_file = IMAGE_PROCESSOR_NAME
+            try:
+                # Load from local folder or from cache or download from model Hub and cache
+                resolved_image_processor_file = cached_file(
+                    pretrained_model_name_or_path,
+                    image_processor_file,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
+                    use_auth_token=use_auth_token,
+                    user_agent=user_agent,
+                    revision=revision,
+                )
+            except EnvironmentError:
+                # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
+                # the original exception.
+                raise
+            except Exception:
+                # For any other exception, we throw a generic error.
+                raise EnvironmentError(
+                    f"Can't load image processor for '{pretrained_model_name_or_path}'. If you were trying to load"
+                    " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
+                    f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
+                    f" directory containing a {IMAGE_PROCESSOR_NAME} file"
+                )
+
+        try:
+            # Load image_processor dict
+            with open(resolved_image_processor_file, "r", encoding="utf-8") as reader:
+                text = reader.read()
+            image_processor_dict = json.loads(text)
+
+        except json.JSONDecodeError:
+            raise EnvironmentError(
+                f"It looks like the config file at '{resolved_image_processor_file}' is not a valid JSON file."
+            )
+
+        if is_local:
+            logger.info(f"loading configuration file {resolved_image_processor_file}")
+        else:
+            logger.info(
+                f"loading configuration file {image_processor_file} from cache at {resolved_image_processor_file}"
+            )
+
+        return image_processor_dict, kwargs
+
+    @classmethod
+    def get_feature_extractor_dict(
+        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        # Make sure to override parent method
+        raise NotImplementedError
 
 
 class BaseImageProcessor(ImageProcessorMixin):
@@ -65,7 +171,7 @@ def get_size_dict(
 ) -> dict:
     """
     Converts the old size parameter in the config into the new dict expected in the config. This is to ensure backwards
-    compatibility with the old feature extractor configs and removes ambiguity over whether the tuple is in (height,
+    compatibility with the old image processor configs and removes ambiguity over whether the tuple is in (height,
     width) or (width, height) format.
 
     - If `size` is tuple, it is converted to `{"height": size[0], "width": size[1]}` or `{"height": size[1], "width":
