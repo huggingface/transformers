@@ -181,9 +181,15 @@ class Jukebox1bModelTester(unittest.TestCase):
         self.assertListEqual(metadata.cpu().numpy()[0][:10].tolist(), self.EXPECTED_Y_COND)
 
         audio_conditioning, metadata_conditioning, lyric_tokens = top_prior.get_cond(music_token_conds, metadata.cpu())
-        torch.testing.assert_allclose(audio_conditioning[0][0][:30].detach(), torch.tensor(self.EXPECTED_AUDIO_COND), atol = 1e-4, rtol= 1e-4)
-        torch.testing.assert_allclose(metadata_conditioning[0][0][:30].detach(), torch.tensor(self.EXPECTED_META_COND), atol = 1e-4, rtol= 1e-4)
-        torch.testing.assert_allclose(lyric_tokens[0,:30].detach(), torch.tensor(self.EXPECTED_LYRIC_COND), atol = 1e-4, rtol= 1e-4)
+        torch.testing.assert_allclose(
+            audio_conditioning[0][0][:30].detach(), torch.tensor(self.EXPECTED_AUDIO_COND), atol=1e-4, rtol=1e-4
+        )
+        torch.testing.assert_allclose(
+            metadata_conditioning[0][0][:30].detach(), torch.tensor(self.EXPECTED_META_COND), atol=1e-4, rtol=1e-4
+        )
+        torch.testing.assert_allclose(
+            lyric_tokens[0, :30].detach(), torch.tensor(self.EXPECTED_LYRIC_COND), atol=1e-4, rtol=1e-4
+        )
 
         set_seed(0)
         top_prior.cuda()
@@ -252,7 +258,7 @@ class Jukebox1bModelTester(unittest.TestCase):
 
         with torch.no_grad():
             x = model.vqvae.decode(zs, start_level=2, bs_chunks=x.shape[0])
-        torch.testing.assert_allclose(x[0, :40, 0], torch.tensor(self.EXPECTED_VQVAE_DECODE), atol=1e-4, rtol= 1e-4)
+        torch.testing.assert_allclose(x[0, :40, 0], torch.tensor(self.EXPECTED_VQVAE_DECODE), atol=1e-4, rtol=1e-4)
 
 
 @require_torch

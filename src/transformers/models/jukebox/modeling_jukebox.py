@@ -322,7 +322,7 @@ class JukeboxEncoder(nn.Module):
 
 
 class JukeboxDecoderConvBock(nn.Module):
-    def __init__(self, config, embed_dim, hidden_dim, depth, down_t, stride_t, reverse_dilation = True):
+    def __init__(self, config, embed_dim, hidden_dim, depth, down_t, stride_t, reverse_dilation=True):
         self.embed_dim = embed_dim
         self.hidden_dim = hidden_dim
         super().__init__()
@@ -1647,7 +1647,7 @@ class JukeboxMusicTokenConditioner(nn.Module):
             config.res_conv_depth,
             config.res_downs_t[level],
             config.res_strides_t[level],
-            reverse_dilation = False
+            reverse_dilation=False,
         )
         self.layer_norm = JukeboxLayerNorm(config.width)
 
@@ -2016,7 +2016,7 @@ class JukeboxPrior(PreTrainedModel):
         """
         Embeds the upper level music tokens and upsamples them to provide as audio conditioning.
         """
-        music_tokens_conds = music_tokens_conds[: self.cond_level+1]
+        music_tokens_conds = music_tokens_conds[: self.cond_level + 1]
         audio_conditioning = None
         for music_tokens_cond, conditioner_block in reversed(list(zip(music_tokens_conds, [self.conditioner_blocks]))):
             audio_conditioning = conditioner_block(music_tokens_cond, audio_conditioning)
@@ -2252,7 +2252,7 @@ class JukeboxPreTrainedModel(PreTrainedModel):
         elif isinstance(module, JukeboxConv1D):
             if self.config.zero_out:
                 module.weight.data.zero_()
-            else :
+            else:
                 module.weight.data.normal_(mean=0.0, std=0.02 * init_scale)
         elif isinstance(module, JukeboxPositionalEmbedding):
             module.pos_emb.data.normal_(mean=0.0, std=0.01 * init_scale)
