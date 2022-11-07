@@ -2658,7 +2658,7 @@ class GenerationMixin:
                 an encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`generation_utilsBeamSearchDecoderOnlyOutput`], [`~generation.utils.BeamSearchEncoderDecoderOutput`] or
+            [`generation.utils.BeamSearchDecoderOnlyOutput`], [`~generation.utils.BeamSearchEncoderDecoderOutput`] or
             `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
             [`~generation.utils.BeamSearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
             `return_dict_in_generate=True` or a [`~generation.utils.BeamSearchEncoderDecoderOutput`] if
@@ -3650,7 +3650,7 @@ class GenerationMixin:
                 an encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`generation_utilsBeamSearchDecoderOnlyOutput`], [`~generation.utils.BeamSearchEncoderDecoderOutput`] or
+            [`generation.utils.BeamSearchDecoderOnlyOutput`], [`~generation.utils.BeamSearchEncoderDecoderOutput`] or
             `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
             [`~generation.utils.BeamSearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
             `return_dict_in_generate=True` or a [`~generation.utils.BeamSearchEncoderDecoderOutput`] if
