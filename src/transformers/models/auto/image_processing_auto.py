@@ -22,7 +22,7 @@ from typing import Dict, Optional, Union
 # Build the list of all image processors
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
-from ...feature_extraction_utils import FeatureExtractionMixin
+from ...image_processing_utils import ImageProcessorMixin
 from ...utils import CONFIG_NAME, IMAGE_PROCESSOR_NAME, get_file_from_repo, logging
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -148,7 +148,7 @@ def get_image_processor_config(
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
             identifier allowed by git.
         local_files_only (`bool`, *optional*, defaults to `False`):
-            If `True`, will only try to load the tokenizer configuration from local files.
+            If `True`, will only try to load the image processor configuration from local files.
 
     <Tip>
 
@@ -157,22 +157,22 @@ def get_image_processor_config(
     </Tip>
 
     Returns:
-        `Dict`: The configuration of the tokenizer.
+        `Dict`: The configuration of the image processor.
 
     Examples:
 
     ```python
     # Download configuration from huggingface.co and cache.
-    tokenizer_config = get_tokenizer_config("bert-base-uncased")
-    # This model does not have a tokenizer config so the result will be an empty dict.
-    tokenizer_config = get_tokenizer_config("xlm-roberta-base")
+    image_processor_config = get_image_processor_config("bert-base-uncased")
+    # This model does not have a image processor config so the result will be an empty dict.
+    image_processor_config = get_image_processor_config("xlm-roberta-base")
 
-    # Save a pretrained tokenizer locally and you can reload its config
+    # Save a pretrained image processor locally and you can reload its config
     from transformers import AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-    tokenizer.save_pretrained("tokenizer-test")
-    tokenizer_config = get_tokenizer_config("tokenizer-test")
+    image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
+    image_processor.save_pretrained("image-processor-test")
+    image_processor_config = get_image_processor_config("image-processor-test")
     ```"""
     resolved_config_file = get_file_from_repo(
         pretrained_model_name_or_path,
@@ -229,7 +229,7 @@ class AutoImageProcessor:
                   huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
                   namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
                 - a path to a *directory* containing a image processor file saved using the
-                  [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] method, e.g.,
+                  [`~image_processing_utils.ImageProcessorMixin.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
                 - a path or url to a saved image processor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
@@ -287,7 +287,7 @@ class AutoImageProcessor:
         trust_remote_code = kwargs.pop("trust_remote_code", False)
         kwargs["_from_auto"] = True
 
-        config_dict, _ = FeatureExtractionMixin.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, _ = ImageProcessorMixin.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
         image_processor_class = config_dict.get("image_processor_type", None)
         image_processor_auto_map = None
         if "AutoImageProcessor" in config_dict.get("auto_map", {}):
