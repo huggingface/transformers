@@ -270,7 +270,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             [
                 {
                     "label": "LABEL_88",
-                    "mask": {"hash": "7f0bf661a4", "shape": (480, 640), "white_pixels": 3},
+                    "mask": {"hash": "4e2da4b9a4", "shape": (480, 640), "white_pixels": 3},
                     "score": None,
                 },
                 {
