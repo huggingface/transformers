@@ -31,7 +31,7 @@ if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_CTC_MAPPING, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
 
 
-def rescale_stride(tokens_or_logits, stride, ratio):
+def rescale_stride(stride, ratio):
     """
     Rescales the stride values from audio space to tokens/logits space.
 
@@ -56,13 +56,41 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right):
     step = chunk_len - stride_left - stride_right
     for i in range(0, inputs_len, step):
         # add start and end paddings to the chunk
-        chunk = inputs[i : i + chunk_len]
+        chunk = inputs[i : i + chunk_len].copy()
         processed = feature_extractor(chunk, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
         _stride_left = 0 if i == 0 else stride_left
         is_last = i + step + stride_left >= inputs_len
         _stride_right = 0 if is_last else stride_right
+
+        processed_len = processed["input_features"].shape[-1]
+        chunk_len = chunk.shape[0]
+        stride = (chunk_len, _stride_left, _stride_right)
+        if processed_len != chunk.shape[-1]:
+            ratio = processed_len / chunk_len
+            stride = rescale_stride([stride], ratio)[0]
         if chunk.shape[0] > _stride_left:
-            yield {"is_last": is_last, "stride": (chunk.shape[0], _stride_left, _stride_right), **processed}
+            yield {"is_last": is_last, "stride": stride, **processed}
+
+
+def _find_longest_common_sequence(sequences, tokenizer):
+    # TODO  Use a faster algorithm this can probably be done in O(n)
+    # using suffix array.
+    # We actually have a really good property which is that the total sequence
+    # MUST be those subsequences in order.
+    # Also the algorithm should be more tolerant to errors.
+    sequence = [tok_id for tok_id in sequences[0][0].tolist() if tok_id not in tokenizer.all_special_ids]
+    for new_seq in sequences[1:]:
+        new_sequence = [tok_id for tok_id in new_seq[0].tolist() if tok_id not in tokenizer.all_special_ids]
+
+        index = 0
+        max_ = 0.0
+        for i in range(1, len(new_sequence) + 1):
+            matching = np.sum(np.array(sequence[-i:]) == np.array(new_sequence[:i])) / i
+            if matching > max_:
+                index = i
+                max_ = matching
+        sequence.extend(new_sequence[index:])
+    return np.array(sequence)
 
 
 class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
@@ -250,10 +278,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
 
         if chunk_length_s:
-            if self.type not in {"ctc", "ctc_with_lm"}:
-                raise ValueError(
-                    "`chunk_length_s` is only valid for CTC models, use other chunking options for other models"
-                )
+            # if self.type not in {"ctc", "ctc_with_lm"}:
+            #     raise ValueError(
+            #         "`chunk_length_s` is only valid for CTC models, use other chunking options for other models"
+            #     )
             if stride_length_s is None:
                 stride_length_s = chunk_length_s / 6
 
@@ -263,7 +291,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             # XXX: Carefuly, this variable will not exist in `seq2seq` setting.
             # Currently chunking is not possible at this level for `seq2seq` so
             # it's ok.
-            align_to = self.model.config.inputs_to_logits_ratio
+            align_to = getattr(self.model.config, "inputs_to_logits_ratio", 1)
             chunk_len = int(round(chunk_length_s * self.feature_extractor.sampling_rate / align_to) * align_to)
             stride_left = int(round(stride_length_s[0] * self.feature_extractor.sampling_rate / align_to) * align_to)
             stride_right = int(round(stride_length_s[1] * self.feature_extractor.sampling_rate / align_to) * align_to)
@@ -334,9 +362,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 # the pieces are to be concatenated.
                 ratio = 1 / self.model.config.inputs_to_logits_ratio
                 if isinstance(stride, tuple):
-                    out["stride"] = rescale_stride(logits, [stride], ratio)[0]
+                    out["stride"] = rescale_stride([stride], ratio)[0]
                 else:
-                    out["stride"] = rescale_stride(logits, stride, ratio)
+                    out["stride"] = rescale_stride(stride, ratio)
         # Leftover
         extra = model_inputs
         return {"is_last": is_last, **out, **extra}
@@ -352,10 +380,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         final_items = []
         key = "logits" if self.type == "ctc_with_lm" else "tokens"
+        stride = None
         for outputs in model_outputs:
             items = outputs[key].numpy()
             stride = outputs.pop("stride", None)
-            if stride is not None:
+            if stride is not None and self.type in {"ctc", "ctc_with_lm"}:
                 total_n, left, right = stride
                 # Total_n might be < logits.shape[1]
                 # because of padding, that's why
@@ -364,8 +393,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 right_n = total_n - right
                 items = items[:, left:right_n]
             final_items.append(items)
-        items = np.concatenate(final_items, axis=1)
-        items = items.squeeze(0)
+        if stride and self.type == "seq2seq":
+            items = _find_longest_common_sequence(final_items, self.tokenizer)
+        else:
+            items = np.concatenate(final_items, axis=1)
+            items = items.squeeze(0)
         if self.type == "ctc_with_lm":
             if decoder_kwargs is None:
                 decoder_kwargs = {}
