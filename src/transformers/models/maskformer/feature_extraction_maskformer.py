@@ -479,6 +479,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         segmentation_map: "np.ndarray",
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
     ):
+        print("Segmentation map:", segmentation_map)
+        
         # Reduce labels, if requested
         if self.reduce_labels:
             if self.ignore_index is None:
@@ -489,6 +491,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         # Get unique ids (class ids, segment ids or instance ids based on input)
         all_labels = np.unique(segmentation_map)
+
+        print("Unique labels:", all_labels)
 
         # Remove ignored label
         if self.ignore_index is not None:
