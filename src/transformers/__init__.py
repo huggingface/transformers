@@ -1438,7 +1438,13 @@ else:
         ]
     )
     _import_structure["models.jukebox"].extend(
-        ["JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST", "JukeboxModel", "JukeboxPreTrainedModel", "JukeboxVQVAE"]
+        [
+            "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "JukeboxModel",
+            "JukeboxPreTrainedModel",
+            "JukeboxVQVAE",
+            "JukeboxPrior",
+        ]
     )
     _import_structure["models.layoutlm"].extend(
         [
@@ -4289,6 +4295,7 @@ if TYPE_CHECKING:
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
             JukeboxModel,
             JukeboxPreTrainedModel,
+            JukeboxPrior,
             JukeboxVQVAE,
         )
         from .models.layoutlm import (

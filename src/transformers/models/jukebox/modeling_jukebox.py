@@ -1910,7 +1910,7 @@ class JukeboxPrior(PreTrainedModel):
         encoder_config.attention_multiplier = config.encoder_attention_multiplier
         encoder_config.mlp_multiplier = config.encoder_mlp_multiplier
         encoder_config.resid_dropout = config.encoder_resid_dropout
-        encoder_config.res_scale = config.encoder_res_scale
+        encoder_config.attn_res_scale = config.encoder_attn_res_scale
         encoder_config.spread = config.encoder_spread
         encoder_config.width = config.encoder_width
         encoder_config.zero_out = config.encoder_zero_out
@@ -1977,8 +1977,8 @@ class JukeboxPrior(PreTrainedModel):
 
     def prior_preprocess(self, tokens, conds):
         """
-        Shifts the input tokens to account for the dictionnary merge. The embed_dim_shift give by how much the
-        music tokens should be shifted by. It is equal to encoder_n_vocab.
+        Shifts the input tokens to account for the dictionnary merge. The embed_dim_shift give by how much the music
+        tokens should be shifted by. It is equal to encoder_n_vocab.
         """
         batch_size = tokens[0].shape[0]
         for i in range(len(tokens)):
@@ -2079,8 +2079,8 @@ class JukeboxPrior(PreTrainedModel):
         sample_tokens=None,
     ):
         """
-        Ancestral/Prime sampling a window of tokens using the provided conditioning and metadatas.
-        music_tokens : previously sampled music tokens that are attended to by the prior.
+        Ancestral/Prime sampling a window of tokens using the provided conditioning and metadatas. music_tokens :
+        previously sampled music tokens that are attended to by the prior.
         """
         no_past_context = music_tokens is None or music_tokens.shape[1] == 0
         name = {True: "Ancestral", False: "Primed"}[no_past_context]

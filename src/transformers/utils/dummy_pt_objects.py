@@ -2683,6 +2683,13 @@ class JukeboxPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class JukeboxPrior(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class JukeboxVQVAE(metaclass=DummyObject):
     _backends = ["torch"]
 
