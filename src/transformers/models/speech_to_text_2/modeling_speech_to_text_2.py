@@ -18,7 +18,7 @@
 import copy
 import math
 import random
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
