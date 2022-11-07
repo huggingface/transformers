@@ -161,6 +161,7 @@ class SegformerModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
 
+    fx_compatible = True
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False

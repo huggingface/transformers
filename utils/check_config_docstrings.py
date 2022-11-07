@@ -49,29 +49,35 @@ CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {
 }
 
 
+def get_checkpoint_from_config_class(config_class):
+    checkpoint = None
+
+    # source code of `config_class`
+    config_source = inspect.getsource(config_class)
+    checkpoints = _re_checkpoint.findall(config_source)
+
+    for checkpoint in checkpoints:
+        # Each `checkpoint` is a tuple of a checkpoint name and a checkpoint link.
+        # For example, `('bert-base-uncased', 'https://huggingface.co/bert-base-uncased')`
+        ckpt_name, ckpt_link = checkpoint
+
+        # verify the checkpoint name corresponds to the checkpoint link
+        ckpt_link_from_name = f"https://huggingface.co/{ckpt_name}"
+        if ckpt_link == ckpt_link_from_name:
+            checkpoint = ckpt_name
+            break
+
+    return checkpoint
+
+
 def check_config_docstrings_have_checkpoints():
     configs_without_checkpoint = []
 
     for config_class in list(CONFIG_MAPPING.values()):
-        checkpoint_found = False
-
-        # source code of `config_class`
-        config_source = inspect.getsource(config_class)
-        checkpoints = _re_checkpoint.findall(config_source)
-
-        for checkpoint in checkpoints:
-            # Each `checkpoint` is a tuple of a checkpoint name and a checkpoint link.
-            # For example, `('bert-base-uncased', 'https://huggingface.co/bert-base-uncased')`
-            ckpt_name, ckpt_link = checkpoint
-
-            # verify the checkpoint name corresponds to the checkpoint link
-            ckpt_link_from_name = f"https://huggingface.co/{ckpt_name}"
-            if ckpt_link == ckpt_link_from_name:
-                checkpoint_found = True
-                break
+        checkpoint = get_checkpoint_from_config_class(config_class)
 
         name = config_class.__name__
-        if not checkpoint_found and name not in CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK:
+        if checkpoint is None and name not in CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK:
             configs_without_checkpoint.append(name)
 
     if len(configs_without_checkpoint) > 0:

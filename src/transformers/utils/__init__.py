@@ -49,6 +49,7 @@ from .generic import (
     is_torch_tensor,
     reshape,
     squeeze,
+    tensor_size,
     to_numpy,
     to_py_obj,
     transpose,
