@@ -1340,10 +1340,7 @@ num_heads)`.
     SWITCH_TRANSFORMERS_START_DOCSTRING,
 )
 class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"encoder.embed_tokens.weight",
-        r"decoder.embed_tokens.weight",
-    ]
+    _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight", r"decoder.embed_tokens.weight"]
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
@@ -1827,9 +1824,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
     SWITCH_TRANSFORMERS_START_DOCSTRING,
 )
 class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
-    authorized_missing_keys = [
-        r"encoder.embed_tokens.weight",
-    ]
+    authorized_missing_keys = [r"encoder.embed_tokens.weight"]
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
