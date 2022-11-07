@@ -19,7 +19,7 @@ import warnings
 from .generation.flax_utils import FlaxGenerationMixin
 
 
-class TFGenerationMixin(FlaxGenerationMixin):
+class FlaxGenerationMixin(FlaxGenerationMixin):
     # warning at import time
     warnings.warn(
         "Importing `FlaxGenerationMixin` from `src/transformers/generation_flax_utils.py` is deprecated and will "
