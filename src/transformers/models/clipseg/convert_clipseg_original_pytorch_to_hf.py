@@ -215,7 +215,7 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     else:
         raise ValueError(f"Model name {model_name} not supported.")
 
-    assert torch.allclose(outputs.predicted_masks[0, :3, :3], expected_masks_slice, atol=1e-3)
+    assert torch.allclose(outputs.logits[0, :3, :3], expected_masks_slice, atol=1e-3)
     assert torch.allclose(outputs.conditional_embeddings[0, :3], expected_conditional, atol=1e-3)
     assert torch.allclose(outputs.pooled_output[0, :3], expected_pooled_output, atol=1e-3)
     print("Looks ok!")
