@@ -1005,7 +1005,8 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
             raise ValueError(f"You have to specify either {err_msg_prefix}input_ids or {err_msg_prefix}inputs_embeds")
 
         if inputs_embeds is None:
-            assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
+            if self.embed_tokens is None:
+                raise ValueError("You have to initialize the model with valid token embeddings")
             inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape
@@ -1014,7 +1015,8 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
 
         if use_cache is True:
-            assert self.is_decoder, f"`use_cache` can only be set to `True` if {self} is used as a decoder"
+            if not self.is_decoder:
+                raise ValueError(f"`use_cache` can only be set to `True` if {self} is used as a decoder")
 
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
