@@ -479,10 +479,18 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         segmentation_map: "np.ndarray",
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
     ):
-        # Get unique ids (class or instance ids based on input)
+        # Reduce labels, if requested
+        if self.reduce_labels:
+            if self.ignore_index is None:
+                raise ValueError("`ignore_index` must be set when `reduce_labels` is `True`.")
+            segmentation_map[segmentation_map == 0] = self.ignore_index
+            segmentation_map -= 1
+            segmentation_map[segmentation_map == self.ignore_index - 1] = self.ignore_index
+
+        # Get unique ids (class ids, segment ids or instance ids based on input)
         all_labels = np.unique(segmentation_map)
 
-        # Remove ignored region
+        # Remove ignored label
         if self.ignore_index is not None:
             all_labels = all_labels[all_labels != self.ignore_index]
 
@@ -490,19 +498,15 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         binary_masks = [(segmentation_map == i) for i in all_labels]
         binary_masks = np.stack(binary_masks, axis=0)  # (num_labels, height, width)
 
-        # Convert instance ids to class ids
+        # Convert instance/segment ids to class ids
         if instance_id_to_semantic_id is not None:
             labels = np.zeros(all_labels.shape[0])
 
             for label in all_labels:
-                class_id = instance_id_to_semantic_id[label]
+                class_id = instance_id_to_semantic_id[label + 1 if self.reduce_labels else label]
                 labels[all_labels == label] = class_id
         else:
             labels = all_labels
-
-        # Decrement labels by 1
-        if self.reduce_labels:
-            labels -= 1
 
         return binary_masks.astype(np.float32), labels.astype(np.int64)
 
