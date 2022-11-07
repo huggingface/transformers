@@ -504,7 +504,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
             for label in all_labels:
                 class_id = instance_id_to_semantic_id[label + 1 if self.reduce_labels else label]
-                labels[all_labels == label] = class_id
+                labels[all_labels == label] = class_id - 1 if self.reduce_labels else class_id
         else:
             labels = all_labels
 
