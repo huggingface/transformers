@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020, The SwitchTransformers Authors and HuggingFace Inc.
+# Copyright 2020, Google and HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -165,7 +165,6 @@ class SwitchTransformersConfig(PretrainedConfig):
         if router_dtype not in ["float32", "float16", "bfloat16"]:
             raise ValueError(f"`router_dtype` must be one of 'float32', 'float16' or 'bfloat16', got {router_dtype}")
         self.router_dtype = router_dtype
-
 
         self.router_ignore_padding_tokens = router_ignore_padding_tokens
         self.relative_attention_num_buckets = relative_attention_num_buckets
