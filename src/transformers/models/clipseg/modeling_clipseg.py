@@ -119,8 +119,8 @@ class CLIPSegOutput(ModelOutput):
 class CLIPSegDecoderOutput(ModelOutput):
     """
     Args:
-        predicted_masks (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            ...
+        predicted_masks (`torch.FloatTensor` of shape `(batch_size, height, width)`):
+            The predicted masks, for each conditioning.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -1312,15 +1312,7 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         output = self.transposed_convolution(output).squeeze()
 
         if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    output,
-                    all_hidden_states,
-                    all_attentions,
-                ]
-                if v is not None
-            )
+            return tuple(v for v in [output, all_hidden_states, all_attentions] if v is not None)
 
         return CLIPSegDecoderOutput(
             predicted_masks=output,

@@ -39,7 +39,6 @@ class CLIPSegTextConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
             Vocabulary size of the CLIPSeg text model. Defines the number of different tokens that can be represented
@@ -146,7 +145,6 @@ class CLIPSegVisionConfig(PretrainedConfig):
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -275,7 +273,8 @@ class CLIPSegConfig(PretrainedConfig):
         decoder_intermediate_size (`int`, *optional*, defaults to 2048):
             Dimensionality of the "intermediate" (i.e., feed-forward) layers in the Transformer decoder.
         conditional_layer (`int`, *optional*, defaults to 0):
-            ...
+            The layer to use of the Transformer encoder whose activations will be combined with the condition
+            embeddings using FiLM (Feature-wise Linear Modulation). If 0, the last layer is used.
         use_complex_transposed_convolution (`bool`, *optional*, defaults to `False`):
             Whether to use a more complex transposed convolution in the decoder, enabling more fine-grained
             segmentation.

@@ -408,14 +408,7 @@ class CLIPSegModelTester:
 
 @require_torch
 class CLIPSegModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            CLIPSegModel,
-            CLIPSegForImageSegmentation,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (CLIPSegModel, CLIPSegForImageSegmentation) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
