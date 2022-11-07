@@ -349,8 +349,9 @@ class TFBeamSampleEncoderDecoderOutput(ModelOutput):
 @dataclass
 class TFContrastiveSearchDecoderOnlyOutput(ModelOutput):
     """
-    Args:
     Base class for outputs of decoder-only generation models using contrastive search.
+
+    Args:
         sequences (`tf.Tensor` of shape `(batch_size, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
@@ -375,10 +376,11 @@ class TFContrastiveSearchDecoderOnlyOutput(ModelOutput):
 @dataclass
 class TFContrastiveSearchEncoderDecoderOutput(ModelOutput):
     """
-    Args:
     Base class for outputs of encoder-decoder generation models using contrastive search. Hidden states and attention
     weights of the decoder (respectively the encoder) can be accessed via the encoder_attentions and the
     encoder_hidden_states attributes (respectively the decoder_attentions and the decoder_hidden_states attributes)
+
+    Args:
         sequences (`tf.Tensor` of shape `(batch_size, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
@@ -3333,9 +3335,10 @@ class TFGenerationMixin:
         **model_kwargs,
     ) -> Union[TFContrastiveSearchOutput, tf.Tensor]:
         r"""
-        Parameters:
         Generates sequences of token ids for models with a language modeling head using **contrastive search** and can
         be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+
+        Parameters:
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             top_k (`int`, *optional*, defaults to 1):
