@@ -62,6 +62,7 @@ src/transformers/models/deit/modeling_tf_deit.py
 src/transformers/models/detr/configuration_detr.py
 src/transformers/models/detr/modeling_detr.py
 src/transformers/models/distilbert/configuration_distilbert.py
+src/transformers/models/dpr/configuration_dpr.py
 src/transformers/models/dpt/modeling_dpt.py
 src/transformers/models/electra/configuration_electra.py
 src/transformers/models/electra/modeling_electra.py
