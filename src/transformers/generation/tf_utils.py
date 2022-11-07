@@ -428,14 +428,14 @@ class TFGenerationMixin:
     """
     A class containing all of the functions supporting generation, to be used as a mixin in [`TFPreTrainedModel`].
 
-    The class exposes [`~generation_tf_utils.TFGenerationMixin.generate`], which can be used for:
-        - *greedy decoding* by calling [`~generation_tf_utils.TFGenerationMixin.greedy_search`] if `num_beams=1` and
+    The class exposes [`~generation.tf_utils.TFGenerationMixin.generate`], which can be used for:
+        - *greedy decoding* by calling [`~generation.tf_utils.TFGenerationMixin.greedy_search`] if `num_beams=1` and
           `do_sample=False`.
-        - *contrastive search* by calling [`~generation_tf_utils.TFGenerationMixin.contrastive_search`] if
+        - *contrastive search* by calling [`~generation.tf_utils.TFGenerationMixin.contrastive_search`] if
           `penalty_alpha>0` and `top_k>1`
-        - *multinomial sampling* by calling [`~generation_tf_utils.TFGenerationMixin.sample`] if `num_beams=1` and
+        - *multinomial sampling* by calling [`~generation.tf_utils.TFGenerationMixin.sample`] if `num_beams=1` and
           `do_sample=True`.
-        - *beam-search decoding* by calling [`~generation_tf_utils.TFGenerationMixin.beam_search`] if `num_beams>1` and
+        - *beam-search decoding* by calling [`~generation.tf_utils.TFGenerationMixin.beam_search`] if `num_beams>1` and
           `do_sample=False`.
     """
 
@@ -497,13 +497,13 @@ class TFGenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head. The method supports the following
         generation methods for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
-            - *greedy decoding* by calling [`~generation_tf_utils.TFGenerationMixin.greedy_search`] if `num_beams=1`
+            - *greedy decoding* by calling [`~generation.tf_utils.TFGenerationMixin.greedy_search`] if `num_beams=1`
               and `do_sample=False`.
-            - *contrastive search* by calling [`~generation_tf_utils.TFGenerationMixin.contrastive_search`] if
+            - *contrastive search* by calling [`~generation.tf_utils.TFGenerationMixin.contrastive_search`] if
               `penalty_alpha>0` and `top_k>1`
-            - *multinomial sampling* by calling [`~generation_tf_utils.TFGenerationMixin.sample`] if `num_beams=1` and
+            - *multinomial sampling* by calling [`~generation.tf_utils.TFGenerationMixin.sample`] if `num_beams=1` and
               `do_sample=True`.
-            - *beam-search decoding* by calling [`~generation_tf_utils.TFGenerationMixin.beam_search`] if `num_beams>1`
+            - *beam-search decoding* by calling [`~generation.tf_utils.TFGenerationMixin.beam_search`] if `num_beams>1`
               and `do_sample=False`.
 
         Adapted in part from [Facebook's XLM beam search
@@ -1498,13 +1498,13 @@ class TFGenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head. The method supports the following
         generation methods for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
-            - *greedy decoding* by calling [`~generation_tf_utils.TFGenerationMixin.greedy_search`] if `num_beams=1`
+            - *greedy decoding* by calling [`~generation.tf_utils.TFGenerationMixin.greedy_search`] if `num_beams=1`
               and `do_sample=False`.
-            - *contrastive search* by calling [`~generation_tf_utils.TFGenerationMixin.contrastive_search`] if
+            - *contrastive search* by calling [`~generation.tf_utils.TFGenerationMixin.contrastive_search`] if
               `penalty_alpha>0` and `top_k>1`
-            - *multinomial sampling* by calling [`~generation_tf_utils.TFGenerationMixin.sample`] if `num_beams=1` and
+            - *multinomial sampling* by calling [`~generation.tf_utils.TFGenerationMixin.sample`] if `num_beams=1` and
               `do_sample=True`.
-            - *beam-search decoding* by calling [`~generation_tf_utils.TFGenerationMixin.beam_search`] if `num_beams>1`
+            - *beam-search decoding* by calling [`~generation.tf_utils.TFGenerationMixin.beam_search`] if `num_beams>1`
               and `do_sample=False`.
 
         Adapted in part from [Facebook's XLM beam search
@@ -3372,11 +3372,11 @@ class TFGenerationMixin:
                 Additional model specific keyword arguments will be forwarded to the `call` function of the model. If
                 model is an encoder-decoder model the kwargs should include `encoder_outputs`.
         Return:
-            [`~generation_tf_utils.TFContrastiveSearchDecoderOnlyOutput`],
-            [`~generation_tf_utils.TFContrastiveSearchEncoderDecoderOutput`] or `tf.Tensor`: A `tf.Tensor` containing
+            [`~generation.tf_utils.TFContrastiveSearchDecoderOnlyOutput`],
+            [`~generation.tf_utils.TFContrastiveSearchEncoderDecoderOutput`] or `tf.Tensor`: A `tf.Tensor` containing
             the generated tokens (default behaviour) or a
-            [`~generation_tf_utils.TFContrastiveySearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False`
-            and `return_dict_in_generate=True` or a [`~generation_tf_utils.TFContrastiveSearchEncoderDecoderOutput`] if
+            [`~generation.tf_utils.TFContrastiveySearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False`
+            and `return_dict_in_generate=True` or a [`~generation.tf_utils.TFContrastiveSearchEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         Examples:
         ```python

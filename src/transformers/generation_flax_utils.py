@@ -23,6 +23,6 @@ class FlaxGenerationMixin(FlaxGenerationMixin):
     # warning at import time
     warnings.warn(
         "Importing `FlaxGenerationMixin` from `src/transformers/generation_flax_utils.py` is deprecated and will "
-        "be removed in Transformers v5. Import from `src/transformers/generation/flax_utils.py` instead.",
+        "be removed in Transformers v5. Import as `from transformers import FlaxGenerationMixin` instead.",
         FutureWarning,
     )

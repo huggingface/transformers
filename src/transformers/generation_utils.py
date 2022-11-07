@@ -23,6 +23,6 @@ class GenerationMixin(GenerationMixin):
     # warning at import time
     warnings.warn(
         "Importing `GenerationMixin` from `src/transformers/generation_utils.py` is deprecated and will "
-        "be removed in Transformers v5. Import from `src/transformers/generation/utils.py` instead.",
+        "be removed in Transformers v5. Import as `from transformers import GenerationMixin` instead.",
         FutureWarning,
     )
