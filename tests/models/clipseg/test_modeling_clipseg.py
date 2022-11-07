@@ -706,8 +706,7 @@ def prepare_img():
 class CLIPSegModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_segmentation(self):
-        # TODO update to appropriate organization
-        model_name = "nielsr/clipseg-rd64-refined"
+        model_name = "CIDAS/clipseg-rd64-refined"
         processor = CLIPSegProcessor.from_pretrained(model_name)
         model = CLIPSegForImageSegmentation.from_pretrained(model_name).to(torch_device)
 

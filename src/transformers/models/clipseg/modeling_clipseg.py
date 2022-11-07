@@ -39,11 +39,10 @@ from .configuration_clipseg import CLIPSegConfig, CLIPSegTextConfig, CLIPSegVisi
 logger = logging.get_logger(__name__)
 
 
-_CHECKPOINT_FOR_DOC = "nielsr/clipseg-rd64-refined"
+_CHECKPOINT_FOR_DOC = "CIDAS/clipseg-rd64-refined"
 
 CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # TODO update organziation
-    "nielsr/clipseg-rd64-refined",
+    "CIDAS/clipseg-rd64-refined",
     # See all CLIPSeg models at https://huggingface.co/models?filter=clipseg
 ]
 
@@ -807,8 +806,8 @@ class CLIPSegTextModel(CLIPSegPreTrainedModel):
         ```python
         >>> from transformers import CLIPTokenizer, CLIPSegTextModel
 
-        >>> tokenizer = CLIPTokenizer.from_pretrained("nielsr/clipseg-rd64-refined")
-        >>> model = CLIPSegTextModel.from_pretrained("nielsr/clipseg-rd64-refined")
+        >>> tokenizer = CLIPTokenizer.from_pretrained("CIDAS/clipseg-rd64-refined")
+        >>> model = CLIPSegTextModel.from_pretrained("CIDAS/clipseg-rd64-refined")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
@@ -918,8 +917,8 @@ class CLIPSegVisionModel(CLIPSegPreTrainedModel):
         >>> import requests
         >>> from transformers import CLIPSegProcessor, CLIPSegVisionModel
 
-        >>> processor = CLIPSegProcessor.from_pretrained("nielsr/clipseg-rd64-refined")
-        >>> model = CLIPSegVisionModel.from_pretrained("nielsr/clipseg-rd64-refined")
+        >>> processor = CLIPSegProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
+        >>> model = CLIPSegVisionModel.from_pretrained("CIDAS/clipseg-rd64-refined")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -994,8 +993,8 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         ```python
         >>> from transformers import CLIPTokenizer, CLIPSegModel
 
-        >>> tokenizer = CLIPTokenizer.from_pretrained("nielsr/clipseg-rd64-refined")
-        >>> model = CLIPSegModel.from_pretrained("nielsr/clipseg-rd64-refined")
+        >>> tokenizer = CLIPTokenizer.from_pretrained("CIDAS/clipseg-rd64-refined")
+        >>> model = CLIPSegModel.from_pretrained("CIDAS/clipseg-rd64-refined")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
@@ -1041,8 +1040,8 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         >>> import requests
         >>> from transformers import CLIPSegProcessor, CLIPSegModel
 
-        >>> processor = CLIPSegProcessor.from_pretrained("nielsr/clipseg-rd64-refined")
-        >>> model = CLIPSegModel.from_pretrained("nielsr/clipseg-rd64-refined")
+        >>> processor = CLIPSegProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
+        >>> model = CLIPSegModel.from_pretrained("CIDAS/clipseg-rd64-refined")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1093,8 +1092,8 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         >>> import requests
         >>> from transformers import CLIPSegProcessor, CLIPSegModel
 
-        >>> processor = CLIPSegProcessor.from_pretrained("nielsr/clipseg-rd64-refined")
-        >>> model = CLIPSegModel.from_pretrained("nielsr/clipseg-rd64-refined")
+        >>> processor = CLIPSegProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
+        >>> model = CLIPSegModel.from_pretrained("CIDAS/clipseg-rd64-refined")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1403,8 +1402,8 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> processor = CLIPSegProcessor.from_pretrained("nielsr/clipseg-rd64-refined")
-        >>> model = CLIPSegForImageSegmentation.from_pretrained("nielsr/clipseg-rd64-refined")
+        >>> processor = CLIPSegProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
+        >>> model = CLIPSegForImageSegmentation.from_pretrained("CIDAS/clipseg-rd64-refined")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
