@@ -235,7 +235,7 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
     #     prior_n_ctx=[8192, 8192, 8192],
     #     prime_width=[1280, 128, 128],
     #     prior_width=[4800, 1920, 1920],
-    #     single_enc_dec=[False, False, False],
+    #     is_encoder_decoder=[False, False, False],
     #     timing_dims=128,
     #     vqvae_width=64,
     #     metadata_dims=[(120, 4111), (120, 4111), (120, 4111)],

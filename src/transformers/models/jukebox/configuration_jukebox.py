@@ -122,9 +122,9 @@ ATTENTION_PATTERNS = {
     "large_separated_enc_dec_w_lyrics": lambda layer: _LARGE_ATTENTION[
         layer % 79
     ],  # Used by large separated_enc_dec model with lyrics
-    "single_enc_dec_w_lyrics": lambda layer: _PrimePrimeDenseAttention[layer % 3]
+    "enc_dec_with_lyrics": lambda layer: _PrimePrimeDenseAttention[layer % 3]
     if layer % 16 == 15
-    else _RawColumnPreviousRowAttention[layer % 3],  # Used by single_enc_dec model with lyrics
+    else _RawColumnPreviousRowAttention[layer % 3],  # Used by encoder_decoder model with lyrics
 }
 
 
@@ -144,7 +144,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         metadata_dims (`List[Tuple[int, int]]`, *optional*, defaults to `[(604, 7898), (120, 4111), (120, 4111)]`):
             List containing the number of genres and the number of artists that were used to train the embedding layers
             of each of the prior models.
-        single_enc_dec (`List[bool]`, *optional*, defaults to `[True, False, False]`):
+        is_encoder_decoder (`List[bool]`, *optional*, defaults to `[True, False, False]`):
             Whether or not to use a single encoder-decoder architecture or split both modules and have a seperate
             `encoderoder` for each of the priors.
         merged_decoder (`list`, *optional*, defaults to [True, False, False]):
@@ -266,7 +266,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         res_conv_width=128,
         res_dilation_growth_rate=1,
         res_dilation_cycle=None,
-        res_scale=None,
+        conv_res_scale=None,
         res_convolution_multiplier=1,
         res_downs_t=(3, 2, 2),
         res_strides_t=(2, 2, 2),
@@ -287,15 +287,16 @@ class JukeboxPriorConfig(PretrainedConfig):
         encoder_res_scale=False,
         encoder_n_vocab=79,
         init_scale=0.2,
+        attn_res_scale=False,
         n_ctx=6144,
         width=2048,
         depth=72,
         n_heads=2,
-        attention_pattern="single_enc_dec_w_lyrics",
+        attention_pattern="enc_dec_with_lyrics",
         alignment_layer=68,
         alignment_head=2,
         metadata_dims=(604, 7898),
-        single_enc_dec=True,
+        is_encoder_decoder=True,
         merged_decoder=True,
         lyric_conditioning=True,
         nb_relevant_lyric_tokens=384,
@@ -325,7 +326,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         self.resid_dropout = resid_dropout
         self.emb_dropout = emb_dropout
         self.zero_out = zero_out
-        self.res_scale = res_scale
+        self.conv_res_scale = conv_res_scale
         self.blocks = blocks
         self.attention_multiplier = attention_multiplier
         self.mlp_multiplier = mlp_multiplier
@@ -341,13 +342,13 @@ class JukeboxPriorConfig(PretrainedConfig):
         self.res_dilation_cycle = res_dilation_cycle
         self.zero_out = zero_out
         self.res_convolution_multiplier = res_convolution_multiplier
-        self.res_scale = res_scale
+        self.attn_res_scale = attn_res_scale
         self.res_downs_t = res_downs_t
         self.res_strides_t = res_strides_t
 
         # Lyric conditioning
         self.merged_decoder = merged_decoder  # is this equivalent ?
-        self.single_enc_dec = single_enc_dec
+        self.is_encoder_decoder = is_encoder_decoder
         self.lyric_conditioning = lyric_conditioning
         self.nb_relevant_lyric_tokens = nb_relevant_lyric_tokens
 
@@ -454,7 +455,7 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         res_convolution_multiplier=1,
         res_dilation_growth_rate=3,
         res_dilation_cycle=None,
-        res_scale=False,
+        conv_res_scale=False,
         act_fn="relu",
         **kwargs
     ):
@@ -476,7 +477,7 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         self.res_strides_t = res_strides_t
         self.lmu = lmu
         self.commit = commit
-        self.res_scale = res_scale
+        self.conv_res_scale = conv_res_scale
         self.act_fn = act_fn
 
     @classmethod
@@ -525,7 +526,7 @@ class JukeboxConfig(PretrainedConfig):
         metadata_conditioning (`bool`, *optional*, defaults to `True`):
             Whether or not to use metadata conditioning, corresponding to the artist, the genre and the min/maximum
             duration.
-        single_enc_dec (`List[bool]`, *optional*, defaults to `[True, False, False]`):
+        is_encoder_decoder (`List[bool]`, *optional*, defaults to `[True, False, False]`):
             Whether or not to use a single encoder-decoder architecture or split both modules and have a seperate
             `encoderoder` for each of the priors.
         merged_decoder (`list`, *optional*, defaults to [True, False, False]):
