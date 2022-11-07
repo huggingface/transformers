@@ -145,6 +145,9 @@ class ResnetModel(PreTrainedModel):
 Para el modelo que clasificará las imágenes, solo cambiamos el método de avance (es decir, el método `forward`):
 
 ```py
+import torch
+
+
 class ResnetModelForImageClassification(PreTrainedModel):
     config_class = ResnetConfig
 
