@@ -223,28 +223,7 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
 
     model_to_convert = MODEL_MAPPING[model_name.split("/")[-1]]
 
-    # config = JukeboxConfig.from_pretrained("openai/" + model_name)
-    # to convert the 5b lyric token model, use : or "openai/jukebox-5b-lyrics"
-    # config = JukeboxConfig(
-    #     timing_dims=128
-    #     prior_attention_pattern=[10, 2, 2],
-    #     prior_blocks=128,
-    #     prime_n_vocab=80,
-    #     nb_relevant_lyric_tokens=[512, 0, 0],
-    #     prior_n_heads=[8, 1, 1],
-    #     prior_n_ctx=[8192, 8192, 8192],
-    #     prime_width=[1280, 128, 128],
-    #     prior_width=[4800, 1920, 1920],
-    #     is_encoder_decoder=[False, False, False],
-    #     timing_dims=128,
-    #     vqvae_width=64,
-    #     metadata_dims=[(120, 4111), (120, 4111), (120, 4111)],
-    #     min_duration=23.8,
-    #     sample_length= 1058304,
-    #     prior_depth=[79, 72, 72],
-    #     max_nb_genres=1,
-    # )
-    config = JukeboxConfig.from_pretrained("ArthurZ/new-5b-lyrics")
+    config = JukeboxConfig.from_pretrained(model_name)
     model = JukeboxModel(config)
 
     weight_dict = []
