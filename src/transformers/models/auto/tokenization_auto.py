@@ -348,6 +348,7 @@ def get_tokenizer_config(
     use_auth_token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
+    subfolder: str = "",
     **kwargs,
 ):
     """
@@ -383,6 +384,9 @@ def get_tokenizer_config(
             identifier allowed by git.
         local_files_only (`bool`, *optional*, defaults to `False`):
             If `True`, will only try to load the tokenizer configuration from local files.
+        subfolder (`str`, *optional*, defaults to `""`):
+            In case the tokenizer config is located inside a subfolder of the model repo on huggingface.co, you can
+            specify the folder name here.
 
     <Tip>
 
@@ -419,6 +423,7 @@ def get_tokenizer_config(
         use_auth_token=use_auth_token,
         revision=revision,
         local_files_only=local_files_only,
+        subfolder=subfolder,
         _raise_exceptions_for_missing_entries=False,
         _raise_exceptions_for_connection_errors=False,
         _commit_hash=commit_hash,
