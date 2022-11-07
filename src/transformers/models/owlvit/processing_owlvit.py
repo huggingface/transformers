@@ -62,9 +62,9 @@ class OwlViTProcessor(ProcessorMixin):
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
             query_images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The query image or batch of query images to be prepared. Each image can be a PIL image, NumPy array or
-                PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where
-                C is a number of channels, H and W are image height and width.
+                The query image to be prepared, one query image is expected per target image to be queried. Each image
+                can be a PIL image, NumPy array or PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image
+                should be of shape (C, H, W), where C is a number of channels, H and W are image height and width.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
@@ -161,6 +161,13 @@ class OwlViTProcessor(ProcessorMixin):
         docstring of this method for more information.
         """
         return self.feature_extractor.post_process(*args, **kwargs)
+
+    def post_process_one_shot_object_detection(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to [`OwlViTFeatureExtractor.post_process_one_shot_object_detection`].
+        Please refer to the docstring of this method for more information.
+        """
+        return self.feature_extractor.post_process_one_shot_object_detection(*args, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
         """
