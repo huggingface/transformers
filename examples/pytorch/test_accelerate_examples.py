@@ -26,7 +26,7 @@ from unittest import mock
 import torch
 
 from accelerate.utils import write_basic_config
-from transformers.testing_utils import TestCasePlus, get_gpu_count, run_command, slow, torch_device
+from transformers.testing_utils import TestCasePlus, get_gpu_count, is_flaky, run_command, slow, torch_device
 from transformers.utils import is_apex_available
 
 
@@ -176,6 +176,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "epoch_0")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ner_no_trainer")))
 
+    @is_flaky()
     @mock.patch.dict(os.environ, {"WANDB_MODE": "offline"})
     def test_run_squad_no_trainer(self):
         tmp_dir = self.get_auto_remove_tmp_dir()

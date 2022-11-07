@@ -70,17 +70,15 @@ class WhisperProcessor(ProcessorMixin):
             forced_decoder_tokens += f"<|{task}|>"
 
         forced_decoder_tokens += "<|notimestamps|>" if no_timestamps else ""
-        ids = self.tokenizer.encode(forced_decoder_tokens)
+        ids = self.tokenizer.encode(forced_decoder_tokens, add_special_tokens=False)
         forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(ids)]
         return forced_decoder_ids
 
     def __call__(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to WhisperFeatureExtractor's
-        [`~WhisperFeatureExtractor.__call__`] and returns its output. If used in the context
-        [`~WhisperProcessor.as_target_processor`] this method forwards all its arguments to WhisperTokenizer's
-        [`~WhisperTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more information.
-
+        Forwards the `audio` argument to WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] and the `text`
+        argument to [`~WhisperTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more
+        information.
         """
         # For backward compatibility
         if self._in_target_context_manager:

@@ -37,6 +37,7 @@ if is_torch_available():
         BloomModel,
         BloomTokenizerFast,
     )
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10
 
 
 @require_torch
@@ -500,9 +501,14 @@ class BloomEmbeddingTest(unittest.TestCase):
         super().setUp()
         self.path_bigscience_model = "bigscience/bigscience-small-testing"
 
+    @unittest.skipIf(
+        not is_torch_available() or not is_torch_greater_or_equal_than_1_10,
+        "Test failed with torch < 1.10 (`LayerNormKernelImpl` not implemented for `BFloat16`)",
+    )
     @require_torch
     def test_embeddings(self):
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, torch_dtype="auto")  # load in fp32
+        # The config in this checkpoint has `bfloat16` as `torch_dtype` -> model in `bfloat16`
+        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, torch_dtype="auto")
         model.eval()
 
         EMBEDDINGS_DS_BEFORE_LN_BF_16_MEAN = {

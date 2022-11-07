@@ -339,10 +339,16 @@ class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class OwlViTModelTester:
-    def __init__(self, parent, is_training=True):
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+
+        if text_kwargs is None:
+            text_kwargs = {}
+        if vision_kwargs is None:
+            vision_kwargs = {}
+
         self.parent = parent
-        self.text_model_tester = OwlViTTextModelTester(parent)
-        self.vision_model_tester = OwlViTVisionModelTester(parent)
+        self.text_model_tester = OwlViTTextModelTester(parent, **text_kwargs)
+        self.vision_model_tester = OwlViTVisionModelTester(parent, **vision_kwargs)
         self.is_training = is_training
         self.text_config = self.text_model_tester.get_config().to_dict()
         self.vision_config = self.vision_model_tester.get_config().to_dict()

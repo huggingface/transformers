@@ -165,7 +165,7 @@ class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
             emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
         if padding_idx is not None:
             emb[padding_idx, :] = 0
-        return emb
+        return emb.to(torch.get_default_dtype())
 
     @torch.no_grad()
     def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
@@ -1334,14 +1334,14 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
 
         >>> generated_ids = model.generate(inputs=input_features)
 
-        >>> transcription = processor.batch_decode(generated_ids)[0]
+        >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> transcription
         'mister quilter is the apostle of the middle classes and we are glad to welcome his gospel'
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
-            if decoder_input_ids is None:
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )

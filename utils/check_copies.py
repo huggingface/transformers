@@ -70,6 +70,22 @@ LOCALIZED_READMES = {
             " {paper_authors}.{supplements}"
         ),
     },
+    "README_es.md": {
+        "start_prompt": "🤗 Transformers actualmente proporciona las siguientes arquitecturas",
+        "end_prompt": "1. ¿Quieres aportar un nuevo modelo?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
+    "README_ja.md": {
+        "start_prompt": "🤗Transformersは現在、以下のアーキテクチャを提供しています",
+        "end_prompt": "1. 新しいモデルを投稿したいですか？",
+        "format_model_list": (
+            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
+            " {paper_authors}.{supplements}"
+        ),
+    },
 }
 
 
@@ -220,7 +236,12 @@ def is_copy_consistent(filename, overwrite=False):
 
         # Test for a diff and act accordingly.
         if observed_code != theoretical_code:
-            diffs.append([object_name, start_index])
+            diff_index = start_index + 1
+            for observed_line, theoretical_line in zip(observed_code.split("\n"), theoretical_code.split("\n")):
+                if observed_line != theoretical_line:
+                    break
+                diff_index += 1
+            diffs.append([object_name, diff_index])
             if overwrite:
                 lines = lines[:start_index] + [theoretical_code] + lines[line_index:]
                 line_index = start_index + 1

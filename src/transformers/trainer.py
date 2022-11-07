@@ -1251,20 +1251,34 @@ class Trainer:
             if dataloader is None:
                 logger.warning("failed to use PyTorch jit mode due to current dataloader is none.")
                 return model
-            jit_inputs = []
             example_batch = next(iter(dataloader))
-            for key in example_batch:
-                example_tensor = torch.ones_like(example_batch[key])
-                jit_inputs.append(example_tensor)
-            jit_inputs = tuple(jit_inputs)
+            example_batch = self._prepare_inputs(example_batch)
             try:
                 jit_model = model.eval()
-                with ContextManagers([self.autocast_smart_context_manager(), torch.no_grad()]):
-                    jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
+                with ContextManagers([self.autocast_smart_context_manager(cache_enabled=False), torch.no_grad()]):
+                    if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.14.0"):
+                        if isinstance(example_batch, dict):
+                            jit_model = torch.jit.trace(jit_model, example_kwarg_inputs=example_batch, strict=False)
+                        else:
+                            jit_model = torch.jit.trace(
+                                jit_model,
+                                example_kwarg_inputs={key: example_batch[key] for key in example_batch},
+                                strict=False,
+                            )
+                    else:
+                        jit_inputs = []
+                        for key in example_batch:
+                            example_tensor = torch.ones_like(example_batch[key])
+                            jit_inputs.append(example_tensor)
+                        jit_inputs = tuple(jit_inputs)
+                        jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
                 jit_model = torch.jit.freeze(jit_model)
                 jit_model(**example_batch)
+                jit_model(**example_batch)
                 model = jit_model
-            except (RuntimeError, TypeError) as e:
+                self.use_cpu_amp = False
+                self.use_cuda_amp = False
+            except (RuntimeError, TypeError, ValueError, NameError, IndexError) as e:
                 logger.warning(f"failed to use PyTorch jit mode due to: {e}.")
 
         return model
@@ -1280,7 +1294,8 @@ class Trainer:
 
         if not training:
             model.eval()
-            model = ipex.optimize(model, dtype=dtype, level="O1")
+            # conv_bn_folding is disabled as it fails in symbolic tracing, resulting in ipex warnings
+            model = ipex.optimize(model, dtype=dtype, level="O1", conv_bn_folding=False)
         else:
             if not model.training:
                 model.train()
@@ -1294,9 +1309,6 @@ class Trainer:
         if self.args.use_ipex:
             dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
             model = self.ipex_optimize_model(model, training, dtype=dtype)
-
-        if self.args.jit_mode_eval:
-            model = self.torch_jit_model_eval(model, dataloader, training)
 
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.
@@ -1319,6 +1331,9 @@ class Trainer:
         # Multi-gpu training (should be after apex fp16 initialization)
         if self.args.n_gpu > 1:
             model = nn.DataParallel(model)
+
+        if self.args.jit_mode_eval:
+            model = self.torch_jit_model_eval(model, dataloader, training)
 
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
@@ -1611,6 +1626,9 @@ class Trainer:
         logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size}")
         logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
         logger.info(f"  Total optimization steps = {max_steps}")
+        logger.info(
+            f"  Number of trainable parameters = {sum(p.numel() for p in model.parameters() if p.requires_grad)}"
+        )
 
         self.state.epoch = 0
         start_time = time.time()
@@ -1648,7 +1666,10 @@ class Trainer:
         self.callback_handler.optimizer = self.optimizer
         self.callback_handler.lr_scheduler = self.lr_scheduler
         self.callback_handler.train_dataloader = train_dataloader
-        self.state.trial_name = self.hp_name(trial) if self.hp_name is not None else None
+        if self.hp_name is not None and self._trial is not None:
+            # use self._trial because the SigOpt/Optuna hpo only call `_hp_search_setup(trial)` instead of passing trial
+            # parameter to Train when using DDP.
+            self.state.trial_name = self.hp_name(self._trial)
         if trial is not None:
             assignments = trial.assignments if self.hp_search_backend == HPSearchBackend.SIGOPT else trial
             self.state.trial_params = hp_params(assignments)
@@ -1876,9 +1897,39 @@ class Trainer:
 
         self.log(metrics)
 
+        run_dir = self._get_output_dir(trial)
+        checkpoints_sorted = self._sorted_checkpoints(use_mtime=False, output_dir=run_dir)
+
+        # Delete the last checkpoint when save_total_limit=1 if it's different from the best checkpoint.
+        if self.state.best_model_checkpoint is not None and self.args.save_total_limit == 1:
+            for checkpoint in checkpoints_sorted:
+                if checkpoint != self.state.best_model_checkpoint:
+                    logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
+                    shutil.rmtree(checkpoint)
+
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
+
+    def _get_output_dir(self, trial):
+        if self.hp_search_backend is not None and trial is not None:
+            if self.hp_search_backend == HPSearchBackend.OPTUNA:
+                run_id = trial.number
+            elif self.hp_search_backend == HPSearchBackend.RAY:
+                from ray import tune
+
+                run_id = tune.get_trial_id()
+            elif self.hp_search_backend == HPSearchBackend.SIGOPT:
+                run_id = trial.id
+            elif self.hp_search_backend == HPSearchBackend.WANDB:
+                import wandb
+
+                run_id = wandb.run.id
+            run_name = self.hp_name(trial) if self.hp_name is not None else f"run-{run_id}"
+            run_dir = os.path.join(self.args.output_dir, run_name)
+        else:
+            run_dir = self.args.output_dir
+        return run_dir
 
     def _load_from_checkpoint(self, resume_from_checkpoint, model=None):
 
@@ -2105,25 +2156,10 @@ class Trainer:
         # Save model checkpoint
         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
 
-        if self.hp_search_backend is not None and trial is not None:
-            if self.hp_search_backend == HPSearchBackend.OPTUNA:
-                run_id = trial.number
-            elif self.hp_search_backend == HPSearchBackend.RAY:
-                from ray import tune
-
-                run_id = tune.get_trial_id()
-            elif self.hp_search_backend == HPSearchBackend.SIGOPT:
-                run_id = trial.id
-            elif self.hp_search_backend == HPSearchBackend.WANDB:
-                import wandb
-
-                run_id = wandb.run.id
-            run_name = self.hp_name(trial) if self.hp_name is not None else f"run-{run_id}"
-            run_dir = os.path.join(self.args.output_dir, run_name)
-        else:
-            run_dir = self.args.output_dir
+        if self.hp_search_backend is None and trial is None:
             self.store_flos()
 
+        run_dir = self._get_output_dir(trial=trial)
         output_dir = os.path.join(run_dir, checkpoint_folder)
         self.save_model(output_dir, _internal_call=True)
         if self.deepspeed:
@@ -2438,7 +2474,7 @@ class Trainer:
         """
         return self.ctx_manager_torchdynamo
 
-    def autocast_smart_context_manager(self):
+    def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = None):
         """
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
         arguments, depending on the situation.
@@ -2446,9 +2482,9 @@ class Trainer:
         if self.use_cuda_amp or self.use_cpu_amp:
             if is_torch_greater_or_equal_than_1_10:
                 ctx_manager = (
-                    torch.cpu.amp.autocast(dtype=self.amp_dtype)
+                    torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
                     if self.use_cpu_amp
-                    else torch.cuda.amp.autocast(dtype=self.amp_dtype)
+                    else torch.cuda.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
                 )
             else:
                 ctx_manager = torch.cuda.amp.autocast()
@@ -3408,7 +3444,8 @@ class Trainer:
         if not hasattr(self, "repo"):
             self.init_git_repo()
 
-        if self.args.should_save:
+        model_name = kwargs.pop("model_name", None)
+        if model_name is None and self.args.should_save:
             if self.args.hub_model_id is None:
                 model_name = Path(self.args.output_dir).name
             else:

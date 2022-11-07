@@ -84,7 +84,8 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
             )
         )
 
-        if self.post_process_function is not None and self.compute_metrics is not None:
+        if self.post_process_function is not None and self.compute_metrics is not None and self.args.should_save:
+            # Only the main node write the results by default
             eval_preds = self.post_process_function(eval_examples, eval_dataset, output)
             metrics = self.compute_metrics(eval_preds)
 
@@ -94,8 +95,12 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
                     metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
 
             output.metrics.update(metrics)
+        else:
+            metrics = {}
 
-        self.log(metrics)
+        if self.args.should_log:
+            # Only the main node log the results by default
+            self.log(metrics)
 
         if self.args.tpu_metrics_debug or self.args.debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
