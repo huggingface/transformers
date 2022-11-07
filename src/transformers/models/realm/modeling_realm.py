@@ -1157,7 +1157,7 @@ class RealmEmbedder(RealmPreTrainedModel):
     @replace_return_docstrings(output_type=RealmEmbedderOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-         input_ids: Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
