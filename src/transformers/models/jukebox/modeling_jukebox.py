@@ -151,7 +151,7 @@ def get_alignment(music_tokens, labels, prior, config):
         weights = torch.cat(w_hops, dim=0)
         del w_hops
         alignment_hop = weights.float().cpu().numpy()
-        del w
+        del weights
 
         # alignment_hop has shape (bs, n_ctx, nb_relevant_lyric_tokens)
         # indices_hop is a list of len=bs, each entry of len hps.nb_relevant_lyric_tokens
