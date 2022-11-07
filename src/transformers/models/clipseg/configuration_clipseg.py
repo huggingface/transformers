@@ -16,16 +16,9 @@
 
 import copy
 import os
-from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
-
-
-if TYPE_CHECKING:
-    from ...processing_utils import ProcessorMixin
-    from ...utils import TensorType
+from typing import Union
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -259,9 +252,9 @@ class CLIPSegConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_config_dict (`dict`, *optional*):
+        text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`CLIPSegTextConfig`].
-        vision_config_dict (`dict`, *optional*):
+        vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`CLIPSegVisionConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
             Dimensionality of text and vision projection layers.
@@ -317,8 +310,8 @@ class CLIPSegConfig(PretrainedConfig):
 
     def __init__(
         self,
-        text_config_dict=None,
-        vision_config_dict=None,
+        text_config=None,
+        vision_config=None,
         projection_dim=512,
         logit_scale_init_value=2.6592,
         extract_layers=[3, 6, 9],
@@ -331,18 +324,25 @@ class CLIPSegConfig(PretrainedConfig):
         use_complex_transposed_convolution=False,
         **kwargs
     ):
-        super().__init__(text_config_dict=text_config_dict, vision_config_dict=vision_config_dict, **kwargs)
+        super().__init__(**kwargs)
 
-        if text_config_dict is None:
-            text_config_dict = {}
-            logger.info("text_config_dict is None. Initializing the CLIPSegTextConfig with default values.")
+        text_config_dict = kwargs.pop("text_config_dict", None)
+        vision_config_dict = kwargs.pop("vision_config_dict", None)
+        if text_config_dict is not None:
+            text_config = text_config_dict
+        if vision_config_dict is not None:
+            vision_config = vision_config_dict
 
-        if vision_config_dict is None:
-            vision_config_dict = {}
-            logger.info("vision_config_dict is None. initializing the CLIPSegVisionConfig with default values.")
+        if text_config is None:
+            text_config = {}
+            logger.info("text_config is None. Initializing the CLIPSegTextConfig with default values.")
 
-        self.text_config = CLIPSegTextConfig(**text_config_dict)
-        self.vision_config = CLIPSegVisionConfig(**vision_config_dict)
+        if vision_config is None:
+            vision_config = {}
+            logger.info("vision_config is None. initializing the CLIPSegVisionConfig with default values.")
+
+        self.text_config = CLIPSegTextConfig(**text_config)
+        self.vision_config = CLIPSegVisionConfig(**vision_config)
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
@@ -366,7 +366,7 @@ class CLIPSegConfig(PretrainedConfig):
             [`CLIPSegConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config_dict=text_config.to_dict(), vision_config_dict=vision_config.to_dict(), **kwargs)
+        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
     def to_dict(self):
         """
@@ -380,50 +380,3 @@ class CLIPSegConfig(PretrainedConfig):
         output["vision_config"] = self.vision_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
-
-
-class CLIPSegOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
-            ]
-        )
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("logits_per_image", {0: "batch"}),
-                ("logits_per_text", {0: "batch"}),
-                ("text_embeds", {0: "batch"}),
-                ("image_embeds", {0: "batch"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-    def generate_dummy_inputs(
-        self,
-        processor: "ProcessorMixin",
-        batch_size: int = -1,
-        seq_length: int = -1,
-        framework: Optional["TensorType"] = None,
-    ) -> Mapping[str, Any]:
-
-        text_input_dict = super().generate_dummy_inputs(
-            processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
-        )
-        image_input_dict = super().generate_dummy_inputs(
-            processor.feature_extractor, batch_size=batch_size, framework=framework
-        )
-        return {**text_input_dict, **image_input_dict}
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 14
