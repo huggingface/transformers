@@ -899,6 +899,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
 # Below: tests for Tapas utilities which are defined in modeling_tapas.py.
 # These are based on segmented_tensor_test.py of the original implementation.
 # URL: https://github.com/google-research/tapas/blob/master/tapas/models/segmented_tensor_test.py
+@require_torch
 class TapasUtilitiesTest(unittest.TestCase):
     def _prepare_tables(self):
         """Prepares two tables, both with three distinct rows.
