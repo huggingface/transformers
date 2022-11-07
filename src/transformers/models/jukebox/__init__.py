@@ -37,6 +37,7 @@ else:
         "JukeboxModel",
         "JukeboxPreTrainedModel",
         "JukeboxVQVAE",
+        "JukeboxPrior",
     ]
 
 if TYPE_CHECKING:
@@ -53,6 +54,7 @@ if TYPE_CHECKING:
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
             JukeboxModel,
             JukeboxPreTrainedModel,
+            JukeboxPrior,
             JukeboxVQVAE,
         )
 
