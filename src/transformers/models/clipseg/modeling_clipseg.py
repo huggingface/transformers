@@ -1334,8 +1334,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
 
         self.config = config
 
-        # TODO perhaps use clip here?
-        self.clipseg = CLIPSegModel(config)
+        self.clip = CLIPSegModel(config)
         self.extract_layers = config.extract_layers
 
         self.decoder = CLIPSegDecoder(config)
@@ -1356,7 +1355,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
             if len(input_ids) != batch_size:
                 raise ValueError("Make sure to pass as many prompt texts as there are query images")
             with torch.no_grad():
-                conditional_embeddings = self.clipseg.get_text_features(
+                conditional_embeddings = self.clip.get_text_features(
                     input_ids, attention_mask=attention_mask, position_ids=position_ids
                 )
         elif conditional_pixel_values is not None:
@@ -1364,7 +1363,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
             if len(conditional_pixel_values) != batch_size:
                 raise ValueError("Make sure to pass as many prompt images as there are query images")
             with torch.no_grad():
-                conditional_embeddings = self.clipseg.get_image_features(conditional_pixel_values)
+                conditional_embeddings = self.clip.get_image_features(conditional_pixel_values)
         else:
             raise ValueError(
                 "Invalid conditional, should be either provided as `input_ids` or `conditional_pixel_values`"
@@ -1420,13 +1419,13 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
 
         # step 1: forward the query images through the frozen CLIP vision encoder
         with torch.no_grad():
-            vision_outputs = self.clipseg.vision_model(
+            vision_outputs = self.clip.vision_model(
                 pixel_values=pixel_values,
                 output_attentions=output_attentions,
                 output_hidden_states=True,  # we need the intermediate hidden states
                 return_dict=return_dict,
             )
-            pooled_output = self.clipseg.visual_projection(vision_outputs[1])
+            pooled_output = self.clip.visual_projection(vision_outputs[1])
 
             hidden_states = vision_outputs.hidden_states if return_dict else vision_outputs[2]
             # we add +1 here as the hidden states also include the initial embeddings

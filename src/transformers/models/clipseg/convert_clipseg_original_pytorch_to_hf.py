@@ -51,7 +51,7 @@ def get_clipseg_config(model_name):
 def rename_key(name):
     # update prefixes
     if "clip_model" in name:
-        name = name.replace("clip_model", "clipseg")
+        name = name.replace("clip_model", "clip")
     if "transformer" in name:
         if "visual" in name:
             name = name.replace("visual.transformer", "vision_model")
@@ -127,17 +127,15 @@ def convert_state_dict(orig_state_dict, config):
                 prefix = "text_model"
 
             if "weight" in key:
-                orig_state_dict[f"clipseg.{prefix}.encoder.layers.{layer_num}.self_attn.q_proj.weight"] = val[:dim, :]
-                orig_state_dict[f"clipseg.{prefix}.encoder.layers.{layer_num}.self_attn.k_proj.weight"] = val[
+                orig_state_dict[f"clip.{prefix}.encoder.layers.{layer_num}.self_attn.q_proj.weight"] = val[:dim, :]
+                orig_state_dict[f"clip.{prefix}.encoder.layers.{layer_num}.self_attn.k_proj.weight"] = val[
                     dim : dim * 2, :
                 ]
-                orig_state_dict[f"clipseg.{prefix}.encoder.layers.{layer_num}.self_attn.v_proj.weight"] = val[-dim:, :]
+                orig_state_dict[f"clip.{prefix}.encoder.layers.{layer_num}.self_attn.v_proj.weight"] = val[-dim:, :]
             else:
-                orig_state_dict[f"clipseg.{prefix}.encoder.layers.{layer_num}.self_attn.q_proj.bias"] = val[:dim]
-                orig_state_dict[f"clipseg.{prefix}.encoder.layers.{layer_num}.self_attn.k_proj.bias"] = val[
-                    dim : dim * 2
-                ]
-                orig_state_dict[f"clipseg.{prefix}.encoder.layers.{layer_num}.self_attn.v_proj.bias"] = val[-dim:]
+                orig_state_dict[f"clip.{prefix}.encoder.layers.{layer_num}.self_attn.q_proj.bias"] = val[:dim]
+                orig_state_dict[f"clip.{prefix}.encoder.layers.{layer_num}.self_attn.k_proj.bias"] = val[dim : dim * 2]
+                orig_state_dict[f"clip.{prefix}.encoder.layers.{layer_num}.self_attn.v_proj.bias"] = val[-dim:]
         elif "self_attn" in key and "out_proj" not in key:
             key_split = key.split(".")
             layer_num = int(key_split[1])
@@ -182,7 +180,7 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     state_dict = convert_state_dict(state_dict, config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
 
-    if missing_keys != ["clipseg.text_model.embeddings.position_ids", "clipseg.vision_model.embeddings.position_ids"]:
+    if missing_keys != ["clip.text_model.embeddings.position_ids", "clip.vision_model.embeddings.position_ids"]:
         raise ValueError("Missing keys that are not expected: {}".format(missing_keys))
     if unexpected_keys != ["decoder.reduce.weight", "decoder.reduce.bias"]:
         raise ValueError(f"Unexpected keys: {unexpected_keys}")
@@ -229,8 +227,8 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
 
     if push_to_hub:
         print(f"Pushing model and processor for {model_name} to the hub")
-        model.push_to_hub(f"nielsr/{model_name}")
-        processor.push_to_hub(f"nielsr/{model_name}")
+        model.push_to_hub(f"CIDAS/{model_name}")
+        processor.push_to_hub(f"CIDAS/{model_name}")
 
 
 if __name__ == "__main__":
