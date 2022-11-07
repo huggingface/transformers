@@ -25,7 +25,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "CIDAS/clipseg-rd64-refined": "https://huggingface.co/CIDAS/clipseg-rd64-refined/resolve/main/config.json",
+    "CIDAS/clipseg-rd64": "https://huggingface.co/CIDAS/clipseg-rd64/resolve/main/config.json",
 }
 
 
@@ -34,7 +34,7 @@ class CLIPSegTextConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to instantiate an
     CLIPSeg model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the CLIPSeg
-    [CIDAS/clipseg-rd64-refined](https://huggingface.co/CIDAS/clipseg-rd64-refined) architecture.
+    [CIDAS/clipseg-rd64](https://huggingface.co/CIDAS/clipseg-rd64) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -73,10 +73,10 @@ class CLIPSegTextConfig(PretrainedConfig):
     ```python
     >>> from transformers import CLIPSegTextConfig, CLIPSegTextModel
 
-    >>> # Initializing a CLIPSegTextConfig with CIDAS/clipseg-rd64-refined style configuration
+    >>> # Initializing a CLIPSegTextConfig with CIDAS/clipseg-rd64 style configuration
     >>> configuration = CLIPSegTextConfig()
 
-    >>> # Initializing a CLIPSegTextModel (with random weights) from the CIDAS/clipseg-rd64-refined style configuration
+    >>> # Initializing a CLIPSegTextModel (with random weights) from the CIDAS/clipseg-rd64 style configuration
     >>> model = CLIPSegTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -141,7 +141,7 @@ class CLIPSegVisionConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to instantiate an
     CLIPSeg model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the CLIPSeg
-    [CIDAS/clipseg-rd64-refined](https://huggingface.co/CIDAS/clipseg-rd64-refined) architecture.
+    [CIDAS/clipseg-rd64](https://huggingface.co/CIDAS/clipseg-rd64) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -178,10 +178,10 @@ class CLIPSegVisionConfig(PretrainedConfig):
     ```python
     >>> from transformers import CLIPSegVisionConfig, CLIPSegVisionModel
 
-    >>> # Initializing a CLIPSegVisionConfig with CIDAS/clipseg-rd64-refined style configuration
+    >>> # Initializing a CLIPSegVisionConfig with CIDAS/clipseg-rd64 style configuration
     >>> configuration = CLIPSegVisionConfig()
 
-    >>> # Initializing a CLIPSegVisionModel (with random weights) from the CIDAS/clipseg-rd64-refined style configuration
+    >>> # Initializing a CLIPSegVisionModel (with random weights) from the CIDAS/clipseg-rd64 style configuration
     >>> model = CLIPSegVisionModel(configuration)
 
     >>> # Accessing the model configuration
@@ -244,7 +244,9 @@ class CLIPSegVisionConfig(PretrainedConfig):
 class CLIPSegConfig(PretrainedConfig):
     r"""
     [`CLIPSegConfig`] is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to
-    instantiate CLIPSeg model according to the specified arguments, defining the text model and vision model configs.
+    instantiate a CLIPSeg model according to the specified arguments, defining the text model and vision model configs.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the CLIPSeg
+    [CIDAS/clipseg-rd64](https://huggingface.co/CIDAS/clipseg-rd64) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -286,10 +288,10 @@ class CLIPSegConfig(PretrainedConfig):
     ```python
     >>> from transformers import CLIPSegConfig, CLIPSegModel
 
-    >>> # Initializing a CLIPSegConfig with CIDAS/clipseg-rd64-refined style configuration
+    >>> # Initializing a CLIPSegConfig with CIDAS/clipseg-rd64 style configuration
     >>> configuration = CLIPSegConfig()
 
-    >>> # Initializing a CLIPSegModel (with random weights) from the CIDAS/clipseg-rd64-refined style configuration
+    >>> # Initializing a CLIPSegModel (with random weights) from the CIDAS/clipseg-rd64 style configuration
     >>> model = CLIPSegModel(configuration)
 
     >>> # Accessing the model configuration
