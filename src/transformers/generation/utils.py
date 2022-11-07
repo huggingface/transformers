@@ -651,6 +651,7 @@ class GenerationMixin:
         input_ids: Optional[torch.LongTensor] = None,
         **model_kwargs,
     ) -> Tuple[torch.LongTensor, Dict[str, Any]]:
+        """Expands tensors from [batch_size, ...] to [batch_size * expand_size, ...]"""
         if input_ids is not None:
             input_ids = input_ids.repeat_interleave(expand_size, dim=0)
 
@@ -1860,7 +1861,7 @@ class GenerationMixin:
 
         >>> tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
         >>> model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m")
-        >>> # set pad_token_id to eos_token_id because GPT2 does not have a PAD token
+        >>> # set pad_token_id to eos_token_id because OPT does not have a PAD token
         >>> model.config.pad_token_id = model.config.eos_token_id
         >>> input_prompt = "DeepMind Company is"
         >>> input_ids = tokenizer(input_prompt, return_tensors="pt")
@@ -1916,7 +1917,7 @@ class GenerationMixin:
                 if this_peer_finished_flag.item() == 0.0:
                     break
 
-            # if the first step in the loop, encode all the prefix and obtain three parameters: (1) past_key_values;
+            # if the first step in the loop, encode all the prefix and obtain: (1) past_key_values;
             # (2) last_hidden_states; (3) logit_for_next_step; (4) update model kwargs for the next step
             if model_kwargs.get("past") is None:
 
@@ -2014,7 +2015,7 @@ class GenerationMixin:
                 full_hidden_states = outputs.hidden_states
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
 
-            # compute the degeneratin penalty and re-rank the candidates based on the degeneration penalty and the
+            # compute the degeneration penalty and re-rank the candidates based on the degeneration penalty and the
             # model confidence
             selected_idx = _ranking_fast(context_hidden, next_hidden, top_k_probs, penalty_alpha, top_k)
 
