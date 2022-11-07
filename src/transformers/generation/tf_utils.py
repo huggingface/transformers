@@ -23,6 +23,15 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.compiler.tf2xla.python.xla import dynamic_update_slice
 
+from ..modeling_tf_outputs import TFCausalLMOutputWithPast, TFSeq2SeqLMOutput
+from ..models.auto import (
+    TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
+    TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
+)
+from ..tf_utils import shape_list, stable_softmax
+from ..utils import ModelOutput, logging
 from .tf_logits_process import (
     TFForcedBOSTokenLogitsProcessor,
     TFForcedEOSTokenLogitsProcessor,
@@ -38,15 +47,6 @@ from .tf_logits_process import (
     TFTopKLogitsWarper,
     TFTopPLogitsWarper,
 )
-from ..modeling_tf_outputs import TFCausalLMOutputWithPast, TFSeq2SeqLMOutput
-from ..models.auto import (
-    TF_MODEL_FOR_CAUSAL_LM_MAPPING,
-    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
-    TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
-)
-from ..tf_utils import shape_list, stable_softmax
-from ..utils import ModelOutput, logging
 
 
 logger = logging.get_logger(__name__)
@@ -349,8 +349,8 @@ class TFBeamSampleEncoderDecoderOutput(ModelOutput):
 @dataclass
 class TFContrastiveSearchDecoderOnlyOutput(ModelOutput):
     """
-    Base class for outputs of decoder-only generation models using contrastive search.
     Args:
+    Base class for outputs of decoder-only generation models using contrastive search.
         sequences (`tf.Tensor` of shape `(batch_size, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
@@ -375,10 +375,10 @@ class TFContrastiveSearchDecoderOnlyOutput(ModelOutput):
 @dataclass
 class TFContrastiveSearchEncoderDecoderOutput(ModelOutput):
     """
+    Args:
     Base class for outputs of encoder-decoder generation models using contrastive search. Hidden states and attention
     weights of the decoder (respectively the encoder) can be accessed via the encoder_attentions and the
     encoder_hidden_states attributes (respectively the decoder_attentions and the decoder_hidden_states attributes)
-    Args:
         sequences (`tf.Tensor` of shape `(batch_size, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
@@ -3333,9 +3333,9 @@ class TFGenerationMixin:
         **model_kwargs,
     ) -> Union[TFContrastiveSearchOutput, tf.Tensor]:
         r"""
+        Parameters:
         Generates sequences of token ids for models with a language modeling head using **contrastive search** and can
         be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
-        Parameters:
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             top_k (`int`, *optional*, defaults to 1):
@@ -3378,6 +3378,7 @@ class TFGenerationMixin:
         Examples:
         ```python
         >>> from transformers import AutoTokenizer, TFAutoModelForCausalLM
+
         >>> tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
         >>> model = TFAutoModelForCausalLM.from_pretrained("facebook/opt-125m")
         >>> # set pad_token_id to eos_token_id because OPT does not have a PAD token
