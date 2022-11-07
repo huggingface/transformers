@@ -414,8 +414,8 @@ class JukeboxPriorConfig(PretrainedConfig):
 class JukeboxVQVAEConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`JukeboxVQVAE`]. It is used to instantiate a
-    `JukeboxVQVAE` according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the VQVAE from
+    `JukeboxVQVAE` according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the VQVAE from
     [openai/jukebox-1b-lyrics](https://huggingface.co/openai/jukebox-1b-lyrics) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -439,8 +439,8 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         levels (`int`, *optional*, defaults to 3):
             Number of hierachical levels that used in the VQVAE.
         lmu (`float`, *optional*, defaults to 0.99):
-            Used in the codebook update, exponential moving average coefficient. For more detail refer to Appendix
-            A.1 of the original [VQVAE paper](https://arxiv.org/pdf/1711.00937v2.pdf)
+            Used in the codebook update, exponential moving average coefficient. For more detail refer to Appendix A.1
+            of the original [VQVAE paper](https://arxiv.org/pdf/1711.00937v2.pdf)
         multipliers (`tuple`, *optional*, defaults to (2, 1, 1)):
             Depth and width multipliers used for each level. Used on the `res_conv_width` and `res_conv_depth`
         res_conv_depth (`int`, *optional*, defaults to 4):
@@ -450,8 +450,8 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         res_convolution_multiplier (`int`, *optional*, defaults to 1):
             Scaling factor of the hidden dimension used in the `JukeboxResConv1DBlock`.
         res_dilation_cycle (`_type_`, *optional*, defaults to None):
-                Dilation cycle value used in the `JukeboxResnet`. If an int is used, each new Conv1 block will have
-                a depth
+                Dilation cycle value used in the `JukeboxResnet`. If an int is used, each new Conv1 block will have a
+                depth
             of reduced by a power of `res_dilation_cycle`.
         res_dilation_growth_rate (`int`, *optional*, defaults to 3):
             Resnet dilation growth rate used in the VQVAE (dilation_growth_rate ** depth)
