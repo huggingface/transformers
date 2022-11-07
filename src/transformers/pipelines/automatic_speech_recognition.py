@@ -56,13 +56,16 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right):
     step = chunk_len - stride_left - stride_right
     for i in range(0, inputs_len, step):
         # add start and end paddings to the chunk
-        chunk = inputs[i : i + chunk_len].copy()
+        chunk = inputs[i : i + chunk_len]
         processed = feature_extractor(chunk, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
         _stride_left = 0 if i == 0 else stride_left
         is_last = i + step + stride_left >= inputs_len
         _stride_right = 0 if is_last else stride_right
 
-        processed_len = processed["input_features"].shape[-1]
+        if "input_features" in processed:
+            processed_len = processed["input_features"].shape[-1]
+        elif "input_values" in processed:
+            processed_len = processed["input_values"].shape[-1]
         chunk_len = chunk.shape[0]
         stride = (chunk_len, _stride_left, _stride_right)
         if processed_len != chunk.shape[-1]:
