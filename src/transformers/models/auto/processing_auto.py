@@ -32,6 +32,7 @@ from .configuration_auto import (
     replace_list_option_in_docstrings,
 )
 from .feature_extraction_auto import AutoFeatureExtractor
+from .image_processing_auto import AutoImageProcessor
 from .tokenization_auto import AutoTokenizer
 
 
@@ -261,6 +262,13 @@ class AutoProcessor:
                 pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
             )
         except Exception:
+            try:
+                return AutoImageProcessor.from_pretrained(
+                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                )
+            except Exception:
+                pass
+
             try:
                 return AutoFeatureExtractor.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs

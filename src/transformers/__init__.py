@@ -130,6 +130,7 @@ _import_structure = {
         "TOKENIZER_MAPPING",
         "AutoConfig",
         "AutoFeatureExtractor",
+        "AutoImageProcessor",
         "AutoProcessor",
         "AutoTokenizer",
     ],
@@ -3225,6 +3226,7 @@ if TYPE_CHECKING:
         TOKENIZER_MAPPING,
         AutoConfig,
         AutoFeatureExtractor,
+        AutoImageProcessor,
         AutoProcessor,
         AutoTokenizer,
     )
