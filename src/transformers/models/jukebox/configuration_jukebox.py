@@ -131,9 +131,10 @@ ATTENTION_PATTERNS = {
 class JukeboxPriorConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`JukeboxPrior`]. It is used to instantiate a
-    `JukeboxPriorl` according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the top level prior fro the
-    [openai/jukebox-1b-lyrics](https://huggingface.co/openai/ukebox-1b-lyrics) architecture.
+    `JukeboxPrior` according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the top level prior from the
+    [openai/jukebox-1b-lyrics](https://huggingface.co/openai/jukebox
+-1b-lyrics) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -405,67 +406,81 @@ class JukeboxPriorConfig(PretrainedConfig):
 
 class JukeboxVQVAEConfig(PretrainedConfig):
     """
-        hop_fraction (`list`, *optional*, defaults to [0.125, 0.5, 0.5]):
-            Fraction of non-intersecting window used when continuing the sampling process.
-        input_channels:
-            number of audio channels
-        sample_length:
-            on which the VQVAE was trained. Provides the max output shape of the VQVAE
-        levels (`int`, *optional*, defaults to 3):
-            Number of hierachical levels that used in the VQVAE.
-        downs_t (`tuple`, *optional*, defaults to (3, 2, 2)):
-            Downsampling rate for each level of the hierachical VQ-VAE.
-        strides_t (`tuple`, *optional*, defaults to (2, 2, 2)):
-            Stride used for each level of the hierachical VQ-VAE.
-        embed_dim (`int`, *optional*, defaults to 64):
-            Dimension of the codebook vectors.
+    This is the configuration class to store the configuration of a [`JukeboxVQVAE`]. It is used to instantiate a
+    `JukeboxVQVAE` according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the VQVAE from
+    [openai/jukebox-1b-lyrics](https://huggingface.co/openai/jukebox
+-1b-lyrics) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+        act_fn (`str`, *optional*, defaults to "relu"):
+            _description_
         codebook_dimension (`int`, *optional*, defaults to 2048):
             Number of codes to use in each of the VQVAE.
-        convolution_multiplier (`int`, *optional*, defaults to 1):
-            Projection factor used in the `JukeboxResConv1DBlock`.
-        dilation_growth_rate (`int`, *optional*, defaults to 3):
-            Resnet dilation growth rate used in the VQVAE (dilation_growth_rate ** depth)
-        dilation_cycle (`int`, *optional*, defaults to None):
-            Dilation cycle value used in the `JukeboxResnet`. If an int is used, each new Conv1 block will have a depth
-            of reduced by a power of `dilation_cycle`.
-        multipliers (`tuple`, *optional*, defaults to (2, 1, 1)):
-            Depth and width multipliers used for each level. Used on the `conv_block_width` and `conv_block_depth`
+        commit (`float`, *optional*, defaults to 0.02):
+            Commit loss multiplier.
+        conv_input_shape (`int`, *optional*, defaults to 1):
+            Number of audio channels.
+        conv_res_scale (`bool`, *optional*, defaults to False):
+            _description_
+        embed_dim (`int`, *optional*, defaults to 64):
+            Embeding dimension of the codebook vectors.
+        hop_fraction (`List[`int`]`, *optional*, defaults to [0.125, 0.5, 0.5]):
+            Fraction of non-intersecting window used when continuing the sampling process.
+        levels (`int`, *optional*, defaults to 3):
+            Number of hierachical levels that used in the VQVAE.
         lmu (`float`, *optional*, defaults to 0.99):
             Used in the codebook update, exponential moving average coefficient. For more detail refer to Appendix A.1
             of the original [VQVAE paper](https://arxiv.org/pdf/1711.00937v2.pdf)
-        commit (`float`, *optional*, defaults to 0.02):
-            Commit loss multiplier.
-        conv_block_depth (`int`, *optional*, defaults to 4):
+        multipliers (`tuple`, *optional*, defaults to (2, 1, 1)):
+            Depth and width multipliers used for each level. Used on the `res_conv_width` and `res_conv_depth`
+        res_conv_depth (`int`, *optional*, defaults to 4):
             Depth of the encoder and decoder block. If no `multipliers` are used, this is the same for each level.
-        conv_block_width (`int`, *optional*, defaults to 32):
+        res_conv_width (`int`, *optional*, defaults to 32):
             Width of the encoder and decoder block. If no `multipliers` are used, this is the same for each level.
-        reverse_decoder_dilation (`int`, *optional*, defaults to 1):
-            Whether or not to reverse the dilation rate for the decoder.
-    Example:
+        res_convolution_multiplier (`int`, *optional*, defaults to 1):
+            Scaling factor of the hidden dimension used in the `JukeboxResConv1DBlock`.
+        res_dilation_cycle (`_type_`, *optional*, defaults to None):
+             Dilation cycle value used in the `JukeboxResnet`. If an int is used, each new Conv1 block will have a depth
+            of reduced by a power of `res_dilation_cycle`.
+        res_dilation_growth_rate (`int`, *optional*, defaults to 3):
+            Resnet dilation growth rate used in the VQVAE (dilation_growth_rate ** depth)
+        res_downs_t (`tuple(int)`, *optional*, defaults to (3, 2, 2)):
+             Downsampling rate for each level of the hierachical VQ-VAE.
+        res_strides_t (`tuple(int)`, *optional*, defaults to (2, 2, 2)):
+            Stride used for each level of the hierachical VQ-VAE.
+        sample_length (`int`, *optional*, defaults to 1058304):
+            Provides the max input shape of the VQVAE. Is used to compute the input shape of
+            each level.
     """
 
     def __init__(
         self,
-        hop_fraction=[0.125, 0.5, 0.5],
-        sample_length=1058304,
-        levels=3,
-        embed_dim=64,
+        act_fn="relu",
         codebook_dimension=2048,
-        lmu=0.99,
         commit=0.02,
         conv_input_shape=1,
+        conv_res_scale=False,
+        embed_dim=64,
+        hop_fraction=[0.125, 0.5, 0.5],
+        levels=3,
+        lmu=0.99,
+        multipliers=(2, 1, 1),
+        res_conv_depth=4,
+        res_conv_width=32,
+        res_convolution_multiplier=1,
+        res_dilation_cycle=None,
+        res_dilation_growth_rate=3,
         res_downs_t=(3, 2, 2),
         res_strides_t=(2, 2, 2),
-        multipliers=(2, 1, 1),
-        res_conv_width=32,
-        res_conv_depth=4,
-        res_convolution_multiplier=1,
-        res_dilation_growth_rate=3,
-        res_dilation_cycle=None,
-        conv_res_scale=False,
-        act_fn="relu",
+        sample_length=1058304,
         **kwargs
     ):
+
+
+
         self.hop_fraction = hop_fraction
         self.conv_input_shape = conv_input_shape
         self.sample_length = sample_length
