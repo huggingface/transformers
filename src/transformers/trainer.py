@@ -623,10 +623,7 @@ class Trainer:
         self.current_flos = 0
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
-        if isinstance(self.model, PreTrainedModel):
-            default_label_names = find_labels(self.model.__class__)
-        else:
-            default_label_names = ["labels"]
+        default_label_names = find_labels(self.model.__class__)
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
@@ -3192,7 +3189,7 @@ class Trainer:
             Tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]: A tuple with the loss,
             logits and labels (each being optional).
         """
-        has_labels = all(inputs.get(k) is not None for k in self.label_names)
+        has_labels = False if len(self.label_names) == 0 else all(inputs.get(k) is not None for k in self.label_names)
         inputs = self._prepare_inputs(inputs)
         if ignore_keys is None:
             if hasattr(self.model, "config"):
