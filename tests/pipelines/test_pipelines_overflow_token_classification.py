@@ -9,7 +9,7 @@ from transformers.pipelines.overflow_token_classification import (
     OverflowTokenClassificationPipeline,
     ReconstitutionStrategy,
 )
-from transformers.testing_utils import nested_simplify, require_torch_gpu
+from transformers.testing_utils import nested_simplify, require_tf, require_torch, require_torch_gpu
 from transformers.tokenization_utils_base import VERY_LARGE_INTEGER
 from transformers import (
     BertForTokenClassification,
@@ -22,9 +22,9 @@ MODEL_NAME = "hf-internal-testing/tiny-bert-for-token-classification"
 MODEL = BertForTokenClassification.from_pretrained(MODEL_NAME)
 TOKENIZER = BertTokenizerFast.from_pretrained(MODEL_NAME)
 
-def get_test_pipeline():
+def get_test_pipeline(framework: str = "pt"):
         pipeline = OverflowTokenClassificationPipeline(
-            model=MODEL, tokenizer=TOKENIZER, framework="pt"
+            model=MODEL, tokenizer=TOKENIZER, framework=framework,
         )
         return pipeline
 
@@ -84,6 +84,18 @@ class OverflowTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         self.assertEqual(output, [[]])
         with self.assertRaises(ValueError):
             pipeline([])
+
+    @require_tf
+    def test_small_model_tf(self):
+        pipeline = get_test_pipeline(framework="tf")
+        outputs = pipeline(OVERFLOW_SHORT)
+        self.assertEqual(nested_simplify(outputs), OVERFLOW_SHORT_OUTPUT)
+
+    @require_torch
+    def test_small_model_pt(self):
+        pipeline = get_test_pipeline(framework="pt")
+        outputs = pipeline(OVERFLOW_SHORT)
+        self.assertEqual(nested_simplify(outputs), OVERFLOW_SHORT_OUTPUT)
 
     def test_simple_str(self):
         """Test the expected tokens with simple string inputs"""
@@ -402,7 +414,7 @@ class TestTruncatedTokenClassificationArguments(unittest.TestCase):
             model=MODEL,
             tokenizer=TOKENIZER,
         )
-        self.assertTrue(pipeline.truncation)
+        self.assertFalse(pipeline.truncation)
 
     @patch.object(TOKENIZER, "model_max_length", VERY_LARGE_INTEGER)
     def test_model_without_max_len(self):
@@ -412,7 +424,7 @@ class TestTruncatedTokenClassificationArguments(unittest.TestCase):
             model=MODEL,
             tokenizer=TOKENIZER,
         )
-        self.assertTrue(pipeline.truncation)
+        self.assertFalse(pipeline.truncation)
         self.assertEqual(pipeline.max_length, 0)
 
     def test_model_max_len(self):
