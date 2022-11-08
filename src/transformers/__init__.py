@@ -171,6 +171,13 @@ _import_structure = {
         "CLIPTokenizer",
         "CLIPVisionConfig",
     ],
+    "models.clipseg": [
+        "CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CLIPSegConfig",
+        "CLIPSegProcessor",
+        "CLIPSegTextConfig",
+        "CLIPSegVisionConfig",
+    ],
     "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
     "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
@@ -1072,6 +1079,16 @@ else:
             "CLIPPreTrainedModel",
             "CLIPTextModel",
             "CLIPVisionModel",
+        ]
+    )
+    _import_structure["models.clipseg"].extend(
+        [
+            "CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CLIPSegModel",
+            "CLIPSegPreTrainedModel",
+            "CLIPSegTextModel",
+            "CLIPSegVisionModel",
+            "CLIPSegForImageSegmentation",
         ]
     )
     _import_structure["models.x_clip"].extend(
@@ -3225,6 +3242,13 @@ if TYPE_CHECKING:
         CLIPTokenizer,
         CLIPVisionConfig,
     )
+    from .models.clipseg import (
+        CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CLIPSegConfig,
+        CLIPSegProcessor,
+        CLIPSegTextConfig,
+        CLIPSegVisionConfig,
+    )
     from .models.codegen import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeGenConfig, CodeGenTokenizer
     from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDetrConfig
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
@@ -3992,6 +4016,14 @@ if TYPE_CHECKING:
             CLIPPreTrainedModel,
             CLIPTextModel,
             CLIPVisionModel,
+        )
+        from .models.clipseg import (
+            CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CLIPSegForImageSegmentation,
+            CLIPSegModel,
+            CLIPSegPreTrainedModel,
+            CLIPSegTextModel,
+            CLIPSegVisionModel,
         )
         from .models.codegen import (
             CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST,
