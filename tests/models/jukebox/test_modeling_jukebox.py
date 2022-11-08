@@ -28,7 +28,7 @@ if is_torch_available():
 @require_torch
 class Jukebox1bModelTester(unittest.TestCase):
     all_model_classes = (JukeboxModel,) if is_torch_available() else ()
-    model_id = "/home/arthur_huggingface_co/transformers/jukebox-1b-lyrics-converted"
+    model_id = "openai/jukebox-1b-lyrics"
     metas = dict(
         artist="Zac Brown Band",
         genres="Country",
@@ -72,24 +72,6 @@ class Jukebox1bModelTester(unittest.TestCase):
 
     EXPECTED_Y_COND = [1058304, 0, 786432, 7169, 507, 76, 27, 40, 30, 76]
 
-    EXPECTED_GPU_OUTPUTS_0 = [
-        591, 1979, 89, 1332, 1572, 755, 844, 1022, 234, 1174, 1962, 1174,
-        1755, 676, 58, 1756, 844, 739, 185, 1332, 806, 1180, 774, 842,
-        306, 442, 1797, 734, 1081, 109, 806, 1492, 926, 2008, 844, 2008,
-        992, 89, 1353, 637
-    ]
-    EXPECTED_GPU_OUTPUTS_1 = [
-        1125, 2037, 317, 1372, 2037, 851, 1274, 1125, 642, 502, 1274, 851,
-        1125, 502, 317, 1125, 880, 904, 317, 1125, 642, 502, 844, 851,
-        416, 317, 1585, 642, 1125, 58, 697, 1125, 1585, 2037, 502, 2037,
-        851, 317, 1125, 642
-    ]
-    EXPECTED_GPU_OUTPUTS_2 = [
-        1489, 1489, 324, 1489, 1600, 1150, 1489, 1489, 947, 1357, 1600, 1417,
-        1481, 1003, 141, 1165, 1303, 904, 303, 1369, 395, 461, 994, 1283,
-        269, 35, 1699, 241, 1369, 35, 1303, 583, 825, 1941, 1089, 1944,
-        581, 35, 1153, 1153
-    ]
     EXPECTED_PRIMED_0 = [
         390, 1160, 1002, 1907, 1788, 1788, 1788, 1907, 1002, 1002, 1854, 1002,
         1002, 1002, 1002, 1002, 1002, 1160, 1160, 1606, 596, 596, 1160, 1002,
@@ -191,30 +173,6 @@ class Jukebox1bModelTester(unittest.TestCase):
         )
 
     @slow
-    def test_slow_sampling(self):
-        torch.backends.cuda.matmul.allow_tf32 = False
-        model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval()
-        labels = [i.cuda() for i in self.prepare_inputs()]
-
-        set_seed(0)
-        model.priors[0].cuda()
-        zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
-        zs = model._sample(zs, labels, [0], sample_length=40 * model.priors[0].raw_to_tokens, save_results=False)
-        torch.testing.assert_allclose(zs[0][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_2))
-        model.priors[0].cpu()
-
-        set_seed(0)
-        model.priors[1].cuda()
-        zs = model._sample(zs, labels, [1], sample_length=40 * model.priors[1].raw_to_tokens, save_results=False)
-        torch.testing.assert_allclose(zs[1][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_1))
-        model.priors[1].cpu()
-
-        set_seed(0)
-        model.priors[2].cuda()
-        zs = model._sample(zs, labels, [2], sample_length=40 * model.priors[2].raw_to_tokens, save_results=False)
-        torch.testing.assert_allclose(zs[2][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_0))
-
-    @slow
     def test_primed_sampling(self):
         torch.backends.cuda.matmul.allow_tf32 = False
 
@@ -260,7 +218,7 @@ class Jukebox1bModelTester(unittest.TestCase):
 @require_torch
 class Jukebox5bModelTester(unittest.TestCase):
     all_model_classes = (JukeboxModel,) if is_torch_available() else ()
-    model_id = "/home/arthur_huggingface_co/transformers/jukebox-5b-lyrics-converted"
+    model_id = "openai/jukebox-5b-lyrics"
     metas = dict(
         artist="Zac Brown Band",
         genres="Country",
@@ -327,7 +285,6 @@ class Jukebox5bModelTester(unittest.TestCase):
         307, 89, 1353, 616, 34, 842, 185, 842, 34, 842, 185, 842,
         307, 114, 185, 89, 34, 1268, 185, 89, 34, 842, 185, 89
     ]
-
     # fmt: on
 
     def prepare_inputs(self, model_id):
