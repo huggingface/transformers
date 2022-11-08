@@ -147,5 +147,5 @@ class Wav2Vec2ProcessorTest(unittest.TestCase):
         self.assertListEqual(
             processor.model_input_names,
             feature_extractor.model_input_names,
-            msg=f"Processor and feature extractor model input names do not match",
+            msg="`processor` and `feature_extractor` model input names do not match",
         )
