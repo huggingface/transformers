@@ -32,16 +32,18 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+# Copied from transformers.models.detr.feature_extraction_detr.center_to_corners_format
 def center_to_corners_format(x):
     """
     Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
-    (left, top, right, bottom).
+    (x_0, y_0, x_1, y_1).
     """
-    x_center, y_center, width, height = x.unbind(-1)
-    boxes = [(x_center - 0.5 * width), (y_center - 0.5 * height), (x_center + 0.5 * width), (y_center + 0.5 * height)]
-    return torch.stack(boxes, dim=-1)
+    center_x, center_y, width, height = x.unbind(-1)
+    b = [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)]
+    return torch.stack(b, dim=-1)
 
 
+# Copied from transformers.models.detr.modeling_detr._upcast
 def _upcast(t: torch.Tensor) -> torch.Tensor:
     # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
     if t.is_floating_point():
@@ -50,6 +52,7 @@ def _upcast(t: torch.Tensor) -> torch.Tensor:
         return t if t.dtype in (torch.int32, torch.int64) else t.int()
 
 
+# Copied from transformers.models.detr.modeling_detr.box_area
 def box_area(boxes: torch.Tensor) -> torch.Tensor:
     """
     Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
@@ -66,6 +69,7 @@ def box_area(boxes: torch.Tensor) -> torch.Tensor:
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
 
 
+# Copied from transformers.models.detr.modeling_detr.box_iou
 def box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
     area1 = box_area(boxes1)
     area2 = box_area(boxes2)
@@ -183,7 +187,7 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
 
         return results
 
-    def post_process_one_shot_object_detection(self, outputs, threshold=0.6, nms_threshold=0.3, target_sizes=None):
+    def post_process_image_guided_detection(self, outputs, threshold=0.6, nms_threshold=0.3, target_sizes=None):
         """
         Converts the output of [`OwlViTForObjectDetection.image_guided_detection`] into the format expected by the COCO
         api.
@@ -196,12 +200,14 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
             nms_threshold (`float`, *optional*, defaults to 0.3):
                 IoU threshold for non-maximum suppression of overlapping boxes.
             target_sizes (`torch.Tensor`, *optional*, defaults None):
-                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
-                image size (before any data augmentation). For visualization, this should be the image size after data
-                augmentation, but before padding.
+                Tensor of shape (batch_size, 2) where each entry is the (height, width) of the corresponding image in
+                the batch. If set, predicted normalized bounding boxes are rescaled to the target sizes. If left to
+                None, predictions will not be unnormalized.
+
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
-            in the batch as predicted by the model.
+            in the batch as predicted by the model. All labels are set to None as
+            `OwlViTForObjectDetection.image_guided_detection` perform one-shot object detection.
         """
         logits, target_boxes = outputs.logits, outputs.target_pred_boxes
 
@@ -216,6 +222,7 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
         # Convert to [x0, y0, x1, y1] format
         target_boxes = center_to_corners_format(target_boxes)
 
+        # Apply non-maximum suppression (NMS)
         if nms_threshold < 1.0:
             for idx in range(target_boxes.shape[0]):
                 for i in torch.argsort(-scores[idx]):

@@ -162,7 +162,7 @@ class OwlViTProcessor(ProcessorMixin):
         """
         return self.feature_extractor.post_process(*args, **kwargs)
 
-    def post_process_one_shot_object_detection(self, *args, **kwargs):
+    def post_process_image_guided_detection(self, *args, **kwargs):
         """
         This method forwards all its arguments to [`OwlViTFeatureExtractor.post_process_one_shot_object_detection`].
         Please refer to the docstring of this method for more information.

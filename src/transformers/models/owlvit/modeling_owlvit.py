@@ -243,19 +243,13 @@ class OwlViTImageGuidedObjectDetectionOutput(ModelOutput):
     Output type of [`OwlViTForObjectDetection.image_guided_detection`].
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-            Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
-            bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
-            scale-invariant IoU loss.
-        loss_dict (`Dict`, *optional*):
-            A dictionary containing the individual losses. Useful for logging.
         logits (`torch.FloatTensor` of shape `(batch_size, num_patches, num_queries)`):
             Classification logits (including no-object) for all queries.
         target_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
-            values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~OwlViTFeatureExtractor.post_process`] to retrieve the unnormalized
-            bounding boxes.
+            values are normalized in [0, 1], relative to the size of each individual target image in the batch
+            (disregarding possible padding). You can use [`~OwlViTFeatureExtractor.post_process`] to retrieve the
+            unnormalized bounding boxes.
         query_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual query image in the batch
@@ -1492,6 +1486,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             if torch.all(ious[0] == 0.0):
                 ious = generalized_box_iou(each_query_box, each_query_pred_boxes)
 
+            # Use an adaptive threshold to include all boxes within 80% of the best IoU
             iou_threshold = torch.max(ious) * 0.8
 
             selected_inds = (ious[0] >= iou_threshold).nonzero()
@@ -1507,8 +1502,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             query_embeds = torch.stack(best_class_embeds)
             box_indices = torch.stack(best_box_indices)
         else:
-            query_embeds = None
-            box_indices = None
+            query_embeds, box_indices = None, None
 
         return query_embeds, box_indices, pred_boxes
 
@@ -1545,7 +1539,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
         >>> target_sizes = torch.Tensor([image.size[::-1]])
         >>> # Convert outputs (bounding boxes and class logits) to COCO API
-        >>> results = processor.post_process_one_shot_object_detection(
+        >>> results = processor.post_process_image_guided_detection(
         ...     outputs=outputs, threshold=0.6, nms_threshold=0.3, target_sizes=target_sizes
         ... )
 
@@ -1572,7 +1566,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         batch_size, num_patches, num_patches, hidden_dim = query_feature_map.shape
         query_image_feats = torch.reshape(query_feature_map, (batch_size, num_patches * num_patches, hidden_dim))
-        # Get top class embedding and best box index for each target image in batch
+        # Get top class embedding and best box index for each query image in batch
         query_embeds, best_box_indices, query_pred_boxes = self.embed_image_query(query_image_feats, query_feature_map)
 
         # Predict object classes [batch_size, num_patches, num_queries+1]
