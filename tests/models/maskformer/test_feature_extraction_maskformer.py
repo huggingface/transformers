@@ -17,6 +17,7 @@
 import unittest
 
 import numpy as np
+from datasets import load_dataset
 
 from huggingface_hub import hf_hub_download
 from transformers.testing_utils import require_torch, require_vision, slow
@@ -448,6 +449,56 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         self.assertEqual(inputs["mask_labels"][1].shape, (8, 512, 512))
         self.assertEquals(inputs["mask_labels"][0].sum().item(), 170200.0)
         self.assertEquals(inputs["mask_labels"][1].sum().item(), 257036.0)
+
+    def test_integration_panoptic_segmentation(self):
+        # load 2 images and corresponding panoptic annotations from the hub
+        dataset = load_dataset("nielsr/ade20k-panoptic-demo")
+        image1 = dataset["train"][0]["image"]
+        image2 = dataset["train"][1]["image"]
+        segments_info1 = dataset["train"][0]["segments_info"]
+        segments_info2 = dataset["train"][1]["segments_info"]
+        annotation1 = dataset["train"][0]["label"]
+        annotation2 = dataset["train"][1]["label"]
+
+        def rgb_to_id(color):
+            print("Shape of color:", color.shape)
+            if isinstance(color, np.ndarray) and len(color.shape) == 3:
+                if color.dtype == np.uint8:
+                    color = color.astype(np.int32)
+                return color[:, :, 0] + 256 * color[:, :, 1] + 256 * 256 * color[:, :, 2]
+            return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
+
+        def create_panoptic_map(annotation, segments_info):
+            print("Annotation:", annotation)
+            annotation = np.array(annotation)
+            print("Shape of annotation:", annotation.shape)
+            # convert RGB to segment IDs per pixel
+            # 0 is the "ignore" label, for which we don't need to make binary masks
+            panoptic_map = rgb_to_id(annotation)
+
+            # create mapping between segment IDs and semantic classes
+            inst2class = {segment["id"]: segment["category_id"] for segment in segments_info}
+
+            return panoptic_map, inst2class
+
+        panoptic_map1, inst2class1 = create_panoptic_map(annotation1, segments_info1)
+        panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
+
+        # create a feature extractor
+        feature_extractor = MaskFormerFeatureExtractor(ignore_index=0, do_resize=False)
+
+        # prepare the images and annotations
+        pixel_values_list = [np.moveaxis(np.array(image1), -1, 0), np.moveaxis(np.array(image2), -1, 0)]
+        inputs = feature_extractor.encode_inputs(
+            pixel_values_list,
+            [panoptic_map1, panoptic_map2],
+            instance_id_to_semantic_id=[inst2class1, inst2class2],
+            return_tensors="pt",
+        )
+
+        # verify the pixel values and pixel mask
+        self.assertEqual(inputs["pixel_values"].shape, (2, 3, 512, 768))
+        self.assertEqual(inputs["pixel_mask"].shape, (2, 512, 768))
 
     def test_binary_mask_to_rle(self):
         fake_binary_mask = np.zeros((20, 50))
