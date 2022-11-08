@@ -22,6 +22,7 @@ from collections import OrderedDict
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
 from ...feature_extraction_utils import FeatureExtractionMixin
+from ...image_processing_utils import ImageProcessingMixin
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
 from ...utils import FEATURE_EXTRACTOR_NAME, get_file_from_repo, logging
 from .auto_factory import _LazyAutoMapping
@@ -32,6 +33,7 @@ from .configuration_auto import (
     replace_list_option_in_docstrings,
 )
 from .feature_extraction_auto import AutoFeatureExtractor
+from .image_processing_auto import AutoImageProcessor
 from .tokenization_auto import AutoTokenizer
 
 
@@ -189,11 +191,18 @@ class AutoProcessor:
         get_file_from_repo_kwargs = {
             key: kwargs[key] for key in inspect.signature(get_file_from_repo).parameters.keys() if key in kwargs
         }
-        # Let's start by checking whether the processor class is saved in a feature extractor
+        # Let's start by checking whether the processor class is saved in an image processor
         preprocessor_config_file = get_file_from_repo(
             pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **get_file_from_repo_kwargs
         )
         if preprocessor_config_file is not None:
+            config_dict, _ = ImageProcessingMixin.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
+            processor_class = config_dict.get("processor_class", None)
+            if "AutoProcessor" in config_dict.get("auto_map", {}):
+                processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
+
+        # If not found, let's check whether the processor class is saved in a feature extractor config
+        if preprocessor_config_file is not None and processor_class is None:
             config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
             processor_class = config_dict.get("processor_class", None)
             if "AutoProcessor" in config_dict.get("auto_map", {}):
@@ -261,6 +270,13 @@ class AutoProcessor:
                 pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
             )
         except Exception:
+            try:
+                return AutoImageProcessor.from_pretrained(
+                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                )
+            except Exception:
+                pass
+
             try:
                 return AutoFeatureExtractor.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs

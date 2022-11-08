@@ -125,11 +125,13 @@ _import_structure = {
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CONFIG_MAPPING",
         "FEATURE_EXTRACTOR_MAPPING",
+        "IMAGE_PROCESSOR_MAPPING",
         "MODEL_NAMES_MAPPING",
         "PROCESSOR_MAPPING",
         "TOKENIZER_MAPPING",
         "AutoConfig",
         "AutoFeatureExtractor",
+        "AutoImageProcessor",
         "AutoProcessor",
         "AutoTokenizer",
     ],
@@ -251,6 +253,7 @@ _import_structure = {
         "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LayoutLMv2Config",
         "LayoutLMv2FeatureExtractor",
+        "LayoutLMv2ImageProcessor",
         "LayoutLMv2Processor",
         "LayoutLMv2Tokenizer",
     ],
@@ -258,6 +261,7 @@ _import_structure = {
         "LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LayoutLMv3Config",
         "LayoutLMv3FeatureExtractor",
+        "LayoutLMv3ImageProcessor",
         "LayoutLMv3Processor",
         "LayoutLMv3Tokenizer",
     ],
@@ -375,7 +379,13 @@ _import_structure = {
     ],
     "models.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
     "models.videomae": ["VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VideoMAEConfig"],
-    "models.vilt": ["VILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViltConfig", "ViltFeatureExtractor", "ViltProcessor"],
+    "models.vilt": [
+        "VILT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ViltConfig",
+        "ViltFeatureExtractor",
+        "ViltImageProcessor",
+        "ViltProcessor",
+    ],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig", "VisionTextDualEncoderProcessor"],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
@@ -689,35 +699,34 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_vision_objects) if not name.startswith("_")
     ]
 else:
-    _import_structure["image_processing_utils"] = ["ImageProcessorMixin"]
+    _import_structure["image_processing_utils"] = ["ImageProcessingMixin"]
     _import_structure["image_transforms"] = ["rescale", "resize", "to_pil_image"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
-    _import_structure["models.beit"].append("BeitFeatureExtractor")
-    _import_structure["models.clip"].append("CLIPFeatureExtractor")
-    _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
+    _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
+    _import_structure["models.clip"].extend(["CLIPFeatureExtractor", "CLIPImageProcessor"])
+    _import_structure["models.convnext"].extend(["ConvNextFeatureExtractor", "ConvNextImageProcessor"])
     _import_structure["models.deformable_detr"].append("DeformableDetrFeatureExtractor")
-    _import_structure["models.deit"].append("DeiTFeatureExtractor")
+    _import_structure["models.deit"].extend(["DeiTFeatureExtractor", "DeiTImageProcessor"])
     _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.conditional_detr"].append("ConditionalDetrFeatureExtractor")
     _import_structure["models.donut"].append("DonutFeatureExtractor")
-    _import_structure["models.dpt"].append("DPTFeatureExtractor")
-    _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaProcessor"])
-    _import_structure["models.glpn"].append("GLPNFeatureExtractor")
-    _import_structure["models.imagegpt"].append("ImageGPTFeatureExtractor")
-    _import_structure["models.layoutlmv2"].append("LayoutLMv2FeatureExtractor")
-    _import_structure["models.layoutlmv3"].append("LayoutLMv3FeatureExtractor")
-    _import_structure["models.levit"].append("LevitFeatureExtractor")
+    _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
+    _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaProcessor", "FlavaImageProcessor"])
+    _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
+    _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
+    _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
+    _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
+    _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
     _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
-    _import_structure["models.mobilevit"].append("MobileViTFeatureExtractor")
+    _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
     _import_structure["models.owlvit"].append("OwlViTFeatureExtractor")
-    _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
-    _import_structure["models.poolformer"].append("PoolFormerFeatureExtractor")
-    _import_structure["models.segformer"].append("SegformerFeatureExtractor")
-    _import_structure["models.videomae"].append("VideoMAEFeatureExtractor")
-    _import_structure["models.vilt"].append("ViltFeatureExtractor")
-    _import_structure["models.vilt"].append("ViltProcessor")
-    _import_structure["models.vit"].append("ViTFeatureExtractor")
-    _import_structure["models.yolos"].append("YolosFeatureExtractor")
+    _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
+    _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
+    _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
+    _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
+    _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
+    _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
+    _import_structure["models.yolos"].extend(["YolosFeatureExtractor"])
 
 # Timm-backed objects
 try:
@@ -3220,11 +3229,13 @@ if TYPE_CHECKING:
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
         FEATURE_EXTRACTOR_MAPPING,
+        IMAGE_PROCESSOR_MAPPING,
         MODEL_NAMES_MAPPING,
         PROCESSOR_MAPPING,
         TOKENIZER_MAPPING,
         AutoConfig,
         AutoFeatureExtractor,
+        AutoImageProcessor,
         AutoProcessor,
         AutoTokenizer,
     )
@@ -3337,6 +3348,7 @@ if TYPE_CHECKING:
         LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LayoutLMv2Config,
         LayoutLMv2FeatureExtractor,
+        LayoutLMv2ImageProcessor,
         LayoutLMv2Processor,
         LayoutLMv2Tokenizer,
     )
@@ -3344,6 +3356,7 @@ if TYPE_CHECKING:
         LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LayoutLMv3Config,
         LayoutLMv3FeatureExtractor,
+        LayoutLMv3ImageProcessor,
         LayoutLMv3Processor,
         LayoutLMv3Tokenizer,
     )
@@ -3441,7 +3454,13 @@ if TYPE_CHECKING:
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
     from .models.videomae import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, VideoMAEConfig
-    from .models.vilt import VILT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViltConfig, ViltFeatureExtractor, ViltProcessor
+    from .models.vilt import (
+        VILT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ViltConfig,
+        ViltFeatureExtractor,
+        ViltImageProcessor,
+        ViltProcessor,
+    )
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
@@ -3716,33 +3735,33 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_vision_objects import *
     else:
-        from .image_processing_utils import ImageProcessorMixin
+        from .image_processing_utils import ImageProcessingMixin
         from .image_transforms import rescale, resize, to_pil_image
         from .image_utils import ImageFeatureExtractionMixin
-        from .models.beit import BeitFeatureExtractor
-        from .models.clip import CLIPFeatureExtractor
+        from .models.beit import BeitFeatureExtractor, BeitImageProcessor
+        from .models.clip import CLIPFeatureExtractor, CLIPImageProcessor
         from .models.conditional_detr import ConditionalDetrFeatureExtractor
-        from .models.convnext import ConvNextFeatureExtractor
+        from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
         from .models.deformable_detr import DeformableDetrFeatureExtractor
-        from .models.deit import DeiTFeatureExtractor
+        from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
         from .models.detr import DetrFeatureExtractor
         from .models.donut import DonutFeatureExtractor
-        from .models.dpt import DPTFeatureExtractor
-        from .models.flava import FlavaFeatureExtractor, FlavaProcessor
-        from .models.glpn import GLPNFeatureExtractor
-        from .models.imagegpt import ImageGPTFeatureExtractor
-        from .models.layoutlmv2 import LayoutLMv2FeatureExtractor
-        from .models.layoutlmv3 import LayoutLMv3FeatureExtractor
-        from .models.levit import LevitFeatureExtractor
+        from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
+        from .models.flava import FlavaFeatureExtractor, FlavaImageProcessor, FlavaProcessor
+        from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
+        from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
+        from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2ImageProcessor
+        from .models.layoutlmv3 import LayoutLMv3FeatureExtractor, LayoutLMv3ImageProcessor
+        from .models.levit import LevitFeatureExtractor, LevitImageProcessor
         from .models.maskformer import MaskFormerFeatureExtractor
-        from .models.mobilevit import MobileViTFeatureExtractor
+        from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
         from .models.owlvit import OwlViTFeatureExtractor
-        from .models.perceiver import PerceiverFeatureExtractor
-        from .models.poolformer import PoolFormerFeatureExtractor
-        from .models.segformer import SegformerFeatureExtractor
-        from .models.videomae import VideoMAEFeatureExtractor
-        from .models.vilt import ViltFeatureExtractor, ViltProcessor
-        from .models.vit import ViTFeatureExtractor
+        from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
+        from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor
+        from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
+        from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
+        from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
+        from .models.vit import ViTFeatureExtractor, ViTImageProcessor
         from .models.yolos import YolosFeatureExtractor
 
     # Modeling

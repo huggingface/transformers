@@ -183,6 +183,8 @@
       title: DeepSpeed Integration
     - local: main_classes/feature_extractor
       title: Feature Extractor
+    - local: main_classes/image_processor
+      title: Image Processor
     title: Main Classes
   - sections:
     - isExpanded: false
