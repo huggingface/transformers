@@ -27,7 +27,7 @@ from transformers import (
     CLIPConfig,
     CLIPImageProcessor,
 )
-from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, get_tests_dir
+from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
@@ -36,29 +36,53 @@ from test_module.custom_configuration import CustomConfig  # noqa E402
 from test_module.custom_image_processing import CustomImageProcessor  # noqa E402
 
 
-SAMPLE_IMAGE_PROCESSING_CONFIG_DIR = get_tests_dir("fixtures")
-SAMPLE_IMAGE_PROCESSING_CONFIG = get_tests_dir("fixtures/dummy_image_processor_config.json")
-
-
 class AutoImageProcessorTest(unittest.TestCase):
     def test_image_processor_from_model_shortcut(self):
         config = AutoImageProcessor.from_pretrained("openai/clip-vit-base-patch32")
         self.assertIsInstance(config, CLIPImageProcessor)
 
     def test_image_processor_from_local_directory_from_key(self):
-        config = AutoImageProcessor.from_pretrained(
-            SAMPLE_IMAGE_PROCESSING_CONFIG_DIR, _configuration_file="image_processor_config.json"
-        )
-        self.assertIsInstance(config, CLIPImageProcessor)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            model_tmpfile = Path(tmpdirname) / "config.json"
+            json.dump(
+                {"image_processor_type": "CLIPImageProcessor", "processor_class": "CLIPProcessor"},
+                open(processor_tmpfile, "w"),
+            )
+            json.dump({"model_type": "clip"}, open(model_tmpfile, "w"))
+
+            config = AutoImageProcessor.from_pretrained(tmpdirname)
+            self.assertIsInstance(config, CLIPImageProcessor)
+
+    def test_image_processor_from_local_directory_from_feature_extractor_key(self):
+        # Ensure we can load the image processor from the feature extractor config
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            model_tmpfile = Path(tmpdirname) / "config.json"
+            json.dump(
+                {"feature_extractor_type": "CLIPFeatureExtractor", "processor_class": "CLIPProcessor"},
+                open(processor_tmpfile, "w"),
+            )
+            json.dump({"model_type": "clip"}, open(model_tmpfile, "w"))
+
+            config = AutoImageProcessor.from_pretrained(tmpdirname)
+            self.assertIsInstance(config, CLIPImageProcessor)
 
     def test_image_processor_from_local_directory_from_config(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model_config = CLIPConfig()
 
+            # Create a dummy config file with image_proceesor_type
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            model_tmpfile = Path(tmpdirname) / "config.json"
+            json.dump(
+                {"image_processor_type": "CLIPImageProcessor", "processor_class": "CLIPProcessor"},
+                open(processor_tmpfile, "w"),
+            )
+            json.dump({"model_type": "clip"}, open(model_tmpfile, "w"))
+
             # remove image_processor_type to make sure config.json alone is enough to load image processor locally
-            config_dict = AutoImageProcessor.from_pretrained(
-                SAMPLE_IMAGE_PROCESSING_CONFIG_DIR, _configuration_file="image_processor_config.json"
-            ).to_dict()
+            config_dict = AutoImageProcessor.from_pretrained(tmpdirname).to_dict()
 
             config_dict.pop("image_processor_type")
             config = CLIPImageProcessor(**config_dict)
@@ -76,8 +100,15 @@ class AutoImageProcessorTest(unittest.TestCase):
         self.assertIsInstance(config, CLIPImageProcessor)
 
     def test_image_processor_from_local_file(self):
-        config = AutoImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG)
-        self.assertIsInstance(config, CLIPImageProcessor)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            json.dump(
+                {"image_processor_type": "CLIPImageProcessor", "processor_class": "CLIPProcessor"},
+                open(processor_tmpfile, "w"),
+            )
+
+            config = AutoImageProcessor.from_pretrained(processor_tmpfile)
+            self.assertIsInstance(config, CLIPImageProcessor)
 
     def test_repo_not_found(self):
         with self.assertRaisesRegex(
@@ -112,8 +143,18 @@ class AutoImageProcessorTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 AutoImageProcessor.register(CLIPConfig, CLIPImageProcessor)
 
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+                model_tmpfile = Path(tmpdirname) / "config.json"
+                json.dump(
+                    {"feature_extractor_type": "CLIPFeatureExtractor", "processor_class": "CLIPProcessor"},
+                    open(processor_tmpfile, "w"),
+                )
+                json.dump({"model_type": "clip"}, open(model_tmpfile, "w"))
+
+                image_processor = CustomImageProcessor.from_pretrained(tmpdirname)
+
             # Now that the config is registered, it can be used as any other config with the auto-API
-            image_processor = CustomImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
             with tempfile.TemporaryDirectory() as tmp_dir:
                 image_processor.save_pretrained(tmp_dir)
                 new_image_processor = AutoImageProcessor.from_pretrained(tmp_dir)
