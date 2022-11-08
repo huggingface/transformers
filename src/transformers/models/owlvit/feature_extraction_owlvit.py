@@ -156,7 +156,7 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
         Args:
             outputs ([`OwlViTObjectDetectionOutput`]):
                 Raw outputs of the model.
-            target_sizes (`torch.Tensor`, *optional*, defaults None):
+            target_sizes (`torch.Tensor`, *optional*):
                 Tensor of shape (batch_size, 2) where each entry is the (height, width) of the corresponding image in
                 the batch. If set, predicted normalized bounding boxes are rescaled to the target sizes. If left to
                 None, predictions will not be unnormalized.
@@ -200,7 +200,7 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
                 Minimum confidence threshold to use to filter out predicted boxes.
             nms_threshold (`float`, *optional*, defaults to 0.3):
                 IoU threshold for non-maximum suppression of overlapping boxes.
-            target_sizes (`torch.Tensor`, *optional*, defaults None):
+            target_sizes (`torch.Tensor`, *optional*):
                 Tensor of shape (batch_size, 2) where each entry is the (height, width) of the corresponding image in
                 the batch. If set, predicted normalized bounding boxes are rescaled to the target sizes. If left to
                 None, predictions will not be unnormalized.
@@ -249,7 +249,8 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
             if not query_scores.nonzero().numel():
                 continue
 
-            # Box alpha is scaled such that the best box for a query has alpha 1.0 and the worst box for which this query is still the top query has alpha 0.1. All other boxes will either belong to a different query, or will not be shown.
+            # Scale box alpha such that the best box for each query has alpha 1.0 and the worst box has alpha 0.1.
+            # All other boxes will either belong to a different query, or will not be shown.
             max_score = torch.max(query_scores) + 1e-6
             query_alphas = (query_scores - (max_score * 0.1)) / (max_score * 0.9)
             query_alphas[query_alphas < threshold] = 0.0
