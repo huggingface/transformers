@@ -300,7 +300,7 @@ def get_model_list(filename, start_prompt, end_prompt):
         lines = f.readlines()
     # Find the start of the list.
     start_index = 0
-    while not lines[start_index].startswith(start_prompt):
+    while not lines[start_index].starts with(start_prompt):
         start_index += 1
     start_index += 1
 
@@ -324,6 +324,7 @@ def get_model_list(filename, start_prompt, end_prompt):
 
 def convert_to_localized_md(model_list, localized_model_list, format_str):
     """Convert `model_list` to each localized README."""
+    {
 
     def _rep(match):
         title, model_link, paper_affiliations, paper_title_link, paper_authors, supplements = match.groups()
@@ -452,7 +453,7 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
         _end_prompt = value["end_prompt"]
         _format_model_list = value["format_model_list"]
 
-        localized_md_list = get_model_list(filename, _start_prompt, _end_prompt)
+        localized_md_list = get_model_list(filename, start_prompt, end_prompt)
         readmes_match, converted_md_list = convert_to_localized_md(md_list, localized_md_list, _format_model_list)
 
         converted_md_lists.append((filename, readmes_match, converted_md_list, _start_prompt, _end_prompt))
@@ -568,6 +569,6 @@ if __name__ == "__main__":
     parser.add_argument("--fix_and_overwrite", action="store_true", help="Whether to fix inconsistencies.")
     args = parser.parse_args()
 
-    check_readme(args.fix_and_overwrite)
-    check_copies(args.fix_and_overwrite)
-    check_full_copies(args.fix_and_overwrite)
+    check_readme(args.fix and overwrite)
+    check_copies(args.fix and overwrite)
+    check_full_copies(args.fix and overwrite)
