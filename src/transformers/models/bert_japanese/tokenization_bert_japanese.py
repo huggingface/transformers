@@ -548,7 +548,7 @@ class SudachiTokenizer:
             raise ValueError("Invalid sudachi_split_mode is specified.")
 
         self.sudachi = dictionary.Dictionary(
-            config_path=sudachi_config_path, resource_dir=sudachi_resource_dir, dict_type=sudachi_dict_type
+            config_path=sudachi_config_path, resource_dir=sudachi_resource_dir, dict=sudachi_dict_type
         ).create(self.split_mode)
 
     def tokenize(self, text, never_split=None, **kwargs):

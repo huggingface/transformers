@@ -20,6 +20,8 @@ from typing import Optional, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -48,10 +50,11 @@ class PoolFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             Center crop the input to the given size. If a tuple is provided, it should be (width, height). If only an
             integer is provided, then the input will be center cropped to (size, size). Only has an effect if
             `do_resize_and_center_crop` is set to `True`.
-        resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
-            An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
-            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
-            if `do_resize_and_center_crop` is set to `True`.
+        resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BICUBIC`):
+            An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
+            `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
+            `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
+            to `True`.
         crop_pct (`float`, *optional*, defaults to `0.9`):
             The percentage of the image to crop from the center. Only has an effect if `do_resize_and_center_crop` is
             set to `True`.
@@ -69,7 +72,7 @@ class PoolFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         self,
         do_resize_and_center_crop=True,
         size=224,
-        resample=Image.BICUBIC,
+        resample=PILImageResampling.BICUBIC,
         crop_pct=0.9,
         do_normalize=True,
         image_mean=None,

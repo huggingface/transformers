@@ -30,7 +30,13 @@ jobs:
                 else
                     touch test_preparation/test_list.txt
                 fi
-            - run: python utils/tests_fetcher.py --filter_pipeline_tests
+            - run: |
+                if [ -f test_repo_utils.txt ]; then
+                    mv test_repo_utils.txt test_preparation/test_repo_utils.txt
+                else
+                    touch test_preparation/test_repo_utils.txt
+                fi
+            - run: python utils/tests_fetcher.py --filter_tests
             - run: |
                 if [ -f test_list.txt ]; then
                     mv test_list.txt test_preparation/filtered_test_list.txt
@@ -75,8 +81,9 @@ jobs:
                   mkdir test_preparation
                   echo "tests" > test_preparation/test_list.txt
                   echo "tests" > test_preparation/examples_test_list.txt
-            - run: python utils/tests_fetcher.py --filter_pipeline_tests
+            - run: python utils/tests_fetcher.py --filter_tests
             - run: mv test_list.txt test_preparation/filtered_test_list.txt
+            - run: mv test_repo_utils.txt test_preparation/test_repo_utils.txt
             - run: python .circleci/create_circleci_config.py --fetcher_folder test_preparation
             - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
             - store_artifacts:

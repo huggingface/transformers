@@ -37,12 +37,15 @@ src/transformers/models/codegen/configuration_codegen.py
 src/transformers/models/conditional_detr/configuration_conditional_detr.py
 src/transformers/models/conditional_detr/modeling_conditional_detr.py
 src/transformers/models/convbert/configuration_convbert.py
+src/transformers/models/convnext/configuration_convnext.py
 src/transformers/models/convnext/modeling_convnext.py
 src/transformers/models/ctrl/configuration_ctrl.py
 src/transformers/models/ctrl/modeling_ctrl.py
+src/transformers/models/cvt/configuration_cvt.py
 src/transformers/models/cvt/modeling_cvt.py
 src/transformers/models/data2vec/configuration_data2vec_audio.py
 src/transformers/models/data2vec/configuration_data2vec_text.py
+src/transformers/models/data2vec/configuration_data2vec_vision.py
 src/transformers/models/data2vec/modeling_data2vec_audio.py
 src/transformers/models/data2vec/modeling_data2vec_vision.py
 src/transformers/models/deberta/modeling_deberta.py
@@ -57,6 +60,8 @@ src/transformers/models/dpt/modeling_dpt.py
 src/transformers/models/electra/modeling_electra.py
 src/transformers/models/electra/modeling_tf_electra.py
 src/transformers/models/ernie/configuration_ernie.py
+src/transformers/models/flava/configuration_flava.py
+src/transformers/models/fnet/configuration_fnet.py
 src/transformers/models/glpn/modeling_glpn.py
 src/transformers/models/gpt2/configuration_gpt2.py
 src/transformers/models/gpt2/modeling_gpt2.py
@@ -78,7 +83,7 @@ src/transformers/models/longt5/modeling_longt5.py
 src/transformers/models/marian/modeling_marian.py
 src/transformers/models/markuplm/modeling_markuplm.py
 src/transformers/models/mbart/modeling_mbart.py
-src/transformers/models/megatron_bert/configuration_megatron_bert.py 
+src/transformers/models/megatron_bert/configuration_megatron_bert.py
 src/transformers/models/mobilebert/configuration_mobilebert.py
 src/transformers/models/mobilebert/modeling_mobilebert.py
 src/transformers/models/mobilebert/modeling_tf_mobilebert.py
@@ -87,10 +92,13 @@ src/transformers/models/mobilevit/modeling_tf_mobilevit.py
 src/transformers/models/opt/modeling_opt.py
 src/transformers/models/opt/modeling_tf_opt.py
 src/transformers/models/owlvit/modeling_owlvit.py
+src/transformers/models/pegasus/configuration_pegasus.py
 src/transformers/models/pegasus/modeling_pegasus.py
+src/transformers/models/pegasus_x/configuration_pegasus_x.py
 src/transformers/models/perceiver/modeling_perceiver.py
 src/transformers/models/plbart/modeling_plbart.py
 src/transformers/models/poolformer/modeling_poolformer.py
+src/transformers/models/realm/configuration_realm.py
 src/transformers/models/reformer/configuration_reformer.py
 src/transformers/models/reformer/modeling_reformer.py
 src/transformers/models/regnet/modeling_regnet.py
@@ -113,6 +121,7 @@ src/transformers/models/segformer/modeling_tf_segformer.py
 src/transformers/models/swin/configuration_swin.py
 src/transformers/models/swin/modeling_swin.py
 src/transformers/models/swinv2/configuration_swinv2.py
+src/transformers/models/table_transformer/modeling_table_transformer.py
 src/transformers/models/time_series_transformer/configuration_time_series_transformer.py
 src/transformers/models/time_series_transformer/modeling_time_series_transformer.py
 src/transformers/models/trajectory_transformer/configuration_trajectory_transformer.py
@@ -135,6 +144,7 @@ src/transformers/models/vit_mae/modeling_vit_mae.py
 src/transformers/models/vit_mae/configuration_vit_mae.py
 src/transformers/models/vit_msn/modeling_vit_msn.py
 src/transformers/models/visual_bert/configuration_visual_bert.py
+src/transformers/models/wav2vec2/configuration_wav2vec2.py
 src/transformers/models/wav2vec2/modeling_wav2vec2.py
 src/transformers/models/wav2vec2/tokenization_wav2vec2.py
 src/transformers/models/wav2vec2_conformer/modeling_wav2vec2_conformer.py

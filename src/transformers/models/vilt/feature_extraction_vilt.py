@@ -19,6 +19,8 @@ from typing import List, Optional, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -53,10 +55,11 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             `do_resize` is set to `True`.
         size_divisor (`int`, *optional*, defaults to 32):
             The size by which to make sure both the height and width can be divided.
-        resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
-            An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
-            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
-            if `do_resize` is set to `True`.
+        resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BICUBIC`):
+            An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
+            `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
+            `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
+            to `True`.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.
         image_mean (`List[int]`, defaults to `[0.5, 0.5, 0.5]`):
@@ -72,7 +75,7 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         do_resize=True,
         size=384,
         size_divisor=32,
-        resample=Image.BICUBIC,
+        resample=PILImageResampling.BICUBIC,
         do_normalize=True,
         image_mean=None,
         image_std=None,
@@ -87,7 +90,7 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
-    def _resize(self, image, shorter=800, longer=1333, size_divisor=32, resample=Image.BICUBIC):
+    def _resize(self, image, shorter=800, longer=1333, size_divisor=32, resample=PILImageResampling.BICUBIC):
         """
         Resizes the shorter edge of `image` to `shorter` and limits the longer edge to under `longer`, while preserving
         the aspect ratio. Also makes sure that both the height and width can be divided by `size_divisor`.
@@ -104,7 +107,7 @@ class ViltFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 The size by which to limit the longer side of the image, while preserving the aspect ratio.
             size_divisor (`int`, *optional*, defaults to `32`):
                 The size by which both the height and the width must be divisible.
-            resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
+            resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BICUBIC`):
                 An optional resampling filter.
         """
         if not isinstance(image, Image.Image):

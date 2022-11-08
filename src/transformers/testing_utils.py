@@ -1547,6 +1547,8 @@ def nested_simplify(obj, decimals=3):
 
     if isinstance(obj, list):
         return [nested_simplify(item, decimals) for item in obj]
+    if isinstance(obj, tuple):
+        return tuple([nested_simplify(item, decimals) for item in obj])
     elif isinstance(obj, np.ndarray):
         return nested_simplify(obj.tolist())
     elif isinstance(obj, Mapping):

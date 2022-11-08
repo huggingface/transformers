@@ -110,6 +110,8 @@ class ConditionalDetrConfig(PretrainedConfig):
             Relative weight of the generalized IoU loss in the object detection loss.
         eos_coefficient (`float`, *optional*, defaults to 0.1):
             Relative classification weight of the 'no-object' class in the object detection loss.
+        focal_alpha (`float`, *optional*, defaults to 0.25):
+            Alpha parameter in the focal loss.
 
     Examples:
 

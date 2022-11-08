@@ -19,6 +19,8 @@ from typing import Optional, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -47,10 +49,11 @@ class ConvNextFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
             Resize the input to the given size. If 384 or larger, the image is resized to (`size`, `size`). Else, the
             smaller edge of the image will be matched to int(`size`/ `crop_pct`), after which the image is cropped to
             `size`. Only has an effect if `do_resize` is set to `True`.
-        resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
-            An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
-            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
-            if `do_resize` is set to `True`.
+        resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BICUBIC`):
+            An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
+            `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
+            `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
+            to `True`.
         crop_pct (`float`, *optional*):
             The percentage of the image to crop. If `None`, then a cropping percentage of 224 / 256 is used. Only has
             an effect if `do_resize` is set to `True` and `size` < 384.
@@ -68,7 +71,7 @@ class ConvNextFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         self,
         do_resize=True,
         size=224,
-        resample=Image.BICUBIC,
+        resample=PILImageResampling.BICUBIC,
         crop_pct=None,
         do_normalize=True,
         image_mean=None,
