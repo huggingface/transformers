@@ -269,8 +269,6 @@ class OwlViTImageGuidedObjectDetectionOutput(ModelOutput):
             patches where the total number of patches is (image_size / patch_size)**2.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[Dict] = None
     logits: torch.FloatTensor = None
     image_embeds: torch.FloatTensor = None
     query_image_embeds: torch.FloatTensor = None
@@ -1088,6 +1086,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        return_projected: Optional[bool] = True,
         return_base_image_embeds: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
@@ -1108,10 +1107,17 @@ class OwlViTModel(OwlViTPreTrainedModel):
         >>> inputs = processor(images=image, return_tensors="pt")
         >>> image_features = model.get_image_features(**inputs)
         ```"""
+        logger.warning(
+            "`return_projected` is deprecated and will be removed in v5 of Transformers, please use"
+            " `return_base_image_embeds`.",
+            FutureWarning,
+        )
 
         # Use OWL-ViT model's config for some fields (if specified) instead of those of vision & text components.
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        return_base_image_embeds = return_base_image_embeds if return_base_image_embeds is not None else False
+        return_base_image_embeds = (
+            return_base_image_embeds if return_base_image_embeds is not None or return_projected else False
+        )
 
         vision_outputs = self.vision_model(pixel_values=pixel_values, return_dict=return_dict)
 
