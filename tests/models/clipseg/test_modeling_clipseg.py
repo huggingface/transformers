@@ -384,7 +384,7 @@ class CLIPSegModelTester:
         with torch.no_grad():
             result = model(input_ids, pixel_values)
         self.parent.assertEqual(
-            result.predicted_masks.shape,
+            result.logits.shape,
             (
                 self.vision_model_tester.batch_size,
                 self.vision_model_tester.image_size,
@@ -720,13 +720,13 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
 
         # verify the predicted masks
         self.assertEqual(
-            outputs.predicted_masks.shape,
+            outputs.logits.shape,
             torch.Size((3, 352, 352)),
         )
         expected_masks_slice = torch.tensor(
             [[-7.4577, -7.4952, -7.4072], [-7.3115, -7.0969, -7.1624], [-6.9472, -6.7641, -6.8911]]
         )
-        self.assertTrue(torch.allclose(outputs.predicted_masks[0, :3, :3], expected_masks_slice, atol=1e-3))
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_masks_slice, atol=1e-3))
 
         # verify conditional and pooled output
         expected_conditional = torch.tensor([0.5601, -0.0314, 0.1980])
