@@ -844,6 +844,8 @@ class BloomForCausalLM(BloomPreTrainedModel):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
+
+            Note: the original softmax is computed in fp32 during training ([see](https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/09a35f53abac96903fee50787426b7ee5f63fc62/megatron/model/gpt_model.py#L289-L29)). To replicate the same behavior as training, make sure to cast lm_logits to fp32 before computing CrossEntropyLoss when using fp16/bf16.
         """
         if deprecated_arguments.pop("position_ids", False) is not False:
             # `position_ids` could have been `torch.Tensor` or `None` so defaulting pop to `False` allows to detect if users were passing explicitly `None`
