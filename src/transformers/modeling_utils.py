@@ -2421,9 +2421,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         add_prefix_to_model = has_prefix_module and not expects_prefix_module
 
         if remove_prefix_from_model:
-            expected_keys_not_prefixed = [s for s in expected_keys if not s.startswith(prefix)]
             _prefix = f"{prefix}."
+            expected_keys_not_prefixed = [s for s in expected_keys if not s.startswith(_prefix)]
             expected_keys = [".".join(s.split(".")[1:]) if s.startswith(_prefix) else s for s in expected_keys]
+            print(expected_keys_not_prefixed)
+            print(expected_keys)
         elif add_prefix_to_model:
             expected_keys = [".".join([prefix, s]) for s in expected_keys]
 
@@ -2650,7 +2652,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # retrieve all modules that has at least one missing weight name
         for name, module in self.named_modules():
             if remove_prefix:
-                name = ".".join(name.split(".")[1:]) if name.startswith(self.base_model_prefix) else name
+                _prefix = f"{self.base_model_prefix}."
+                name = name[len(_prefix) :] if name.startswith(_prefix) else name
             elif add_prefix:
                 name = ".".join([self.base_model_prefix, name]) if len(name) > 0 else self.base_model_prefix
 
