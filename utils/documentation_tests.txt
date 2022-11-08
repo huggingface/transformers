@@ -132,6 +132,8 @@ src/transformers/models/resnet/modeling_tf_resnet.py
 src/transformers/models/roberta/configuration_roberta.py
 src/transformers/models/roberta/modeling_roberta.py
 src/transformers/models/roberta/modeling_tf_roberta.py
+src/transformers/models/roc_bert/modeling_roc_bert.py
+src/transformers/models/roc_bert/tokenization_roc_bert.py
 src/transformers/models/segformer/modeling_segformer.py
 src/transformers/models/sew/configuration_sew.py
 src/transformers/models/sew/modeling_sew.py

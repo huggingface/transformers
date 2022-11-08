@@ -127,6 +127,7 @@ from . import (
     resnet,
     retribert,
     roberta,
+    roc_bert,
     roformer,
     segformer,
     sew,
