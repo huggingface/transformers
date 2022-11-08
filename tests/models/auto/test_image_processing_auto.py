@@ -46,7 +46,9 @@ class AutoImageProcessorTest(unittest.TestCase):
         self.assertIsInstance(config, CLIPImageProcessor)
 
     def test_image_processor_from_local_directory_from_key(self):
-        config = AutoImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR, _configuration_file="image_processor_config.json")
+        config = AutoImageProcessor.from_pretrained(
+            SAMPLE_IMAGE_PROCESSING_CONFIG_DIR, _configuration_file="image_processor_config.json"
+        )
         self.assertIsInstance(config, CLIPImageProcessor)
 
     def test_image_processor_from_local_directory_from_config(self):
@@ -54,7 +56,9 @@ class AutoImageProcessorTest(unittest.TestCase):
             model_config = CLIPConfig()
 
             # remove image_processor_type to make sure config.json alone is enough to load image processor locally
-            config_dict = AutoImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR, _configuration_file="image_processor_config.json").to_dict()
+            config_dict = AutoImageProcessor.from_pretrained(
+                SAMPLE_IMAGE_PROCESSING_CONFIG_DIR, _configuration_file="image_processor_config.json"
+            ).to_dict()
 
             config_dict.pop("image_processor_type")
             config = CLIPImageProcessor(**config_dict)
