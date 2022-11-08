@@ -691,14 +691,18 @@ class RoCBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
         model = RoCBertForMaskedLM.from_pretrained("weiweishi/roc-bert-base-zh")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
 
-        vocab_size = 21128
+        # input_text: ['[CLS]', 'b', 'a', '里', '系', '[MASK]', '国', '的', '首', '都', '[SEP]'] is the adversarial text
+        # of ['[CLS]', '巴', '黎', '是', '[MASK]', '国', '的', '首', '都', '[SEP]'], means
+        # "Paris is the [MASK] of France" in English
+        input_ids = torch.tensor([[101, 144, 143, 7027, 5143, 103, 1744, 4638, 7674, 6963, 102]])
+        input_shape_ids = torch.tensor([[2, 20324, 23690, 8740, 706, 1, 10900, 23343, 20205, 5850, 2]])
+        input_pronunciation_ids = torch.tensor([[2, 718, 397, 52, 61, 1, 168, 273, 180, 243, 2]])
 
-        expected_shape = torch.Size((1, 6, vocab_size))
-        self.assertEqual(output.shape, expected_shape)
+        output = model(input_ids, input_shape_ids, input_pronunciation_ids)
+        output_ids = torch.argmax(output.logits, dim=2)
 
-        expected_slice = torch.tensor([[[0.6248, 0.3013, 0.3739], [0.3544, 0.8086, 0.2427], [0.3244, 0.6589, 0.1711]]])
+        # convert to tokens is: ['[CLS]', '巴', '*', '黎', '是', '法', '国', '的', '首', '都', '[SEP]']
+        expected_output = torch.tensor([[101, 2349, 115, 7944, 3221, 3791, 1744, 4638, 7674, 6963, 102]])
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(output_ids, expected_output)
