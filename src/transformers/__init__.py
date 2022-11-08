@@ -322,6 +322,7 @@ _import_structure = {
     "models.resnet": ["RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ResNetConfig"],
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
+    "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig", "RoCBertTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
@@ -847,6 +848,23 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.roc_bert"].extend(
+        [
+            "ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RoCBertForMaskedLM",
+            "RoCBertForCausalLM",
+            "RoCBertForMultipleChoice",
+            "RoCBertForQuestionAnswering",
+            "RoCBertForSequenceClassification",
+            "RoCBertForTokenClassification",
+            "RoCBertLayer",
+            "RoCBertModel",
+            "RoCBertForPreTraining",
+            "RoCBertPreTrainedModel",
+            "load_tf_weights_in_roc_bert",
+        ]
+    )
 
     _import_structure["models.time_series_transformer"].extend(
         [
@@ -3383,6 +3401,7 @@ if TYPE_CHECKING:
     from .models.resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
+    from .models.roc_bert import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RoCBertConfig, RoCBertTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
@@ -4655,6 +4674,20 @@ if TYPE_CHECKING:
             RobertaForTokenClassification,
             RobertaModel,
             RobertaPreTrainedModel,
+        )
+        from .models.roc_bert import (
+            ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RoCBertForCausalLM,
+            RoCBertForMaskedLM,
+            RoCBertForMultipleChoice,
+            RoCBertForPreTraining,
+            RoCBertForQuestionAnswering,
+            RoCBertForSequenceClassification,
+            RoCBertForTokenClassification,
+            RoCBertLayer,
+            RoCBertModel,
+            RoCBertPreTrainedModel,
+            load_tf_weights_in_roc_bert,
         )
         from .models.roformer import (
             ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
