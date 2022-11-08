@@ -722,15 +722,70 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
         return inputs_embeds
 
 
+class SpeechT5BatchNormConvLayer(nn.Module):
+    def __init__(self, config, layer_id=0):
+        super().__init__()
+
+        if layer_id == 0:
+            in_conv_dim = config.num_mel_bins
+        else:
+            in_conv_dim = config.speech_decoder_postnet_units
+
+        if layer_id == config.speech_decoder_postnet_layers - 1:
+            out_conv_dim = config.num_mel_bins
+        else:
+            out_conv_dim = config.speech_decoder_postnet_units
+
+        self.conv = nn.Conv1d(
+            in_conv_dim,
+            out_conv_dim,
+            kernel_size=config.speech_decoder_postnet_kernel,
+            stride=1,
+            padding=(config.speech_decoder_postnet_kernel - 1) // 2,
+            bias=False,
+        )
+        self.batch_norm = nn.BatchNorm1d(out_conv_dim)
+
+        if layer_id < config.speech_decoder_postnet_layers - 1:
+            self.activation = nn.Tanh()
+        else:
+            self.activation = None
+
+        self.dropout = nn.Dropout(config.speech_decoder_postnet_dropout)
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.batch_norm(hidden_states)
+        if self.activation is not None:
+            hidden_states = self.activation(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states
+
+
 class SpeechT5SpeechDecoderPostnet(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
 
-        # TODO: implement this class
+        self.feat_out = nn.Linear(config.hidden_size, config.num_mel_bins * config.reduction_factor)
+        self.prob_out = nn.Linear(config.hidden_size, config.reduction_factor)
+
+        layers = []
+        for i in range(config.speech_decoder_postnet_layers):
+            layers.append(SpeechT5BatchNormConvLayer(config, i))
+        self.layers = nn.ModuleList(layers)
 
     def forward(self, hidden_states: torch.Tensor):
-        return hidden_states
+        before_outs = self.feat_out(hidden_states).view(hidden_states.size(0), -1, self.config.num_mel_bins)
+
+        logits = self.prob_out(hidden_states).view(hidden_states.size(0), -1)
+
+        layer_output = before_outs.transpose(1, 2)
+        for layer in self.layers:
+            layer_output = layer(layer_output)
+        after_outs = before_outs + layer_output.transpose(1, 2)
+
+        return before_outs, after_outs, logits
 
 
 class SpeechT5TextEncoderPrenet(nn.Module):

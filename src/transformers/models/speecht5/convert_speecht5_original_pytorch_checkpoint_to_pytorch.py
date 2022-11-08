@@ -53,40 +53,18 @@ MAPPING_SPEECH_DECODER_PRENET = {
     "speech_decoder_prenet.spkembs_layer.0": "speecht5.decoder.prenet.speaker_embeds_layer",
 }
 MAPPING_SPEECH_DECODER_POSTNET = {
-    # "speech_decoder_postnet.feat_out.weight"
-    # "speech_decoder_postnet.feat_out.bias"
-    # "speech_decoder_postnet.prob_out.weight"
-    # "speech_decoder_postnet.prob_out.bias"
-    # "speech_decoder_postnet.postnet.postnet.0.0.weight"
-    # "speech_decoder_postnet.postnet.postnet.0.1.weight"
-    # "speech_decoder_postnet.postnet.postnet.0.1.bias"
-    # "speech_decoder_postnet.postnet.postnet.0.1.running_mean"
-    # "speech_decoder_postnet.postnet.postnet.0.1.running_var"
-    # "speech_decoder_postnet.postnet.postnet.0.1.num_batches_tracked"
-    # "speech_decoder_postnet.postnet.postnet.1.0.weight"
-    # "speech_decoder_postnet.postnet.postnet.1.1.weight"
-    # "speech_decoder_postnet.postnet.postnet.1.1.bias"
-    # "speech_decoder_postnet.postnet.postnet.1.1.running_mean"
-    # "speech_decoder_postnet.postnet.postnet.1.1.running_var"
-    # "speech_decoder_postnet.postnet.postnet.1.1.num_batches_tracked"
-    # "speech_decoder_postnet.postnet.postnet.2.0.weight"
-    # "speech_decoder_postnet.postnet.postnet.2.1.weight"
-    # "speech_decoder_postnet.postnet.postnet.2.1.bias"
-    # "speech_decoder_postnet.postnet.postnet.2.1.running_mean"
-    # "speech_decoder_postnet.postnet.postnet.2.1.running_var"
-    # "speech_decoder_postnet.postnet.postnet.2.1.num_batches_tracked"
-    # "speech_decoder_postnet.postnet.postnet.3.0.weight"
-    # "speech_decoder_postnet.postnet.postnet.3.1.weight"
-    # "speech_decoder_postnet.postnet.postnet.3.1.bias"
-    # "speech_decoder_postnet.postnet.postnet.3.1.running_mean"
-    # "speech_decoder_postnet.postnet.postnet.3.1.running_var"
-    # "speech_decoder_postnet.postnet.postnet.3.1.num_batches_tracked"
-    # "speech_decoder_postnet.postnet.postnet.4.0.weight"
-    # "speech_decoder_postnet.postnet.postnet.4.1.weight"
-    # "speech_decoder_postnet.postnet.postnet.4.1.bias"
-    # "speech_decoder_postnet.postnet.postnet.4.1.running_mean"
-    # "speech_decoder_postnet.postnet.postnet.4.1.running_var"
-    # "speech_decoder_postnet.postnet.postnet.4.1.num_batches_tracked"
+    "speech_decoder_postnet.feat_out": "speech_decoder_postnet.feat_out",
+    "speech_decoder_postnet.prob_out": "speech_decoder_postnet.prob_out",
+    "speech_decoder_postnet.postnet.postnet.0.0": "speech_decoder_postnet.layers.0.conv",
+    "speech_decoder_postnet.postnet.postnet.0.1": "speech_decoder_postnet.layers.0.batch_norm",
+    "speech_decoder_postnet.postnet.postnet.1.0": "speech_decoder_postnet.layers.1.conv",
+    "speech_decoder_postnet.postnet.postnet.1.1": "speech_decoder_postnet.layers.1.batch_norm",
+    "speech_decoder_postnet.postnet.postnet.2.0": "speech_decoder_postnet.layers.2.conv",
+    "speech_decoder_postnet.postnet.postnet.2.1": "speech_decoder_postnet.layers.2.batch_norm",
+    "speech_decoder_postnet.postnet.postnet.3.0": "speech_decoder_postnet.layers.3.conv",
+    "speech_decoder_postnet.postnet.postnet.3.1": "speech_decoder_postnet.layers.3.batch_norm",
+    "speech_decoder_postnet.postnet.postnet.4.0": "speech_decoder_postnet.layers.4.conv",
+    "speech_decoder_postnet.postnet.postnet.4.1": "speech_decoder_postnet.layers.4.batch_norm",
 }
 MAPPING_TEXT_DECODER_PRENET = {
     "text_decoder_prenet.embed_tokens": "speecht5.decoder.prenet.embed_tokens",
@@ -198,6 +176,12 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
         hf_pointer.weight_v.data = value
     elif weight_type == "bias":
         hf_pointer.bias.data = value
+    elif weight_type == "running_mean":
+        hf_pointer.running_mean.data = value
+    elif weight_type == "running_var":
+        hf_pointer.running_var.data = value
+    elif weight_type == "num_batches_tracked":
+        hf_pointer.num_batches_tracked.data = value
     else:
         hf_pointer.data = value
 
@@ -275,6 +259,12 @@ def recursively_load_weights(fairseq_dict, hf_model, task):
                     elif "weight" in name:
                         # TODO: don't match quantizer.weight_proj
                         weight_type = "weight"
+                    elif "running_mean" in name:
+                        weight_type = "running_mean"
+                    elif "running_var" in name:
+                        weight_type = "running_var"
+                    elif "num_batches_tracked" in name:
+                        weight_type = "num_batches_tracked"
                     else:
                         weight_type = None
                     set_recursively(hf_model, mapped_key, value, name, weight_type)

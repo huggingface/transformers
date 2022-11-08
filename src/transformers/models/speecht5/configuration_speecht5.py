@@ -147,6 +147,16 @@ class SpeechT5Config(PretrainedConfig):
             The dropout probability for the speech decoder pre-net layers.
         speaker_embedding_dim (`int`, *optional*, defaults to 512):
             Dimensionality of the *XVector* embedding vectors.
+        speech_decoder_postnet_layers (`int`, *optional*, defaults to 5):
+            Number of layers in the speech decoder post-net.
+        speech_decoder_postnet_units (`int`, *optional*, defaults to 256):
+            Dimensionality of the layers in the speech decoder post-net.
+        speech_decoder_postnet_kernel (`int`, *optional*, defaults to 5):
+            Number of convolutional filter channels in the speech decoder post-net.
+        speech_decoder_postnet_dropout (`float`, *optional*, defaults to 0.5):
+            The dropout probability for the speech decoder post-net layers.
+        reduction_factor (`int`, *optional*, defaults to 2):
+            Spectrogram length reduction factor for the speech decoder post-net.
         max_speech_positions (`int`, *optional*, defaults to 4000):
             The maximum sequence length of speech features that this model might ever be used with.
         max_text_positions (`int`, *optional*, defaults to 450):
@@ -226,6 +236,11 @@ class SpeechT5Config(PretrainedConfig):
         speech_decoder_prenet_units=256,
         speech_decoder_prenet_dropout=0.5,
         speaker_embedding_dim=512,
+        speech_decoder_postnet_layers=5,
+        speech_decoder_postnet_units=256,
+        speech_decoder_postnet_kernel=5,
+        speech_decoder_postnet_dropout=0.5,
+        reduction_factor=2,
         max_speech_positions=4000,
         max_text_positions=450,
         encoder_max_relative_position=160,
@@ -301,6 +316,12 @@ class SpeechT5Config(PretrainedConfig):
         self.speech_decoder_prenet_units = speech_decoder_prenet_units
         self.speech_decoder_prenet_dropout = speech_decoder_prenet_dropout
         self.speaker_embedding_dim = speaker_embedding_dim
+
+        self.speech_decoder_postnet_layers = speech_decoder_postnet_layers
+        self.speech_decoder_postnet_units = speech_decoder_postnet_units
+        self.speech_decoder_postnet_kernel = speech_decoder_postnet_kernel
+        self.speech_decoder_postnet_dropout = speech_decoder_postnet_dropout
+        self.reduction_factor = reduction_factor
 
         # ctc loss
         self.ctc_loss_reduction = ctc_loss_reduction
