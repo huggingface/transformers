@@ -294,9 +294,6 @@ class AutoImageProcessor:
                     " based on pattern matching with the model's feature extractor configuration."
                 )
                 image_processor_class = feature_extractor_class.replace("FeatureExtractor", "ImageProcessor")
-                # Return None if not found, as some vision models don't yet have an image processor.
-                if image_processor_class not in IMAGE_PROCESSOR_MAPPING_NAMES.values():
-                    image_processor_class = None
             if "AutoFeatureExtractor" in config_dict.get("auto_map", {}):
                 feature_extractor_auto_map = config_dict["auto_map"]["AutoFeatureExtractor"]
                 image_processor_auto_map = feature_extractor_auto_map.replace("FeatureExtractor", "ImageProcessor")
