@@ -288,7 +288,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if self.type == "seq2seq":
                 logger.warning(
                     "Using `chunk_length_s` is very experimental. The results will not necessarily be entirely"
-                    " accurate and will have caveats. More information: https://github.com/huggingface/transformers/pull/20104"
+                    " accurate and will have caveats. More information:"
+                    " https://github.com/huggingface/transformers/pull/20104"
                 )
             if stride_length_s is None:
                 stride_length_s = chunk_length_s / 6
