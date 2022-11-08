@@ -265,15 +265,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             model="openai/whisper-tiny",
             framework="pt",
         )
-        # waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
-        # output = speech_recognizer(waveform)
-        # self.assertEqual(output, {"text": ""})
-
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         filename = ds[40]["file"]
-        # output = speech_recognizer(filename)
-        # self.assertEqual(output, {"text": " A man said to the universe, Sir, I exist."})
-        print(filename)
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": " A man said to the universe, Sir, I exist."})
 
         output = speech_recognizer([filename], chunk_length_s=5, batch_size=4)
         self.assertEqual(output, [{"text": " A man said to the universe, Sir, I exist."}])
