@@ -78,6 +78,7 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right):
 def _find_longest_common_sequence(sequences, tokenizer):
     # TODO  Use a faster algorithm this can probably be done in O(n)
     # using suffix array.
+    # It might be tedious to do because of fault tolerance.
     # We actually have a really good property which is that the total sequence
     # MUST be those subsequences in order.
     # Also the algorithm should be more tolerant to errors.
@@ -88,8 +89,11 @@ def _find_longest_common_sequence(sequences, tokenizer):
         index = 0
         max_ = 0.0
         for i in range(1, len(new_sequence) + 1):
-            matching = np.sum(np.array(sequence[-i:]) == np.array(new_sequence[:i])) / i
-            if matching > max_:
+            # epsilon to favor long perfect matches
+            eps = i / 10000.0
+            matches = np.sum(np.array(sequence[-i:]) == np.array(new_sequence[:i]))
+            matching = matches / i + eps
+            if matches > 1 and matching > max_:
                 index = i
                 max_ = matching
         sequence.extend(new_sequence[index:])
@@ -281,6 +285,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
 
         if chunk_length_s:
+            if self.type == "seq2seq":
+                logger.warning(
+                    "Using `chunk_length_s` is very experimental. The results will not necessarily be entirely"
+                    " accurate and will have caveats. More information: https://github.com/huggingface/transformers/pull/20104"
+                )
             if stride_length_s is None:
                 stride_length_s = chunk_length_s / 6
 
