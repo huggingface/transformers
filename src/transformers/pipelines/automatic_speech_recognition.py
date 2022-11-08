@@ -281,10 +281,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
 
         if chunk_length_s:
-            # if self.type not in {"ctc", "ctc_with_lm"}:
-            #     raise ValueError(
-            #         "`chunk_length_s` is only valid for CTC models, use other chunking options for other models"
-            #     )
             if stride_length_s is None:
                 stride_length_s = chunk_length_s / 6
 

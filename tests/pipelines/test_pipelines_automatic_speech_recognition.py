@@ -146,10 +146,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(output, {"text": "(Applaudissements)"})
         output = speech_recognizer(waveform, chunk_length_s=10)
         self.assertEqual(output, {"text": "(Applaudissements)"})
-        # self.assertEqual(
-        #     str(v.exception),
-        #     "`chunk_length_s` is only valid for CTC models, use other chunking options for other models",
-        # )
 
         # Non CTC models cannot use return_timestamps
         with self.assertRaises(ValueError) as v:
