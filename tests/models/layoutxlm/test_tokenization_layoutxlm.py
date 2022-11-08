@@ -1946,3 +1946,11 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("Doesn't support another framework than PyTorch")
     def test_np_encode_plus_sent_to_model(self):
         pass
+
+    @unittest.skip("Doesn't use SentencePiece")
+    def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
+        pass
+
+    @unittest.skip("Doesn't use SentencePiece")
+    def test_sentencepiece_tokenize_and_decode(self):
+        pass

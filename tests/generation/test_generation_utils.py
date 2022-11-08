@@ -27,6 +27,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoModelForCausalLM,
         AutoModelForSeq2SeqLM,
         AutoTokenizer,
         BartForConditionalGeneration,
@@ -36,6 +37,7 @@ if is_torch_available():
         ImageGPTForCausalImageModeling,
         Speech2TextForConditionalGeneration,
         SpeechEncoderDecoderModel,
+        T5ForConditionalGeneration,
         VisionEncoderDecoderModel,
         pipeline,
         top_k_top_p_filtering,
@@ -619,6 +621,76 @@ class GenerationTesterMixin:
                 **model_kwargs,
             )
         return output_generate, output_group_beam_search
+
+    def _contrastive_generate(
+        self,
+        model,
+        input_ids,
+        attention_mask,
+        max_length,
+        output_scores=False,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict_in_generate=False,
+    ):
+        contrastive_search_kwargs = {
+            "penalty_alpha": 0.6,
+            "top_k": 5,
+        }
+
+        if model.config.is_encoder_decoder:
+            max_length = 4
+        logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+            input_ids.shape[-1],
+            eos_token_id=model.config.eos_token_id,
+            forced_bos_token_id=model.config.forced_bos_token_id,
+            forced_eos_token_id=model.config.forced_eos_token_id,
+            max_length=max_length,
+        )
+
+        kwargs = {}
+        model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
+        output_generate = model.generate(
+            input_ids,
+            do_sample=False,
+            num_beams=1,
+            max_length=max_length,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            output_scores=output_scores,
+            return_dict_in_generate=return_dict_in_generate,
+            remove_invalid_values=True,
+            **logits_process_kwargs,
+            **model_kwargs,
+            **contrastive_search_kwargs,
+        )
+
+        if model.config.is_encoder_decoder:
+            encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
+                model,
+                input_ids,
+                attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+            kwargs["encoder_outputs"] = encoder_outputs
+
+        with torch.no_grad():
+            model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
+            stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=max_length)])
+            output_contrastive = model.contrastive_search(
+                input_ids,
+                stopping_criteria=stopping_criteria,
+                logits_processor=logits_processor,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                output_scores=output_scores,
+                return_dict_in_generate=return_dict_in_generate,
+                **kwargs,
+                **model_kwargs,
+                **contrastive_search_kwargs,
+            )
+        return output_contrastive, output_generate
 
     def test_greedy_generate(self):
         # check `generate()` and `greedy_search()` are equal
@@ -1332,6 +1404,64 @@ class GenerationTesterMixin:
 
             for output in (output_beam_search, output_generate):
                 self._check_outputs(output, input_ids, model.config, num_return_sequences=beam_scorer.num_beams)
+
+    def test_contrastive_generate(self):
+        # check `generate()` and `contrastive_search()` are equal
+        for model_class in self.all_generative_model_classes:
+
+            # TODO: Fix Bloom. Bloom fails because `past` has a different shape.
+            # won't fix: FSMT and Reformer have a different cache variable type (and format).
+            if any(model_name in model_class.__name__.lower() for model_name in ["bloom", "fsmt", "reformer"]):
+                return
+
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+
+            # NOTE: contrastive search only works with cache on at the moment.
+            if not hasattr(config, "use_cache"):
+                return
+            config.use_cache = True
+            config.is_decoder = True
+
+            # test old generation output for backwards compatibility
+            model = model_class(config).to(torch_device).eval()
+            output_contrastive, output_generate = self._contrastive_generate(
+                model=model, input_ids=input_ids, attention_mask=attention_mask, max_length=max_length
+            )
+            self.assertListEqual(output_contrastive.tolist(), output_generate.tolist())
+
+    def test_contrastive_generate_dict_outputs_use_cache(self):
+        for model_class in self.all_generative_model_classes:
+
+            # TODO: Fix Bloom. Bloom fails because `past` has a different shape.
+            # won't fix: FSMT and Reformer have a different cache variable type (and format).
+            if any(model_name in model_class.__name__.lower() for model_name in ["bloom", "fsmt", "reformer"]):
+                return
+
+            # enable cache
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+
+            # NOTE: contrastive search only works with cache on at the moment.
+            if not hasattr(config, "use_cache"):
+                return
+            config.use_cache = True
+            config.is_decoder = True
+
+            model = model_class(config).to(torch_device).eval()
+            output_contrastive, output_generate = self._contrastive_generate(
+                model=model,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_length=max_length,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+
+            self.assertListEqual(output_generate.sequences.tolist(), output_contrastive.sequences.tolist())
+
+            for output in (output_contrastive, output_generate):
+                self._check_outputs(output, input_ids, model.config, use_cache=True)
 
     def test_generate_with_head_masking(self):
         """Test designed for encoder-decoder models to ensure the attention head masking is used."""
@@ -2050,6 +2180,134 @@ class GenerationIntegrationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             bart_model.generate(decoder_input_ids=input_ids, max_new_tokens=10, max_length=20)
 
+    def test_max_new_tokens_decoder_only_contrastive_search_t5(self):
+        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
+        t5_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-t5")
+        t5_model = T5ForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-t5").to(torch_device)
+        input_ids = t5_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        self.assertEqual(list(input_ids.shape), [1, 56])
+
+        max_new_tokens = 3
+        t5_model.config.max_length = 20
+        t5_model.config.eos_token_id = None
+
+        # Encoder decoder call
+        outputs = t5_model.generate(input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4)
+        # 1 BOS + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 4])
+
+        # Decoder only call
+        outputs = t5_model.generate(
+            decoder_input_ids=input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4
+        )
+        # 56 + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 59])
+
+        # Encoder decoder call > 20
+        outputs = t5_model.generate(max_new_tokens=max_new_tokens + 20, penalty_alpha=0.6, top_k=4)
+
+        # 1 BOS + 20 + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 24])
+
+        # max_new_tokens and max_length serve the same purpose and must not be used together.
+        with self.assertRaises(ValueError):
+            t5_model.generate(
+                decoder_input_ids=input_ids, max_new_tokens=10, max_length=20, penalty_alpha=0.6, top_k=4
+            )
+
+    def test_max_new_tokens_decoder_only_contrastive_search_bart(self):
+        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
+        bart_tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+        bart_model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(
+            torch_device
+        )
+        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        self.assertEqual(list(input_ids.shape), [1, 29])
+
+        max_new_tokens = 3
+        bart_model.config.max_length = 20
+        bart_model.config.eos_token_id = None
+
+        # Encoder decoder call
+        outputs = bart_model.generate(input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4)
+        # 1 BOS + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 4])
+
+        # Decoder only call
+        outputs = bart_model.generate(
+            decoder_input_ids=input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4
+        )
+        # 29 + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 32])
+
+        # Encoder decoder call > 20
+        outputs = bart_model.generate(max_new_tokens=max_new_tokens + 20, penalty_alpha=0.6, top_k=4)
+
+        # 1 BOS + 20 + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 24])
+
+        # max_new_tokens and max_length serve the same purpose and must not be used together.
+        with self.assertRaises(ValueError):
+            bart_model.generate(
+                decoder_input_ids=input_ids, max_new_tokens=10, max_length=20, penalty_alpha=0.6, top_k=4
+            )
+
+    def test_max_new_tokens_decoder_only_contrastive_search_gptj(self):
+        article = """Justin Timberlake."""
+        gptj_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gptj")
+        gptj_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gptj").to(torch_device)
+        input_ids = gptj_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        self.assertEqual(list(input_ids.shape), [1, 9])
+
+        max_new_tokens = 3
+        gptj_model.config.max_length = 20
+
+        # call < 20
+        outputs = gptj_model.generate(input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4)
+
+        # 9 input_ids + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 12])
+
+        # call > 20
+        outputs = gptj_model.generate(max_new_tokens=max_new_tokens + 20, penalty_alpha=0.6, top_k=4)
+
+        # 1 BOS token + 23 new tokens
+        self.assertEqual(list(outputs.shape), [1, 24])
+
+        # max_new_tokens and max_length serve the same purpose and must not be used together.
+        with self.assertRaises(ValueError):
+            gptj_model.generate(input_ids=input_ids, max_new_tokens=10, max_length=20, penalty_alpha=0.6, top_k=4)
+
+    def test_max_new_tokens_decoder_only_contrastive_search_gpt2(self):
+        article = """Justin Timberlake."""
+        gpt2_tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        gpt2_model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        input_ids = gpt2_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        self.assertEqual(list(input_ids.shape), [1, 9])
+
+        max_new_tokens = 3
+        gpt2_model.config.max_length = 20
+
+        # call < 20
+        outputs = gpt2_model.generate(input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4)
+
+        # 9 input_ids + 3 new tokens
+        self.assertEqual(list(outputs.shape), [1, 12])
+
+        # call > 20
+        outputs = gpt2_model.generate(max_new_tokens=max_new_tokens + 20, penalty_alpha=0.6, top_k=4)
+
+        # 1 BOS token + 23 new tokens
+        self.assertEqual(list(outputs.shape), [1, 24])
+
+        # max_new_tokens and max_length serve the same purpose and must not be used together.
+        with self.assertRaises(ValueError):
+            gpt2_model.generate(input_ids=input_ids, max_new_tokens=10, max_length=20, penalty_alpha=0.6, top_k=4)
+
     def test_max_new_tokens_decoder_only(self):
         article = """Justin Timberlake."""
         gpt2_tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
@@ -2722,6 +2980,31 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             model.generate(input_ids, force_words_ids=[[[-1]]])
+
+    def test_contrastive_search_batched(self):
+        # Tests that contrastive search works with batched inputs (i.e. has the same output as for non-batched inputs)
+        articles = ["Foo", "Bar Baz"]
+        tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+        model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(torch_device)
+
+        model.config.eos_token_id = None
+        input_ids_batched = tokenizer(articles, padding=True, return_tensors="pt").input_ids.to(torch_device)
+        input_ids = tokenizer(articles[1], return_tensors="pt").input_ids.to(torch_device)
+
+        output_sequences_batched = model.generate(
+            input_ids=input_ids_batched, penalty_alpha=0.6, top_k=4, return_dict_in_generate=True, output_scores=True
+        )
+        output_sequences = model.generate(
+            input_ids=input_ids, penalty_alpha=0.6, top_k=4, return_dict_in_generate=True, output_scores=True
+        )
+
+        batched_out = tokenizer.decode(output_sequences_batched.sequences[1], skip_special_tokens=True)
+        out = tokenizer.decode(output_sequences.sequences[0], skip_special_tokens=True)
+        self.assertEqual(batched_out, out)
+
+        # output_sequences_batched.scores[0][1] -> 1st set of logits, 2nd sequence
+        max_score_diff = (output_sequences_batched.scores[0][1] - output_sequences.scores[0][0]).abs().max()
+        self.assertTrue(max_score_diff < 1e-5)
 
     def test_validate_generation_inputs(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-t5")

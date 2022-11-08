@@ -41,5 +41,7 @@
     title: Come aggiungere una pipeline a 🤗 Transformers?
   - local: add_new_model
     title: Come aggiungere un modello a 🤗 Transformers?
+  - local: perf_hardware
+    title: Hardware ottimizzato per l'addestramento
   title: Guide How-to
   

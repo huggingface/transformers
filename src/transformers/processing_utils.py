@@ -56,7 +56,7 @@ class ProcessorMixin(PushToHubMixin):
         # Sanitize args and kwargs
         for key in kwargs:
             if key not in self.attributes:
-                raise TypeError(f"Unexepcted keyword argument {key}.")
+                raise TypeError(f"Unexpected keyword argument {key}.")
         for arg, attribute_name in zip(args, self.attributes):
             if attribute_name in kwargs:
                 raise TypeError(f"Got multiple values for argument {attribute_name}.")

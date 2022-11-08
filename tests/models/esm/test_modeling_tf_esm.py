@@ -254,7 +254,7 @@ class TFEsmModelTest(TFModelTesterMixin, unittest.TestCase):
 
 @require_tf
 class TFEsmModelIntegrationTest(unittest.TestCase):
-    @slow
+    @unittest.skip("Temporarily disabled as we update ESM model checkpoints")
     def test_inference_masked_lm(self):
         model = TFEsmForMaskedLM.from_pretrained("Rocketknight1/esm2_t6_8M_UR50D")
 
@@ -268,7 +268,7 @@ class TFEsmModelIntegrationTest(unittest.TestCase):
         )
         self.assertTrue(numpy.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-4))
 
-    @slow
+    @unittest.skip("Temporarily disabled as we update ESM model checkpoints")
     def test_inference_no_head(self):
         model = TFEsmModel.from_pretrained("Rocketknight1/esm2_t6_8M_UR50D")
 

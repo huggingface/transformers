@@ -30,6 +30,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_vilt"] = ["ViltFeatureExtractor"]
+    _import_structure["image_processing_vilt"] = ["ViltImageProcessor"]
     _import_structure["processing_vilt"] = ["ViltProcessor"]
 
 try:
@@ -61,6 +62,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_vilt import ViltFeatureExtractor
+        from .image_processing_vilt import ViltImageProcessor
         from .processing_vilt import ViltProcessor
 
     try:
