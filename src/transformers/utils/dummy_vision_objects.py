@@ -3,7 +3,7 @@
 from ..utils import DummyObject, requires_backends
 
 
-class ImageProcessorMixin(metaclass=DummyObject):
+class ImageProcessingMixin(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

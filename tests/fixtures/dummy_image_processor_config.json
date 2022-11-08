@@ -1,0 +1,4 @@
+{
+    "image_processor_type": "CLIPImageProcessor",
+    "processor_class": "CLIPProcessor"
+}

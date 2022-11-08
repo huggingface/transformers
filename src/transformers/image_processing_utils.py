@@ -13,19 +13,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import json
 import os
 from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
+import numpy as np
+
+from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
-from .feature_extraction_utils import FeatureExtractionMixin
-from .utils import IMAGE_PROCESSOR_NAME, cached_file, download_url, is_offline_mode, is_remote_url, logging
+from .utils import (
+    IMAGE_PROCESSOR_NAME,
+    PushToHubMixin,
+    cached_file,
+    copy_func,
+    download_url,
+    is_offline_mode,
+    is_remote_url,
+    logging,
+)
 
 
 logger = logging.get_logger(__name__)
 
 
-# TODO: Move BatchFeature to be imported by both feature_extraction_utils and image_processing_utils
+# TODO: Move BatchFeature to be imported by both image_processing_utils and image_processing_utils
 # We override the class string here, but logic is the same.
 class BatchFeature(BaseBatchFeature):
     r"""
@@ -42,13 +54,160 @@ class BatchFeature(BaseBatchFeature):
     """
 
 
-# We using a quick and simple inheritance whilst we phase out the old API. Once image processors for vision models
-# are fully deprecated, ImageProcessor mixin will be implemented. Any shared logic will be abstracted out.
-class ImageProcessorMixin(FeatureExtractionMixin):
+# TODO: (Amy) - factor out the common parts of this and the feature extractor
+class ImageProcessingMixin(PushToHubMixin):
     """
     This is an image processor mixin used to provide saving/loading functionality for sequential and image feature
     extractors.
     """
+
+    _auto_class = None
+
+    def __init__(self, **kwargs):
+        """Set elements of `kwargs` as attributes."""
+        # Pop "processor_class" as it should be saved as private attribute
+        self._processor_class = kwargs.pop("processor_class", None)
+        # Additional attributes without default values
+        for key, value in kwargs.items():
+            try:
+                setattr(self, key, value)
+            except AttributeError as err:
+                logger.error(f"Can't set {key} with value {value} for {self}")
+                raise err
+
+    def _set_processor_class(self, processor_class: str):
+        """Sets processor class as an attribute."""
+        self._processor_class = processor_class
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs):
+        r"""
+        Instantiate a type of [`~image_processing_utils.ImageProcessingMixin`] from an image processor.
+
+        Args:
+            pretrained_model_name_or_path (`str` or `os.PathLike`):
+                This can be either:
+
+                - a string, the *model id* of a pretrained image_processor hosted inside a model repo on
+                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
+                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                - a path to a *directory* containing a image processor file saved using the
+                  [`~image_processing_utils.FeatureExtractionMixin.save_pretrained`] method, e.g.,
+                  `./my_model_directory/`.
+                - a path or url to a saved image processor JSON *file*, e.g.,
+                  `./my_model_directory/preprocessor_config.json`.
+            cache_dir (`str` or `os.PathLike`, *optional*):
+                Path to a directory in which a downloaded pretrained model image processor should be cached if the
+                standard cache should not be used.
+            force_download (`bool`, *optional*, defaults to `False`):
+                Whether or not to force to (re-)download the image processor files and override the cached versions if
+                they exist.
+            resume_download (`bool`, *optional*, defaults to `False`):
+                Whether or not to delete incompletely received file. Attempts to resume the download if such a file
+                exists.
+            proxies (`Dict[str, str]`, *optional*):
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+            use_auth_token (`str` or `bool`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
+                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+            revision (`str`, *optional*, defaults to `"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
+                identifier allowed by git.
+
+
+                <Tip>
+
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+
+                </Tip>
+
+            return_unused_kwargs (`bool`, *optional*, defaults to `False`):
+                If `False`, then this function returns just the final image processor object. If `True`, then this
+                functions returns a `Tuple(image_processor, unused_kwargs)` where *unused_kwargs* is a dictionary
+                consisting of the key/value pairs whose keys are not image processor attributes: i.e., the part of
+                `kwargs` which has not been used to update `image_processor` and is otherwise ignored.
+            kwargs (`Dict[str, Any]`, *optional*):
+                The values in kwargs of any keys which are image processor attributes will be used to override the
+                loaded values. Behavior concerning key/value pairs whose keys are *not* image processor attributes is
+                controlled by the `return_unused_kwargs` keyword parameter.
+
+        Returns:
+            A image processor of type [`~image_processing_utils.FeatureExtractionMixin`].
+
+        Examples:
+
+        ```python
+        # We can't instantiate directly the base class *ImageProcessingMixin* so let's show the examples on a
+        # derived class: *CLIPImageProcessor*
+        image_processor = CLIPImageProcessor.from_pretrained(
+            "openai/clip-vit-base-patch32"
+        )  # Download image_processing_config from huggingface.co and cache.
+        image_processor = CLIPImageProcessor.from_pretrained(
+            "./test/saved_model/"
+        )  # E.g. image processor (or model) was saved using *save_pretrained('./test/saved_model/')*
+        image_processor = CLIPImageProcessor.from_pretrained("./test/saved_model/preprocessor_config.json")
+        image_processor = CLIPImageProcessor.from_pretrained(
+            "openai/clip-vit-base-patch32", do_normalize=False, foo=False
+        )
+        assert image_processor.do_normalize is False
+        image_processor, unused_kwargs = CLIPImageProcessor.from_pretrained(
+            "openai/clip-vit-base-patch32", do_normalize=False, foo=False, return_unused_kwargs=True
+        )
+        assert image_processor.do_normalize is False
+        assert unused_kwargs == {"foo": False}
+        ```"""
+        import pdb
+
+        pdb.set_trace()
+        image_processor_dict, kwargs = cls.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
+
+        return cls.from_dict(image_processor_dict, **kwargs)
+
+    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
+        """
+        Save an image processor object to the directory `save_directory`, so that it can be re-loaded using the
+        [`~image_processing_utils.FeatureExtractionMixin.from_pretrained`] class method.
+
+        Args:
+            save_directory (`str` or `os.PathLike`):
+                Directory where the image processor JSON file will be saved (will be created if it does not exist).
+            push_to_hub (`bool`, *optional*, defaults to `False`):
+                Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
+                repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
+                namespace).
+            kwargs:
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
+        """
+        if os.path.isfile(save_directory):
+            raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
+
+        os.makedirs(save_directory, exist_ok=True)
+
+        if push_to_hub:
+            commit_message = kwargs.pop("commit_message", None)
+            repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            repo_id, token = self._create_repo(repo_id, **kwargs)
+            files_timestamps = self._get_files_timestamps(save_directory)
+
+        # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
+        # loaded from the Hub.
+        if self._auto_class is not None:
+            custom_object_save(self, save_directory, config=self)
+
+        # If we save using the predefined names, we can load using `from_pretrained`
+        output_image_processor_file = os.path.join(save_directory, IMAGE_PROCESSOR_NAME)
+
+        self.to_json_file(output_image_processor_file)
+        logger.info(f"Image processor saved in {output_image_processor_file}")
+
+        if push_to_hub:
+            self._upload_modified_files(
+                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
+            )
+
+        return [output_image_processor_file]
 
     @classmethod
     def get_image_processor_dict(
@@ -56,7 +215,7 @@ class ImageProcessorMixin(FeatureExtractionMixin):
     ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
-        image processor of type [`~image_processor_utils.ImageProcessorMixin`] using `from_dict`.
+        image processor of type [`~image_processor_utils.ImageProcessingMixin`] using `from_dict`.
 
         Parameters:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -144,14 +303,136 @@ class ImageProcessorMixin(FeatureExtractionMixin):
         return image_processor_dict, kwargs
 
     @classmethod
-    def get_feature_extractor_dict(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
-    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        # Make sure to override parent method
-        raise NotImplementedError
+    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+        """
+        Instantiates a type of [`~image_processing_utils.FeatureExtractionMixin`] from a Python dictionary of
+        parameters.
+
+        Args:
+            image_processor_dict (`Dict[str, Any]`):
+                Dictionary that will be used to instantiate the image processor object. Such a dictionary can be
+                retrieved from a pretrained checkpoint by leveraging the
+                [`~image_processing_utils.FeatureExtractionMixin.to_dict`] method.
+            kwargs (`Dict[str, Any]`):
+                Additional parameters from which to initialize the image processor object.
+
+        Returns:
+            [`~image_processing_utils.FeatureExtractionMixin`]: The image processor object instantiated from those
+            parameters.
+        """
+        return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+
+        image_processor = cls(**image_processor_dict)
+
+        # Update image_processor with kwargs if needed
+        to_remove = []
+        for key, value in kwargs.items():
+            if hasattr(image_processor, key):
+                setattr(image_processor, key, value)
+                to_remove.append(key)
+        for key in to_remove:
+            kwargs.pop(key, None)
+
+        logger.info(f"Image processor {image_processor}")
+        if return_unused_kwargs:
+            return image_processor, kwargs
+        else:
+            return image_processor
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this image processor instance.
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["image_processor_type"] = self.__class__.__name__
+
+        return output
+
+    @classmethod
+    def from_json_file(cls, json_file: Union[str, os.PathLike]):
+        """
+        Instantiates a image processor of type [`~image_processing_utils.FeatureExtractionMixin`] from the path to a
+        JSON file of parameters.
+
+        Args:
+            json_file (`str` or `os.PathLike`):
+                Path to the JSON file containing the parameters.
+
+        Returns:
+            A image processor of type [`~image_processing_utils.FeatureExtractionMixin`]: The image_processor object
+            instantiated from that JSON file.
+        """
+        with open(json_file, "r", encoding="utf-8") as reader:
+            text = reader.read()
+        image_processor_dict = json.loads(text)
+        return cls(**image_processor_dict)
+
+    def to_json_string(self) -> str:
+        """
+        Serializes this instance to a JSON string.
+
+        Returns:
+            `str`: String containing all the attributes that make up this feature_extractor instance in JSON format.
+        """
+        dictionary = self.to_dict()
+
+        for key, value in dictionary.items():
+            if isinstance(value, np.ndarray):
+                dictionary[key] = value.tolist()
+
+        # make sure private name "_processor_class" is correctly
+        # saved as "processor_class"
+        _processor_class = dictionary.pop("_processor_class", None)
+        if _processor_class is not None:
+            dictionary["processor_class"] = _processor_class
+
+        return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
+
+    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+        """
+        Save this instance to a JSON file.
+
+        Args:
+            json_file_path (`str` or `os.PathLike`):
+                Path to the JSON file in which this image_processor instance's parameters will be saved.
+        """
+        with open(json_file_path, "w", encoding="utf-8") as writer:
+            writer.write(self.to_json_string())
+
+    def __repr__(self):
+        return f"{self.__class__.__name__} {self.to_json_string()}"
+
+    @classmethod
+    def register_for_auto_class(cls, auto_class="AutoImageProcessor"):
+        """
+        Register this class with a given auto class. This should only be used for custom image processors as the ones
+        in the library are already mapped with `AutoImageProcessor `.
+
+        <Tip warning={true}>
+
+        This API is experimental and may have some slight breaking changes in the next releases.
+
+        </Tip>
+
+        Args:
+            auto_class (`str` or `type`, *optional*, defaults to `"AutoImageProcessor "`):
+                The auto class to register this new image processor with.
+        """
+        if not isinstance(auto_class, str):
+            auto_class = auto_class.__name__
+
+        import transformers.models.auto as auto_module
+
+        if not hasattr(auto_module, auto_class):
+            raise ValueError(f"{auto_class} is not a valid auto class.")
+
+        cls._auto_class = auto_class
 
 
-class BaseImageProcessor(ImageProcessorMixin):
+class BaseImageProcessor(ImageProcessingMixin):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -225,3 +506,9 @@ def get_size_dict(
         f" or ('shortest_edge',) got {size}. Setting as {size_dict}.",
     )
     return size_dict
+
+
+ImageProcessingMixin.push_to_hub = copy_func(ImageProcessingMixin.push_to_hub)
+ImageProcessingMixin.push_to_hub.__doc__ = ImageProcessingMixin.push_to_hub.__doc__.format(
+    object="image processor", object_class="AutoImageProcessor", object_files="image processor file"
+)

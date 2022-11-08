@@ -22,7 +22,7 @@ from typing import Dict, Optional, Union
 # Build the list of all image processors
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
-from ...image_processing_utils import ImageProcessorMixin
+from ...image_processing_utils import ImageProcessingMixin
 from ...utils import CONFIG_NAME, IMAGE_PROCESSOR_NAME, get_file_from_repo, logging
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -220,7 +220,7 @@ class AutoImageProcessor:
                   huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
                   namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
                 - a path to a *directory* containing a image processor file saved using the
-                  [`~image_processing_utils.ImageProcessorMixin.save_pretrained`] method, e.g.,
+                  [`~image_processing_utils.ImageProcessingMixin.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
                 - a path or url to a saved image processor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
@@ -274,11 +274,14 @@ class AutoImageProcessor:
         >>> # If image processor files are in a directory (e.g. image processor was saved using *save_pretrained('./test/saved_model/')*)
         >>> image_processor = AutoImageProcessor.from_pretrained("./test/saved_model/")
         ```"""
+        import pdb
+
+        pdb.set_trace()
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", False)
         kwargs["_from_auto"] = True
 
-        config_dict, _ = ImageProcessorMixin.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, _ = ImageProcessingMixin.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
         image_processor_class = config_dict.get("image_processor_type", None)
         image_processor_auto_map = None
         if "AutoImageProcessor" in config_dict.get("auto_map", {}):
@@ -292,6 +295,27 @@ class AutoImageProcessor:
             image_processor_class = getattr(config, "image_processor_type", None)
             if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:
                 image_processor_auto_map = config.auto_map["AutoImageProcessor"]
+
+        # If we still don't have the image processor class, check if we're loading from a previous feature extractor config
+        # and if so, infer the image processor class from there.
+        if image_processor_class is None and image_processor_auto_map is None:
+            feature_extractor_class = config_dict.pop("feature_extractor_type", None)
+            if feature_extractor_class is not None:
+                logger.warning(
+                    "Could not find image processor class in the image processor config or the model config. Loading"
+                    " based on pattern matching with the model's feature extractor configuration."
+                )
+                image_processor_class = feature_extractor_class.replace("FeatureExtractor", "ImageProcessor")
+                # Return None if not found, as some vision models don't yet have an image processor.
+                if image_processor_class not in IMAGE_PROCESSOR_MAPPING_NAMES.values():
+                    image_processor_class = None
+            if "AutoFeatureExtractor" in config_dict.get("auto_map", {}):
+                feature_extractor_auto_map = config_dict["auto_map"]["AutoFeatureExtractor"]
+                image_processor_auto_map = feature_extractor_auto_map.replace("FeatureExtractor", "ImageProcessor")
+                logger.warning(
+                    "Could not find image processor auto map in the image processor config or the model config."
+                    " Loading based on pattern matching with the model's feature extractor configuration."
+                )
 
         if image_processor_class is not None:
             # If we have custom code for a image processor, we get the proper class.
@@ -335,6 +359,6 @@ class AutoImageProcessor:
         Args:
             config_class ([`PretrainedConfig`]):
                 The configuration corresponding to the model to register.
-            image_processor_class ([`ImageProcessorMixin`]): The image processor to register.
+            image_processor_class ([`ImageProcessingMixin`]): The image processor to register.
         """
         IMAGE_PROCESSOR_MAPPING.register(config_class, image_processor_class)

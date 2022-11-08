@@ -1,5 +1,5 @@
-from transformers import ViTImageProcessor
+from transformers import CLIPImageProcessor
 
 
-class CustomFeatureExtractor(ViTImageProcessor):
+class CustomImageProcessor(CLIPImageProcessor):
     pass
