@@ -18,7 +18,8 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import require_torch, require_vision
+from huggingface_hub import hf_hub_download
+from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_image_inputs
@@ -344,6 +345,67 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         common(is_instance_map=True)
         common(is_instance_map=False, segmentation_type="pil")
         common(is_instance_map=True, segmentation_type="pil")
+
+    @slow
+    def test_integration_instance_segmentation(self):
+        # load 2 images and corresponding annotations from the hub
+        repo_id = "nielsr/image-segmentation-toy-data"
+        image1 = Image.open(
+            hf_hub_download(repo_id=repo_id, filename="instance_segmentation_image_1.png", repo_type="dataset")
+        )
+        image2 = Image.open(
+            hf_hub_download(repo_id=repo_id, filename="instance_segmentation_image_2.png", repo_type="dataset")
+        )
+        annotation1 = Image.open(
+            hf_hub_download(repo_id=repo_id, filename="instance_segmentation_annotation_1.png", repo_type="dataset")
+        )
+        annotation2 = Image.open(
+            hf_hub_download(repo_id=repo_id, filename="instance_segmentation_annotation_2.png", repo_type="dataset")
+        )
+
+        # get instance segmentations and instance-to-segmentation mappings
+        def get_instance_segmentation_and_mapping(annotation):
+            instance_seg = np.array(annotation)[:, :, 1]
+            class_id_map = np.array(annotation)[:, :, 0]
+            class_labels = np.unique(class_id_map)
+
+            # create mapping between instance IDs and semantic category IDs
+            inst2class = {}
+            for label in class_labels:
+                instance_ids = np.unique(instance_seg[class_id_map == label])
+                inst2class.update({i: label for i in instance_ids})
+
+            return instance_seg, inst2class
+
+        instance_seg1, inst2class1 = get_instance_segmentation_and_mapping(annotation1)
+        instance_seg2, inst2class2 = get_instance_segmentation_and_mapping(annotation2)
+
+        # create a feature extractor
+        feature_extractor = MaskFormerFeatureExtractor(reduce_labels=True, ignore_index=255, size=(512, 512))
+
+        # prepare the images and annotations
+        inputs = feature_extractor(
+            [image1, image2],
+            [instance_seg1, instance_seg2],
+            instance_id_to_semantic_id=[inst2class1, inst2class2],
+            return_tensors="pt",
+        )
+
+        # verify the pixel values and pixel mask
+        self.assertEqual(inputs["pixel_values"].shape, (2, 3, 512, 512))
+        self.assertEqual(inputs["pixel_mask"].shape, (2, 512, 512))
+
+        # verify the class labels
+        self.assertEqual(len(inputs["class_labels"]), 2)
+        self.assertTrue(torch.allclose(inputs["class_labels"][0], torch.tensor([30, 55])))
+        self.assertTrue(torch.allclose(inputs["class_labels"][1], torch.tensor([4, 4, 23, 55])))
+
+        # verify the mask labels
+        self.assertEqual(len(inputs["mask_labels"]), 2)
+        self.assertEqual(inputs["mask_labels"][0].shape, (2, 512, 512))
+        self.assertTrue(inputs["mask_labels"][1].shape, (4, 512, 512))
+        self.assertEquals(inputs["mask_labels"][0].sum().item(), 41527.0)
+        self.assertEquals(inputs["mask_labels"][1].sum().item(), 26259.0)
 
     def test_binary_mask_to_rle(self):
         fake_binary_mask = np.zeros((20, 50))

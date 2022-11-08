@@ -328,11 +328,23 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         padded up to the largest image in a batch, and a pixel mask is created that indicates which pixels are
         real/which are padding.
 
-        MaskFormer addresses semantic segmentation with a mask classification paradigm, thus input segmentation maps
-        will be converted to lists of binary masks and their respective labels. Let's see an example, assuming
-        `segmentation_maps = [[2,6,7,9]]`, the output will contain `mask_labels =
+        Segmentation maps can be instance, semantic or panoptic segmentation maps. In case of instance and panoptic
+        segmentation, one needs to provide `instance_id_to_semantic_id`, which is a mapping from instance/segment ids
+        to semantic category ids.
+
+        MaskFormer addresses all 3 forms of segmentation (instance, semantic and panoptic) in the same way, namely by
+        converting the segmentation maps to a set of binary masks with corresponding classes.
+
+        In case of instance segmentation, the segmentation maps contain the instance ids, and
+        `instance_id_to_semantic_id` maps instance IDs to their corresponding semantic category.
+
+        In case of semantic segmentation, the segmentation maps contain the semantic category ids. Let's see an
+        example, assuming `segmentation_maps = [[2,6,7,9]]`, the output will contain `mask_labels =
         [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]` (four binary masks) and `class_labels = [2,6,7,9]`, the labels for
         each mask.
+
+        In case of panoptic segmentation, the segmentation maps contain the segment ids, and
+        `instance_id_to_semantic_id` maps segment IDs to their corresponding semantic category.
 
         <Tip warning={true}>
 
@@ -348,9 +360,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 number of channels, H and W are image height and width.
 
             segmentation_maps (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
-                The corresponding semantic segmentation maps with the pixel-wise class id annotations or instance
-                segmentation maps with pixel-wise instance id annotations. Assumed to be semantic segmentation maps if
-                no `instance_id_to_semantic_id map` is provided.
+                The corresponding segmentation maps with the pixel-wise instance id, semantic id or segment id
+                annotations. Assumed to be semantic segmentation maps if no `instance_id_to_semantic_id map` is
+                provided.
 
             pad_and_return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.
@@ -361,10 +373,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 - 0 for pixels that are padding (i.e. **masked**).
 
             instance_id_to_semantic_id (`List[Dict[int, int]]` or `Dict[int, int]`, *optional*):
-                A mapping between object instance ids and class ids. If passed, `segmentation_maps` is treated as an
-                instance segmentation map where each pixel represents an instance id. Can be provided as a single
-                dictionary with a global / dataset-level mapping or as a list of dictionaries (one per image), to map
-                instance ids in each image separately.
+                A mapping between instance/segment ids and semantic category ids. If passed, `segmentation_maps` is
+                treated as an instance or panoptic segmentation map where each pixel represents an instance or segment
+                id. Can be provided as a single dictionary with a global / dataset-level mapping or as a list of
+                dictionaries (one per image), to map instance ids in each image separately.
 
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
@@ -487,7 +499,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             segmentation_map -= 1
             segmentation_map[segmentation_map == self.ignore_index - 1] = self.ignore_index
 
-        # Get unique ids (class ids, segment ids or instance ids based on input)
+        # Get unique ids (instance, class ids or segment ids based on input)
         all_labels = np.unique(segmentation_map)
 
         # Remove ignored label
@@ -512,28 +524,48 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
     def encode_inputs(
         self,
-        pixel_values_list: List["np.ndarray"],
+        pixel_values_list: Union[List["np.ndarray"], List["torch.Tensor"]],
         segmentation_maps: ImageInput = None,
         pad_and_return_pixel_mask: bool = True,
         instance_id_to_semantic_id: Optional[Union[List[Dict[int, int]], Dict[int, int]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ):
         """
-        Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
+        Encode a list of pixel values and an optional list of corresponding segmentation maps.
 
-        MaskFormer addresses semantic segmentation with a mask classification paradigm, thus input segmentation maps
-        will be converted to lists of binary masks and their respective labels. Let's see an example, assuming
-        `segmentation_maps = [[2,6,7,9]]`, the output will contain `mask_labels =
+        This method is useful if you have resized and normalized your images and segmentation maps yourself, using a
+        library like [torchvision](https://pytorch.org/vision/stable/transforms.html) or
+        [albumentations](https://albumentations.ai/).
+
+        Images are padded up to the largest image in a batch, and a corresponding `pixel_mask` is created.
+
+        Segmentation maps can be instance, semantic or panoptic segmentation maps. In case of instance and panoptic
+        segmentation, one needs to provide `instance_id_to_semantic_id`, which is a mapping from instance/segment ids
+        to semantic category ids.
+
+        MaskFormer addresses all 3 forms of segmentation (instance, semantic and panoptic) in the same way, namely by
+        converting the segmentation maps to a set of binary masks with corresponding classes.
+
+        In case of instance segmentation, the segmentation maps contain the instance ids, and
+        `instance_id_to_semantic_id` maps instance IDs to their corresponding semantic category.
+
+        In case of semantic segmentation, the segmentation maps contain the semantic category ids. Let's see an
+        example, assuming `segmentation_maps = [[2,6,7,9]]`, the output will contain `mask_labels =
         [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]` (four binary masks) and `class_labels = [2,6,7,9]`, the labels for
         each mask.
 
+        In case of panoptic segmentation, the segmentation maps contain the segment ids, and
+        `instance_id_to_semantic_id` maps segment IDs to their corresponding semantic category.
+
         Args:
-            pixel_values_list (`List[torch.Tensor]`):
+            pixel_values_list (`List[np.ndarray]` or `List[torch.Tensor]`):
                 List of images (pixel values) to be padded. Each image should be a tensor of shape `(channels, height,
                 width)`.
 
             segmentation_maps (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
-                The corresponding semantic segmentation maps with the pixel-wise annotations.
+                The corresponding segmentation maps with the pixel-wise instance id, semantic id or segment id
+                annotations. Assumed to be semantic segmentation maps if no `instance_id_to_semantic_id map` is
+                provided.
 
             pad_and_return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.
@@ -544,10 +576,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 - 0 for pixels that are padding (i.e. **masked**).
 
             instance_id_to_semantic_id (`List[Dict[int, int]]` or `Dict[int, int]`, *optional*):
-                A mapping between object instance ids and class ids. If passed, `segmentation_maps` is treated as an
-                instance segmentation map where each pixel represents an instance id. Can be provided as a single
-                dictionary with a global/dataset-level mapping or as a list of dictionaries (one per image), to map
-                instance ids in each image separately.
+                A mapping between instance/segment ids and semantic category ids. If passed, `segmentation_maps` is
+                treated as an instance or panoptic segmentation map where each pixel represents an instance or segment
+                id. Can be provided as a single dictionary with a global / dataset-level mapping or as a list of
+                dictionaries (one per image), to map instance ids in each image separately.
 
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
