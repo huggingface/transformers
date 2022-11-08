@@ -274,9 +274,6 @@ class AutoImageProcessor:
         >>> # If image processor files are in a directory (e.g. image processor was saved using *save_pretrained('./test/saved_model/')*)
         >>> image_processor = AutoImageProcessor.from_pretrained("./test/saved_model/")
         ```"""
-        import pdb
-
-        pdb.set_trace()
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", False)
         kwargs["_from_auto"] = True

@@ -158,9 +158,6 @@ class ImageProcessingMixin(PushToHubMixin):
         assert image_processor.do_normalize is False
         assert unused_kwargs == {"foo": False}
         ```"""
-        import pdb
-
-        pdb.set_trace()
         image_processor_dict, kwargs = cls.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
 
         return cls.from_dict(image_processor_dict, **kwargs)

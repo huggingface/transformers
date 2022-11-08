@@ -300,9 +300,6 @@ class AutoFeatureExtractor:
         if "AutoFeatureExtractor" in config_dict.get("auto_map", {}):
             feature_extractor_auto_map = config_dict["auto_map"]["AutoFeatureExtractor"]
 
-        import pdb
-
-        pdb.set_trace()
         # If we don't find the feature extractor class in the feature extractor config, let's try the model config.
         if feature_extractor_class is None and feature_extractor_auto_map is None:
             if not isinstance(config, PretrainedConfig):
