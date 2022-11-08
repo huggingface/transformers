@@ -25,8 +25,13 @@ from ..test_modeling_common import floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers.generation.beam_constraints import DisjunctiveConstraint, PhrasalConstraint
-    from transformers.generation.beam_search import BeamHypotheses, BeamSearchScorer, ConstrainedBeamSearchScorer
+    from transformers.generation import (
+        BeamHypotheses,
+        BeamSearchScorer,
+        ConstrainedBeamSearchScorer,
+        DisjunctiveConstraint,
+        PhrasalConstraint,
+    )
 
 
 class BeamSearchTester:

@@ -42,23 +42,27 @@ if is_torch_available():
         pipeline,
         top_k_top_p_filtering,
     )
-    from transformers.generation.beam_constraints import DisjunctiveConstraint, PhrasalConstraint
-    from transformers.generation.beam_search import BeamSearchScorer, ConstrainedBeamSearchScorer
-    from transformers.generation.logits_process import (
+    from transformers.generation import (
+        BeamSearchScorer,
+        ConstrainedBeamSearchScorer,
+        DisjunctiveConstraint,
         ForcedBOSTokenLogitsProcessor,
         ForcedEOSTokenLogitsProcessor,
         HammingDiversityLogitsProcessor,
         InfNanRemoveLogitsProcessor,
         LogitsProcessorList,
+        MaxLengthCriteria,
         MinLengthLogitsProcessor,
         NoBadWordsLogitsProcessor,
         NoRepeatNGramLogitsProcessor,
+        PhrasalConstraint,
         RepetitionPenaltyLogitsProcessor,
+        StoppingCriteria,
+        StoppingCriteriaList,
         TemperatureLogitsWarper,
         TopKLogitsWarper,
         TopPLogitsWarper,
     )
-    from transformers.generation.stopping_criteria import MaxLengthCriteria, StoppingCriteria, StoppingCriteriaList
     from transformers.generation.utils import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,

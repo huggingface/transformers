@@ -25,7 +25,7 @@ from ..test_modeling_common import ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers.generation.stopping_criteria import (
+    from transformers.generation import (
         MaxLengthCriteria,
         MaxNewTokensCriteria,
         MaxTimeCriteria,

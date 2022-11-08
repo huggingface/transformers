@@ -16,7 +16,7 @@
 
 import warnings
 
-from .generation.tf_utils import TFGenerationMixin
+from .generation import TFGenerationMixin
 
 
 class TFGenerationMixin(TFGenerationMixin):

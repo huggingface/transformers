@@ -18,13 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ..utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_flax_available,
-    is_tf_available,
-    is_torch_available,
-)
+from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_tf_available, is_torch_available
 
 
 _import_structure = {}
@@ -42,7 +36,12 @@ else:
         "DisjunctiveConstraint",
         "PhrasalConstraint",
     ]
-    _import_structure["beam_search"] = ["BeamScorer", "BeamSearchScorer", "ConstrainedBeamSearchScorer"]
+    _import_structure["beam_search"] = [
+        "BeamHypotheses",
+        "BeamScorer",
+        "BeamSearchScorer",
+        "ConstrainedBeamSearchScorer",
+    ]
     _import_structure["logits_process"] = [
         "ForcedBOSTokenLogitsProcessor",
         "ForcedEOSTokenLogitsProcessor",
@@ -60,14 +59,32 @@ else:
         "TopKLogitsWarper",
         "TopPLogitsWarper",
         "TypicalLogitsWarper",
+        "EncoderNoRepeatNGramLogitsProcessor",
+        "ExponentialDecayLengthPenalty",
+        "LogitNormalization",
     ]
     _import_structure["stopping_criteria"] = [
+        "MaxNewTokensCriteria",
         "MaxLengthCriteria",
         "MaxTimeCriteria",
         "StoppingCriteria",
         "StoppingCriteriaList",
+        "validate_stopping_criteria",
     ]
-    _import_structure["utils"] = ["GenerationMixin", "top_k_top_p_filtering"]
+    _import_structure["utils"] = [
+        "GenerationMixin",
+        "top_k_top_p_filtering",
+        "GreedySearchEncoderDecoderOutput",
+        "GreedySearchDecoderOnlyOutput",
+        "SampleEncoderDecoderOutput",
+        "SampleDecoderOnlyOutput",
+        "BeamSearchEncoderDecoderOutput",
+        "BeamSearchDecoderOnlyOutput",
+        "BeamSampleEncoderDecoderOutput",
+        "BeamSampleDecoderOnlyOutput",
+        "ContrastiveSearchEncoderDecoderOutput",
+        "ContrastiveSearchDecoderOnlyOutput",
+    ]
 
 try:
     if not is_tf_available():
@@ -88,8 +105,24 @@ else:
         "TFTemperatureLogitsWarper",
         "TFTopKLogitsWarper",
         "TFTopPLogitsWarper",
+        "TFForceTokensLogitsProcessor",
+        "TFSuppressTokensAtBeginLogitsProcessor",
+        "TFSuppressTokensLogitsProcessor",
     ]
-    _import_structure["tf_utils"] = ["TFGenerationMixin", "tf_top_k_top_p_filtering"]
+    _import_structure["tf_utils"] = [
+        "TFGenerationMixin",
+        "tf_top_k_top_p_filtering",
+        "TFGreedySearchDecoderOnlyOutput",
+        "TFGreedySearchEncoderDecoderOutput",
+        "TFSampleEncoderDecoderOutput",
+        "TFSampleDecoderOnlyOutput",
+        "TFBeamSearchEncoderDecoderOutput",
+        "TFBeamSearchDecoderOnlyOutput",
+        "TFBeamSampleEncoderDecoderOutput",
+        "TFBeamSampleDecoderOnlyOutput",
+        "TFContrastiveSearchEncoderDecoderOutput",
+        "TFContrastiveSearchDecoderOnlyOutput",
+    ]
 
 try:
     if not is_flax_available():
@@ -108,7 +141,12 @@ else:
         "FlaxTopKLogitsWarper",
         "FlaxTopPLogitsWarper",
     ]
-    _import_structure["flax_utils"] = ["FlaxGenerationMixin"]
+    _import_structure["flax_utils"] = [
+        "FlaxGenerationMixin",
+        "FlaxGreedySearchOutput",
+        "FlaxSampleOutput",
+        "FlaxBeamSearchOutput",
+    ]
 
 if TYPE_CHECKING:
     try:
@@ -117,18 +155,16 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .beam_constraints import (
-            Constraint,
-            ConstraintListState,
-            DisjunctiveConstraint,
-            PhrasalConstraint,
-        )
-        from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
+        from .beam_constraints import Constraint, ConstraintListState, DisjunctiveConstraint, PhrasalConstraint
+        from .beam_search import BeamHypotheses, BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
         from .logits_process import (
+            EncoderNoRepeatNGramLogitsProcessor,
+            ExponentialDecayLengthPenalty,
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
             HammingDiversityLogitsProcessor,
             InfNanRemoveLogitsProcessor,
+            LogitNormalization,
             LogitsProcessor,
             LogitsProcessorList,
             LogitsWarper,
@@ -144,11 +180,26 @@ if TYPE_CHECKING:
         )
         from .stopping_criteria import (
             MaxLengthCriteria,
+            MaxNewTokensCriteria,
             MaxTimeCriteria,
             StoppingCriteria,
             StoppingCriteriaList,
+            validate_stopping_criteria,
         )
-        from .utils import GenerationMixin, top_k_top_p_filtering
+        from .utils import (
+            BeamSampleDecoderOnlyOutput,
+            BeamSampleEncoderDecoderOutput,
+            BeamSearchDecoderOnlyOutput,
+            BeamSearchEncoderDecoderOutput,
+            ContrastiveSearchDecoderOnlyOutput,
+            ContrastiveSearchEncoderDecoderOutput,
+            GenerationMixin,
+            GreedySearchDecoderOnlyOutput,
+            GreedySearchEncoderDecoderOutput,
+            SampleDecoderOnlyOutput,
+            SampleEncoderDecoderOutput,
+            top_k_top_p_filtering,
+        )
 
     try:
         if not is_tf_available():
@@ -159,6 +210,7 @@ if TYPE_CHECKING:
         from .tf_logits_process import (
             TFForcedBOSTokenLogitsProcessor,
             TFForcedEOSTokenLogitsProcessor,
+            TFForceTokensLogitsProcessor,
             TFLogitsProcessor,
             TFLogitsProcessorList,
             TFLogitsWarper,
@@ -166,11 +218,26 @@ if TYPE_CHECKING:
             TFNoBadWordsLogitsProcessor,
             TFNoRepeatNGramLogitsProcessor,
             TFRepetitionPenaltyLogitsProcessor,
+            TFSuppressTokensAtBeginLogitsProcessor,
+            TFSuppressTokensLogitsProcessor,
             TFTemperatureLogitsWarper,
             TFTopKLogitsWarper,
             TFTopPLogitsWarper,
         )
-        from .tf_utils import TFGenerationMixin, tf_top_k_top_p_filtering
+        from .tf_utils import (
+            TFBeamSampleDecoderOnlyOutput,
+            TFBeamSampleEncoderDecoderOutput,
+            TFBeamSearchDecoderOnlyOutput,
+            TFBeamSearchEncoderDecoderOutput,
+            TFContrastiveSearchDecoderOnlyOutput,
+            TFContrastiveSearchEncoderDecoderOutput,
+            TFGenerationMixin,
+            TFGreedySearchDecoderOnlyOutput,
+            TFGreedySearchEncoderDecoderOutput,
+            TFSampleDecoderOnlyOutput,
+            TFSampleEncoderDecoderOutput,
+            tf_top_k_top_p_filtering,
+        )
 
     try:
         if not is_flax_available():
@@ -189,7 +256,7 @@ if TYPE_CHECKING:
             FlaxTopKLogitsWarper,
             FlaxTopPLogitsWarper,
         )
-        from .flax_utils import FlaxGenerationMixin
+        from .flax_utils import FlaxBeamSearchOutput, FlaxGenerationMixin, FlaxGreedySearchOutput, FlaxSampleOutput
 else:
     import sys
 

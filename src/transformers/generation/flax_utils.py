@@ -127,11 +127,11 @@ class FlaxGenerationMixin:
     A class containing all functions for auto-regressive text generation, to be used as a mixin in
     [`FlaxPreTrainedModel`].
 
-    The class exposes [`~generation.flax_utils.FlaxGenerationMixin.generate`], which can be used for:
-            - *greedy decoding* by calling [`~generation.flax_utils.FlaxGenerationMixin._greedy_search`] if
-              `num_beams=1` and `do_sample=False`.
-            - *multinomial sampling* by calling [`~generation.flax_utils.FlaxGenerationMixin._sample`] if `num_beams=1`
-              and `do_sample=True`.
+    The class exposes [`~generation.FlaxGenerationMixin.generate`], which can be used for:
+            - *greedy decoding* by calling [`~generation.FlaxGenerationMixin._greedy_search`] if `num_beams=1` and
+              `do_sample=False`.
+            - *multinomial sampling* by calling [`~generation.FlaxGenerationMixin._sample`] if `num_beams=1` and
+              `do_sample=True`.
             - *beam-search decoding* by calling [`~generation.utils.FlaxGenerationMixin._beam_search`] if `num_beams>1`
               and `do_sample=False`.
     """
@@ -237,10 +237,10 @@ class FlaxGenerationMixin:
         Generates sequences of token ids for models with a language modeling head. The method supports the following
         generation methods for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
 
-            - *greedy decoding* by calling [`~generation.flax_utils.FlaxGenerationMixin._greedy_search`] if
-              `num_beams=1` and `do_sample=False`.
-            - *multinomial sampling* by calling [`~generation.flax_utils.FlaxGenerationMixin._sample`] if `num_beams=1`
-              and `do_sample=True`.
+            - *greedy decoding* by calling [`~generation.FlaxGenerationMixin._greedy_search`] if `num_beams=1` and
+              `do_sample=False`.
+            - *multinomial sampling* by calling [`~generation.FlaxGenerationMixin._sample`] if `num_beams=1` and
+              `do_sample=True`.
             - *beam-search decoding* by calling [`~generation.utils.FlaxGenerationMixin._beam_search`] if `num_beams>1`
               and `do_sample=False`.
 

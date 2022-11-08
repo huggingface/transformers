@@ -21,9 +21,7 @@ import torch
 from torch import nn
 
 from ...configuration_utils import PretrainedConfig
-from ...generation.beam_search import BeamSearchScorer
-from ...generation.logits_process import LogitsProcessorList
-from ...generation.stopping_criteria import StoppingCriteriaList
+from ...generation import BeamSearchScorer, LogitsProcessorList, StoppingCriteriaList
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings_to_model_forward, logging, replace_return_docstrings

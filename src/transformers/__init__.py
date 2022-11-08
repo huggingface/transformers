@@ -2253,7 +2253,7 @@ else:
             "TFTopKLogitsWarper",
             "TFTopPLogitsWarper",
             "TFGenerationMixin",
-            "tf_top_k_top_p_filtering"
+            "tf_top_k_top_p_filtering",
         ]
     )
     _import_structure["keras_callbacks"] = ["KerasMetricCallback", "PushToHubCallback"]
@@ -2890,7 +2890,7 @@ else:
             "FlaxTemperatureLogitsWarper",
             "FlaxTopKLogitsWarper",
             "FlaxTopPLogitsWarper",
-            "FlaxGenerationMixin"
+            "FlaxGenerationMixin",
         ]
     )
     _import_structure["modeling_flax_outputs"] = []
@@ -3783,35 +3783,35 @@ if TYPE_CHECKING:
             TextDatasetForNextSentencePrediction,
         )
         from .generation import (
-            Constraint,
-            ConstraintListState,
-            DisjunctiveConstraint,
-            PhrasalConstraint,
             BeamScorer,
             BeamSearchScorer,
             ConstrainedBeamSearchScorer,
+            Constraint,
+            ConstraintListState,
+            DisjunctiveConstraint,
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
+            GenerationMixin,
             HammingDiversityLogitsProcessor,
             InfNanRemoveLogitsProcessor,
             LogitsProcessor,
             LogitsProcessorList,
             LogitsWarper,
+            MaxLengthCriteria,
+            MaxTimeCriteria,
             MinLengthLogitsProcessor,
             NoBadWordsLogitsProcessor,
             NoRepeatNGramLogitsProcessor,
+            PhrasalConstraint,
             PrefixConstrainedLogitsProcessor,
             RepetitionPenaltyLogitsProcessor,
+            StoppingCriteria,
+            StoppingCriteriaList,
             TemperatureLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,
             TypicalLogitsWarper,
-            MaxLengthCriteria,
-            MaxTimeCriteria,
-            StoppingCriteria,
-            StoppingCriteriaList,
-            GenerationMixin,
-            top_k_top_p_filtering
+            top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
 
@@ -4965,6 +4965,7 @@ if TYPE_CHECKING:
         from .generation import (
             TFForcedBOSTokenLogitsProcessor,
             TFForcedEOSTokenLogitsProcessor,
+            TFGenerationMixin,
             TFLogitsProcessor,
             TFLogitsProcessorList,
             TFLogitsWarper,
@@ -4975,8 +4976,7 @@ if TYPE_CHECKING:
             TFTemperatureLogitsWarper,
             TFTopKLogitsWarper,
             TFTopPLogitsWarper,
-            TFGenerationMixin,
-            tf_top_k_top_p_filtering
+            tf_top_k_top_p_filtering,
         )
         from .keras_callbacks import KerasMetricCallback, PushToHubCallback
         from .modeling_tf_layoutlm import (
@@ -5470,6 +5470,7 @@ if TYPE_CHECKING:
         from .generation import (
             FlaxForcedBOSTokenLogitsProcessor,
             FlaxForcedEOSTokenLogitsProcessor,
+            FlaxGenerationMixin,
             FlaxLogitsProcessor,
             FlaxLogitsProcessorList,
             FlaxLogitsWarper,
@@ -5477,7 +5478,6 @@ if TYPE_CHECKING:
             FlaxTemperatureLogitsWarper,
             FlaxTopKLogitsWarper,
             FlaxTopPLogitsWarper,
-            FlaxGenerationMixin
         )
         from .modeling_flax_utils import FlaxPreTrainedModel
 

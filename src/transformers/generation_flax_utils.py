@@ -16,7 +16,7 @@
 
 import warnings
 
-from .generation.flax_utils import FlaxGenerationMixin
+from .generation import FlaxGenerationMixin
 
 
 class FlaxGenerationMixin(FlaxGenerationMixin):

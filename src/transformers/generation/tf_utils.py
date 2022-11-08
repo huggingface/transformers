@@ -428,14 +428,14 @@ class TFGenerationMixin:
     """
     A class containing all of the functions supporting generation, to be used as a mixin in [`TFPreTrainedModel`].
 
-    The class exposes [`~generation.tf_utils.TFGenerationMixin.generate`], which can be used for:
-        - *greedy decoding* by calling [`~generation.tf_utils.TFGenerationMixin.greedy_search`] if `num_beams=1` and
+    The class exposes [`~generation.TFGenerationMixin.generate`], which can be used for:
+        - *greedy decoding* by calling [`~generation.TFGenerationMixin.greedy_search`] if `num_beams=1` and
           `do_sample=False`.
-        - *contrastive search* by calling [`~generation.tf_utils.TFGenerationMixin.contrastive_search`] if
-          `penalty_alpha>0` and `top_k>1`
-        - *multinomial sampling* by calling [`~generation.tf_utils.TFGenerationMixin.sample`] if `num_beams=1` and
+        - *contrastive search* by calling [`~generation.TFGenerationMixin.contrastive_search`] if `penalty_alpha>0` and
+          `top_k>1`
+        - *multinomial sampling* by calling [`~generation.TFGenerationMixin.sample`] if `num_beams=1` and
           `do_sample=True`.
-        - *beam-search decoding* by calling [`~generation.tf_utils.TFGenerationMixin.beam_search`] if `num_beams>1` and
+        - *beam-search decoding* by calling [`~generation.TFGenerationMixin.beam_search`] if `num_beams>1` and
           `do_sample=False`.
     """
 
@@ -497,14 +497,14 @@ class TFGenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head. The method supports the following
         generation methods for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
-            - *greedy decoding* by calling [`~generation.tf_utils.TFGenerationMixin.greedy_search`] if `num_beams=1`
-              and `do_sample=False`.
-            - *contrastive search* by calling [`~generation.tf_utils.TFGenerationMixin.contrastive_search`] if
-              `penalty_alpha>0` and `top_k>1`
-            - *multinomial sampling* by calling [`~generation.tf_utils.TFGenerationMixin.sample`] if `num_beams=1` and
+            - *greedy decoding* by calling [`~generation.TFGenerationMixin.greedy_search`] if `num_beams=1` and
+              `do_sample=False`.
+            - *contrastive search* by calling [`~generation.TFGenerationMixin.contrastive_search`] if `penalty_alpha>0`
+              and `top_k>1`
+            - *multinomial sampling* by calling [`~generation.TFGenerationMixin.sample`] if `num_beams=1` and
               `do_sample=True`.
-            - *beam-search decoding* by calling [`~generation.tf_utils.TFGenerationMixin.beam_search`] if `num_beams>1`
-              and `do_sample=False`.
+            - *beam-search decoding* by calling [`~generation.TFGenerationMixin.beam_search`] if `num_beams>1` and
+              `do_sample=False`.
 
         Adapted in part from [Facebook's XLM beam search
         code](https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529).
@@ -615,18 +615,18 @@ class TFGenerationMixin:
                 If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
                 [`~utils.ModelOutput`] types are:
 
-                    - [`~generation.tf_utils.TFGreedySearchDecoderOnlyOutput`],
-                    - [`~generation.tf_utils.TFSampleDecoderOnlyOutput`],
-                    - [`~generation.tf_utils.TFBeamSearchDecoderOnlyOutput`],
-                    - [`~generation.tf_utils.TFBeamSampleDecoderOnlyOutput`]
+                    - [`~generation.TFGreedySearchDecoderOnlyOutput`],
+                    - [`~generation.TFSampleDecoderOnlyOutput`],
+                    - [`~generation.TFBeamSearchDecoderOnlyOutput`],
+                    - [`~generation.TFBeamSampleDecoderOnlyOutput`]
 
                 If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
                 [`~utils.ModelOutput`] types are:
 
-                    - [`~generation.tf_utils.TFGreedySearchEncoderDecoderOutput`],
-                    - [`~generation.tf_utils.TFSampleEncoderDecoderOutput`],
-                    - [`~generation.tf_utils.TFBeamSearchEncoderDecoderOutput`],
-                    - [`~generation.tf_utils.TFBeamSampleEncoderDecoderOutput`]
+                    - [`~generation.TFGreedySearchEncoderDecoderOutput`],
+                    - [`~generation.TFSampleEncoderDecoderOutput`],
+                    - [`~generation.TFBeamSearchEncoderDecoderOutput`],
+                    - [`~generation.TFBeamSampleEncoderDecoderOutput`]
 
         Examples:
 
@@ -817,7 +817,7 @@ class TFGenerationMixin:
             bad_words_ids is None or isinstance(bad_words_ids, list) and isinstance(bad_words_ids[0], list)
         ), "`bad_words_ids` is either `None` or a list of lists of tokens that should not be generated"
 
-        # This block corresponds to the following line in `generation.tf_utils`:
+        # This block corresponds to the following line in `generation`:
         #   "input_ids = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))"
         # with the following differences:
         #   1. In PT, `generate()`'s `model_kwargs` can accept `encoder_outputs`, but not the case in TF.
@@ -1498,14 +1498,14 @@ class TFGenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head. The method supports the following
         generation methods for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
-            - *greedy decoding* by calling [`~generation.tf_utils.TFGenerationMixin.greedy_search`] if `num_beams=1`
-              and `do_sample=False`.
-            - *contrastive search* by calling [`~generation.tf_utils.TFGenerationMixin.contrastive_search`] if
-              `penalty_alpha>0` and `top_k>1`
-            - *multinomial sampling* by calling [`~generation.tf_utils.TFGenerationMixin.sample`] if `num_beams=1` and
+            - *greedy decoding* by calling [`~generation.TFGenerationMixin.greedy_search`] if `num_beams=1` and
+              `do_sample=False`.
+            - *contrastive search* by calling [`~generation.TFGenerationMixin.contrastive_search`] if `penalty_alpha>0`
+              and `top_k>1`
+            - *multinomial sampling* by calling [`~generation.TFGenerationMixin.sample`] if `num_beams=1` and
               `do_sample=True`.
-            - *beam-search decoding* by calling [`~generation.tf_utils.TFGenerationMixin.beam_search`] if `num_beams>1`
-              and `do_sample=False`.
+            - *beam-search decoding* by calling [`~generation.TFGenerationMixin.beam_search`] if `num_beams>1` and
+              `do_sample=False`.
 
         Adapted in part from [Facebook's XLM beam search
         code](https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529).
@@ -1616,18 +1616,18 @@ class TFGenerationMixin:
                 If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
                 [`~utils.ModelOutput`] types are:
 
-                    - [`~generation.tf_utils.TFGreedySearchDecoderOnlyOutput`],
-                    - [`~generation.tf_utils.TFSampleDecoderOnlyOutput`],
-                    - [`~generation.tf_utils.TFBeamSearchDecoderOnlyOutput`],
-                    - [`~generation.tf_utils.TFBeamSampleDecoderOnlyOutput`]
+                    - [`~generation.TFGreedySearchDecoderOnlyOutput`],
+                    - [`~generation.TFSampleDecoderOnlyOutput`],
+                    - [`~generation.TFBeamSearchDecoderOnlyOutput`],
+                    - [`~generation.TFBeamSampleDecoderOnlyOutput`]
 
                 If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
                 [`~utils.ModelOutput`] types are:
 
-                    - [`~generation.tf_utils.TFGreedySearchEncoderDecoderOutput`],
-                    - [`~generation.tf_utils.TFSampleEncoderDecoderOutput`],
-                    - [`~generation.tf_utils.TFBeamSearchEncoderDecoderOutput`],
-                    - [`~generation.tf_utils.TFBeamSampleEncoderDecoderOutput`]
+                    - [`~generation.TFGreedySearchEncoderDecoderOutput`],
+                    - [`~generation.TFSampleEncoderDecoderOutput`],
+                    - [`~generation.TFBeamSearchEncoderDecoderOutput`],
+                    - [`~generation.TFBeamSampleEncoderDecoderOutput`]
 
         Examples:
 
@@ -2366,11 +2366,11 @@ class TFGenerationMixin:
                 model is an encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`~generation.tf_utils.TFGreedySearchDecoderOnlyOutput`],
-            [`~generation.tf_utils.TFGreedySearchEncoderDecoderOutput`] or `tf.Tensor`: A `tf.Tensor` containing the
-            generated tokens (default behaviour) or a [`~generation.tf_utils.TFGreedySearchDecoderOnlyOutput`] if
-            `model.config.is_encoder_decoder=False` and `return_dict_in_generate=True` or a
-            [`~generation.tf_utils.TFGreedySearchEncoderDecoderOutput`] if `model.config.is_encoder_decoder=True`.
+            [`~generation.TFGreedySearchDecoderOnlyOutput`], [`~generation.TFGreedySearchEncoderDecoderOutput`] or
+            `tf.Tensor`: A `tf.Tensor` containing the generated tokens (default behaviour) or a
+            [`~generation.TFGreedySearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
+            `return_dict_in_generate=True` or a [`~generation.TFGreedySearchEncoderDecoderOutput`] if
+            `model.config.is_encoder_decoder=True`.
 
         Examples:
 
@@ -2625,10 +2625,10 @@ class TFGenerationMixin:
                 encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`~generation.tf_utils.TFSampleDecoderOnlyOutput`], [`~generation.tf_utils.TFSampleEncoderDecoderOutput`]
-            or `tf.Tensor`: A `tf.Tensor` containing the generated tokens (default behaviour) or a
-            [`~generation.tf_utils.TFSampleDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
-            `return_dict_in_generate=True` or a [`~generation.tf_utils.TFSampleEncoderDecoderOutput`] if
+            [`~generation.TFSampleDecoderOnlyOutput`], [`~generation.TFSampleEncoderDecoderOutput`] or `tf.Tensor`: A
+            `tf.Tensor` containing the generated tokens (default behaviour) or a
+            [`~generation.TFSampleDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
+            `return_dict_in_generate=True` or a [`~generation.TFSampleEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
 
         Examples:
@@ -2901,11 +2901,11 @@ class TFGenerationMixin:
                 encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`~generation.tf_utils.TFBeamSearchDecoderOnlyOutput`],
-            [`~generation.tf_utils.TFBeamSearchEncoderDecoderOutput`] or `tf.Tensor`: A `tf.Tensor` containing the
-            generated tokens (default behaviour) or a [`~generation.tf_utils.TFBeamSearchDecoderOnlyOutput`] if
-            `model.config.is_encoder_decoder=False` and `return_dict_in_generate=True` or a
-            [`~generation.tf_utils.TFBeamSearchEncoderDecoderOutput`] if `model.config.is_encoder_decoder=True`.
+            [`~generation.TFBeamSearchDecoderOnlyOutput`], [`~generation.TFBeamSearchEncoderDecoderOutput`] or
+            `tf.Tensor`: A `tf.Tensor` containing the generated tokens (default behaviour) or a
+            [`~generation.TFBeamSearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
+            `return_dict_in_generate=True` or a [`~generation.TFBeamSearchEncoderDecoderOutput`] if
+            `model.config.is_encoder_decoder=True`.
 
         Examples:
 
@@ -3372,12 +3372,11 @@ class TFGenerationMixin:
                 Additional model specific keyword arguments will be forwarded to the `call` function of the model. If
                 model is an encoder-decoder model the kwargs should include `encoder_outputs`.
         Return:
-            [`~generation.tf_utils.TFContrastiveSearchDecoderOnlyOutput`],
-            [`~generation.tf_utils.TFContrastiveSearchEncoderDecoderOutput`] or `tf.Tensor`: A `tf.Tensor` containing
-            the generated tokens (default behaviour) or a
-            [`~generation.tf_utils.TFContrastiveySearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False`
-            and `return_dict_in_generate=True` or a [`~generation.tf_utils.TFContrastiveSearchEncoderDecoderOutput`] if
-            `model.config.is_encoder_decoder=True`.
+            [`~generation.TFContrastiveSearchDecoderOnlyOutput`],
+            [`~generation.TFContrastiveSearchEncoderDecoderOutput`] or `tf.Tensor`: A `tf.Tensor` containing the
+            generated tokens (default behaviour) or a [`~generation.TFContrastiveySearchDecoderOnlyOutput`] if
+            `model.config.is_encoder_decoder=False` and `return_dict_in_generate=True` or a
+            [`~generation.TFContrastiveSearchEncoderDecoderOutput`] if `model.config.is_encoder_decoder=True`.
         Examples:
         ```python
         >>> from transformers import AutoTokenizer, TFAutoModelForCausalLM
