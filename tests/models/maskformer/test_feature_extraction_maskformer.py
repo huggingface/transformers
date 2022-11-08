@@ -461,7 +461,6 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         annotation2 = dataset["train"][1]["label"]
 
         def rgb_to_id(color):
-            print("Shape of color:", color.shape)
             if isinstance(color, np.ndarray) and len(color.shape) == 3:
                 if color.dtype == np.uint8:
                     color = color.astype(np.int32)
@@ -469,9 +468,7 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
 
         def create_panoptic_map(annotation, segments_info):
-            print("Annotation:", annotation)
             annotation = np.array(annotation)
-            print("Shape of annotation:", annotation.shape)
             # convert RGB to segment IDs per pixel
             # 0 is the "ignore" label, for which we don't need to make binary masks
             panoptic_map = rgb_to_id(annotation)
@@ -497,8 +494,26 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         )
 
         # verify the pixel values and pixel mask
-        self.assertEqual(inputs["pixel_values"].shape, (2, 3, 512, 768))
-        self.assertEqual(inputs["pixel_mask"].shape, (2, 512, 768))
+        self.assertEqual(inputs["pixel_values"].shape, (2, 3, 512, 711))
+        self.assertEqual(inputs["pixel_mask"].shape, (2, 512, 711))
+
+        # verify the class labels
+        self.assertEqual(len(inputs["class_labels"]), 2)
+        # fmt: off
+        expected_class_labels = torch.tensor([4, 17, 32, 42, 42, 42, 42, 42, 42, 42, 32, 12, 12, 12, 12, 12, 42, 42, 12, 12, 12, 42, 12, 12, 12, 12, 12, 3, 12, 12, 12, 12, 42, 42, 42, 12, 42, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 5, 12, 12, 12, 12, 12, 12, 12, 0, 43, 43, 43, 96, 43, 104, 43, 31, 125, 31, 125, 138, 87, 125, 149, 138, 125, 87, 87])  # noqa: E231
+        # fmt: on
+        self.assertTrue(torch.allclose(inputs["class_labels"][0], torch.tensor(expected_class_labels)))
+        # fmt: off
+        expected_class_labels = torch.tensor([19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 67, 82, 19, 19, 17, 19, 19, 19, 19, 19, 19, 19, 19, 19, 12, 12, 42, 12, 12, 12, 12, 3, 14, 12, 12, 12, 12, 12, 12, 12, 12, 14, 5, 12, 12, 0, 115, 43, 43, 115, 43, 43, 43, 8, 8, 8, 138, 138, 125, 143])  # noqa: E231
+        # fmt: on
+        self.assertTrue(torch.allclose(inputs["class_labels"][1], expected_class_labels))
+
+        # verify the mask labels
+        self.assertEqual(len(inputs["mask_labels"]), 2)
+        self.assertEqual(inputs["mask_labels"][0].shape, (79, 512, 711))
+        self.assertEqual(inputs["mask_labels"][1].shape, (61, 512, 711))
+        self.assertEquals(inputs["mask_labels"][0].sum().item(), 315193.0)
+        self.assertEquals(inputs["mask_labels"][1].sum().item(), 350747.0)
 
     def test_binary_mask_to_rle(self):
         fake_binary_mask = np.zeros((20, 50))
