@@ -28,6 +28,40 @@ def get_test_pipeline():
         )
         return pipeline
 
+
+def _create_output(sentence: str, scores: List[float], tags: List[str]) -> List[Dict]:
+    # This doesn't need to use the 'real' tokenizer as the input is simple
+    tokens = sentence.split()
+    ptr = 0
+    dicts: List[Dict] = []
+    for i, (token, score, tag) in enumerate(zip(tokens, scores, tags)):
+        end = ptr + len(token)
+        d = {
+            "entity": tag,
+            "score": score,
+            "index": i + 1,
+            "word": token.lower(),
+            "start": ptr,
+            "end": end,
+        }
+        dicts.append(d)
+        ptr = end + 1
+    return dicts
+
+
+# Test Data
+OVERFLOW_SHORT = "This is a test !"
+SCORES_SHORT = [0.115, 0.115, 0.116, 0.116, 0.116]
+TAGS_SHORT = ["I-MISC", "I-MISC", "O", "O", "O"]
+OVERFLOW_SHORT_OUTPUT = _create_output(OVERFLOW_SHORT, SCORES_SHORT, TAGS_SHORT)
+OVERFLOW_LONG = "Another test this is with longer sentence"
+SCORES_LONG = [0.116, 0.116, 0.116, 0.116, 0.116, 0.116, 0.116]
+TAGS_LONG = ["O", "O", "O", "O", "O", "O", "O"]
+OVERFLOW_LONG_OUTPUT = _create_output(OVERFLOW_LONG, SCORES_LONG, TAGS_LONG)
+OVERFLOW_BATCH = [OVERFLOW_SHORT, OVERFLOW_LONG]
+OVERFLOW_BATCH_OUTPUT = [OVERFLOW_SHORT_OUTPUT, OVERFLOW_LONG_OUTPUT]
+
+
 class OverflowTokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     @require_torch_gpu
     def test_gpu(self):
@@ -51,38 +85,34 @@ class OverflowTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         with self.assertRaises(ValueError):
             pipeline([])
 
-    def test_simple_str(self, overflow_short: str, overflow_short_output):
+    def test_simple_str(self):
         """Test the expected tokens with simple string inputs"""
         pipeline = get_test_pipeline()
-        outputs = pipeline(overflow_short)
-        self.assertEqual(nested_simplify(outputs), overflow_short_output)
+        outputs = pipeline(OVERFLOW_SHORT)
+        self.assertEqual(nested_simplify(outputs), OVERFLOW_SHORT_OUTPUT)
 
     def test_simple_list(
         self,
-        overflow_short: str,
-        overflow_short_output,
-        overflow_batch,
-        overflow_batch_output,
     ):
         """Test the expected tokens with simple list inputs"""
         pipeline = get_test_pipeline()
-        outputs = pipeline([overflow_short])
-        self.assertEqual(nested_simplify(outputs), [overflow_short_output])
-        outputs = pipeline(overflow_batch)
-        self.assertEqual(nested_simplify(outputs), overflow_batch_output)
+        outputs = pipeline([OVERFLOW_SHORT])
+        self.assertEqual(nested_simplify(outputs), [OVERFLOW_SHORT_OUTPUT])
+        outputs = pipeline(OVERFLOW_BATCH)
+        self.assertEqual(nested_simplify(outputs), OVERFLOW_BATCH_OUTPUT)
 
-    def test_batching(self, overflow_batch):
+    def test_batching(self):
         """Assert that batching sentences does not change the output shape or
         results"""
         pipeline = get_test_pipeline()
-        single_output = pipeline(overflow_batch, batch_size=1)
-        batched_output = pipeline(overflow_batch, batch_size=2)
+        single_output = pipeline(OVERFLOW_BATCH, batch_size=1)
+        batched_output = pipeline(OVERFLOW_BATCH, batch_size=2)
         self.assertEqual(single_output, batched_output)
 
-    def test_simple_reconstruction(self, overflow_long: str):
+    def test_simple_reconstruction(self):
         """Assert that truncated sentences are reconstructed into original
         input sentences"""
-        expected_tokens = [token.lower() for token in overflow_long.split()]
+        expected_tokens = [token.lower() for token in OVERFLOW_LONG.split()]
         num_tokens = len(expected_tokens)
         max_seq_len = num_tokens - 1
         ner = OverflowTokenClassificationPipeline(
@@ -91,7 +121,7 @@ class OverflowTokenClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
             max_seq_len=max_seq_len,
             stride=2,
         )
-        outputs = ner(overflow_long)
+        outputs = ner(OVERFLOW_LONG)
         self.assertEqual(len(outputs), num_tokens)
         output_words = [token["word"].lower() for token in outputs]
         self.assertEqual(output_words, expected_tokens)
@@ -399,11 +429,11 @@ class TestTruncatedTokenClassificationArguments(unittest.TestCase):
         with self.assertRaises(ValueError):
             OverflowTokenClassificationPipeline(model=MODEL)
 
-    def test_invalid_reconstitution_strategy(self, overflow_short):
+    def test_invalid_reconstitution_strategy(self):
         pipeline = get_test_pipeline()
         """Assert that passing an unknown reconstitution strategy raises an error"""
         strategy = "my-strategy"
         with self.assertRaises(ValueError):
-            pipeline(overflow_short, reconstitution_strategy=strategy)
+            pipeline(OVERFLOW_SHORT, reconstitution_strategy=strategy)
         with self.assertRaises(ValueError):
             pipeline.combine_overlapping_tokens([], [], strategy)  # noqa
