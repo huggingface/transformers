@@ -1,3 +1,7 @@
+# flake8: noqa
+# There's no way to ignore "F401 '...' imported but unused" warnings in this
+# module, but to preserve other warnings. So, don't check this module at all.
+
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,3 +15,182 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from typing import TYPE_CHECKING
+
+from ..utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_flax_available,
+    is_tf_available,
+    is_torch_available,
+)
+
+
+_import_structure = {}
+
+
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["beam_constraints"] = [
+        "Constraint",
+        "ConstraintListState",
+        "DisjunctiveConstraint",
+        "PhrasalConstraint",
+    ]
+    _import_structure["beam_search"] = ["BeamScorer", "BeamSearchScorer", "ConstrainedBeamSearchScorer"]
+    _import_structure["logits_process"] = [
+        "ForcedBOSTokenLogitsProcessor",
+        "ForcedEOSTokenLogitsProcessor",
+        "HammingDiversityLogitsProcessor",
+        "InfNanRemoveLogitsProcessor",
+        "LogitsProcessor",
+        "LogitsProcessorList",
+        "LogitsWarper",
+        "MinLengthLogitsProcessor",
+        "NoBadWordsLogitsProcessor",
+        "NoRepeatNGramLogitsProcessor",
+        "PrefixConstrainedLogitsProcessor",
+        "RepetitionPenaltyLogitsProcessor",
+        "TemperatureLogitsWarper",
+        "TopKLogitsWarper",
+        "TopPLogitsWarper",
+        "TypicalLogitsWarper",
+    ]
+    _import_structure["stopping_criteria"] = [
+        "MaxLengthCriteria",
+        "MaxTimeCriteria",
+        "StoppingCriteria",
+        "StoppingCriteriaList",
+    ]
+    _import_structure["utils"] = ["GenerationMixin", "top_k_top_p_filtering"]
+
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tf_logits_process"] = [
+        "TFForcedBOSTokenLogitsProcessor",
+        "TFForcedEOSTokenLogitsProcessor",
+        "TFLogitsProcessor",
+        "TFLogitsProcessorList",
+        "TFLogitsWarper",
+        "TFMinLengthLogitsProcessor",
+        "TFNoBadWordsLogitsProcessor",
+        "TFNoRepeatNGramLogitsProcessor",
+        "TFRepetitionPenaltyLogitsProcessor",
+        "TFTemperatureLogitsWarper",
+        "TFTopKLogitsWarper",
+        "TFTopPLogitsWarper",
+    ]
+    _import_structure["tf_utils"] = ["TFGenerationMixin", "tf_top_k_top_p_filtering"]
+
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["flax_logits_process"] = [
+        "FlaxForcedBOSTokenLogitsProcessor",
+        "FlaxForcedEOSTokenLogitsProcessor",
+        "FlaxLogitsProcessor",
+        "FlaxLogitsProcessorList",
+        "FlaxLogitsWarper",
+        "FlaxMinLengthLogitsProcessor",
+        "FlaxTemperatureLogitsWarper",
+        "FlaxTopKLogitsWarper",
+        "FlaxTopPLogitsWarper",
+    ]
+    _import_structure["flax_utils"] = ["FlaxGenerationMixin"]
+
+if TYPE_CHECKING:
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .beam_constraints import (
+            Constraint,
+            ConstraintListState,
+            DisjunctiveConstraint,
+            PhrasalConstraint,
+        )
+        from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
+        from .logits_process import (
+            ForcedBOSTokenLogitsProcessor,
+            ForcedEOSTokenLogitsProcessor,
+            HammingDiversityLogitsProcessor,
+            InfNanRemoveLogitsProcessor,
+            LogitsProcessor,
+            LogitsProcessorList,
+            LogitsWarper,
+            MinLengthLogitsProcessor,
+            NoBadWordsLogitsProcessor,
+            NoRepeatNGramLogitsProcessor,
+            PrefixConstrainedLogitsProcessor,
+            RepetitionPenaltyLogitsProcessor,
+            TemperatureLogitsWarper,
+            TopKLogitsWarper,
+            TopPLogitsWarper,
+            TypicalLogitsWarper,
+        )
+        from .stopping_criteria import (
+            MaxLengthCriteria,
+            MaxTimeCriteria,
+            StoppingCriteria,
+            StoppingCriteriaList,
+        )
+        from .utils import GenerationMixin, top_k_top_p_filtering
+
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tf_logits_process import (
+            TFForcedBOSTokenLogitsProcessor,
+            TFForcedEOSTokenLogitsProcessor,
+            TFLogitsProcessor,
+            TFLogitsProcessorList,
+            TFLogitsWarper,
+            TFMinLengthLogitsProcessor,
+            TFNoBadWordsLogitsProcessor,
+            TFNoRepeatNGramLogitsProcessor,
+            TFRepetitionPenaltyLogitsProcessor,
+            TFTemperatureLogitsWarper,
+            TFTopKLogitsWarper,
+            TFTopPLogitsWarper,
+        )
+        from .tf_utils import TFGenerationMixin, tf_top_k_top_p_filtering
+
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .flax_logits_process import (
+            FlaxForcedBOSTokenLogitsProcessor,
+            FlaxForcedEOSTokenLogitsProcessor,
+            FlaxLogitsProcessor,
+            FlaxLogitsProcessorList,
+            FlaxLogitsWarper,
+            FlaxMinLengthLogitsProcessor,
+            FlaxTemperatureLogitsWarper,
+            FlaxTopKLogitsWarper,
+            FlaxTopPLogitsWarper,
+        )
+        from .flax_utils import FlaxGenerationMixin
+else:
+    import sys
+
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
