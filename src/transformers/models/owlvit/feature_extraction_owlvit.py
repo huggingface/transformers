@@ -156,10 +156,11 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
         Args:
             outputs ([`OwlViTObjectDetectionOutput`]):
                 Raw outputs of the model.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
-                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
-                image size (before any data augmentation). For visualization, this should be the image size after data
-                augment, but before padding.
+            target_sizes (`torch.Tensor`, *optional*, defaults None):
+                Tensor of shape (batch_size, 2) where each entry is the (height, width) of the corresponding image in
+                the batch. If set, predicted normalized bounding boxes are rescaled to the target sizes. If left to
+                None, predictions will not be unnormalized.
+
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
