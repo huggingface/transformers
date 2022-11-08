@@ -22,13 +22,12 @@ logger = logging.get_logger(__name__)
 
 ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "weiweishi/roc-bert-base-zh": "https://huggingface.co/weiweishi/roc-bert-base-zh/resolve/main/config.json",
-    # See all RoCBert models at https://huggingface.co/models?filter=roc_bert
 }
 
 
 class RoCBertConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`RoCBertModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`RoCBertModel`]. It is used to instantiate a
     RoCBert model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the RoCBert
     [weiweishi/roc-bert-base-zh](https://huggingface.co/weiweishi/roc-bert-base-zh) architecture.
@@ -68,6 +67,14 @@ class RoCBertConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
+            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
+            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
+            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+        classifier_dropout (`float`, *optional*):
+            The dropout ratio for the classification head.
         enable_cls (`bool`, *optional*, defaults to `True`):
             Whether or not the model use cls loss when pretrained.
         enable_pronunciation (`bool`, *optional*, defaults to `True`):
@@ -84,6 +91,10 @@ class RoCBertConfig(PretrainedConfig):
         shape_vocab_size (`int`, *optional*, defaults to 24858):
             Shape Vocabulary size of the RoCBert model. Defines the number of different tokens that can be represented
             by the `input_shape_ids` passed when calling [`RoCBertModel`].
+        concat_input (`bool`, *optional*, defaults to `True`):
+            Defines the way of merging the shape_embed, pronunciation_embed and word_embed, if the value is true,
+            output_embed = torch.cat((word_embed, shape_embed, pronunciation_embed), -1), else output_embed =
+            (word_embed + shape_embed + pronunciation_embed) / 3
         Example:
 
     ```python

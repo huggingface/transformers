@@ -858,7 +858,7 @@ class RoCBertModel(RoCBertPreTrainedModel):
     Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
     To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
-    to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
+    to `True`. To be used in a Seq2Seq model, the model needs to be initialized with both `is_decoder` argument and
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
@@ -1182,10 +1182,10 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
                 device = labels_input_ids.device
 
                 target_inputs = torch.clone(labels_input_ids)
-                target_inputs[target_inputs == -100] = 0
+                target_inputs[target_inputs == -100] = self.config.pad_token_id
 
                 labels_output = self.roc_bert(
-                    labels_input_ids,
+                    target_inputs,
                     input_shape_ids=labels_input_shape_ids,
                     input_pronunciation_ids=labels_input_pronunciation_ids,
                     attention_mask=labels_attention_mask,
@@ -1335,7 +1335,9 @@ class RoCBertForMaskedLM(RoCBertPreTrainedModel):
         effective_batch_size = input_shape[0]
 
         #  add a dummy token
-        assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
+        if self.config.pad_token_id is None:
+            raise ValueError("The PAD token should be defined for generation")
+
         attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
         dummy_token = torch.full(
             (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
