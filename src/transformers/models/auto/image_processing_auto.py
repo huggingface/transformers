@@ -284,7 +284,6 @@ class AutoImageProcessor:
         if "AutoImageProcessor" in config_dict.get("auto_map", {}):
             image_processor_auto_map = config_dict["auto_map"]["AutoImageProcessor"]
 
-
         # If we still don't have the image processor class, check if we're loading from a previous feature extractor config
         # and if so, infer the image processor class from there.
         if image_processor_class is None and image_processor_auto_map is None:
