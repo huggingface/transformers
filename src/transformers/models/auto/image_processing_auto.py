@@ -284,14 +284,6 @@ class AutoImageProcessor:
         if "AutoImageProcessor" in config_dict.get("auto_map", {}):
             image_processor_auto_map = config_dict["auto_map"]["AutoImageProcessor"]
 
-        # If we don't find the image processor class in the image processor config, let's try the model config.
-        if image_processor_class is None and image_processor_auto_map is None:
-            if not isinstance(config, PretrainedConfig):
-                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-            # It could be in `config.image_processor_type``
-            image_processor_class = getattr(config, "image_processor_type", None)
-            if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:
-                image_processor_auto_map = config.auto_map["AutoImageProcessor"]
 
         # If we still don't have the image processor class, check if we're loading from a previous feature extractor config
         # and if so, infer the image processor class from there.
@@ -313,6 +305,15 @@ class AutoImageProcessor:
                     "Could not find image processor auto map in the image processor config or the model config."
                     " Loading based on pattern matching with the model's feature extractor configuration."
                 )
+
+        # If we don't find the image processor class in the image processor config, let's try the model config.
+        if image_processor_class is None and image_processor_auto_map is None:
+            if not isinstance(config, PretrainedConfig):
+                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            # It could be in `config.image_processor_type``
+            image_processor_class = getattr(config, "image_processor_type", None)
+            if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:
+                image_processor_auto_map = config.auto_map["AutoImageProcessor"]
 
         if image_processor_class is not None:
             # If we have custom code for a image processor, we get the proper class.
