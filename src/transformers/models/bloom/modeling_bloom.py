@@ -328,9 +328,7 @@ class BloomAttention(nn.Module):
         # cast attention scores to fp32, compute scaled softmax and cast back to initial dtype - [batch_size, num_heads, q_length, kv_length]
         input_dtype = attention_scores.dtype
         # `float16` has a minimum value of -65504.0, whereas `bfloat16` and `float32` have a minimum value of `-3.4e+38`
-        # compute softmax in fp32, the same as the fused kernel during training
-        # https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/09a35f53abac96903fee50787426b7ee5f63fc62/megatron/fused_kernels/scaled_upper_triang_masked_softmax_cuda.cu#L52
-        if input_dtype == torch.float16 or input_dtype == torch.bfloat16:
+        if input_dtype == torch.float16:
             attention_scores = attention_scores.to(torch.float)
         attn_weights = torch.masked_fill(attention_scores, attention_mask, torch.finfo(attention_scores.dtype).min)
         attention_probs = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
@@ -873,11 +871,9 @@ class BloomForCausalLM(BloomPreTrainedModel):
         hidden_states = transformer_outputs[0]
 
         lm_logits = self.lm_head(hidden_states)
-        input_dtype = lm_logits.dtype
-        # compute softmax in fp32, the same as training
-        # https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/09a35f53abac96903fee50787426b7ee5f63fc62/megatron/model/gpt_model.py#L289-L291
-        if input_dtype == torch.float16 or input_dtype == torch.bfloat16:
-            lm_logits = lm_logits.float()
+        # the original softmax is computed in fp32 during training
+        # https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/09a35f53abac96903fee50787426b7ee5f63fc62/megatron/model/gpt_model.py#L289-L29
+        # to replicate the same behavior as training, make sure to cast lm_logits to fp32
 
         loss = None
         if labels is not None:
