@@ -158,79 +158,49 @@ class JukeboxPriorConfig(PretrainedConfig):
         attn_dropout (`int`, *optional*, defaults to 0):
             Dropout probability for the post-attention layer dropout in the decoder.
         attn_res_scale (`bool`, *optional*, defaults to False):
-            Wheter or not to scale the residuals in the attention conditionner block.
+            Whether or not to scale the residuals in the attention conditioner block.
         blocks (`int`, *optional*, defaults to 64):
             Number of blocks used in the `block_attn`. A sequence of length seq_len is factored as [blocks, seq_len //
             blocks] in the `JukeboxAttention` layer.
         conv_res_scale (`int`, *optional*, defaults to None):
-            Wheter or not to scale the residuals in the conditionner block. Since the top level prior doeas not have a
-            conditionner, the default value is to None and should not be modified.
+            Whether or not to scale the residuals in the conditioner block. Since the top level prior does not have a
+            conditioner, the default value is to None and should not be modified.
         depth (`int`, *optional*, defaults to 72):
             Number of layers of the decoder architecture. #TODO replace with num decoder_layers?
         emb_dropout (`int`, *optional*, defaults to 0):
             Embedding dropout used in the lyric decoder.
-        embed_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the audio embedings. I can be different with the `width` for smaller models.
-        encoder_attention_multiplier (`float`, *optional*, defaults to 0.25):
-            Multiplier coefficient used to define the hidden dimension of the attention layers. 0.25 means that
-            0.25*width of the model will be used.
-        encoder_attention_pattern (`str`, *optional*, defaults to "RawColumnPreviousRowAttention"):
-            Which attention pattern to use for the lyric encoder.
-        encoder_attn_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for the post-attention layer dropout in the lyric encoder.
-        encoder_attn_res_scale (`bool`, *optional*, defaults to False):
-            Wheter or not to scale the residuals in the attention conditionner block.
-        encoder_blocks (`int`, *optional*, defaults to 32):
-            Number of blocks used in the `block_attn`. A sequence of length seq_len is factored as [blocks, seq_len //
-            blocks] in the `JukeboxAttention` layer.
-        encoder_depth (`int`, *optional*, defaults to 18):
-            Depth of the encoder model.
-        encoder_emb_dropout (`float`, *optional*, defaults to 0.0):
-            Embedding dropout used in the lyric encoder.
-        encoder_heads (`int`, *optional*, defaults to 4):
-            Number of heads in the lyric encoder
-        encoder_init_scale (`float`, *optional*, defaults to 0.1):
-            Initialisation scales for the lyric encoder modules.
-        encoder_loss_fraction (`list`, *optional*, defaults to [0.4, 0.0, 0.0]):
-            Multiplication factor used in front of the lyric encoder loss. Each value is for a particular level.
-        encoder_mlp_multiplier (`float`, *optional*, defaults to 1.0):
-            Multiplier coefficient used to define the hidden dimension of the MLP layers. 0.25 means that 0.25*width of
-            the model will be used.
-        encoder_n_vocab (`int`, *optional*, defaults to 79):
-            Defines the number of different lyric tokens that can be represented by the `inputs_ids` passed to the
-            `encoder`.
-        encoder_resid_dropout (`float`, *optional*, defaults to 0.0):
-            Residual dropout used in the attention pattern of the lyric encoder.
-        encoder_spread (`int`, *optional*, defaults to None):
-            Spread used in the `summary_spread_attention` pattern
-        encoder_width (`int`, *optional*, defaults to 128):
-            Width of the lyric encoder if `is_encoder_decoder=False` and `nb_relevant_lyric_tokens>0`
-        encoder_zero_out (`bool`, *optional*, defaults to False):
-            Whether or not to set to zeros the weights the convolutions in the lyric encoder.
+        encoder_config (`JukeboxPriorConfig`, *optional*) :
+            Configuration of the encoder which models the prior on the lyrics.
+        encoder_loss_fraction (`float`, *optional*, defaults to 0.4):
+            Multiplication factor used in front of the lyric encoder loss.
+        hidden_size (`int`, *optional*, defaults to 2048):
+            Hidden dimension of the attention layers.
         init_scale (`float`, *optional*, defaults to 0.2):
-            Initialisation scales for the prior modules.
+            Initialization scales for the prior modules.
         is_encoder_decoder (`bool`, *optional*, defaults to True):
             Whether or not the prior is an encoder-decoder model. In case it is not, and `nb_relevant_lyric_tokens` is
             greater than 0, the `encoder` args should be specified for the lyric encoding.
         mask (`bool`, *optional*, defaults to False):
             Whether or not to mask the previous positions in the attention.
         max_duration (`int`, *optional*, defaults to 600):
-            _description_
+            #TODO FILLME
         max_nb_genres (`int`, *optional*, defaults to 1):
-            _description_
+            #TODO FILLME
         merged_decoder (`bool`, *optional*, defaults to True):
-            Whether or not the decoder and the encoder inputs are merged. This is used for the seperated
+            Whether or not the decoder and the encoder inputs are merged. This is used for the separated
             encoder-decoder architecture
         metadata_conditioning (`bool`, *optional*, defaults to True):
-            _description_
-        metadata_dims (`tuple(int)`, *optional*, defaults to (604, 7898)):
+            #TODO FILLME
+        metadata_dims (`List[`int`]`, *optional*, defaults to [604, 7898]):
             Number of genres and the number of artists that were used to train the embedding layers of the prior
             models.
         min_duration (`int`, *optional*, defaults to 0):
-            _description_
+            #TODO FILLME
         mlp_multiplier (`float`, *optional*, defaults to 1.0):
             Multiplier coefficient used to define the hidden dimension of the MLP layers. 0.25 means that 0.25*width of
             the model will be used.
+        music_vocab_size (`int`, *optional*, defaults to 2048):
+            Number of different music tokens. Should be similar to the `JukeboxVQVAEConfig.nb_discrete_codes`.
         n_ctx (`int`, *optional*, defaults to 6144):
             Number of context tokens for each prior. The context tokens are the music tokens that are attended to when
             generating music tokens.
@@ -252,9 +222,9 @@ class JukeboxPriorConfig(PretrainedConfig):
             tokens.
         res_dilation_growth_rate (`int`, *optional*, defaults to 1):
             Dilation grow rate used between each convolutionnal block of the `JukeboxMusicTokenConditioner`
-        res_downs_t (`tuple(int)`, *optional*, defaults to (3, 2, 2)):
+        res_downs_t (`List[`int`]`, *optional*, defaults to [3, 2, 2]):
             Downsampling rates used in the audio conditioning network
-        res_strides_t (`tuple(int)`, *optional*, defaults to (2, 2, 2)):
+        res_strides_t (`List[`int`]`, *optional*, defaults to [2, 2, 2]):
             Striding used in the audio conditioning network
         resid_dropout (`int`, *optional*, defaults to 0):
             Residual dropout used in the attention pattern.
@@ -264,10 +234,8 @@ class JukeboxPriorConfig(PretrainedConfig):
             Spread used in the `summary_spread_attention` pattern
         timing_dims (`int`, *optional*, defaults to 64):
             _description_
-        width (`int`, *optional*, defaults to 2048):
-            Dimension of the attention layers. # TODO this is a bit confusing
         zero_out (`bool`, *optional*, defaults to False):
-            Whether or not to zero out convolution weights when initialising.
+            Whether or not to zero out convolution weights when initializing.
     """
 
     model_type = "jukebox"
@@ -290,34 +258,21 @@ class JukeboxPriorConfig(PretrainedConfig):
         conv_res_scale=None,
         depth=72,
         emb_dropout=0,
-        embed_dim=2048,
-        encoder_attention_multiplier=0.25,
-        encoder_attention_pattern="RawColumnPreviousRowAttention",
-        encoder_attn_dropout=0.0,
-        encoder_blocks=32,
-        encoder_depth=18,
-        encoder_emb_dropout=0.0,
-        encoder_heads=4,
-        encoder_init_scale=0.1,
-        encoder_loss_fraction=[0.4, 0.0, 0.0],
-        encoder_mlp_multiplier=1.0,
-        encoder_n_vocab=79,
-        encoder_attn_res_scale=False,
-        encoder_resid_dropout=0.0,
-        encoder_spread=None,
-        encoder_width=128,
-        encoder_zero_out=False,
+        encoder_config=None,
+        encoder_loss_fraction=0.4,
+        hidden_size=2048,
         init_scale=0.2,
         is_encoder_decoder=True,
-        lyric_conditioning=True,
+        lyric_vocab_size=80,
         mask=False,
         max_duration=600,
         max_nb_genres=1,
         merged_decoder=True,
         metadata_conditioning=True,
-        metadata_dims=(604, 7898),
+        metadata_dims=[604, 7898],
         min_duration=0,
         mlp_multiplier=1.0,
+        music_vocab_size=2048,
         n_ctx=6144,
         n_heads=2,
         nb_relevant_lyric_tokens=384,
@@ -326,13 +281,12 @@ class JukeboxPriorConfig(PretrainedConfig):
         res_convolution_multiplier=1,
         res_dilation_cycle=None,
         res_dilation_growth_rate=1,
-        res_downs_t=(3, 2, 2),
-        res_strides_t=(2, 2, 2),
+        res_downs_t=[3, 2, 2],
+        res_strides_t=[2, 2, 2],
         resid_dropout=0,
         sampling_rate=44100,
         spread=None,
         timing_dims=64,
-        width=2048,
         zero_out=False,
         **kwargs
     ):
@@ -348,26 +302,15 @@ class JukeboxPriorConfig(PretrainedConfig):
         self.conv_res_scale = conv_res_scale
         self.depth = depth
         self.emb_dropout = emb_dropout
-        self.embed_dim = embed_dim
-        self.encoder_attention_multiplier = encoder_attention_multiplier
-        self.encoder_attention_pattern = encoder_attention_pattern
-        self.encoder_attn_dropout = encoder_attn_dropout
-        self.encoder_attn_res_scale = encoder_attn_res_scale
-        self.encoder_blocks = encoder_blocks
-        self.encoder_depth = encoder_depth
-        self.encoder_emb_dropout = encoder_emb_dropout
-        self.encoder_heads = encoder_heads
-        self.encoder_init_scale = encoder_init_scale
+        self.music_vocab_size = music_vocab_size
+        if encoder_config is not None:
+            self.encoder_config = JukeboxPriorConfig(**encoder_config)
+        else :
+            self.encoder_config = None
         self.encoder_loss_fraction = encoder_loss_fraction
-        self.encoder_mlp_multiplier = encoder_mlp_multiplier
-        self.encoder_n_vocab = encoder_n_vocab
-        self.encoder_resid_dropout = encoder_resid_dropout
-        self.encoder_spread = encoder_spread
-        self.encoder_width = encoder_width
-        self.encoder_zero_out = encoder_zero_out
         self.init_scale = init_scale
         self.is_encoder_decoder = is_encoder_decoder
-        self.lyric_conditioning = lyric_conditioning
+        self.lyric_vocab_size = lyric_vocab_size
         self.mask = mask
         self.max_duration = max_duration
         self.max_nb_genres = max_nb_genres
@@ -390,7 +333,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         self.sampling_rate = sampling_rate
         self.spread = spread
         self.timing_dims = timing_dims
-        self.width = width
+        self.hidden_size = hidden_size
         self.zero_out = zero_out
 
     @classmethod
@@ -398,7 +341,7 @@ class JukeboxPriorConfig(PretrainedConfig):
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-        # get the text config dict if we are loading from CLIPConfig
+        # get the prior config dict if we are loading from JukeboxConfig
         if config_dict.get("model_type") == "jukebox_prior":
             config_dict = config_dict["prior_configs"]
 
@@ -410,6 +353,17 @@ class JukeboxPriorConfig(PretrainedConfig):
 
         return cls.from_dict(config_dict, **kwargs)
 
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+
+        Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["encoder_config"] = self.encoder_config.to_dict() if self.encoder_config is not None else None
+        output["model_type"] = self.__class__.model_type
+        return output
 
 class JukeboxVQVAEConfig(PretrainedConfig):
     """
@@ -424,20 +378,20 @@ class JukeboxVQVAEConfig(PretrainedConfig):
     Args:
         act_fn (`str`, *optional*, defaults to "relu"):
             _description_
-        codebook_dimension (`int`, *optional*, defaults to 2048):
-            Number of codes to use in each of the VQVAE.
+        nb_discrete_codes (`int`, *optional*, defaults to 2048):
+            Number of codes of the VQVAE.
         commit (`float`, *optional*, defaults to 0.02):
             Commit loss multiplier.
         conv_input_shape (`int`, *optional*, defaults to 1):
             Number of audio channels.
         conv_res_scale (`bool`, *optional*, defaults to False):
-            _description_
+            Whether or not to scale the residuals of the `JukeboxResConv1DBlock`.
         embed_dim (`int`, *optional*, defaults to 64):
-            Embeding dimension of the codebook vectors.
+            Embedding dimension of the codebook vectors.
         hop_fraction (`List[`int`]`, *optional*, defaults to [0.125, 0.5, 0.5]):
             Fraction of non-intersecting window used when continuing the sampling process.
         levels (`int`, *optional*, defaults to 3):
-            Number of hierachical levels that used in the VQVAE.
+            Number of hierarchical levels that used in the VQVAE.
         lmu (`float`, *optional*, defaults to 0.99):
             Used in the codebook update, exponential moving average coefficient. For more detail refer to Appendix A.1
             of the original [VQVAE paper](https://arxiv.org/pdf/1711.00937v2.pdf)
@@ -455,10 +409,10 @@ class JukeboxVQVAEConfig(PretrainedConfig):
             of reduced by a power of `res_dilation_cycle`.
         res_dilation_growth_rate (`int`, *optional*, defaults to 3):
             Resnet dilation growth rate used in the VQVAE (dilation_growth_rate ** depth)
-        res_downs_t (`tuple(int)`, *optional*, defaults to (3, 2, 2)):
-                Downsampling rate for each level of the hierachical VQ-VAE.
-        res_strides_t (`tuple(int)`, *optional*, defaults to (2, 2, 2)):
-            Stride used for each level of the hierachical VQ-VAE.
+        res_downs_t (`List[`int`]`, *optional*, defaults to [3, 2, 2]):
+                Downsampling rate for each level of the hierarchical VQ-VAE.
+        res_strides_t (`List[`int`]`, *optional*, defaults to [2, 2, 2]):
+            Stride used for each level of the hierarchical VQ-VAE.
         sample_length (`int`, *optional*, defaults to 1058304):
             Provides the max input shape of the VQVAE. Is used to compute the input shape of each level.
     """
@@ -466,7 +420,7 @@ class JukeboxVQVAEConfig(PretrainedConfig):
     def __init__(
         self,
         act_fn="relu",
-        codebook_dimension=2048,
+        nb_discrete_codes=2048,
         commit=0.02,
         conv_input_shape=1,
         conv_res_scale=False,
@@ -493,7 +447,7 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         # VQVAE parameters (all used)
         self.levels = levels
         self.embed_dim = embed_dim
-        self.codebook_dimension = codebook_dimension
+        self.nb_discrete_codes = nb_discrete_codes
         self.res_conv_width = res_conv_width
         self.res_conv_depth = res_conv_depth
         self.res_convolution_multiplier = res_convolution_multiplier
@@ -535,7 +489,7 @@ class JukeboxConfig(PretrainedConfig):
     [openai/jukebox-1b-lyrics](https://huggingface.co/openai/jukebox-1b-lyrics) architecture.
 
 
-    The downsampling and stride are used to determine downsampling of the input sequence. For example, downsamoling =
+    The downsampling and stride are used to determine downsampling of the input sequence. For example, downsampling =
     (5,3), and strides = (2, 2) will downsample the audio by 2**5 = 32 to get the first level of codes, and 2**8 = 256
     to get the second level codes. This is mostly true for training the top level prior and the upsamplers.
 
@@ -545,7 +499,7 @@ class JukeboxConfig(PretrainedConfig):
         prior_config_list (`List[`JukeboxPriorConfig`]`, *optional*, defaults to None):
             _description_
         nb_priors (`int`, *optional*, defaults to 3):
-            Number of prior models that will sequentialy sample tokens. Each prior is conditional auto regressive
+            Number of prior models that will sequentially sample tokens. Each prior is conditional auto regressive
             (decoder) model, apart from the top prior, which can include a lyric encoder. The available models were
             trained using a top prior and 2 upsampler priors.
         sampling_rate (`int`, *optional*, defaults to 44100):
@@ -553,7 +507,7 @@ class JukeboxConfig(PretrainedConfig):
         timing_dims (`int`, *optional*, defaults to 64):
             Dimensions of the JukeboxRangeEmbedding layer which is equivalent to traditional positional embedding
             layer. The timing embedding layer converts the absolute and relative position in the currently sampled
-            audio to a tensor of lenght `timing_dims` that will be added to the music tokens.
+            audio to a tensor of length `timing_dims` that will be added to the music tokens.
         min_duration (`int`, *optional*, defaults to 0):
             Minimum duration of the audios to generate
         max_duration (`float`, *optional*, defaults to 600.0):
@@ -564,7 +518,7 @@ class JukeboxConfig(PretrainedConfig):
             Whether or not to use metadata conditioning, corresponding to the artist, the genre and the min/maximum
             duration.
         init_std (`float`, *optional*, defaults to 0.2):
-            Standard deviation used to inital the model.
+            Standard deviation used to initial the model.
 
     Example:
 
