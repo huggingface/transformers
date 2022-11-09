@@ -195,9 +195,8 @@ def generalized_box_iou(boxes1, boxes2):
 @dataclass
 class OwlViTObjectDetectionOutput(ModelOutput):
     """
-    Output type of [`OwlViTForObjectDetection`].
-
     Args:
+    Output type of [`OwlViTForObjectDetection`].
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
             Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
             bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
@@ -246,9 +245,8 @@ class OwlViTObjectDetectionOutput(ModelOutput):
 @dataclass
 class OwlViTImageGuidedObjectDetectionOutput(ModelOutput):
     """
-    Output type of [`OwlViTForObjectDetection.image_guided_detection`].
-
     Args:
+    Output type of [`OwlViTForObjectDetection.image_guided_detection`].
         logits (`torch.FloatTensor` of shape `(batch_size, num_patches, num_queries)`):
             Classification logits (including no-object) for all queries.
         target_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
@@ -684,10 +682,9 @@ OWLVIT_IMAGE_GUIDED_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
 
 class OwlViTEncoder(nn.Module):
     """
+    Args:
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`OwlViTEncoderLayer`].
-
-    Args:
         config: OwlViTConfig
     """
 
@@ -799,7 +796,6 @@ class OwlViTTextTransformer(nn.Module):
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
-
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -884,7 +880,7 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
-        Returns:
+        Returns: 
 
         Examples:
         ```python
@@ -931,7 +927,6 @@ class OwlViTVisionTransformer(nn.Module):
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
-
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -999,9 +994,7 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-
         >>> inputs = processor(images=image, return_tensors="pt")
-
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled CLS states
@@ -1354,7 +1347,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         box_bias = torch.cat([box_coord_bias, box_size_bias], dim=-1)
         return box_bias
 
-    def box_predictor(
+    def rctor(
         self,
         image_feats: torch.FloatTensor,
         feature_map: torch.FloatTensor,
@@ -1520,7 +1513,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> OwlViTImageGuidedObjectDetectionOutput:
         r"""
-        Returns:
+        Returns: 
 
         Examples:
         ```python
@@ -1531,7 +1524,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
-
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> query_url = "http://images.cocodataset.org/val2017/000000001675.jpg"
@@ -1539,14 +1531,12 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> inputs = processor(images=image, query_images=query_image, return_tensors="pt")
         >>> with torch.no_grad():
         ...     outputs = model.image_guided_detection(**inputs)
-
         >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
         >>> target_sizes = torch.Tensor([image.size[::-1]])
         >>> # Convert outputs (bounding boxes and class logits) to COCO API
         >>> results = processor.post_process_image_guided_detection(
         ...     outputs=outputs, threshold=0.6, nms_threshold=0.3, target_sizes=target_sizes
         ... )
-
         >>> i = 0  # Retrieve predictions for the first image
         >>> boxes, scores = results[i]["boxes"], results[i]["scores"]
         >>> for box, score in zip(boxes, scores):
@@ -1614,7 +1604,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> OwlViTObjectDetectionOutput:
         r"""
-        Returns:
+        Returns: 
 
         Examples:
         ```python
@@ -1625,22 +1615,18 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
-
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> texts = [["a photo of a cat", "a photo of a dog"]]
         >>> inputs = processor(text=texts, images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
-
         >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
         >>> target_sizes = torch.Tensor([image.size[::-1]])
         >>> # Convert outputs (bounding boxes and class logits) to COCO API
         >>> results = processor.post_process(outputs=outputs, target_sizes=target_sizes)
-
         >>> i = 0  # Retrieve predictions for the first image for the corresponding text queries
         >>> text = texts[i]
         >>> boxes, scores, labels = results[i]["boxes"], results[i]["scores"], results[i]["labels"]
-
         >>> score_threshold = 0.1
         >>> for box, score, label in zip(boxes, scores, labels):
         ...     box = [round(i, 2) for i in box.tolist()]

@@ -2227,7 +2227,7 @@ def _upcast(t: torch.Tensor) -> torch.Tensor:
         return t if t.dtype in (torch.int32, torch.int64) else t.int()
 
 
-def box_area(boxes: Tensor) -> Tensor:
+def box_area(boxes: torch.Tensor) -> torch.Tensor:
     """
     Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
 

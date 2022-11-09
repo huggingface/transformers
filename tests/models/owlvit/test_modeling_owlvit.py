@@ -520,11 +520,14 @@ class OwlViTModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class OwlViTForObjectDetectionTester:
-    def __init__(self, parent, is_training=True):
+    def __init__(self, parent, is_training=True, query_batch_size=2, query_image_size=16, query_num_channels=3):
         self.parent = parent
         self.text_model_tester = OwlViTTextModelTester(parent)
         self.vision_model_tester = OwlViTVisionModelTester(parent)
         self.is_training = is_training
+        self.query_batch_size = query_batch_size
+        self.query_image_size = query_image_size
+        self.query_num_channels = query_num_channels
         self.text_config = self.text_model_tester.get_config().to_dict()
         self.vision_config = self.vision_model_tester.get_config().to_dict()
 
@@ -533,6 +536,14 @@ class OwlViTForObjectDetectionTester:
         vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
         config = self.get_config()
         return config, pixel_values, input_ids, attention_mask
+
+    def prepare_config_and_inputs_image_guided(self):
+        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        query_pixel_values = floats_tensor(
+            [self.query_batch_size, self.query_num_channels, self.query_image_size, self.query_image_size]
+        )
+        config = self.get_config()
+        return config, pixel_values, query_pixel_values
 
     def get_config(self):
         return OwlViTConfig.from_text_vision_configs(self.text_config, self.vision_config, projection_dim=64)
@@ -566,6 +577,34 @@ class OwlViTForObjectDetectionTester:
         self.parent.assertEqual(result.logits.shape, pred_logits_size)
         self.parent.assertEqual(result.class_embeds.shape, pred_class_embeds_size)
 
+    def create_and_check_model_image_guided(self, config, pixel_values, query_pixel_values):
+        model = OwlViTForObjectDetection(config).to(torch_device).eval()
+        with torch.no_grad():
+            result = model(
+                pixel_values=pixel_values,
+                query_pixel_values=query_pixel_values,
+                return_dict=True,
+            )
+
+        pred_boxes_size = (
+            self.vision_model_tester.batch_size,
+            (self.vision_model_tester.image_size // self.vision_model_tester.patch_size) ** 2,
+            4,
+        )
+        pred_logits_size = (
+            self.vision_model_tester.batch_size,
+            (self.vision_model_tester.image_size // self.vision_model_tester.patch_size) ** 2,
+            self.query_batch_size,
+        )
+        pred_class_embeds_size = (
+            self.vision_model_tester.batch_size,
+            (self.vision_model_tester.image_size // self.vision_model_tester.patch_size) ** 2,
+            config.projection_dim,
+        )
+        self.parent.assertEqual(result.pred_boxes.shape, pred_boxes_size)
+        self.parent.assertEqual(result.logits.shape, pred_logits_size)
+        self.parent.assertEqual(result.class_embeds.shape, pred_class_embeds_size)
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, input_ids, attention_mask = config_and_inputs
@@ -574,6 +613,12 @@ class OwlViTForObjectDetectionTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
+        return config, inputs_dict
+
+    def prepare_config_and_inputs_for_common_image_guided(self):
+        config_and_inputs = self.prepare_config_and_inputs_image_guided()
+        config, pixel_values, query_pixel_values = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values, "query_pixel_values": query_pixel_values}
         return config, inputs_dict
 
 
@@ -643,7 +688,7 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
             try:
                 input_ids = inputs_dict["input_ids"]
                 pixel_values = inputs_dict["pixel_values"]  # OWLVIT needs pixel_values
-                traced_model = torch.jit.trace(model, (input_ids, pixel_values))
+                traced_model = torch.jit.trace(model, (pixel_values, input_ids))
             except RuntimeError:
                 self.fail("Couldn't trace module.")
 

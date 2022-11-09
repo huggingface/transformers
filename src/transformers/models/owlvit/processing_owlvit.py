@@ -27,11 +27,10 @@ from ...tokenization_utils_base import BatchEncoding
 
 class OwlViTProcessor(ProcessorMixin):
     r"""
+    Args:
     Constructs an OWL-ViT processor which wraps [`OwlViTFeatureExtractor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`]
     into a single processor that interits both the feature extractor and tokenizer functionalities. See the
     [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
-
-    Args:
         feature_extractor ([`OwlViTFeatureExtractor`]):
             The feature extractor is a required input.
         tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
@@ -45,13 +44,12 @@ class OwlViTProcessor(ProcessorMixin):
 
     def __call__(self, text=None, images=None, query_images=None, padding="max_length", return_tensors="np", **kwargs):
         """
+        Args:
         Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
         `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode:
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
         CLIPFeatureExtractor's [`~CLIPFeatureExtractor.__call__`] if `images` is not `None`. Please refer to the
         doctsring of the above two methods for more information.
-
-        Args:
             text (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
@@ -61,7 +59,8 @@ class OwlViTProcessor(ProcessorMixin):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
-            query_images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            query_images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`,
+            `List[torch.Tensor]`):
                 The query image to be prepared, one query image is expected per target image to be queried. Each image
                 can be a PIL image, NumPy array or PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image
                 should be of shape (C, H, W), where C is a number of channels, H and W are image height and width.
