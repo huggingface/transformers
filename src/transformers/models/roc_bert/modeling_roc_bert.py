@@ -66,6 +66,8 @@ _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
 _QA_EXPECTED_LOSS = 0.59
 _QA_EXPECTED_OUTPUT = "'who was jim henson? jim henson was a'"
 
+# Maske language modeling
+_EXPECTED_MLM_OUTPUT = "."
 ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "weiweishi/roc-bert-base-zh",
     # See all RoCBert models at https://huggingface.co/models?filter=roc_bert
@@ -926,7 +928,6 @@ class RoCBertModel(RoCBertPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
-    
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1153,21 +1154,20 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
         >>> model = RoCBertForPreTraining.from_pretrained("weiweishi/roc-bert-base-zh")
 
         >>> inputs = tokenizer("你好，很高兴认识你", return_tensors="pt")
-        >>> attack_inputs = tokenizer("你号，很高兴认识你", return_tensors="pt")
-        >>> attack_keys = list(attack_inputs.keys())
-        >>> for key in attack_keys:
-        ...     attack_inputs[f"attack_{key}"] = attack_inputs.pop(key)
-        >>> label_inputs = tokenizer("你好，很高兴认识你", return_tensors="pt")
-        >>> label_keys = list(attack_inputs.keys())
-        >>> for key in label_keys:
-        ...     label_inputs[f"labels_{key}"] = label_inputs.pop(key)
+        >>> attack_inputs = {}
+        >>> for key in list(inputs.keys()):
+        ...     attack_inputs[f"attack_{key}"] = inputs[key]
+        >>> label_inputs = {}
+        >>> for key in list(inputs.keys()):
+        ...     label_inputs[f"labels_{key}"] = inputs[key]
 
         >>> inputs.update(label_inputs)
         >>> inputs.update(attack_inputs)
         >>> outputs = model(**inputs)
 
         >>> logits = outputs.logits
-
+        >>> logits.shape
+        torch.Size([1, 11, 21128])
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1284,6 +1284,8 @@ class RoCBertForMaskedLM(RoCBertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        mask="[MASK]",
+        expected_output="."
     )
     def forward(
         self,
@@ -1798,6 +1800,7 @@ class RoCBertForTokenClassification(RoCBertPreTrainedModel):
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_TOK_CLASS_EXPECTED_OUTPUT,
+        expected_loss=0
     )
     def forward(
         self,
