@@ -1256,6 +1256,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
         r"decoder.version",
         r"model.encoder.embed_positions.weights",
         r"model.decoder.embed_positions.weights",
+        r"lm_head.weight",
     ]
     _keys_to_ignore_on_save = [
         r"model.encoder.embed_positions.weights",

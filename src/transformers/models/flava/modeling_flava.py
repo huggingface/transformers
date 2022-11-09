@@ -1729,6 +1729,14 @@ class FlavaGlobalContrastiveHead(nn.Module):
     FLAVA_START_DOCSTRING.format(config="FlavaConfig") + FLAVA_PRETRAINING_START_DOCSTRING_EXTRA,
 )
 class FlavaForPreTraining(FlavaPreTrainedModel):
+    # Those are linked to xxx.bias
+    _keys_to_ignore_on_load_missing = [
+        "mmm_text_head.decoder.bias",
+        "mmm_image_head.decoder.bias",
+        "mlm_head.decoder.bias",
+        "mim_head.decoder.bias",
+    ]
+
     def __init__(self, config: FlavaConfig, image_codebook: Optional[nn.Module] = None):
         super().__init__(config)
         self.flava = FlavaModel(config)
