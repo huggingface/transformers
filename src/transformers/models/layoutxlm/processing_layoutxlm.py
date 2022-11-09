@@ -161,4 +161,4 @@ class LayoutXLMProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        return ["input_ids", "bbox", "image", "attention_mask"]
+        return ["input_ids", "bbox", "attention_mask", "image"]

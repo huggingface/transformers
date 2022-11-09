@@ -246,7 +246,9 @@ class OwlViTProcessorTest(unittest.TestCase):
 
         processor = OwlViTProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
-        self.assertListEqual(
-            processor.model_input_names,
-            ["input_ids", "attention_mask", "pixel_values"],
-        )
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input)
+
+        self.assertListEqual(list(inputs.keys()), processor.model_input_names)

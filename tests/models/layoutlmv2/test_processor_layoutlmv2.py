@@ -25,6 +25,7 @@ from transformers.models.layoutlmv2.tokenization_layoutlmv2 import VOCAB_FILES_N
 from transformers.testing_utils import require_pytesseract, require_tokenizers, require_torch, slow
 from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
 
+import numpy as np
 
 if is_pytesseract_available():
     from PIL import Image
@@ -86,6 +87,17 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+    def prepare_image_inputs(self):
+        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
+        or a list of PyTorch tensors if one specifies torchify=True.
+        """
+
+        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
+
+        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+
+        return image_inputs
+
     def test_save_load_pretrained_default(self):
         feature_extractor = self.get_feature_extractor()
         tokenizers = self.get_tokenizers()
@@ -139,9 +151,15 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
 
         processor = LayoutLMv2Processor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        # add extra args
+        inputs = processor(text=input_str, images=image_input, return_codebook_pixels=False, return_image_mask=False)
+
         self.assertListEqual(
-            processor.model_input_names,
-            ["input_ids", "bbox", "image", "attention_mask"],
+            list(inputs.keys()),
+            processor.model_input_names
         )
 
     @slow

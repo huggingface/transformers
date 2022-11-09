@@ -238,12 +238,17 @@ class FlavaProcessorTest(unittest.TestCase):
 
         processor = FlavaProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input)
+
+        self.assertListEqual(list(inputs.keys()), ["input_ids", "token_type_ids", "attention_mask", "pixel_values"])
+
+        # add extra args
+        inputs = processor(text=input_str, images=image_input, return_codebook_pixels=True, return_image_mask=True)
+
         self.assertListEqual(
-            processor.model_input_names,
-            [
-                "input_ids",
-                "token_type_ids",
-                "attention_mask",
-                "pixel_values",
-            ],
+            list(inputs.keys()),
+            processor.model_input_names
         )

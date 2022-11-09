@@ -19,6 +19,8 @@ import tempfile
 import unittest
 from typing import List
 
+import numpy as np
+
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.layoutxlm import LayoutXLMTokenizer, LayoutXLMTokenizerFast
 from transformers.testing_utils import (
@@ -73,6 +75,17 @@ class LayoutXLMProcessorTest(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
+
+    def prepare_image_inputs(self):
+        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
+        or a list of PyTorch tensors if one specifies torchify=True.
+        """
+
+        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
+
+        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+
+        return image_inputs
 
     def test_save_load_pretrained_default(self):
         feature_extractor = self.get_feature_extractor()
@@ -132,9 +145,15 @@ class LayoutXLMProcessorTest(unittest.TestCase):
 
         processor = LayoutXLMProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        # add extra args
+        inputs = processor(text=input_str, images=image_input, return_codebook_pixels=False, return_image_mask=False)
+
         self.assertListEqual(
-            processor.model_input_names,
-            ["input_ids", "bbox", "image", "attention_mask"],
+            list(inputs.keys()),
+            processor.model_input_names
         )
 
     @slow

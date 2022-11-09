@@ -161,4 +161,4 @@ class LayoutLMv2Processor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        return ["input_ids", "bbox", "image", "attention_mask"]
+        return ["input_ids", "bbox", "token_type_ids", "attention_mask", "image"]
