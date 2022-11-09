@@ -1800,7 +1800,8 @@ def _segment_reduce(values, index, segment_reduce_fn, name):
         dim=0,
     )
 
-    output_values = segment_means.view(new_shape.tolist())
+    output_values = segment_means.clone().view(new_shape.tolist())
+    # output_values = segment_means.view(new_shape.tolist())
     output_index = range_index_map(index.batch_shape(), index.num_segments)
     return output_values, output_index
 
@@ -2348,7 +2349,7 @@ def _calculate_expected_result(
 # PyTorch does not currently support Huber loss with custom delta so we define it ourself
 def huber_loss(input, target, delta: float = 1.0):
     errors = torch.abs(input - target)  # shape (batch_size,)
-    return torch.where(errors < delta, 0.5 * errors**2, errors * delta - (0.5 * delta**2))
+    return torch.where(errors < delta, 0.5 * errors ** 2, errors * delta - (0.5 * delta ** 2))
 
 
 def _calculate_regression_loss(

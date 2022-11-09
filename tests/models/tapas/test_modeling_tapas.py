@@ -1056,11 +1056,11 @@ class TapasUtilitiesTest(unittest.TestCase):
 
     def test_reduce_sum_vectorized(self):
         values = torch.as_tensor([[1.0, 2.0, 3.0], [2.0, 3.0, 4.0], [3.0, 4.0, 5.0]])
-        index = IndexMap(indices=torch.as_tensor([0, 0, 1]), num_segments=2, batch_dims=0)
+        index = IndexMap(indices=torch.as_tensor([[0, 0, 1]]), num_segments=2, batch_dims=0)
         sums, new_index = reduce_sum(values, index)
 
         # We use np.testing.assert_allclose rather than Tensorflow's assertAllClose
-        np.testing.assert_allclose(sums.numpy(), [[3.0, 5.0, 7.0], [3.0, 4.0, 5.0]])
+        np.testing.assert_allclose(sums.numpy(), [3., 3,])
         # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(new_index.indices.numpy(), [0, 1])
         np.testing.assert_array_equal(new_index.num_segments.numpy(), 2)
