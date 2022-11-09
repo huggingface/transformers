@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch Jukebox model."""
+"""Pytorch Jukebox model."""
 
 import math
 import os
@@ -586,8 +586,8 @@ JUKEBOX_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    This model is also a Pytorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular Pytorch Module and refer to the Pytorch documentation for all matter related to general usage
     and behavior.
 
     Parameters:
@@ -1290,25 +1290,25 @@ class JukeboxConditionalAutoregressive(nn.Module):
         is_encoder=False,
     ):
         """
-        _summary_
+        Autoregressive model.
 
         Args:
             config (`JukeboxPriorConfig`):
                 Model configuration class with all the parameters of the model. Initializing with a config file does
                 not load the weights associated with the model, only the configuration. Check out the
                 [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-            n_ctx (`int`, *optional*, defaults to `None)`:
+            n_ctx (`int`, *optional*):
                 number of tokens or lyrics tokens provided in a single pass.
-            embed_dim (`int`, *optional*, defaults to `None)`:
+            embed_dim (`int`, *optional*):
                 either equals to the dimension of the codebook, or the sum of n_vocab (lyrics) and codeboook dimension,
                 if the model combines lyrics and music tokens, or simply n_vocab if the model is a seperate encoder
-            audio_conditioning (`bool`, *optional*, defaults to `False)`:
+            audio_conditioning (`bool`, *optional*, defaults to `False`):
                 whether or not the prior supports conditionning on audio.
-            metadata_conditioning (`bool`, *optional*, defaults to `False)`:
+            metadata_conditioning (`bool`, *optional*, defaults to `False`):
                 whether or not the prior supports conditionning on artitst, genres, lyrics and timing.
-            encoder_len (`int`, *optional*, defaults to `0)`:
+            encoder_len (`int`, *optional*, defaults to `0`):
                 length of the encoder #TODO this is related to n_vocab
-            is_encoder (`bool`, *optional*, defaults to `False)`:
+            is_encoder (`bool`, *optional*, defaults to `False`):
                 _description_
         """
 
@@ -1640,7 +1640,7 @@ class JukeboxMusicTokenConditioner(nn.Module):
         Args :
             music_tokens (`torch.LongTensor`):
                 Music tokens form the uper level in range(nb_discrete_codes)
-            raw_audio_conditionning (`torch.LongTensor`):
+            raw_audio_conditionning (`torch.LongTensor`, *optional*):
                 Audio used when primed sampling, raw audio information that conditions the generation
         """
         if raw_audio_conditionning is None:
@@ -1775,12 +1775,12 @@ class JukeboxPrior(PreTrainedModel):
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
         level (`int`):
             Current level of the Prior. Should be in range `0,nb_priors`.
-        nb_priors (`int`, *optional*, defaults to `3)`:
+        nb_priors (`int`, *optional*, defaults to 3):
             Total number of priors.
-        vqvae_encoder (`Callable`, *optional*, defaults to `None)`:
+        vqvae_encoder (`Callable`, *optional*):
             Encoding method of the VQVAE encoder used in the forward pass of the model. Passing functions instead of
             the vqvae module to avoid getting the parameters.
-        vqvae_decoder (`Callable`, *optional*, defaults to `None)`:
+        vqvae_decoder (`Callable`, *optional*):
             Decoding method of the VQVAE decoder used in the forward pass of the model. Passing functions instead of
             the vqvae module to avoid getting the parameters.
     """
@@ -1956,9 +1956,7 @@ class JukeboxPrior(PreTrainedModel):
     def prior_postprocess(self, tokens):
         """
         Shifts back the input tokens if the model uses an encoder decoder architecture. As the embedding layer is
-        shared, prior_embed_dim_shift shifts the music token ids by
-         - nb_vocab.
-        Returns : only returns the music tokens
+        shared, prior_embed_dim_shift shifts the music token ids by nb_vocab. Only returns the music tokens.
         """
         batch_size = tokens.shape[0]
         # dim (nb_lyric_tokens, codebook dim = latent_dim of the model)
@@ -2276,7 +2274,7 @@ class JukeboxPreTrainedModel(PreTrainedModel):
 
 
 JUKEBOX_SAMPLING_INPUT_DOCSTRING = r"""
-            labels (`List[Torch.LongTensor]` of lenght `n_sample`, and shape `(self.levels, self.config.max_nb_genre + lyric_sequence_lenght)` :
+            labels (`List[torch.LongTensor]` of length `n_sample`, and shape `(self.levels, self.config.max_nb_genre + lyric_sequence_length)` :
                 List of metadata such as `artist_id`, `genre_id` and the full list of lyric tokens which are used to
                 condition the generation.
             sampling_kwargs (`Dict[Any]`):
@@ -2451,13 +2449,13 @@ class JukeboxModel(JukeboxPreTrainedModel):
         the generated raw audio at each step.
 
         Args:
-           music_tokens (`List[torch.LongTensor`] of length `self.levels` ) :
+           music_tokens (`List[torch.LongTensor] of length `self.levels` ) :
                 A sequence of music tokens which will be used as context to continue the sampling process. Should have
                 `self.levels` tensors, each corresponding to the generation at a certain level.
-            labels (`List[Torch.LongTensor]` of lenght `n_sample`, and shape `(self.levels, 4 +
-            self.config.max_nb_genre + lyric_sequence_lenght)` :
-                List of metadata such as `artist_id`, `genre_id` and the full list of lyric tokens which are used to
-                condition the generation.
+            labels (`List[torch.LongTensor]`):
+                List of length `n_sample`, and shape `(self.levels, 4 + self.config.max_nb_genre +
+                lyric_sequence_length)` metadata such as `artist_id`, `genre_id` and the full list of lyric tokens
+                which are used to condition the generation.
             sample_levels (`List[int]`):
                 List of the desired levels at which the sampling will be done. A level is equivalent to the index of
                 the prior in the list of priors
@@ -2473,7 +2471,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             max_batch_size (`int`, *optional*, defaults to 16):
                 Maximum batch size for the top level priors
             sample_length_in_seconds (`int`, *optional*, defaults to 24):
-                Desired lenght of the generation in seconds
+                Desired length of the generation in seconds
             compute_alignments (`bool`, *optional*, defaults to `False`):
                 Whether or not to compute the alignment between the lyrics and the audio using the top_prior
             sample_tokens (`int`, *optional*):
@@ -2486,7 +2484,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 Whether or not to save the intermediate results. If `True`, will generate a folder named with the start
                 time.
             sample_length (`int`, *optional*):
-                Desired lenght of the generation in samples.
+                Desired length of the generation in samples.
 
         Returns: torch.Tensor
 
@@ -2571,9 +2569,10 @@ class JukeboxModel(JukeboxPreTrainedModel):
         the VQ-VAE decoder to convert the music tokens to raw audio.
 
         Args:
-            labels (`List[Torch.LongTensor]` of lenght `n_sample`, and shape `(self.levels, 4 + self.config.max_nb_genre + lyric_sequence_lenght)` :
-                List of metadata such as `artist_id`, `genre_id` and the full list of lyric tokens which are used to
-                condition the generation.
+            labels (`List[torch.LongTensor]`) :
+                List of length `n_sample`, and shape `(self.levels, 4 + self.config.max_nb_genre +
+                lyric_sequence_length)` metadata such as `artist_id`, `genre_id` and the full list of lyric tokens
+                which are used to condition the generation.
             n_samples (`int`, *optional*, default to 1) :
                 Number of samples to be generated in parallel.
         """,
@@ -2612,7 +2611,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         """Generates a continuation of the previously generated tokens.
 
         Args:
-            music_tokens (`List[torch.LongTensor`] of length `self.levels` ) :
+            music_tokens (`List[torch.LongTensor]` of length `self.levels` ) :
                 A sequence of music tokens which will be used as context to continue the sampling process. Should have
                 `self.levels` tensors, each corresponding to the generation at a certain level.
         """,
@@ -2627,7 +2626,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         """Upsamples a sequence of music tokens using the prior at level `level`.
 
         Args:
-            music_tokens (`List[torch.LongTensor`] of length `self.levels` ) :
+            music_tokens (`List[torch.LongTensor]` of length `self.levels` ) :
                 A sequence of music tokens which will be used as context to continue the sampling process. Should have
                 `self.levels` tensors, each corresponding to the generation at a certain level.
         """,
@@ -2644,7 +2643,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         used: as conditioning for each level, which means that no ancestral sampling is required.
 
         Args:
-            raw_audio (`List[torch.Tensor`] of length `n_samples` ) :
+            raw_audio (`List[torch.Tensor]` of length `n_samples` ) :
                 A list of raw audio that will be used as conditioning information for each samples that will be
                 generated.
         """,

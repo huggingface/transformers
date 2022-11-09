@@ -183,19 +183,19 @@ class JukeboxPriorConfig(PretrainedConfig):
         mask (`bool`, *optional*, defaults to `False`):
             Whether or not to mask the previous positions in the attention.
         max_duration (`int`, *optional*, defaults to 600):
-            #TODO FILLME
+            Maximum supported duration of the generated song in seconds.
         max_nb_genres (`int`, *optional*, defaults to 1):
-            #TODO FILLME
+            Maximum number of genres that can be used to condition the model.
         merged_decoder (`bool`, *optional*, defaults to `True`):
             Whether or not the decoder and the encoder inputs are merged. This is used for the separated
             encoder-decoder architecture
         metadata_conditioning (`bool`, *optional*, defaults to `True)`:
-            #TODO FILLME
+            Whether or not to condition on the artist and genre metadata.
         metadata_dims (`List[`int`]`, *optional*, defaults to `[604, 7898]`):
             Number of genres and the number of artists that were used to train the embedding layers of the prior
             models.
         min_duration (`int`, *optional*, defaults to 0):
-            #TODO FILLME
+            Minimum duration of the generated audio on which the model was trained.
         mlp_multiplier (`float`, *optional*, defaults to 1.0):
             Multiplier coefficient used to define the hidden dimension of the MLP layers. 0.25 means that 0.25*width of
             the model will be used.
