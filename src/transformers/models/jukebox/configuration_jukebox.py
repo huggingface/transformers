@@ -291,7 +291,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         zero_out=False,
         **kwargs
     ):
-
+        super().__init__()
         self.act_fn = act_fn
         self.alignment_head = alignment_head
         self.alignment_layer = alignment_layer
@@ -418,6 +418,10 @@ class JukeboxVQVAEConfig(PretrainedConfig):
             Stride used for each level of the hierarchical VQ-VAE.
         sample_length (`int`, *optional*, defaults to 1058304):
             Provides the max input shape of the VQVAE. Is used to compute the input shape of each level.
+        init_scale (`float`, *optional*, defaults to 0.2):
+            Initialization scale.
+        zero_out (`bool`, *optional*, defaults to `False`):
+            Whether or not to zero out convolution weights when initializing.
     """
 
     model_type = "jukebox_vqvae"
@@ -442,9 +446,11 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         res_downs_t=[3, 2, 2],
         res_strides_t=[2, 2, 2],
         sample_length=1058304,
+        init_scale=0.2,
+        zero_out=False,
         **kwargs
     ):
-
+        super().__init__()
         self.hop_fraction = hop_fraction
         self.conv_input_shape = conv_input_shape
         self.sample_length = sample_length
@@ -465,6 +471,8 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         self.commit = commit
         self.conv_res_scale = conv_res_scale
         self.act_fn = act_fn
+        self.init_scale = init_scale
+        self.zero_out = zero_out
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":

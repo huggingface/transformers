@@ -605,6 +605,23 @@ class JukeboxVQVAE(PreTrainedModel):
     base_model_prefix = "vqvae"
     _keys_to_ignore_on_load_unexpected = [r"priors"]
 
+    def _init_weights(self, module):
+        if isinstance(module, nn.Embedding):  # embed_tokens
+            module.weight.data.normal_(mean=0.0, std=0.02 * self.config.init_scale)
+        elif isinstance(module, JukeboxConv1D):
+            if self.config.zero_out:
+                module.weight.data.zero_()
+            else:
+                module.weight.data.normal_(mean=0.0, std=0.02 * self.config.init_scale)
+        elif isinstance(module, JukeboxResConv1DBlock) and self.config.zero_out:
+            module.conv1d_2.weight.data.zero_()
+            module.conv1d_2.bias.data.zero_()
+        if isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
+
     def __init__(self, config: JukeboxVQVAEConfig):
         super().__init__(config)
         downs_t = config.res_downs_t
@@ -1789,12 +1806,10 @@ class JukeboxPrior(PreTrainedModel):
             module.pos_emb.data.normal_(mean=0.0, std=0.01 * init_scale)
         elif isinstance(module, JukeboxRangeEmbedding):
             module.emb.weight.data.normal_(mean=0.0, std=0.01 * init_scale)
-        elif isinstance(module, nn.Linear) and "encoder.lm_head" in module.__class__.__name__:
-            module.weight.data.normal_(mean=0.0, std=0.02 * init_scale)
-        elif isinstance(module, nn.Parameter) and "pos_emb" in module.__class__.__name__:
-            module.data.normal_(mean=0.0, std=0.01 * init_scale)
-        elif isinstance(module, nn.Parameter) and "start_token" in module.__class__.__name__:
-            module.data.normal_(mean=0.0, std=0.01 * init_scale)
+        elif isinstance(module, JukeboxConditionalAutoregressive) and hasattr(module, "lm_head"):
+            module.lm_head.weight.data.normal_(mean=0.0, std=0.02 * init_scale)
+        elif isinstance(module, JukeboxConditionalAutoregressive) and hasattr(module, "start_token"):
+            module.start_token.data.normal_(mean=0.0, std=0.01 * init_scale)
         elif isinstance(module, JukeboxResConv1DBlock) and self.config.zero_out:
             module.conv1d_2.weigth.data.zero_()
             module.conv1d_2.bias.data.zero_()
@@ -2259,33 +2274,8 @@ class JukeboxPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
 
     def _init_weights(self, module):
-        init_scale = self.config.init_scale
-
-        if isinstance(module, nn.Embedding):  # embed_tokens
-            module.weight.data.normal_(mean=0.0, std=0.02 * init_scale)
-        elif isinstance(module, JukeboxConv1D):
-            if self.config.zero_out:
-                module.weight.data.zero_()
-            else:
-                module.weight.data.normal_(mean=0.0, std=0.02 * init_scale)
-        elif isinstance(module, JukeboxPositionalEmbedding):
-            module.pos_emb.data.normal_(mean=0.0, std=0.01 * init_scale)
-        elif isinstance(module, JukeboxRangeEmbedding):
-            module.emb.weight.data.normal_(mean=0.0, std=0.01 * init_scale)
-        elif isinstance(module, nn.Linear) and "encoder.lm_head" in module.__class__.__name__:
-            module.weight.data.normal_(mean=0.0, std=0.02 * init_scale)
-        elif isinstance(module, nn.Parameter) and "pos_emb" in module.__class__.__name__:
-            module.data.normal_(mean=0.0, std=0.01 * init_scale)
-        elif isinstance(module, nn.Parameter) and "start_token" in module.__class__.__name__:
-            module.data.normal_(mean=0.0, std=0.01 * init_scale)
-        elif isinstance(module, JukeboxResConv1DBlock) and self.config.zero_out:
-            module.conv1d_2.weigth.data.zero_()
-            module.conv1d_2.bias.data.zero_()
-        if isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+        if isinstance(module, JukeboxPrior) or isinstance(module, JukeboxVQVAE):
+            module.apply(module._init_weights)
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
