@@ -52,6 +52,20 @@ _CHECKPOINT_FOR_DOC = "weiweishi/roc-bert-base-zh"
 _CONFIG_FOR_DOC = "RoCBertConfig"
 _TOKENIZER_FOR_DOC = "RoCBertTokenizer"
 
+# Base model docstring
+_EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
+
+# Token Classification output
+_TOK_CLASS_EXPECTED_OUTPUT = ['LABEL_0', 'LABEL_1', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_1', 'LABEL_1', 'LABEL_0', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1']
+
+# SequenceClassification docstring
+_SEQ_CLASS_EXPECTED_LOSS = 0.0
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
+
+# QuestionAsnwering docstring
+_QA_EXPECTED_LOSS = 0.59
+_QA_EXPECTED_OUTPUT = "'who was jim henson? jim henson was a'"
+
 ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "weiweishi/roc-bert-base-zh",
     # See all RoCBert models at https://huggingface.co/models?filter=roc_bert
@@ -910,7 +924,9 @@ class RoCBertModel(RoCBertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
+    
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1151,6 +1167,7 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> logits = outputs.logits
+
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1452,7 +1469,9 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> prediction_logits = outputs.logits
-        ```"""
+
+        ```
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.roc_bert(
@@ -1564,6 +1583,7 @@ class RoCBertForSequenceClassification(RoCBertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT
     )
     def forward(
         self,
@@ -1669,6 +1689,7 @@ class RoCBertForMultipleChoice(RoCBertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_EXPECTED_OUTPUT_SHAPE
     )
     def forward(
         self,
@@ -1776,6 +1797,7 @@ class RoCBertForTokenClassification(RoCBertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_TOK_CLASS_EXPECTED_OUTPUT,
     )
     def forward(
         self,
@@ -1859,6 +1881,7 @@ class RoCBertForQuestionAnswering(RoCBertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_QA_EXPECTED_OUTPUT,
     )
     def forward(
         self,
