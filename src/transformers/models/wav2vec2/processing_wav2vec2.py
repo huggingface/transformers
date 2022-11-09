@@ -45,10 +45,6 @@ class Wav2Vec2Processor(ProcessorMixin):
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
 
-    @property
-    def model_input_names(self):
-        return self.feature_extractor.model_input_names
-
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         try:

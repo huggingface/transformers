@@ -367,6 +367,19 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         self.assertListEqual(decoded_wav2vec2.text, decoded_auto.text)
 
+    def test_model_input_names(self):
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+        decoder = self.get_decoder()
+
+        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, feature_extractor=feature_extractor, decoder=decoder)
+
+        self.assertListEqual(
+            processor.model_input_names,
+            feature_extractor.model_input_names,
+            msg="`processor` and `feature_extractor` model input names do not match",
+        )
+
     @staticmethod
     def get_from_offsets(offsets, key):
         retrieved_list = [d[key] for d in offsets]
