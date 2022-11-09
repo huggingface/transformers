@@ -399,7 +399,7 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         lmu (`float`, *optional*, defaults to 0.99):
             Used in the codebook update, exponential moving average coefficient. For more detail refer to Appendix A.1
             of the original [VQVAE paper](https://arxiv.org/pdf/1711.00937v2.pdf)
-        multipliers (`tuple`, *optional*, defaults to `(2, 1, 1)`):
+        multipliers (`List[`int`]`, *optional*, defaults to `[2, 1, 1]`):
             Depth and width multipliers used for each level. Used on the `res_conv_width` and `res_conv_depth`
         res_conv_depth (`int`, *optional*, defaults to 4):
             Depth of the encoder and decoder block. If no `multipliers` are used, this is the same for each level.
@@ -433,14 +433,14 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         hop_fraction=[0.125, 0.5, 0.5],
         levels=3,
         lmu=0.99,
-        multipliers=(2, 1, 1),
+        multipliers=[2, 1, 1],
         res_conv_depth=4,
         res_conv_width=32,
         res_convolution_multiplier=1,
         res_dilation_cycle=None,
         res_dilation_growth_rate=3,
-        res_downs_t=(3, 2, 2),
-        res_strides_t=(2, 2, 2),
+        res_downs_t=[3, 2, 2],
+        res_strides_t=[2, 2, 2],
         sample_length=1058304,
         **kwargs
     ):
