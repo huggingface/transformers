@@ -1103,6 +1103,7 @@ if __name__ == "__main__":
                 if arch == "processors":
                     continue
                 to_upload.append(os.path.join(args.output_path, model_type, arch))
+        to_upload = sorted(to_upload)
 
         upload_results = {}
         if len(to_upload) > 0:
