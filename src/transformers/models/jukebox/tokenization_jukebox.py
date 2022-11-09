@@ -351,7 +351,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 Name of the artist.
             genres (`str`):
                 List of genres that will be mixed to condition the audio
-            lyrics (`str`, *optional*):
+            lyrics (`str`, *optional*, defaults to `""`):
                 Lyrics used to condition the generation
         """
         input_ids = [0, 0, 0]
@@ -376,9 +376,11 @@ class JukeboxTokenizer(PreTrainedTokenizer):
 
         Args:
             save_directory (`str`):
-                _description_
-            filename_prefix (`Optional[str]`, *optional*, defaults to None):
-                _description_
+                A path to the directory where to saved. It will be created if it doesn't exist.
+
+            filename_prefix (`Optional[str]`, *optional*):
+                A prefix to add to the names of the files saved by the tokenizer.
+
         """
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")

@@ -603,6 +603,7 @@ Ringer, Tom Ash, John Hughes, David MacLeod, Jamie Dougherty](https://arxiv.org/
 class JukeboxVQVAE(PreTrainedModel):
     config_class = JukeboxVQVAEConfig
     base_model_prefix = "vqvae"
+    _keys_to_ignore_on_load_unexpected = [r"priors"]
 
     def __init__(self, config: JukeboxVQVAEConfig):
         super().__init__(config)
@@ -1772,6 +1773,7 @@ class JukeboxPrior(PreTrainedModel):
     """
 
     config_class = JukeboxPriorConfig
+    _keys_to_ignore_on_load_unexpected = ["vqvae"]
 
     def _init_weights(self, module):
         init_scale = self.config.init_scale
@@ -1803,7 +1805,6 @@ class JukeboxPrior(PreTrainedModel):
             module.bias.data.zero_()
 
     def __init__(self, config: JukeboxPriorConfig, level=None, nb_priors=3, vqvae_encoder=None, vqvae_decoder=None):
-
         super().__init__(config)
         # Passing functions instead of the vqvae module to avoid getting params, only used in the
         # forward loop
@@ -1812,7 +1813,10 @@ class JukeboxPrior(PreTrainedModel):
 
         self.levels = nb_priors
         self.level = level if level is not None else config.level
+
         self.base_model_prefix = f"priors.{self.level}"
+        self._keys_to_ignore_on_load_unexpected += [r"priors.[^%d]." % self.level]
+
         self.n_ctx = config.n_ctx
 
         self.lyric_conditioning = config.nb_relevant_lyric_tokens > 0

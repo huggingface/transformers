@@ -257,7 +257,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         attn_res_scale=False,
         blocks=64,
         conv_res_scale=None,
-        num_decoder_layers=72,
+        num_layers=72,
         emb_dropout=0,
         encoder_config=None,
         encoder_loss_fraction=0.4,
@@ -301,7 +301,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         self.attn_res_scale = attn_res_scale
         self.blocks = blocks
         self.conv_res_scale = conv_res_scale
-        self.num_decoder_layers = num_decoder_layers
+        self.num_layers = num_layers
         self.emb_dropout = emb_dropout
         self.music_vocab_size = music_vocab_size
         if encoder_config is not None:
