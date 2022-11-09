@@ -305,7 +305,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         self.music_vocab_size = music_vocab_size
         if encoder_config is not None:
             self.encoder_config = JukeboxPriorConfig(**encoder_config)
-        else :
+        else:
             self.encoder_config = None
         self.encoder_loss_fraction = encoder_loss_fraction
         self.init_scale = init_scale
@@ -364,6 +364,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         output["encoder_config"] = self.encoder_config.to_dict() if self.encoder_config is not None else None
         output["model_type"] = self.__class__.model_type
         return output
+
 
 class JukeboxVQVAEConfig(PretrainedConfig):
     """
