@@ -22,7 +22,12 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_jukebox": ["JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "JukeboxConfig"],
+    "configuration_jukebox": [
+        "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "JukeboxConfig",
+        "JukeboxPriorConfig",
+        "JukeboxVQVAEConfig",
+    ],
     "tokenization_jukebox": ["JukeboxTokenizer"],
 }
 
