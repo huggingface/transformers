@@ -261,6 +261,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         tesseract_config: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
+        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -360,7 +361,6 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
             images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
 
         # flip color channels from RGB to BGR (as Detectron2 requires this)
-        images = [flip_channel_order(image) for image in images]
         images = [to_channel_dimension_format(image, data_format) for image in images]
 
         data = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
