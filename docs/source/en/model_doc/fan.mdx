@@ -15,7 +15,11 @@ specific language governing permissions and limitations under the License.
 ## Overview
 
 The FAN model was proposed in [Understanding The Robustness in Vision Transformers](https://arxiv.org/pdf/2204.12451.pdf)  by Daquan Zhou, Zhiding Yu, Enze Xie,
-Chaowei Xiao, Anima Anandkumar, Jiashi Feng, Jose M. Alvarez. <INSERT SHORT SUMMARY HERE>
+Chaowei Xiao, Anima Anandkumar, Jiashi Feng, Jose M. Alvarez. Since the introduction of [Vision Transformer (ViT)](vit) introduced in [Dosovitskiy et al., 2020](https://arxiv.org/abs/2010.11929),
+they've achieved great performance in many visual tasks. These self-attention models were outperforming ConvNets on corruption robustness as per ([Bai et al., 2021](https://arxiv.org/pdf/2111.05464.pdf); [Xie et al., 2021](https://arxiv.org/pdf/2105.15203.pdf); [Paul & Chen, 2022](https://arxiv.org/pdf/2105.07581.pdf); [Naseer et al., 2021](https://arxiv.org/pdf/2105.10497.pdf)),
+which was attributed to their designs, this was later challenged by the introduction of [ConvNeXt](https://arxiv.org/pdf/2201.03545.pdf) where a model build from convolution modules without self-attention competed favorably against ViT in generalization and robustness.
+This paper aims to answer the above question regarding the performance of ConvNeXt and ViT, while introducing a novel attention channel processing design.
+
 
 The abstract from the paper is the following:
 
