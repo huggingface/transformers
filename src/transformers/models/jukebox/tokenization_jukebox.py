@@ -290,7 +290,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         Args:
             tensor_type (`str` or [`~utils.TensorType`], *optional*):
                 The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
-                `None`, no modification is done.
+                unset, no modification is done.
             prepend_batch_axis (`int`, *optional*, defaults to `False`):
                 Whether or not to add the batch dimension during the conversion.
         """
@@ -350,7 +350,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 Name of the artist.
             genres (`str`):
                 List of genres that will be mixed to condition the audio
-            lyrics (`srt`, Optional):
+            lyrics (`str`, *optional*):
                 Lyrics used to condition the generation
         """
         input_ids = [0, 0, 0]
