@@ -16,6 +16,8 @@
 import copy
 from typing import Dict, Optional
 
+from transformers import CONFIG_MAPPING
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
@@ -130,24 +132,33 @@ class MaskFormerConfig(PretrainedConfig):
             )
         else:
             # verify that the backbone is supported
-            backbone_model_type = backbone_config.model_type
-            if backbone_config.model_type not in self.backbones_supported:
+            backbone_model_type = (
+                backbone_config.pop("model_type") if isinstance(backbone_config, dict) else backbone_config.model_type
+            )
+            if backbone_model_type not in self.backbones_supported:
                 raise ValueError(
                     f"Backbone {backbone_model_type} not supported, please use one of"
                     f" {','.join(self.backbones_supported)}"
                 )
+            if isinstance(backbone_config, dict):
+                config_class = CONFIG_MAPPING[backbone_model_type]()
+                backbone_config = config_class.from_dict(backbone_config)
 
         if decoder_config is None:
             # fall back to https://huggingface.co/facebook/detr-resnet-50
             decoder_config = DetrConfig()
         else:
-            decoder_type = decoder_config.pop("model_type")
+            decoder_type = (
+                decoder_config.pop("model_type") if isinstance(decoder_config, dict) else decoder_config.model_type
+            )
             if decoder_type not in self.decoders_supported:
                 raise ValueError(
                     f"Transformer Decoder {decoder_type} not supported, please use one of"
                     f" {','.join(self.decoders_supported)}"
                 )
-            decoder_config = AutoConfig.for_model(decoder_type, **decoder_config)
+            if isinstance(decoder_config, dict):
+                config_class = CONFIG_MAPPING[decoder_type]()
+                decoder_config = config_class.from_dict(decoder_config)
 
         self.backbone_config = backbone_config
         self.decoder_config = decoder_config
@@ -186,8 +197,8 @@ class MaskFormerConfig(PretrainedConfig):
                 [`MaskFormerConfig`]: An instance of a configuration object
         """
         return cls(
-            backbone_config=backbone_config.to_dict(),
-            decoder_config=decoder_config.to_dict(),
+            backbone_config=backbone_config,
+            decoder_config=decoder_config,
             **kwargs,
         )
 

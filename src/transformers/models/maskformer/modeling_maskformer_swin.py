@@ -841,6 +841,14 @@ class MaskFormerSwinBackbone(Backbone):
             hidden_states_permuted.append(hidden_state_permuted)
         return hidden_states_permuted
 
+    @property
+    def input_resolutions(self) -> List[int]:
+        return [layer.input_resolution for layer in self.model.encoder.layers]
+
+    @property
+    def outputs_shapes(self) -> List[int]:
+        return [layer.dim for layer in self.model.encoder.layers]
+
     def output_shape(self):
         return {
             name: ShapeSpec(channels=self._out_feature_channels[name], stride=self._out_feature_strides[name])
