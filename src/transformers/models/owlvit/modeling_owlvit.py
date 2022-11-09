@@ -1275,7 +1275,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)
-        text_embeds = outputs.text_model_output.pooler_output
+        text_embeds = outputs.text_embeds
 
         # Last hidden states from text and vision transformers
         text_model_last_hidden_state = outputs[-2][0]
