@@ -16,6 +16,8 @@
 Processor class for VisionTextDualEncoder
 """
 
+import warnings
+
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
@@ -41,6 +43,11 @@ class VisionTextDualEncoderProcessor(ProcessorMixin):
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         if "feature_extractor" in kwargs:
+            warnings.warn(
+                "The `feature_extractor` argument is deprecated and will be removed in v4.27, use `image_processor`"
+                " instead.",
+                FutureWarning,
+            )
             feature_extractor = kwargs.pop("feature_extractor")
 
         image_processor = image_processor if image_processor is not None else feature_extractor
@@ -118,3 +125,12 @@ class VisionTextDualEncoderProcessor(ProcessorMixin):
         Please refer to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+    @property
+    def feature_extractor_class(self):
+        warnings.warn(
+            "`feature_extractor_class` is deprecated and will be removed in v4.27. Use `image_processor_class`"
+            " instead.",
+            FutureWarning,
+        )
+        return self.image_processor_class

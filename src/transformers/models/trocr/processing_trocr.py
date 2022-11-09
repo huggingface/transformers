@@ -120,3 +120,12 @@ class TrOCRProcessor(ProcessorMixin):
         yield
         self.current_processor = self.image_processor
         self._in_target_context_manager = False
+
+    @property
+    def feature_extractor_class(self):
+        warnings.warn(
+            "`feature_extractor_class` is deprecated and will be removed in v4.27. Use `image_processor_class`"
+            " instead.",
+            FutureWarning,
+        )
+        return self.image_processor_class
