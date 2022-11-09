@@ -15,24 +15,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+# rely on isort to merge the imports
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
-    "configuration_imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig", "ImageGPTOnnxConfig"]
+    "configuration_roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig"],
+    "tokenization_roc_bert": ["RoCBertTokenizer"],
 }
 
 try:
-    if not is_vision_available():
+    if not is_tokenizers_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_imagegpt"] = ["ImageGPTFeatureExtractor"]
-    _import_structure["image_processing_imagegpt"] = ["ImageGPTImageProcessor"]
+    pass
 
 try:
     if not is_torch_available():
@@ -40,27 +40,32 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_imagegpt"] = [
-        "IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "ImageGPTForCausalImageModeling",
-        "ImageGPTForImageClassification",
-        "ImageGPTModel",
-        "ImageGPTPreTrainedModel",
-        "load_tf_weights_in_imagegpt",
+    _import_structure["modeling_roc_bert"] = [
+        "ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "RoCBertForCausalLM",
+        "RoCBertForMaskedLM",
+        "RoCBertForMultipleChoice",
+        "RoCBertForPreTraining",
+        "RoCBertForQuestionAnswering",
+        "RoCBertForSequenceClassification",
+        "RoCBertForTokenClassification",
+        "RoCBertLayer",
+        "RoCBertModel",
+        "RoCBertPreTrainedModel",
+        "load_tf_weights_in_roc_bert",
     ]
 
-
 if TYPE_CHECKING:
-    from .configuration_imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig, ImageGPTOnnxConfig
+    from .configuration_roc_bert import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RoCBertConfig
+    from .tokenization_roc_bert import RoCBertTokenizer
 
     try:
-        if not is_vision_available():
+        if not is_tokenizers_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_imagegpt import ImageGPTFeatureExtractor
-        from .image_processing_imagegpt import ImageGPTImageProcessor
+        raise OptionalDependencyNotAvailable()
 
     try:
         if not is_torch_available():
@@ -68,14 +73,21 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_imagegpt import (
-            IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ImageGPTForCausalImageModeling,
-            ImageGPTForImageClassification,
-            ImageGPTModel,
-            ImageGPTPreTrainedModel,
-            load_tf_weights_in_imagegpt,
+        from .modeling_roc_bert import (
+            ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RoCBertForCausalLM,
+            RoCBertForMaskedLM,
+            RoCBertForMultipleChoice,
+            RoCBertForPreTraining,
+            RoCBertForQuestionAnswering,
+            RoCBertForSequenceClassification,
+            RoCBertForTokenClassification,
+            RoCBertLayer,
+            RoCBertModel,
+            RoCBertPreTrainedModel,
+            load_tf_weights_in_roc_bert,
         )
+
 
 else:
     import sys

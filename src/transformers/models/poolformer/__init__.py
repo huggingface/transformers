@@ -30,6 +30,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_poolformer"] = ["PoolFormerFeatureExtractor"]
+    _import_structure["image_processing_poolformer"] = ["PoolFormerImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -55,6 +56,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_poolformer import PoolFormerFeatureExtractor
+        from .image_processing_poolformer import PoolFormerImageProcessor
 
     try:
         if not is_torch_available():
