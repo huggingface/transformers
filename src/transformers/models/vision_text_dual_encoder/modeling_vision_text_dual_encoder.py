@@ -96,7 +96,7 @@ VISION_TEXT_DUAL_ENCODER_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
+            [`CLIPImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -131,8 +131,8 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
             [What are position IDs?](../glossary#position-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            a feature extractor (e.g. if you use ViT as the encoder, you should use [`ViTFeatureExtractor`]). See
-            [`ViTFeatureExtractor.__call__`] for details.
+            an image processor (e.g. if you use ViT as the encoder, you should use [`ViTImageProcessor`]). See
+            [`ViTImageProcessor.__call__`] for details.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
@@ -267,15 +267,15 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import VisionTextDualEncoderModel, AutoFeatureExtractor
+        >>> from transformers import VisionTextDualEncoderModel, AutoImageProcessor
 
         >>> model = VisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian")
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
+        >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> image_features = model.get_image_features(**inputs)
         ```"""
@@ -316,13 +316,13 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         >>> from transformers import (
         ...     VisionTextDualEncoderModel,
         ...     VisionTextDualEncoderProcessor,
-        ...     ViTFeatureExtractor,
+        ...     ViTImageProcessor,
         ...     BertTokenizer,
         ... )
 
         >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
-        >>> processor = VisionTextDualEncoderProcessor(feature_extractor, tokenizer)
+        >>> image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224")
+        >>> processor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
         >>> model = VisionTextDualEncoderModel.from_vision_text_pretrained(
         ...     "google/vit-base-patch16-224", "bert-base-uncased"
         ... )
