@@ -20,10 +20,7 @@ from typing import Optional
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutputWithNoAttention,
-    BaseModelOutputWithPoolingAndNoAttention,
-)
+from ...modeling_outputs import BaseModelOutputWithNoAttention, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from ..resnet import ResNetConfig
@@ -32,6 +29,7 @@ from ..resnet import ResNetConfig
 logger = logging.get_logger(__name__)
 
 
+# Copied from transformers.models.resnet.modeling_resnet.ResNetConvLayer with ResNet->MaskFormerResNet
 class MaskFormerResNetConvLayer(nn.Module):
     def __init__(
         self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu"
@@ -50,6 +48,7 @@ class MaskFormerResNetConvLayer(nn.Module):
         return hidden_state
 
 
+# Copied from transformers.models.resnet.modeling_resnet.ResNetEmbeddings with ResNetConvLayer->MaskFormerResNetConvLayer
 class MaskFormerResNetEmbeddings(nn.Module):
     """
     ResNet Embeddings (stem) composed of a single aggressive convolution.
@@ -74,6 +73,7 @@ class MaskFormerResNetEmbeddings(nn.Module):
         return embedding
 
 
+# Copied from transformers.models.resnet.modeling_resnet.ResNetShortCut
 class MaskFormerResNetShortCut(nn.Module):
     """
     ResNet shortcut, used to project the residual features to the correct size. If needed, it is also used to
@@ -91,6 +91,7 @@ class MaskFormerResNetShortCut(nn.Module):
         return hidden_state
 
 
+# Copied from transformers.models.resnet.modeling_resnet.ResNetBasicLayer with ResNetShortCut->MaskFormerResNetShortCut, ResNetConvLayer->MaskFormerResNetConvLayer
 class MaskFormerResNetBasicLayer(nn.Module):
     """
     A classic ResNet's residual layer composed by two `3x3` convolutions.
@@ -100,7 +101,9 @@ class MaskFormerResNetBasicLayer(nn.Module):
         super().__init__()
         should_apply_shortcut = in_channels != out_channels or stride != 1
         self.shortcut = (
-            MaskFormerResNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
+            MaskFormerResNetShortCut(in_channels, out_channels, stride=stride)
+            if should_apply_shortcut
+            else nn.Identity()
         )
         self.layer = nn.Sequential(
             MaskFormerResNetConvLayer(in_channels, out_channels, stride=stride),
@@ -117,6 +120,7 @@ class MaskFormerResNetBasicLayer(nn.Module):
         return hidden_state
 
 
+# Copied from transformers.models.resnet.modeling_resnet.ResNetBottleNeckLayer with ResNetShortCut->MaskFormerResNetShortCut, ResNetConvLayer->MaskFormerResNetConvLayer
 class MaskFormerResNetBottleNeckLayer(nn.Module):
     """
     A classic ResNet's bottleneck layer composed by three `3x3` convolutions.
@@ -132,7 +136,9 @@ class MaskFormerResNetBottleNeckLayer(nn.Module):
         should_apply_shortcut = in_channels != out_channels or stride != 1
         reduces_channels = out_channels // reduction
         self.shortcut = (
-            MaskFormerResNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
+            MaskFormerResNetShortCut(in_channels, out_channels, stride=stride)
+            if should_apply_shortcut
+            else nn.Identity()
         )
         self.layer = nn.Sequential(
             MaskFormerResNetConvLayer(in_channels, reduces_channels, kernel_size=1),
@@ -150,6 +156,7 @@ class MaskFormerResNetBottleNeckLayer(nn.Module):
         return hidden_state
 
 
+# Copied from transformers.models.resnet.modeling_resnet.ResNetStage with ResNetBottleNeckLayer->MaskFormerResNetBottleNeckLayer, ResNetBasicLayer->MaskFormerResNetBasicLayer
 class MaskFormerResNetStage(nn.Module):
     """
     A ResNet stage composed by stacked layers.
@@ -180,6 +187,7 @@ class MaskFormerResNetStage(nn.Module):
         return hidden_state
 
 
+# Copied from transformers.models.resnet.modeling_resnet.ResNetEncoder with ResNetStage->MaskFormerResNetStage
 class MaskFormerResNetEncoder(nn.Module):
     def __init__(self, config: ResNetConfig):
         super().__init__()
@@ -221,6 +229,7 @@ class MaskFormerResNetEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNetModel->MaskFormerResNetModel
 class MaskFormerResNetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -245,6 +254,7 @@ class MaskFormerResNetPreTrainedModel(PreTrainedModel):
 
 
 class MaskFormerResNetModel(MaskFormerResNetPreTrainedModel):
+    # Copied from transformers.models.resnet.modeling_resnet.ResNetModel.__init__ with ResNet->MaskFormerResNet
     def __init__(self, config):
         super().__init__(config)
         self.config = config

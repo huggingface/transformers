@@ -16,18 +16,17 @@
 """MaskFormer Swin backbone."""
 
 import collections.abc
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 from typing import List, Optional, Tuple
+
+import torch
+from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput
 from ...modeling_utils import ModuleUtilsMixin
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-
-import torch
-from torch import Tensor, nn
-
 from ..swin import SwinConfig
 
 
