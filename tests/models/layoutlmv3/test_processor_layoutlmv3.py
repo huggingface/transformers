@@ -146,6 +146,17 @@ class LayoutLMv3ProcessorTest(unittest.TestCase):
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, LayoutLMv3FeatureExtractor)
 
+    def test_model_input_names(self):
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+
+        processor = LayoutLMv3Processor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+
+        self.assertListEqual(
+            processor.model_input_names,
+            ["input_ids", "bbox", "pixel_values", "attention_mask"],
+        )
+
 
 # different use cases tests
 @require_torch

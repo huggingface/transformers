@@ -231,3 +231,19 @@ class FlavaProcessorTest(unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
+
+    def test_model_input_names(self):
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+
+        processor = FlavaProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+
+        self.assertListEqual(
+            processor.model_input_names,
+            [
+                "input_ids",
+                "token_type_ids",
+                "attention_mask",
+                "pixel_values",
+            ],
+        )

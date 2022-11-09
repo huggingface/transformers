@@ -126,6 +126,17 @@ class LayoutXLMProcessorTest(unittest.TestCase):
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
 
+    def test_model_input_names(self):
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+
+        processor = LayoutXLMProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+
+        self.assertListEqual(
+            processor.model_input_names,
+            ["input_ids", "bbox", "image", "attention_mask"],
+        )
+
     @slow
     def test_overflowing_tokens(self):
         # In the case of overflowing tokens, test that we still have 1-to-1 mapping between the images and input_ids (sequences that are too long are broken down into multiple sequences).
