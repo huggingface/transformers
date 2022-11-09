@@ -165,8 +165,8 @@ class JukeboxPriorConfig(PretrainedConfig):
         conv_res_scale (`int`, *optional*):
             Whether or not to scale the residuals in the conditioner block. Since the top level prior does not have a
             conditioner, the default value is to None and should not be modified.
-        depth (`int`, *optional*, defaults to 72):
-            Number of layers of the decoder architecture. #TODO replace with num decoder_layers?
+        num_layers (`int`, *optional*, defaults to 72):
+            Number of layers of the transformer architecture.
         emb_dropout (`int`, *optional*, defaults to 0):
             Embedding dropout used in the lyric decoder.
         encoder_config (`JukeboxPriorConfig`, *optional*) :
@@ -257,7 +257,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         attn_res_scale=False,
         blocks=64,
         conv_res_scale=None,
-        depth=72,
+        num_decoder_layers=72,
         emb_dropout=0,
         encoder_config=None,
         encoder_loss_fraction=0.4,
@@ -301,7 +301,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         self.attn_res_scale = attn_res_scale
         self.blocks = blocks
         self.conv_res_scale = conv_res_scale
-        self.depth = depth
+        self.num_decoder_layers = num_decoder_layers
         self.emb_dropout = emb_dropout
         self.music_vocab_size = music_vocab_size
         if encoder_config is not None:

@@ -1188,7 +1188,7 @@ class JukeboxBlock(nn.Module):
         self.layer_norm_0 = JukeboxLayerNorm(config.hidden_size)
         self.mlp = JukeboxMLP(config)
         self.layer_norm_1 = JukeboxLayerNorm(config.hidden_size)
-        self.res_scale = 1.0 / config.depth if config.attn_res_scale else 1.0
+        self.res_scale = 1.0 / config.num_layers if config.attn_res_scale else 1.0
         self.attn_func = attn_func
 
     def forward(self, hidden_states, last_encoder_hidden_states, sample=False):
@@ -1210,7 +1210,7 @@ class JukeboxLayerStack(nn.Module):
         super().__init__()
         self.n_ctx = n_ctx
         self.width = config.hidden_size
-        self.depth = config.depth
+        self.num_layers = config.num_layers
         self.blocks = config.blocks
         self.attention_pattern = config.attention_pattern
         if self.blocks is not None:
@@ -1221,7 +1221,7 @@ class JukeboxLayerStack(nn.Module):
         # Orders of attn_func
         attention_pattern = ATTENTION_PATTERNS[self.attention_pattern]
         self._attn_mods = nn.ModuleList()
-        for depth in range(self.depth):
+        for depth in range(self.num_layers):
             self._attn_mods.append(JukeboxBlock(config, n_ctx, attn_func=attention_pattern(depth)))
 
         self.saved_attn_weights = []
@@ -1306,7 +1306,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
 
         super().__init__()
         self.width = config.hidden_size
-        self.depth = config.depth
+        self.num_layers = config.num_layers
         self.n_ctx = n_ctx if n_ctx is not None else config.n_ctx
         self.embed_dim = embed_dim if embed_dim is not None else config.music_vocab_size
         self.embed_tokens = nn.Embedding(self.embed_dim, config.hidden_size)
