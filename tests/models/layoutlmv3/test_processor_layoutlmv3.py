@@ -171,10 +171,8 @@ class LayoutLMv3ProcessorTest(unittest.TestCase):
         # add extra args
         inputs = processor(text=input_str, images=image_input, return_codebook_pixels=False, return_image_mask=False)
 
-        self.assertListEqual(
-            list(inputs.keys()),
-            processor.model_input_names
-        )
+        self.assertListEqual(list(inputs.keys()), processor.model_input_names)
+
 
 # different use cases tests
 @require_torch

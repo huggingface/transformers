@@ -248,7 +248,4 @@ class FlavaProcessorTest(unittest.TestCase):
         # add extra args
         inputs = processor(text=input_str, images=image_input, return_codebook_pixels=True, return_image_mask=True)
 
-        self.assertListEqual(
-            list(inputs.keys()),
-            processor.model_input_names
-        )
+        self.assertListEqual(list(inputs.keys()), processor.model_input_names)

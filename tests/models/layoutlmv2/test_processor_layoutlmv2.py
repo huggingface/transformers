@@ -19,13 +19,14 @@ import tempfile
 import unittest
 from typing import List
 
+import numpy as np
+
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.layoutlmv2 import LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pytesseract, require_tokenizers, require_torch, slow
 from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
 
-import numpy as np
 
 if is_pytesseract_available():
     from PIL import Image
@@ -157,10 +158,7 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         # add extra args
         inputs = processor(text=input_str, images=image_input, return_codebook_pixels=False, return_image_mask=False)
 
-        self.assertListEqual(
-            list(inputs.keys()),
-            processor.model_input_names
-        )
+        self.assertListEqual(list(inputs.keys()), processor.model_input_names)
 
     @slow
     def test_overflowing_tokens(self):
