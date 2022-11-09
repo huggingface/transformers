@@ -40,7 +40,8 @@ from ...utils import (
 )
 from ..detr import DetrConfig
 from .configuration_maskformer import MaskFormerConfig
-from .modeling_maskformer_swin import MaskFormerSwinEncoder, MaskFormerSwinTransformerBackbone
+from .modeling_maskformer_resnet import MaskFormerResNetBackbone
+from .modeling_maskformer_swin import MaskFormerSwinBackbone, MaskFormerSwinEncoder
 
 
 if is_scipy_available():
@@ -1373,7 +1374,10 @@ class MaskFormerPixelLevelModule(nn.Module):
                 The configuration used to instantiate this model.
         """
         super().__init__()
-        self.encoder = MaskFormerSwinTransformerBackbone(config.backbone_config)
+        if config.backbone_config.model_type == "swin":
+            self.encoder = MaskFormerSwinBackbone(config.backbone_config)
+        elif config.backbone_config.model_type == "resnet":
+            self.encoder = MaskFormerResNetBackbone(config.backbone_config)
         self.decoder = MaskFormerPixelDecoder(
             in_features=self.encoder.outputs_shapes[-1],
             feature_size=config.fpn_feature_size,

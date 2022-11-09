@@ -97,16 +97,16 @@ class MaskFormerConfig(PretrainedConfig):
     """
     model_type = "maskformer"
     attribute_map = {"hidden_size": "mask_feature_size"}
-    backbones_supported = ["swin"]
+    backbones_supported = ["swin", "resnet"]
     decoders_supported = ["detr"]
 
     def __init__(
         self,
+        backbone_config: Optional[Dict] = None,
         fpn_feature_size: int = 256,
         mask_feature_size: int = 256,
         no_object_weight: float = 0.1,
         use_auxiliary_loss: bool = False,
-        backbone_config: Optional[Dict] = None,
         decoder_config: Optional[Dict] = None,
         init_std: float = 0.02,
         init_xavier_std: float = 1.0,
@@ -129,13 +129,13 @@ class MaskFormerConfig(PretrainedConfig):
                 drop_path_rate=0.3,
             )
         else:
-            backbone_model_type = backbone_config.pop("model_type")
-            if backbone_model_type not in self.backbones_supported:
+            # verify that the backbone is supported
+            backbone_model_type = backbone_config.model_type
+            if backbone_config.model_type not in self.backbones_supported:
                 raise ValueError(
                     f"Backbone {backbone_model_type} not supported, please use one of"
                     f" {','.join(self.backbones_supported)}"
                 )
-            backbone_config = AutoConfig.for_model(backbone_model_type, **backbone_config)
 
         if decoder_config is None:
             # fall back to https://huggingface.co/facebook/detr-resnet-50

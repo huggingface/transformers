@@ -24,6 +24,7 @@ import torch
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
+from ...backbone import Backbone, ShapeSpec
 from ...file_utils import ModelOutput
 from ...modeling_utils import ModuleUtilsMixin
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
@@ -803,7 +804,7 @@ class MaskFormerSwinModel(nn.Module, ModuleUtilsMixin):
         )
 
 
-class MaskFormerSwinTransformerBackbone(nn.Module):
+class MaskFormerSwinBackbone(Backbone):
     """
     This class uses [`MaskFormerSwinModel`] to reshape its `hidden_states` from (`batch_size, sequence_length,
     hidden_size)` to (`batch_size, num_channels, height, width)`).
@@ -840,10 +841,12 @@ class MaskFormerSwinTransformerBackbone(nn.Module):
             hidden_states_permuted.append(hidden_state_permuted)
         return hidden_states_permuted
 
-    @property
-    def input_resolutions(self) -> List[int]:
-        return [layer.input_resolution for layer in self.model.encoder.layers]
+    def output_shape(self):
+        return {
+            name: ShapeSpec(channels=self._out_feature_channels[name], stride=self._out_feature_strides[name])
+            for name in self._out_features
+        }
 
     @property
-    def outputs_shapes(self) -> List[int]:
-        return [layer.dim for layer in self.model.encoder.layers]
+    def size_divisibility(self):
+        return 32

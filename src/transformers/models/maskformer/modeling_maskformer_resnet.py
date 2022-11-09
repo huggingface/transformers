@@ -15,11 +15,12 @@
 
 """MaskFormer ResNet backbone."""
 
-from typing import Optional
+from typing import List, Optional
 
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
+from ...backbone import Backbone, ShapeSpec
 from ...modeling_outputs import BaseModelOutputWithNoAttention, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -290,3 +291,31 @@ class MaskFormerResNetModel(MaskFormerResNetPreTrainedModel):
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
         )
+
+
+class MaskFormerResNetBackbone(Backbone):
+    """
+    This class converts [`MaskFormerResNetModel`] into a generic backbone.
+
+    Args:
+        config (`ResNetConfig`):
+            The configuration used by [`MaskFormerResNetModel`].
+    """
+
+    def __init__(self, config: ResNetConfig):
+        super().__init__()
+        self.model = MaskFormerResNetModel(config)
+
+    def forward(self, *args, **kwargs) -> List[Tensor]:
+        output = self.model(*args, **kwargs, output_hidden_states=True)
+        return output
+
+    def output_shape(self):
+        return {
+            name: ShapeSpec(channels=self._out_feature_channels[name], stride=self._out_feature_strides[name])
+            for name in self._out_features
+        }
+
+    @property
+    def size_divisibility(self):
+        return 32
