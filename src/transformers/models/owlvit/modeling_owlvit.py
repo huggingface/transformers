@@ -880,7 +880,7 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
-        Returns: 
+        Returns:
 
         Examples:
         ```python
@@ -1513,7 +1513,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> OwlViTImageGuidedObjectDetectionOutput:
         r"""
-        Returns: 
+        Returns:
 
         Examples:
         ```python
@@ -1604,7 +1604,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> OwlViTObjectDetectionOutput:
         r"""
-        Returns: 
+        Returns:
 
         Examples:
         ```python
