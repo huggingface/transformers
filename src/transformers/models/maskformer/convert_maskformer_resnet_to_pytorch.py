@@ -1,5 +1,6 @@
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
 
+
 backbone_config = ResNetConfig()
 config = MaskFormerConfig(backbone_config=backbone_config)
 config.save_pretrained(".")

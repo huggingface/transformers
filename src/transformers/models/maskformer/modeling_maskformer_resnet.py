@@ -302,9 +302,14 @@ class MaskFormerResNetBackbone(Backbone):
             The configuration used by [`MaskFormerResNetModel`].
     """
 
-    def __init__(self, config: ResNetConfig):
+    def __init__(self, config: ResNetConfig, out_features):
         super().__init__()
         self.model = MaskFormerResNetModel(config)
+
+        current_stride = self.model.embedder.embedder.stride
+        self._out_feature_strides = {"stem": current_stride}
+        self._out_feature_channels = {"stem": config.embedding_size}
+        self._out_features = out_features
 
     def forward(self, *args, **kwargs) -> List[Tensor]:
         output = self.model(*args, **kwargs, output_hidden_states=True)
@@ -315,7 +320,3 @@ class MaskFormerResNetBackbone(Backbone):
             name: ShapeSpec(channels=self._out_feature_channels[name], stride=self._out_feature_strides[name])
             for name in self._out_features
         }
-
-    @property
-    def size_divisibility(self):
-        return 32
