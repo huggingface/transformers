@@ -370,8 +370,6 @@ class ModelTesterMixin:
 
             # this will often delete a single weight of a multi-weight module
             # to test an edge case
-            # XXX: Setting a seed to get reproducible failures on CI.
-            random.seed(0)
             random_key_to_del = random.choice(list(state_dict.keys()))
             del state_dict[random_key_to_del]
 
