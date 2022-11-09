@@ -238,18 +238,26 @@ predictions and the expected value (the label).
 
 These labels are different according to the model head, for example:
 
-- For sequence classification models ([`BertForSequenceClassification`]), the model expects a tensor of dimension
+- For sequence classification models, ([`BertForSequenceClassification`]), the model expects a tensor of dimension
   `(batch_size)` with each value of the batch corresponding to the expected label of the entire sequence.
-- For token classification models ([`BertForTokenClassification`]), the model expects a tensor of dimension
+- For token classification models, ([`BertForTokenClassification`]), the model expects a tensor of dimension
   `(batch_size, seq_length)` with each value corresponding to the expected label of each individual token.
-- For masked language modeling ([`BertForMaskedLM`]), the model expects a tensor of dimension `(batch_size,
+- For masked language modeling, ([`BertForMaskedLM`]), the model expects a tensor of dimension `(batch_size,
   seq_length)` with each value corresponding to the expected label of each individual token: the labels being the token
   ID for the masked token, and values to be ignored for the rest (usually -100).
-- For sequence to sequence tasks,([`BartForConditionalGeneration`], [`MBartForConditionalGeneration`]), the model
+- For sequence to sequence tasks, ([`BartForConditionalGeneration`], [`MBartForConditionalGeneration`]), the model
   expects a tensor of dimension `(batch_size, tgt_seq_length)` with each value corresponding to the target sequences
   associated with each input sequence. During training, both BART and T5 will make the appropriate
   `decoder_input_ids` and decoder attention masks internally. They usually do not need to be supplied. This does not
-  apply to models leveraging the Encoder-Decoder framework. 
+  apply to models leveraging the Encoder-Decoder framework.
+- For image classification models, ([`ViTForImageClassification`]), the model expects a tensor of dimension
+  `(batch_size)` with each value of the batch corresponding to the expected label of each individual image.
+- For semantic segmentation models, ([`SegformerForSemanticSegmentation`]), the model expects a tensor of dimension
+  `(batch_size, height, width)` with each value of the batch corresponding to the expected label of each individual pixel.
+- For object detection models, ([`DetrForObjectDetection`]), the model expects a list of dictionaries with a
+  `class_labels` and `boxes` key where each value of the batch corresponds to the expected label and number of bounding boxes of each individual image.
+- For automatic speech recognition models, ([`Wav2Vec2ForCTC`]), the model expects a tensor of dimension `(batch_size,
+  target_length)` with each value corresponding to the expected label of each individual token.
   
 <Tip>
 
