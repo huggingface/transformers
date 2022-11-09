@@ -605,7 +605,8 @@ Ringer, Tom Ash, John Hughes, David MacLeod, Jamie Dougherty](https://arxiv.org/
     JUKEBOX_START_DOCSTRING,
 )
 class JukeboxVQVAE(PreTrainedModel):
-    config_class = JukeboxConfig
+    config_class = JukeboxVQVAEConfig
+    base_model_prefix = "vqvae"
 
     def __init__(self, config: JukeboxVQVAEConfig):
         super().__init__(config)
@@ -701,11 +702,11 @@ class JukeboxVQVAE(PreTrainedModel):
             input_audio (`torch.Tensor`):
                 Raw audio which will be encoded to its discrete representation using the codebook. The closest `code`
                 form the codebook will be computed for each sequence of samples.
-            start_level (`int`, *optional*):
+            start_level (`int`, *optional*, defaults to 0):
                 Level at which the encoding process will start. Default to 0.
             end_level (`int`, *optional*):
                 Level at which the encoding process will start. Default to None.
-            bs_chunks (int, *optional*):
+            bs_chunks (int, *optional*, defaults to 1):
                 Number of chunks of raw audio to process at the same time.
         """
         audio_chunks = torch.chunk(input_audio, bs_chunks, dim=0)
@@ -742,12 +743,13 @@ class JukeboxVQVAE(PreTrainedModel):
         >>> from transformers import JukeboxVQVAE, set_seed
         >>> import torch
 
-        >>> model = JukeboxVQVAE.from_pretrained("ArthurZ/vqvae-dummy").eval()
+        >>> model = JukeboxVQVAE.from_pretrained("openai/jukebox-1b-lyrics").eval()
         >>> set_seed(0)
         >>> zs = [torch.randint(100, (4, 1))]
         >>> model.decode(zs).shape
         torch.Size([4, 8, 1])
-        ```"""
+        ```
+        """
 
         # Encode/Decode
         input_audio = raw_audio.permute(0, 2, 1).float()
@@ -804,7 +806,7 @@ class JukeboxLayerNorm(FusedLayerNorm):
 
 
 class JukeboxAttention(nn.Module):
-    def __init__(self, config, n_ctx, attn_func="dense_attn", encoder_len=None):
+    def __init__(self, config, n_ctx, attn_func="dense_attn"):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.n_heads = config.n_heads
@@ -855,7 +857,7 @@ class JukeboxAttention(nn.Module):
 
         self.sample_t = 0
         self.cache = {}
-        self.encoder_len = encoder_len
+        self.encoder_len = config.nb_relevant_lyric_tokens  # length of the encoder input ids
         self.record_attn = False
 
     def _attn(self, query_states, key_states, value_states, sample):
@@ -1178,15 +1180,10 @@ class JukeboxAttention(nn.Module):
 
 
 class JukeboxBlock(nn.Module):
-    def __init__(self, config, n_ctx, attn_func="dense_attn", encoder_len=None):
+    def __init__(self, config, n_ctx, attn_func="dense_attn"):
         super().__init__()
         self.width = config.hidden_size
-        self.attn = JukeboxAttention(
-            config=config,
-            n_ctx=n_ctx,
-            attn_func=attn_func,
-            encoder_len=encoder_len,
-        )
+        self.attn = JukeboxAttention(config, n_ctx, attn_func=attn_func)
 
         self.layer_norm_0 = JukeboxLayerNorm(config.hidden_size)
         self.mlp = JukeboxMLP(config)
@@ -1209,7 +1206,7 @@ class JukeboxBlock(nn.Module):
 
 
 class JukeboxLayerStack(nn.Module):
-    def __init__(self, config, n_ctx, encoder_len=None):
+    def __init__(self, config, n_ctx):
         super().__init__()
         self.n_ctx = n_ctx
         self.width = config.hidden_size
@@ -1218,16 +1215,14 @@ class JukeboxLayerStack(nn.Module):
         self.attention_pattern = config.attention_pattern
         if self.blocks is not None:
             self.block_ctx = n_ctx // self.blocks
-        self.encoder_len = encoder_len
+        self.encoder_len = config.nb_relevant_lyric_tokens
         self.n_heads = config.n_heads
 
         # Orders of attn_func
         attention_pattern = ATTENTION_PATTERNS[self.attention_pattern]
         self._attn_mods = nn.ModuleList()
         for depth in range(self.depth):
-            self._attn_mods.append(
-                JukeboxBlock(config, n_ctx, attn_func=attention_pattern(depth), encoder_len=encoder_len)
-            )
+            self._attn_mods.append(JukeboxBlock(config, n_ctx, attn_func=attention_pattern(depth)))
 
         self.saved_attn_weights = []
 
@@ -1286,7 +1281,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
         embed_dim=None,
         audio_conditioning=False,
         metadata_conditioning=False,
-        encoder_len=0,
         is_encoder=False,
     ):
         """
@@ -1306,8 +1300,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 whether or not the prior supports conditionning on audio.
             metadata_conditioning (`bool`, *optional*, defaults to `False`):
                 whether or not the prior supports conditionning on artitst, genres, lyrics and timing.
-            encoder_len (`int`, *optional*, defaults to `0`):
-                length of the encoder #TODO this is related to n_vocab
             is_encoder (`bool`, *optional*, defaults to `False`):
                 _description_
         """
@@ -1326,9 +1318,9 @@ class JukeboxConditionalAutoregressive(nn.Module):
         self.pos_emb = JukeboxPositionalEmbedding(self.n_ctx, config.hidden_size)
         self.pos_emb_dropout = nn.Dropout(config.emb_dropout)
 
-        self.transformer = JukeboxLayerStack(config, n_ctx=self.n_ctx, encoder_len=encoder_len)
+        self.transformer = JukeboxLayerStack(config, n_ctx=self.n_ctx)
         self.is_encoder = is_encoder
-        self.encoder_len = encoder_len
+        self.encoder_len = config.nb_relevant_lyric_tokens
 
         if config.merged_decoder:
             # Merged piped model uses this setup
@@ -1773,7 +1765,7 @@ class JukeboxPrior(PreTrainedModel):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        level (`int`):
+        level (`int`, *optional*):
             Current level of the Prior. Should be in range `0,nb_priors`.
         nb_priors (`int`, *optional*, defaults to 3):
             Total number of priors.
@@ -1787,7 +1779,36 @@ class JukeboxPrior(PreTrainedModel):
 
     config_class = JukeboxPriorConfig
 
-    def __init__(self, config: JukeboxPriorConfig, level, nb_priors=3, vqvae_encoder=None, vqvae_decoder=None):
+    def _init_weights(self, module):
+        init_scale = self.config.init_scale
+
+        if isinstance(module, nn.Embedding):  # embed_tokens
+            module.weight.data.normal_(mean=0.0, std=0.02 * init_scale)
+        elif isinstance(module, JukeboxConv1D):
+            if self.config.zero_out:
+                module.weight.data.zero_()
+            else:
+                module.weight.data.normal_(mean=0.0, std=0.02 * init_scale)
+        elif isinstance(module, JukeboxPositionalEmbedding):
+            module.pos_emb.data.normal_(mean=0.0, std=0.01 * init_scale)
+        elif isinstance(module, JukeboxRangeEmbedding):
+            module.emb.weight.data.normal_(mean=0.0, std=0.01 * init_scale)
+        elif isinstance(module, nn.Linear) and "encoder.lm_head" in module.__class__.__name__:
+            module.weight.data.normal_(mean=0.0, std=0.02 * init_scale)
+        elif isinstance(module, nn.Parameter) and "pos_emb" in module.__class__.__name__:
+            module.data.normal_(mean=0.0, std=0.01 * init_scale)
+        elif isinstance(module, nn.Parameter) and "start_token" in module.__class__.__name__:
+            module.data.normal_(mean=0.0, std=0.01 * init_scale)
+        elif isinstance(module, JukeboxResConv1DBlock) and self.config.zero_out:
+            module.conv1d_2.weigth.data.zero_()
+            module.conv1d_2.bias.data.zero_()
+        if isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
+
+    def __init__(self, config: JukeboxPriorConfig, level=None, nb_priors=3, vqvae_encoder=None, vqvae_decoder=None):
 
         super().__init__(config)
         # Passing functions instead of the vqvae module to avoid getting params, only used in the
@@ -1796,7 +1817,8 @@ class JukeboxPrior(PreTrainedModel):
         self.vqvae_decoder = vqvae_decoder
 
         self.levels = nb_priors
-        self.level = level
+        self.level = level if level is not None else config.level
+        self.base_model_prefix = f"priors.{self.level}"
         self.n_ctx = config.n_ctx
 
         self.lyric_conditioning = config.nb_relevant_lyric_tokens > 0
@@ -1804,8 +1826,8 @@ class JukeboxPrior(PreTrainedModel):
         self.encoder_loss_fraction = config.encoder_loss_fraction
 
         # Audio conditioning : conditioning on music tokens (either from audio or from previous levels or both)
-        self.audio_conditioning = level != 0
-        self.cond_level = level - 1
+        self.audio_conditioning = self.level != 0
+        self.cond_level = self.level - 1
         if self.audio_conditioning:
             self.conditioner_blocks = JukeboxMusicTokenConditioner(config, self.level)
 
@@ -1823,7 +1845,7 @@ class JukeboxPrior(PreTrainedModel):
             self.embed_dim_shift = [0, config.lyric_vocab_size]
             self.width = config.hidden_size
 
-            self.lyrics_enc_loss_dims = config.nb_relevant_lyric_tokens
+            self.nb_relevant_lyric_tokens = config.nb_relevant_lyric_tokens
 
             self.prior = JukeboxConditionalAutoregressive(
                 config,
@@ -1831,7 +1853,6 @@ class JukeboxPrior(PreTrainedModel):
                 embed_dim=config.lyric_vocab_size + config.music_vocab_size,
                 audio_conditioning=(self.audio_conditioning or self.metadata_conditioning),
                 metadata_conditioning=True,
-                encoder_len=self.lyrics_enc_loss_dims,
             )
 
         else:
@@ -1840,7 +1861,6 @@ class JukeboxPrior(PreTrainedModel):
             encoder_config = config.encoder_config
 
             if self.nb_relevant_lyric_tokens != 0 and self.lyric_conditioning:
-                self.lyrics_enc_loss_dims = self.nb_relevant_lyric_tokens
                 self.lyric_acts_width = encoder_config.hidden_size
                 self.encoder_width = config.hidden_size
                 self.encoder_dim = config.lyric_vocab_size
@@ -1856,7 +1876,7 @@ class JukeboxPrior(PreTrainedModel):
                 self.encoder.final_layer_norm = JukeboxLayerNorm(config.hidden_size)
                 self.encoder.lm_head = nn.Linear(config.hidden_size, config.lyric_vocab_size, bias=False)
             else:
-                self.lyrics_enc_loss_dims = 0
+                self.nb_relevant_lyric_tokens = 0
 
             # decoder model on the tokens
             self.prior = JukeboxConditionalAutoregressive(
@@ -1866,15 +1886,15 @@ class JukeboxPrior(PreTrainedModel):
             )
 
         self.next_token_prediction_loss_dims = config.n_ctx
-        self.total_loss_dims = self.lyrics_enc_loss_dims + self.next_token_prediction_loss_dims
+        self.total_loss_dims = self.nb_relevant_lyric_tokens + self.next_token_prediction_loss_dims
 
         self.downsamples = [stride**down for stride, down in zip(config.res_strides_t, config.res_downs_t)]
-        self.cond_downsample = self.downsamples[level] if level != 0 else None
-        self.raw_to_tokens = np.prod(self.downsamples[: nb_priors - level])
+        self.cond_downsample = self.downsamples[self.level] if self.level != 0 else None
+        self.raw_to_tokens = np.prod(self.downsamples[: nb_priors - self.level])
         self.sample_length = self.n_ctx * self.raw_to_tokens
 
         logger.info(
-            f"Level:{level}, Cond downsample:{self.cond_downsample}, Raw to tokens:{self.raw_to_tokens}, Sample"
+            f"Level:{self.level}, Cond downsample:{self.cond_downsample}, Raw to tokens:{self.raw_to_tokens}, Sample"
             f" length:{self.sample_length}"
         )
 
@@ -2183,7 +2203,7 @@ class JukeboxPrior(PreTrainedModel):
                 last_encoder_hidden_states,
                 get_preds=get_preds,
             )
-        loss = self.encoder_loss_fraction * encoder_loss * self.lyrics_enc_loss_dims / self.total_loss_dims
+        loss = self.encoder_loss_fraction * encoder_loss * self.nb_relevant_lyric_tokens / self.total_loss_dims
         loss += next_token_prediction_loss * self.next_token_prediction_loss_dims / self.total_loss_dims
 
         metrics = dict(

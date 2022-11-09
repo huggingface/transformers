@@ -238,7 +238,7 @@ class JukeboxPriorConfig(PretrainedConfig):
             Whether or not to zero out convolution weights when initializing.
     """
 
-    model_type = "jukebox"
+    model_type = "jukebox_prior"
     attribute_map = {
         "hidden_size": "vqvae_codebook_dimension",
         "max_position_embeddings": "n_positions",
@@ -248,6 +248,7 @@ class JukeboxPriorConfig(PretrainedConfig):
     def __init__(
         self,
         act_fn="quick_gelu",
+        level=0,
         alignment_head=2,
         alignment_layer=68,
         attention_multiplier=0.25,
@@ -311,6 +312,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         self.init_scale = init_scale
         self.is_encoder_decoder = is_encoder_decoder
         self.lyric_vocab_size = lyric_vocab_size
+        self.level = level
         self.mask = mask
         self.max_duration = max_duration
         self.max_nb_genres = max_nb_genres
@@ -337,13 +339,14 @@ class JukeboxPriorConfig(PretrainedConfig):
         self.zero_out = zero_out
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
+    def from_pretrained(
+        cls, pretrained_model_name_or_path: Union[str, os.PathLike], level=0, **kwargs
+    ) -> "PretrainedConfig":
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the prior config dict if we are loading from JukeboxConfig
-        if config_dict.get("model_type") == "jukebox_prior":
-            config_dict = config_dict["prior_configs"]
+        if config_dict.get("model_type") == "jukebox":
+            config_dict = config_dict[f"prior_{level}"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
             logger.warning(
@@ -416,6 +419,8 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         sample_length (`int`, *optional*, defaults to 1058304):
             Provides the max input shape of the VQVAE. Is used to compute the input shape of each level.
     """
+
+    model_type = "jukebox_vqvae"
 
     def __init__(
         self,
@@ -537,11 +542,6 @@ class JukeboxConfig(PretrainedConfig):
     """
 
     model_type = "jukebox"
-    attribute_map = {
-        "hidden_size": "codebook_dimension",
-        "max_position_embeddings": "n_positions",
-        "num_attention_heads": "n_head",
-    }
     is_composition = True
 
     def __init__(
