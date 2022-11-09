@@ -424,7 +424,6 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     fx_compatible = True
     test_pruning = False
-    test_missing_keys = False
 
     def setUp(self):
         self.model_tester = BartModelTester(self)
@@ -1445,6 +1444,7 @@ class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, un
     fx_comptatible = True
     test_pruning = False
     is_encoder_decoder = False
+    test_missing_keys = False
 
     def setUp(
         self,
