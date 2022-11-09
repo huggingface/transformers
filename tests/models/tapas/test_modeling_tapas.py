@@ -1060,7 +1060,7 @@ class TapasUtilitiesTest(unittest.TestCase):
         sums, new_index = reduce_sum(values, index)
 
         # We use np.testing.assert_allclose rather than Tensorflow's assertAllClose
-        np.testing.assert_allclose(sums.numpy(), [3., 3,])
+        np.testing.assert_allclose(sums.numpy(), [3., 3.])
         # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(new_index.indices.numpy(), [0, 1])
         np.testing.assert_array_equal(new_index.num_segments.numpy(), 2)
