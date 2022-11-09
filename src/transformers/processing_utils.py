@@ -37,6 +37,7 @@ transformers_module = spec.loader.load_module()
 AUTO_TO_BASE_CLASS_MAPPING = {
     "AutoTokenizer": "PreTrainedTokenizerBase",
     "AutoFeatureExtractor": "FeatureExtractionMixin",
+    "AutoImageProcessor": "ImageProcessingMixin",
 }
 
 
