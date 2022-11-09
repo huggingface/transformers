@@ -58,7 +58,7 @@ This model was contributed by [sshleifer](https://huggingface.co/sshleifer). The
 - Model predictions are intended to be identical to the original implementation when
   `forced_bos_token_id=0`. This only works, however, if the string you pass to
   [`fairseq.encode`] starts with a space.
-- [`~generation_utils.GenerationMixin.generate`] should be used for conditional generation tasks like
+- [`~generation.GenerationMixin.generate`] should be used for conditional generation tasks like
   summarization, see the example in that docstrings.
 - Models that load the *facebook/bart-large-cnn* weights will not have a `mask_token_id`, or be able to perform
   mask-filling tasks.

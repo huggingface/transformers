@@ -26,7 +26,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers.generation_logits_process import (
+    from transformers.generation import (
         EncoderNoRepeatNGramLogitsProcessor,
         ExponentialDecayLengthPenalty,
         ForcedBOSTokenLogitsProcessor,

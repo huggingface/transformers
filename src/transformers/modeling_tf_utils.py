@@ -43,7 +43,7 @@ from . import DataCollatorWithPadding, DefaultDataCollator
 from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
-from .generation_tf_utils import TFGenerationMixin
+from .generation import TFGenerationMixin
 from .tf_utils import shape_list
 from .utils import (
     DUMMY_INPUTS,
