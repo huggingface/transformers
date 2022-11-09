@@ -16,7 +16,7 @@
 
 import warnings
 
-from .generation.utils import GenerationMixin
+from .generation import GenerationMixin
 
 
 class GenerationMixin(GenerationMixin):

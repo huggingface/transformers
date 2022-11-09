@@ -43,11 +43,17 @@ if is_torch_available():
         top_k_top_p_filtering,
     )
     from transformers.generation import (
+        BeamSampleDecoderOnlyOutput,
+        BeamSampleEncoderDecoderOutput,
+        BeamSearchDecoderOnlyOutput,
+        BeamSearchEncoderDecoderOutput,
         BeamSearchScorer,
         ConstrainedBeamSearchScorer,
         DisjunctiveConstraint,
         ForcedBOSTokenLogitsProcessor,
         ForcedEOSTokenLogitsProcessor,
+        GreedySearchDecoderOnlyOutput,
+        GreedySearchEncoderDecoderOutput,
         HammingDiversityLogitsProcessor,
         InfNanRemoveLogitsProcessor,
         LogitsProcessorList,
@@ -57,21 +63,13 @@ if is_torch_available():
         NoRepeatNGramLogitsProcessor,
         PhrasalConstraint,
         RepetitionPenaltyLogitsProcessor,
+        SampleDecoderOnlyOutput,
+        SampleEncoderDecoderOutput,
         StoppingCriteria,
         StoppingCriteriaList,
         TemperatureLogitsWarper,
         TopKLogitsWarper,
         TopPLogitsWarper,
-    )
-    from transformers.generation.utils import (
-        BeamSampleDecoderOnlyOutput,
-        BeamSampleEncoderDecoderOutput,
-        BeamSearchDecoderOnlyOutput,
-        BeamSearchEncoderDecoderOutput,
-        GreedySearchDecoderOnlyOutput,
-        GreedySearchEncoderDecoderOutput,
-        SampleDecoderOnlyOutput,
-        SampleEncoderDecoderOutput,
     )
 
 

@@ -461,21 +461,21 @@ class GenerationMixin:
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in [`PreTrainedModel`].
 
-    The class exposes [`~generation.utils.GenerationMixin.generate`], which can be used for:
-        - *greedy decoding* by calling [`~generation.utils.GenerationMixin.greedy_search`] if `num_beams=1` and
+    The class exposes [`~generation.GenerationMixin.generate`], which can be used for:
+        - *greedy decoding* by calling [`~generation.GenerationMixin.greedy_search`] if `num_beams=1` and
           `do_sample=False`.
-        - *contrastive search* by calling [`~generation.utils.GenerationMixin.contrastive_search`] if `penalty_alpha>0`
-          and `top_k>1`
-        - *multinomial sampling* by calling [`~generation.utils.GenerationMixin.sample`] if `num_beams=1` and
+        - *contrastive search* by calling [`~generation.GenerationMixin.contrastive_search`] if `penalty_alpha>0` and
+          `top_k>1`
+        - *multinomial sampling* by calling [`~generation.GenerationMixin.sample`] if `num_beams=1` and
           `do_sample=True`.
-        - *beam-search decoding* by calling [`~generation.utils.GenerationMixin.beam_search`] if `num_beams>1` and
+        - *beam-search decoding* by calling [`~generation.GenerationMixin.beam_search`] if `num_beams>1` and
           `do_sample=False`.
-        - *beam-search multinomial sampling* by calling [`~generation.utils.GenerationMixin.beam_sample`] if
-          `num_beams>1` and `do_sample=True`.
-        - *diverse beam-search decoding* by calling [`~generation.utils.GenerationMixin.group_beam_search`], if
-          `num_beams>1` and `num_beam_groups>1`.
-        - *constrained beam-search decoding* by calling [`~generation.utils.GenerationMixin.constrained_beam_search`],
-          if `constraints!=None` or `force_words_ids!=None`.
+        - *beam-search multinomial sampling* by calling [`~generation.GenerationMixin.beam_sample`] if `num_beams>1`
+          and `do_sample=True`.
+        - *diverse beam-search decoding* by calling [`~generation.GenerationMixin.group_beam_search`], if `num_beams>1`
+          and `num_beam_groups>1`.
+        - *constrained beam-search decoding* by calling [`~generation.GenerationMixin.constrained_beam_search`], if
+          `constraints!=None` or `force_words_ids!=None`.
     """
 
     def _prepare_model_inputs(
@@ -1039,21 +1039,20 @@ class GenerationMixin:
         Generates sequences of token ids for models with a language modeling head. The method supports the following
         generation methods for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
 
-            - *greedy decoding* by calling [`~generation.utils.GenerationMixin.greedy_search`] if `num_beams=1` and
+            - *greedy decoding* by calling [`~generation.GenerationMixin.greedy_search`] if `num_beams=1` and
               `do_sample=False`.
-            - *contrastive search* by calling [`~generation.utils.GenerationMixin.contrastive_search`] if
-              `penalty_alpha>0.` and `top_k>1`
-            - *multinomial sampling* by calling [`~generation.utils.GenerationMixin.sample`] if `num_beams=1` and
+            - *contrastive search* by calling [`~generation.GenerationMixin.contrastive_search`] if `penalty_alpha>0.`
+              and `top_k>1`
+            - *multinomial sampling* by calling [`~generation.GenerationMixin.sample`] if `num_beams=1` and
               `do_sample=True`.
-            - *beam-search decoding* by calling [`~generation.utils.GenerationMixin.beam_search`] if `num_beams>1` and
+            - *beam-search decoding* by calling [`~generation.GenerationMixin.beam_search`] if `num_beams>1` and
               `do_sample=False`.
-            - *beam-search multinomial sampling* by calling [`~generation.utils.GenerationMixin.beam_sample`] if
+            - *beam-search multinomial sampling* by calling [`~generation.GenerationMixin.beam_sample`] if
               `num_beams>1` and `do_sample=True`.
-            - *diverse beam-search decoding* by calling [`~generation.utils.GenerationMixin.group_beam_search`], if
+            - *diverse beam-search decoding* by calling [`~generation.GenerationMixin.group_beam_search`], if
               `num_beams>1` and `num_beam_groups>1`.
-            - *constrained beam-search decoding* by calling
-              [`~generation.utils.GenerationMixin.constrained_beam_search`], if `constraints!=None` or
-              `force_words_ids!=None`.
+            - *constrained beam-search decoding* by calling [`~generation.GenerationMixin.constrained_beam_search`], if
+              `constraints!=None` or `force_words_ids!=None`.
 
         <Tip warning={true}>
 
@@ -1216,18 +1215,18 @@ class GenerationMixin:
                 If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
                 [`~utils.ModelOutput`] types are:
 
-                    - [`~generation.utils.GreedySearchDecoderOnlyOutput`],
-                    - [`~generation.utils.SampleDecoderOnlyOutput`],
-                    - [`~generation.utils.BeamSearchDecoderOnlyOutput`],
-                    - [`~generation.utils.BeamSampleDecoderOnlyOutput`]
+                    - [`~generation.GreedySearchDecoderOnlyOutput`],
+                    - [`~generation.SampleDecoderOnlyOutput`],
+                    - [`~generation.BeamSearchDecoderOnlyOutput`],
+                    - [`~generation.BeamSampleDecoderOnlyOutput`]
 
                 If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
                 [`~utils.ModelOutput`] types are:
 
-                    - [`~generation.utils.GreedySearchEncoderDecoderOutput`],
-                    - [`~generation.utils.SampleEncoderDecoderOutput`],
-                    - [`~generation.utils.BeamSearchEncoderDecoderOutput`],
-                    - [`~generation.utils.BeamSampleEncoderDecoderOutput`]
+                    - [`~generation.GreedySearchEncoderDecoderOutput`],
+                    - [`~generation.SampleEncoderDecoderOutput`],
+                    - [`~generation.BeamSearchEncoderDecoderOutput`],
+                    - [`~generation.BeamSampleEncoderDecoderOutput`]
 
         Examples:
 
@@ -1843,11 +1842,10 @@ class GenerationMixin:
                 If model is an encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`~generation.utils.ContrastiveSearchDecoderOnlyOutput`],
-            [`~generation.utils.ContrastiveSearchEncoderDecoderOutput`] or `torch.LongTensor`: A `torch.LongTensor`
-            containing the generated tokens (default behaviour) or a
-            [`~generation.utils.ContrastiveSearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
-            `return_dict_in_generate=True` or a [`~generation.utils.ContrastiveSearchEncoderDecoderOutput`] if
+            [`~generation.ContrastiveSearchDecoderOnlyOutput`], [`~generation.ContrastiveSearchEncoderDecoderOutput`]
+            or `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
+            [`~generation.ContrastiveSearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
+            `return_dict_in_generate=True` or a [`~generation.ContrastiveSearchEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
 
         Examples:
@@ -2176,10 +2174,10 @@ class GenerationMixin:
                 If model is an encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`~generation.utils.GreedySearchDecoderOnlyOutput`], [`~generation.utils.GreedySearchEncoderDecoderOutput`]
-            or `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
-            [`~generation.utils.GreedySearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
-            `return_dict_in_generate=True` or a [`~generation.utils.GreedySearchEncoderDecoderOutput`] if
+            [`~generation.GreedySearchDecoderOnlyOutput`], [`~generation.GreedySearchEncoderDecoderOutput`] or
+            `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
+            [`~generation.GreedySearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
+            `return_dict_in_generate=True` or a [`~generation.GreedySearchEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
 
         Examples:
@@ -2408,10 +2406,10 @@ class GenerationMixin:
                 an encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`~generation.utils.SampleDecoderOnlyOutput`], [`~generation.utils.SampleEncoderDecoderOutput`] or
-            `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
-            [`~generation.utils.SampleDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
-            `return_dict_in_generate=True` or a [`~generation.utils.SampleEncoderDecoderOutput`] if
+            [`~generation.SampleDecoderOnlyOutput`], [`~generation.SampleEncoderDecoderOutput`] or `torch.LongTensor`:
+            A `torch.LongTensor` containing the generated tokens (default behaviour) or a
+            [`~generation.SampleDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
+            `return_dict_in_generate=True` or a [`~generation.SampleEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
 
         Examples:
@@ -2658,10 +2656,10 @@ class GenerationMixin:
                 an encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`generation.utils.BeamSearchDecoderOnlyOutput`], [`~generation.utils.BeamSearchEncoderDecoderOutput`] or
+            [`generation.BeamSearchDecoderOnlyOutput`], [`~generation.BeamSearchEncoderDecoderOutput`] or
             `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
-            [`~generation.utils.BeamSearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
-            `return_dict_in_generate=True` or a [`~generation.utils.BeamSearchEncoderDecoderOutput`] if
+            [`~generation.BeamSearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
+            `return_dict_in_generate=True` or a [`~generation.BeamSearchEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
 
 
@@ -2972,10 +2970,10 @@ class GenerationMixin:
                 an encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`~generation.utils.BeamSampleDecoderOnlyOutput`], [`~generation.utils.BeamSampleEncoderDecoderOutput`] or
+            [`~generation.BeamSampleDecoderOnlyOutput`], [`~generation.BeamSampleEncoderDecoderOutput`] or
             `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
-            [`~generation.utils.BeamSampleDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
-            `return_dict_in_generate=True` or a [`~generation.utils.BeamSampleEncoderDecoderOutput`] if
+            [`~generation.BeamSampleDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
+            `return_dict_in_generate=True` or a [`~generation.BeamSampleEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
 
         Examples:
@@ -3284,11 +3282,11 @@ class GenerationMixin:
                 model is an encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`~generation.utils.BeamSearchDecoderOnlyOutput`], [`~generation.utils.BeamSearchEncoderDecoderOutput`] or
+            [`~generation.BeamSearchDecoderOnlyOutput`], [`~generation.BeamSearchEncoderDecoderOutput`] or
             `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
-            [`~generation.utils.BeamSearchDecoderOnlyOutput`] if [`~generation.utils.BeamSearchDecoderOnlyOutput`] if
+            [`~generation.BeamSearchDecoderOnlyOutput`] if [`~generation.BeamSearchDecoderOnlyOutput`] if
             `model.config.is_encoder_decoder=False` and `return_dict_in_generate=True` or a
-            [`~generation.utils.BeamSearchEncoderDecoderOutput`] if `model.config.is_encoder_decoder=True`.
+            [`~generation.BeamSearchEncoderDecoderOutput`] if `model.config.is_encoder_decoder=True`.
 
         Examples:
 
@@ -3650,10 +3648,10 @@ class GenerationMixin:
                 an encoder-decoder model the kwargs should include `encoder_outputs`.
 
         Return:
-            [`generation.utils.BeamSearchDecoderOnlyOutput`], [`~generation.utils.BeamSearchEncoderDecoderOutput`] or
+            [`generation.BeamSearchDecoderOnlyOutput`], [`~generation.BeamSearchEncoderDecoderOutput`] or
             `torch.LongTensor`: A `torch.LongTensor` containing the generated tokens (default behaviour) or a
-            [`~generation.utils.BeamSearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
-            `return_dict_in_generate=True` or a [`~generation.utils.BeamSearchEncoderDecoderOutput`] if
+            [`~generation.BeamSearchDecoderOnlyOutput`] if `model.config.is_encoder_decoder=False` and
+            `return_dict_in_generate=True` or a [`~generation.BeamSearchEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
 
 

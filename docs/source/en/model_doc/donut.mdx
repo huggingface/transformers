@@ -40,7 +40,7 @@ Tips:
 ## Inference
 
 Donut's [`VisionEncoderDecoder`] model accepts images as input and makes use of
-[`~generation.utils.GenerationMixin.generate`] to autoregressively generate text given the input image.
+[`~generation.GenerationMixin.generate`] to autoregressively generate text given the input image.
 
 The [`DonutFeatureExtractor`] class is responsible for preprocessing the input image and
 [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`] decodes the generated target tokens to the target string. The

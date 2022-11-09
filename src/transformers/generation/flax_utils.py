@@ -132,8 +132,8 @@ class FlaxGenerationMixin:
               `do_sample=False`.
             - *multinomial sampling* by calling [`~generation.FlaxGenerationMixin._sample`] if `num_beams=1` and
               `do_sample=True`.
-            - *beam-search decoding* by calling [`~generation.utils.FlaxGenerationMixin._beam_search`] if `num_beams>1`
-              and `do_sample=False`.
+            - *beam-search decoding* by calling [`~generation.FlaxGenerationMixin._beam_search`] if `num_beams>1` and
+              `do_sample=False`.
     """
 
     @staticmethod
@@ -241,8 +241,8 @@ class FlaxGenerationMixin:
               `do_sample=False`.
             - *multinomial sampling* by calling [`~generation.FlaxGenerationMixin._sample`] if `num_beams=1` and
               `do_sample=True`.
-            - *beam-search decoding* by calling [`~generation.utils.FlaxGenerationMixin._beam_search`] if `num_beams>1`
-              and `do_sample=False`.
+            - *beam-search decoding* by calling [`~generation.FlaxGenerationMixin._beam_search`] if `num_beams>1` and
+              `do_sample=False`.
 
         <Tip warning={true}>
 
