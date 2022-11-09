@@ -956,7 +956,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        return_projected: Optional[bool] = True,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -993,10 +992,8 @@ class OwlViTModel(OwlViTPreTrainedModel):
         pooled_output = vision_outputs[1]  # pooled_output
 
         # Return projected output
-        if return_projected:
-            image_features = self.visual_projection(pooled_output)
-        else:
-            image_features = pooled_output
+        image_features = self.visual_projection(pooled_output)
+
         return image_features
 
     @add_start_docstrings_to_model_forward(OWLVIT_INPUTS_DOCSTRING)
