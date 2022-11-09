@@ -762,6 +762,12 @@ class AlbertModel(AlbertPreTrainedModel):
     ALBERT_START_DOCSTRING,
 )
 class AlbertForPreTraining(AlbertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [
+        "predictions.decoder.weight",
+        "predictions.decoder.bias",
+        "embeddings.position_ids",
+    ]
+
     def __init__(self, config: AlbertConfig):
         super().__init__(config)
 
@@ -910,6 +916,11 @@ class AlbertSOPHead(nn.Module):
 class AlbertForMaskedLM(AlbertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    _keys_to_ignore_on_load_missing = [
+        "predictions.decoder.weight",
+        "predictions.decoder.bias",
+        "embeddings.position_ids",
+    ]
 
     def __init__(self, config):
         super().__init__(config)

@@ -194,7 +194,7 @@ class XGLMSinusoidalPositionalEmbedding(nn.Module):
         if padding_idx is not None:
             emb[padding_idx, :] = 0
 
-        return emb
+        return emb.to(torch.get_default_dtype())
 
     @torch.no_grad()
     def forward(
@@ -825,6 +825,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
         r"model.embed_positions.weights",
+        r"embed_positions.weights",
         r"lm_head.weight",
     ]
     _keys_to_ignore_on_save = [

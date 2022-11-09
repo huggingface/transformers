@@ -114,6 +114,8 @@ class DeformableDetrConfig(PretrainedConfig):
         with_box_refine (`bool`, *optional*, defaults to `False`):
             Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes
             based on the predictions from the previous layer.
+        focal_alpha (`float`, *optional*, defaults to 0.25):
+            Alpha parameter in the focal loss.
 
     Examples:
 
@@ -174,6 +176,7 @@ class DeformableDetrConfig(PretrainedConfig):
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
+        focal_alpha=0.25,
         **kwargs
     ):
         self.num_queries = num_queries
@@ -216,6 +219,7 @@ class DeformableDetrConfig(PretrainedConfig):
         self.bbox_loss_coefficient = bbox_loss_coefficient
         self.giou_loss_coefficient = giou_loss_coefficient
         self.eos_coefficient = eos_coefficient
+        self.focal_alpha = focal_alpha
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property

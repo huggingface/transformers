@@ -581,6 +581,7 @@ class BertGenerationPreTrainedModel(PreTrainedModel):
 
     config_class = BertGenerationConfig
     base_model_prefix = "bert"
+    supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -598,6 +599,10 @@ class BertGenerationPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, BertEncoder):
+            module.gradient_checkpointing = value
 
 
 BERT_GENERATION_START_DOCSTRING = r"""
@@ -850,6 +855,8 @@ class BertGenerationOnlyLMHead(nn.Module):
     BERT_GENERATION_START_DOCSTRING,
 )
 class BertGenerationDecoder(BertGenerationPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.decoder.weight", "lm_head.decoder.bias", "embeddings.position_ids"]
+
     def __init__(self, config):
         super().__init__(config)
 

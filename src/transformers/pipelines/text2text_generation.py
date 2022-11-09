@@ -32,7 +32,9 @@ class Text2TextGenerationPipeline(Pipeline):
 
     The models that this pipeline can use are models that have been fine-tuned on a translation task. See the
     up-to-date list of available models on
-    [huggingface.co/models](https://huggingface.co/models?filter=text2text-generation).
+    [huggingface.co/models](https://huggingface.co/models?filter=text2text-generation). For a list of available
+    parameters, see the [following
+    documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation_utils.GenerationMixin.generate)
 
     Usage:
 
@@ -202,7 +204,9 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
 
     The models that this pipeline can use are models that have been fine-tuned on a summarization task, which is
     currently, '*bart-large-cnn*', '*t5-small*', '*t5-base*', '*t5-large*', '*t5-3b*', '*t5-11b*'. See the up-to-date
-    list of available models on [huggingface.co/models](https://huggingface.co/models?filter=summarization).
+    list of available models on [huggingface.co/models](https://huggingface.co/models?filter=summarization). For a list
+    of available parameters, see the [following
+    documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation_utils.GenerationMixin.generate)
 
     Usage:
 
@@ -269,6 +273,8 @@ class TranslationPipeline(Text2TextGenerationPipeline):
 
     The models that this pipeline can use are models that have been fine-tuned on a translation task. See the
     up-to-date list of available models on [huggingface.co/models](https://huggingface.co/models?filter=translation).
+    For a list of available parameters, see the [following
+    documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation_utils.GenerationMixin.generate)
 
     Usage:
 

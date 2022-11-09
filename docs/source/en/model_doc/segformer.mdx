@@ -36,7 +36,7 @@ The figure below illustrates the architecture of SegFormer. Taken from the [orig
 
 <img width="600" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/segformer_architecture.png"/>
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The TensorFlow version 
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The TensorFlow version
 of the model was contributed by [sayakpaul](https://huggingface.co/sayakpaul). The original code can be found [here](https://github.com/NVlabs/SegFormer).
 
 Tips:
@@ -55,7 +55,7 @@ Tips:
 - TensorFlow users should refer to [this repository](https://github.com/deep-diver/segformer-tf-transformers) that shows off-the-shelf inference and fine-tuning.
 - One can also check out [this interactive demo on Hugging Face Spaces](https://huggingface.co/spaces/chansung/segformer-tf-transformers)
   to try out a SegFormer model on custom images.
-- SegFormer works on any input size, as it pads the input to be divisible by `config.patch_sizes`. 
+- SegFormer works on any input size, as it pads the input to be divisible by `config.patch_sizes`.
 - One can use [`SegformerFeatureExtractor`] to prepare images and corresponding segmentation maps
   for the model. Note that this feature extractor is fairly basic and does not include all data augmentations used in
   the original paper. The original preprocessing pipelines (for the ADE20k dataset for instance) can be found [here](https://github.com/NVlabs/SegFormer/blob/master/local_configs/_base_/datasets/ade20k_repeat.py). The most
@@ -95,6 +95,12 @@ SegFormer's results on the segmentation datasets like ADE20k, refer to the [pape
     - __call__
     - post_process_semantic_segmentation
 
+## SegformerImageProcessor
+
+[[autodoc]] SegformerImageProcessor
+    - preprocess
+    - post_process_semantic_segmentation
+
 ## SegformerModel
 
 [[autodoc]] SegformerModel
@@ -123,14 +129,14 @@ SegFormer's results on the segmentation datasets like ADE20k, refer to the [pape
 ## TFSegformerModel
 
 [[autodoc]] TFSegformerModel
-    - call 
+    - call
 
 ## TFSegformerForImageClassification
 
 [[autodoc]] TFSegformerForImageClassification
-    - call 
+    - call
 
 ## TFSegformerForSemanticSegmentation
 
 [[autodoc]] TFSegformerForSemanticSegmentation
-    - call 
+    - call

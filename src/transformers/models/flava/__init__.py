@@ -38,6 +38,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_flava"] = ["FlavaFeatureExtractor"]
+    _import_structure["image_processing_flava"] = ["FlavaImageProcessor"]
     _import_structure["processing_flava"] = ["FlavaProcessor"]
 
 try:
@@ -74,6 +75,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_flava import FlavaFeatureExtractor
+        from .image_processing_flava import FlavaImageProcessor
         from .processing_flava import FlavaProcessor
 
     try:

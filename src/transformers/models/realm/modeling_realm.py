@@ -1140,6 +1140,8 @@ class RealmBertModel(RealmPreTrainedModel):
     REALM_START_DOCSTRING,
 )
 class RealmEmbedder(RealmPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.bias"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1368,6 +1370,8 @@ class RealmScorer(RealmPreTrainedModel):
     REALM_START_DOCSTRING,
 )
 class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder"]
+
     def __init__(self, config):
         super().__init__(config)
         self.realm = RealmBertModel(self.config)

@@ -547,10 +547,11 @@ class TFSuppressTokensLogitsProcessor(TFLogitsProcessor):
 
 
 class TFForceTokensLogitsProcessor(TFLogitsProcessor):
-    r"""This processor can be used to force a list of tokens. The processor will set their log probs to `0` and all
-    other tokens to `-inf` so that they are sampled at their corresponding index."""
+    r"""This processor takes a list of pairs of integers which indicates a mapping from generation indices to token
+    indices that will be forced before sampling. The processor will set their log probs to `0` and all other tokens to
+    `-inf` so that they are sampled at their corresponding index."""
 
-    def __init__(self, force_token_map):
+    def __init__(self, force_token_map: List[List[int]]):
         force_token_map = dict(force_token_map)
         # Converts the dictionary of format {index: token} containing the tokens to be forced to an array, where the
         # index of the array corresponds to the index of the token to be forced, for XLA compatibility.

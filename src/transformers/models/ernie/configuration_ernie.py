@@ -96,12 +96,12 @@ class ErnieConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import ErnieModel, ErnieConfig
+    >>> from transformers import ErnieConfig, ErnieModel
 
     >>> # Initializing a ERNIE nghuyong/ernie-3.0-base-zh style configuration
     >>> configuration = ErnieConfig()
 
-    >>> # Initializing a model from the nghuyong/ernie-3.0-base-zh style configuration
+    >>> # Initializing a model (with random weights) from the nghuyong/ernie-3.0-base-zh style configuration
     >>> model = ErnieModel(configuration)
 
     >>> # Accessing the model configuration

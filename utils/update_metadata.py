@@ -101,6 +101,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
         "_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES",
         "AutoModel",
     ),
+    ("depth-estimation", "MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES", "AutoModelForDepthEstimation"),
 ]
 
 

@@ -40,6 +40,7 @@ if is_torch_available():
         NoRepeatNGramLogitsProcessor,
         PrefixConstrainedLogitsProcessor,
         RepetitionPenaltyLogitsProcessor,
+        EncoderRepetitionPenaltyLogitsProcessor,
         TemperatureLogitsWarper,
         TopKLogitsWarper,
         TopPLogitsWarper,
@@ -123,6 +124,27 @@ class LogitsProcessorTest(unittest.TestCase):
 
         self.assertAlmostEqual(scores[1, 0].item(), (1 / vocab_size) / 2)
         self.assertAlmostEqual(scores[1, 5].item(), (4 / vocab_size) / 2)
+
+    def test_encoder_repetition_penalty_dist_process(self):
+        input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)
+        vocab_size = 10
+
+        scores = self._get_uniform_logits(batch_size=2, length=vocab_size)
+
+        # give values special values
+        scores[0, 0] = -(1 / vocab_size)
+        scores[1, 5] = 4 / vocab_size
+
+        rep_penalty_proc = EncoderRepetitionPenaltyLogitsProcessor(penalty=2.0, encoder_input_ids=input_ids)
+
+        scores = rep_penalty_proc(input_ids, scores.clone())
+
+        # check that values were correctly changed
+        self.assertAlmostEqual(scores[0, 0].item(), -(1 / vocab_size) / 2)
+        self.assertAlmostEqual(scores[0, 1].item(), (1 / vocab_size) * 2)
+
+        self.assertAlmostEqual(scores[1, 0].item(), (1 / vocab_size) * 2)
+        self.assertAlmostEqual(scores[1, 5].item(), (4 / vocab_size) * 2)
 
     def test_top_k_dist_warper(self):
         input_ids = None
