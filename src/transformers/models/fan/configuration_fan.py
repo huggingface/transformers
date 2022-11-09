@@ -17,7 +17,6 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 FAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -97,6 +96,11 @@ class FANConfig(PretrainedConfig):
         channel_dims (`tuple(int)`, *optional*, defaults to None):
             List of Input channels for each of the encoder layers.
             If None it defaults to [config.embed_dim] * config.num_hidden_layers.
+        rounding_mode (`string`, *optional*, defaults to 'floor'):
+            Torch Divison rounding mode used for positional encoding.
+            Should be set to None in Semantic Segmentation tasks to be compatible with original paper implementation.
+        semantic_loss_ignore_index (`int`, *optional*, defaults to -100):
+            The index that is ignored by the loss function of the semantic segmentation model.
         cls_attn_layers (`int`, defaults to 2):
             Number of ClassAttentionBlock used.
             Class Attention Layer as in CaiT https://arxiv.org/abs/2103.17239.
@@ -165,13 +169,13 @@ class FANConfig(PretrainedConfig):
         channel_dims=None,  # HASCOMMENTS
         feat_downsample=False,  # HASCOMMENTS
         out_index=-1,
-        rounding_mode="floor",
+        rounding_mode="floor",  # HASCOMMENTS
         segmentation_in_channels=[128, 256, 480, 480],  # HASCOMMENTS
         feature_strides=[4, 8, 16, 32],
         channels=256,
         decoder_hidden_size=768,
         reshape_last_stage=False,
-        semantic_loss_ignore_index=-100,
+        semantic_loss_ignore_index=-100,  # HASCOMMENTS
         **kwargs,
     ):
 
