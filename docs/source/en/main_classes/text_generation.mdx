@@ -14,13 +14,13 @@ specific language governing permissions and limitations under the License.
 
 Each framework has a generate method for auto-regressive text generation implemented in their respective `GenerationMixin` class:
 
-- PyTorch [`~generation_utils.GenerationMixin.generate`] is implemented in [`~generation_utils.GenerationMixin`].
-- TensorFlow [`~generation_tf_utils.TFGenerationMixin.generate`] is implemented in [`~generation_tf_utils.TFGenerationMixin`].
-- Flax/JAX [`~generation_flax_utils.FlaxGenerationMixin.generate`] is implemented in [`~generation_flax_utils.FlaxGenerationMixin`].
+- PyTorch [`~generation.GenerationMixin.generate`] is implemented in [`~generation.GenerationMixin`].
+- TensorFlow [`~generation.TFGenerationMixin.generate`] is implemented in [`~generation.TFGenerationMixin`].
+- Flax/JAX [`~generation.FlaxGenerationMixin.generate`] is implemented in [`~generation.FlaxGenerationMixin`].
 
 ## GenerationMixin
 
-[[autodoc]] generation_utils.GenerationMixin
+[[autodoc]] generation.GenerationMixin
 	- generate
 	- greedy_search
 	- sample
@@ -32,10 +32,10 @@ Each framework has a generate method for auto-regressive text generation impleme
 
 ## TFGenerationMixin
 
-[[autodoc]] generation_tf_utils.TFGenerationMixin
+[[autodoc]] generation.TFGenerationMixin
 	- generate
 
 ## FlaxGenerationMixin
 
-[[autodoc]] generation_flax_utils.FlaxGenerationMixin
+[[autodoc]] generation.FlaxGenerationMixin
 	- generate

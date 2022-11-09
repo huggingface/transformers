@@ -42,32 +42,34 @@ if is_torch_available():
         pipeline,
         top_k_top_p_filtering,
     )
-    from transformers.generation_beam_constraints import DisjunctiveConstraint, PhrasalConstraint
-    from transformers.generation_beam_search import BeamSearchScorer, ConstrainedBeamSearchScorer
-    from transformers.generation_logits_process import (
-        ForcedBOSTokenLogitsProcessor,
-        ForcedEOSTokenLogitsProcessor,
-        HammingDiversityLogitsProcessor,
-        InfNanRemoveLogitsProcessor,
-        LogitsProcessorList,
-        MinLengthLogitsProcessor,
-        NoBadWordsLogitsProcessor,
-        NoRepeatNGramLogitsProcessor,
-        RepetitionPenaltyLogitsProcessor,
-        TemperatureLogitsWarper,
-        TopKLogitsWarper,
-        TopPLogitsWarper,
-    )
-    from transformers.generation_stopping_criteria import MaxLengthCriteria, StoppingCriteria, StoppingCriteriaList
-    from transformers.generation_utils import (
+    from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
         BeamSearchDecoderOnlyOutput,
         BeamSearchEncoderDecoderOutput,
+        BeamSearchScorer,
+        ConstrainedBeamSearchScorer,
+        DisjunctiveConstraint,
+        ForcedBOSTokenLogitsProcessor,
+        ForcedEOSTokenLogitsProcessor,
         GreedySearchDecoderOnlyOutput,
         GreedySearchEncoderDecoderOutput,
+        HammingDiversityLogitsProcessor,
+        InfNanRemoveLogitsProcessor,
+        LogitsProcessorList,
+        MaxLengthCriteria,
+        MinLengthLogitsProcessor,
+        NoBadWordsLogitsProcessor,
+        NoRepeatNGramLogitsProcessor,
+        PhrasalConstraint,
+        RepetitionPenaltyLogitsProcessor,
         SampleDecoderOnlyOutput,
         SampleEncoderDecoderOutput,
+        StoppingCriteria,
+        StoppingCriteriaList,
+        TemperatureLogitsWarper,
+        TopKLogitsWarper,
+        TopPLogitsWarper,
     )
 
 
