@@ -1801,7 +1801,6 @@ def _segment_reduce(values, index, segment_reduce_fn, name):
     )
 
     output_values = segment_means.clone().view(new_shape.tolist())
-    # output_values = segment_means.view(new_shape.tolist())
     output_index = range_index_map(index.batch_shape(), index.num_segments)
     return output_values, output_index
 
