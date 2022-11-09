@@ -46,7 +46,12 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_jukebox import JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP, JukeboxConfig, JukeboxPriorConfig, JukeboxVQVAEConfig
+    from .configuration_jukebox import (
+        JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        JukeboxConfig,
+        JukeboxPriorConfig,
+        JukeboxVQVAEConfig,
+    )
     from .tokenization_jukebox import JukeboxTokenizer
 
     try:
