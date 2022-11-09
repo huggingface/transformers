@@ -243,9 +243,4 @@ class FlavaProcessorTest(unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "token_type_ids", "attention_mask", "pixel_values"])
-
-        # add extra args
-        inputs = processor(text=input_str, images=image_input, return_codebook_pixels=True, return_image_mask=True)
-
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)
