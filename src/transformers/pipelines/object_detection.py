@@ -84,7 +84,7 @@ class ObjectDetectionPipeline(Pipeline):
         image = load_image(image)
         target_size = torch.IntTensor([[image.height, image.width]])
         inputs = self.feature_extractor(images=[image], return_tensors="pt")
-        if self.tokenizer:
+        if self.tokenizer is not None:
             inputs = self.tokenizer(text=inputs["words"], boxes=inputs["boxes"], return_tensors="pt")
         inputs["target_size"] = target_size
         return inputs
@@ -93,13 +93,13 @@ class ObjectDetectionPipeline(Pipeline):
         target_size = model_inputs.pop("target_size")
         outputs = self.model(**model_inputs)
         model_outputs = outputs.__class__({"target_size": target_size, **outputs})
-        if self.tokenizer:
+        if self.tokenizer is not None:
             model_outputs["bbox"] = model_inputs["bbox"]
         return model_outputs
 
     def postprocess(self, model_outputs, threshold=0.9):
         target_size = model_outputs["target_size"]
-        if self.tokenizer:
+        if self.tokenizer is not None:
             w, h = target_size[0].tolist()
 
             def unnormalize(bbox):
