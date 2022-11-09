@@ -516,9 +516,6 @@ OWLVIT_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_base_image_embeds (`bool`, *optional*):
-            Whether or not to return unprojected image embeddings. Set to `True` when `OwlViTModel` is called within
-            `OwlViTForObjectDetection`.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -785,7 +782,6 @@ class OwlViTVisionTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        use_hidden_state: Optional[bool] = True,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -809,10 +805,7 @@ class OwlViTVisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         pooled_output = last_hidden_state[:, 0, :]
 
-        if use_hidden_state:
-            pooled_output = self.post_layernorm(last_hidden_state)
-        else:
-            pooled_output = self.post_layernorm(pooled_output)
+        pooled_output = self.post_layernorm(pooled_output)
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -1016,7 +1009,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_base_image_embeds: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, OwlViTOutput]:
         r"""
@@ -1044,15 +1036,11 @@ class OwlViTModel(OwlViTPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # Whether to return unprojected image features
-        return_base_image_embeds = return_base_image_embeds if return_base_image_embeds is not None else False
-
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            use_hidden_state=False,
         )
 
         # Get embeddings for all text queries in all batch samples
@@ -1070,24 +1058,17 @@ class OwlViTModel(OwlViTPreTrainedModel):
         image_embeds = self.visual_projection(image_embeds)
 
         # normalized features
-        image_embeds_norm = image_embeds / torch.linalg.norm(image_embeds, ord=2, dim=-1, keepdim=True)
-        text_embeds_norm = text_embeds / torch.linalg.norm(text_embeds, ord=2, dim=-1, keepdim=True)
+        image_embeds = image_embeds / torch.linalg.norm(image_embeds, ord=2, dim=-1, keepdim=True)
+        text_embeds = text_embeds / torch.linalg.norm(text_embeds, ord=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
-        logits_per_text = torch.matmul(text_embeds_norm, image_embeds_norm.t()) * logit_scale
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
         logits_per_image = logits_per_text.t()
 
         loss = None
         if return_loss:
             loss = owlvit_loss(logits_per_text)
-
-        if return_base_image_embeds:
-            last_hidden_state = vision_outputs[0]
-            image_embeds = self.vision_model.post_layernorm(last_hidden_state)
-        else:
-            image_embeds = image_embeds_norm
-            text_embeds = text_embeds_norm
 
         if not return_dict:
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
@@ -1276,11 +1257,12 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_base_image_embeds=True,
+            return_dict=True,
         )
 
         # Resize class token
-        image_embeds = outputs[-3]
+        last_hidden_state = outputs.vision_model_output[0]
+        image_embeds = self.owlvit.vision_model.post_layernorm(last_hidden_state)
         new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
         class_token_out = torch.broadcast_to(image_embeds[:, :1, :], new_size)
 
@@ -1296,7 +1278,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)
-        text_embeds = outputs[-4]
+        text_embeds = outputs.text_model_output.pooler_output
 
         # Last hidden states from text and vision transformers
         text_model_last_hidden_state = outputs[-2][0]
