@@ -1294,9 +1294,9 @@ class JukeboxConditionalAutoregressive(nn.Module):
 
         Args:
             config (`JukeboxPriorConfig`):
-                Model configuration class with all the parameters of the model.
-                Initializing with a config file does not load the weights associated with the model, only the
-                configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+                Model configuration class with all the parameters of the model. Initializing with a config file does
+                not load the weights associated with the model, only the configuration. Check out the
+                [`~PreTrainedModel.from_pretrained`] method to load the model weights.
             n_ctx (`int`, *optional*, defaults to `None)`:
                 number of tokens or lyrics tokens provided in a single pass.
             embed_dim (`int`, *optional*, defaults to `None)`:
@@ -1356,7 +1356,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
     ):
         """
         Args:
-
         tokens : composed of both music tokens and lyrics tokens or just music tokens
         depending on the `merged_decoder` flag.
         """
@@ -1764,26 +1763,26 @@ class LabelConditioner(nn.Module):
 
 class JukeboxPrior(PreTrainedModel):
     """
-    The JukeboxPrior class, which is a wrapper around the various conditioning and the transformer. JukeboxPrior can be seen
-    as language models trained on music. They model the next `music token` prediction task. If a (lyric) `encoderù is defined,
-    it also models the `next character` prediction on the lyrics. Can be conditionned on timing, artist, genre, lyrics and codes
-    from lower-levels Priors.
+    The JukeboxPrior class, which is a wrapper around the various conditioning and the transformer. JukeboxPrior can be
+    seen as language models trained on music. They model the next `music token` prediction task. If a (lyric) `encoderù
+    is defined, it also models the `next character` prediction on the lyrics. Can be conditionned on timing, artist,
+    genre, lyrics and codes from lower-levels Priors.
 
     Args:
         config (`JukeboxPriorConfig`):
-            Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
         level (`int`):
             Current level of the Prior. Should be in range `0,nb_priors`.
         nb_priors (`int`, *optional*, defaults to `3)`:
             Total number of priors.
         vqvae_encoder (`Callable`, *optional*, defaults to `None)`:
-            Encoding method of the VQVAE encoder used in the forward pass of the model. Passing functions
-            instead of the vqvae module to avoid getting the parameters.
+            Encoding method of the VQVAE encoder used in the forward pass of the model. Passing functions instead of
+            the vqvae module to avoid getting the parameters.
         vqvae_decoder (`Callable`, *optional*, defaults to `None)`:
-            Decoding method of the VQVAE decoder used in the forward pass of the model. Passing functions
-            instead of the vqvae module to avoid getting the parameters.
+            Decoding method of the VQVAE decoder used in the forward pass of the model. Passing functions instead of
+            the vqvae module to avoid getting the parameters.
     """
 
     config_class = JukeboxPriorConfig
@@ -2455,7 +2454,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
            music_tokens (`List[torch.LongTensor`] of length `self.levels` ) :
                 A sequence of music tokens which will be used as context to continue the sampling process. Should have
                 `self.levels` tensors, each corresponding to the generation at a certain level.
-            labels (`List[Torch.LongTensor]` of lenght `n_sample`, and shape `(self.levels, 4 + self.config.max_nb_genre + lyric_sequence_lenght)` :
+            labels (`List[Torch.LongTensor]` of lenght `n_sample`, and shape `(self.levels, 4 +
+            self.config.max_nb_genre + lyric_sequence_lenght)` :
                 List of metadata such as `artist_id`, `genre_id` and the full list of lyric tokens which are used to
                 condition the generation.
             sample_levels (`List[int]`):

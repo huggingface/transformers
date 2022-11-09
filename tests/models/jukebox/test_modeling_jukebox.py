@@ -28,7 +28,7 @@ if is_torch_available():
 @require_torch
 class Jukebox1bModelTester(unittest.TestCase):
     all_model_classes = (JukeboxModel,) if is_torch_available() else ()
-    model_id = "openai/jukebox-1b-lyrics"
+    model_id = "jukebox-1b-lyrics"
     metas = dict(
         artist="Zac Brown Band",
         genres="Country",
@@ -218,7 +218,7 @@ class Jukebox1bModelTester(unittest.TestCase):
 @require_torch
 class Jukebox5bModelTester(unittest.TestCase):
     all_model_classes = (JukeboxModel,) if is_torch_available() else ()
-    model_id = "openai/jukebox-5b-lyrics"
+    model_id = "jukebox-5b-lyrics"
     metas = dict(
         artist="Zac Brown Band",
         genres="Country",
