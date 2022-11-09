@@ -345,10 +345,16 @@ class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class CLIPSegModelTester:
-    def __init__(self, parent, is_training=True):
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+
+        if text_kwargs is None:
+            text_kwargs = {}
+        if vision_kwargs is None:
+            vision_kwargs = {}
+
         self.parent = parent
-        self.text_model_tester = CLIPSegTextModelTester(parent)
-        self.vision_model_tester = CLIPSegVisionModelTester(parent)
+        self.text_model_tester = CLIPSegTextModelTester(parent, **text_kwargs)
+        self.vision_model_tester = CLIPSegVisionModelTester(parent, **vision_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
