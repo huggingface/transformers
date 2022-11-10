@@ -18,7 +18,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.utils import is_torch_available, is_torch_tensor, is_vision_available
+from transformers.utils import is_torch_available, is_torch_tensor
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -42,9 +42,6 @@ from ...image_utils import (
 )
 from ...utils import logging
 
-
-if is_vision_available():
-    import PIL
 
 if is_torch_available():
     import torch
