@@ -119,8 +119,6 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsNotNone(model)
             self.assertIsInstance(model, BertForPreTraining)
             # Only one value should not be initialized and in the missing keys.
-            missing_keys = loading_info.pop("missing_keys")
-            self.assertListEqual(["cls.predictions.decoder.bias"], missing_keys)
             for key, value in loading_info.items():
                 self.assertEqual(len(value), 0)
 

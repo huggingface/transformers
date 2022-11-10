@@ -48,6 +48,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_layoutlmv2"] = ["LayoutLMv2FeatureExtractor"]
+    _import_structure["image_processing_layoutlmv2"] = ["LayoutLMv2ImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -84,7 +85,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_layoutlmv2 import LayoutLMv2FeatureExtractor
+        from .feature_extraction_layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2ImageProcessor
 
     try:
         if not is_torch_available():

@@ -6,7 +6,7 @@ from typing import Optional
 
 import torch
 
-from .utils import add_start_docstrings
+from ..utils import add_start_docstrings
 
 
 STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""

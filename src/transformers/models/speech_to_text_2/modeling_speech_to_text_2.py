@@ -745,6 +745,8 @@ class Speech2Text2DecoderWrapper(Speech2Text2PreTrainedModel):
     SPEECH_TO_TEXT_2_START_DOCSTRING,
 )
 class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+
     def __init__(self, config):
         config = copy.deepcopy(config)
         config.is_decoder = True

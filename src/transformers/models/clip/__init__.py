@@ -55,6 +55,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_clip"] = ["CLIPFeatureExtractor"]
+    _import_structure["image_processing_clip"] = ["CLIPImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -126,6 +127,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_clip import CLIPFeatureExtractor
+        from .image_processing_clip import CLIPImageProcessor
 
     try:
         if not is_torch_available():

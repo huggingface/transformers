@@ -345,7 +345,7 @@ SUPPORTED_TASKS = {
         "tf": (),
         "pt": (AutoModelForObjectDetection,) if is_torch_available() else (),
         "default": {"model": {"pt": ("facebook/detr-resnet-50", "2729413")}},
-        "type": "image",
+        "type": "multimodal",
     },
     "zero-shot-object-detection": {
         "impl": ZeroShotObjectDetectionPipeline,
