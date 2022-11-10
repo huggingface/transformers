@@ -336,9 +336,10 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
         """
-        Args:
         Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports
         PyTorch.
+
+        Args:
             outputs ([`MobileNetV2ForSemanticSegmentation`]):
                 Raw outputs of the model.
             target_sizes (`List[Tuple]`, *optional*):
