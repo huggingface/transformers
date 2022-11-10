@@ -2249,7 +2249,6 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         self,
         seqs: Union[str, List[str]],
         residx=None,
-        with_mask: Optional[torch.Tensor] = None,
     ):
         if type(seqs) is str:
             lst = [seqs]
@@ -2280,9 +2279,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         return self.forward(
             aatype,
             mask,
-            mask_aa=with_mask is not None,
-            masking_pattern=with_mask,
-            residx=residx,
+            position_ids=residx,
         )
 
     @staticmethod
