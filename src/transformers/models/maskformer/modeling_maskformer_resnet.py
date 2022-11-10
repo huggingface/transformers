@@ -307,8 +307,6 @@ class MaskFormerResNetBackbone(Backbone):
 
         self.model = MaskFormerResNetModel(config)
 
-        import numpy as np
-
         # TODO we might need to make this configurable
         self.out_features = ["res2", "res3", "res4", "res5"]
 
