@@ -855,6 +855,11 @@ class TFTapasModelIntegrationTest(unittest.TestCase):
         expected_slice = tf.constant([[0.795137286, 9.5572]])
         tf.debugging.assert_near(logits, expected_slice, atol=0.05)
 
+    @require_torch
+    @require_scatter
+    def test_pt_tf_model_equivalence(self):
+        super().test_pt_tf_model_equivalence()
+
 
 # Below: tests for Tapas utilities which are defined in modeling_tf_tapas.py.
 # These are based on segmented_tensor_test.py of the original implementation.
@@ -1046,8 +1051,3 @@ class TFTapasUtilsTest(unittest.TestCase):
 
         # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(result.numpy(), [[[1, 2], [3, 4]], [[7, 8], [5, 6]]])
-
-    @require_torch
-    @require_scatter
-    def test_pt_tf_model_equivalence(self):
-        super().test_pt_tf_model_equivalence()

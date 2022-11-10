@@ -326,6 +326,7 @@ repo_utils_job = CircleCIJob(
     pytest_num_workers=1,
     resource_class=None,
     tests_to_run="tests/repo_utils",
+    cache_name="repo_utils_v2",
 )
 
 REGULAR_TESTS = [
