@@ -232,6 +232,13 @@ class MobileNetV2FeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class MobileNetV2ImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class MobileViTFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
