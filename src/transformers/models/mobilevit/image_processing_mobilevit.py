@@ -323,14 +323,16 @@ class MobileViTImageProcessor(BaseImageProcessor):
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
         """
-        Args:
         Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps. Only supports
         PyTorch.
+
+        Args:
             outputs ([`MobileViTForSemanticSegmentation`]):
                 Raw outputs of the model.
             target_sizes (`List[Tuple]`, *optional*):
                 A list of length `batch_size`, where each item is a `Tuple[int, int]` corresponding to the requested
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
+
         Returns:
             `List[torch.Tensor]`:
                 A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
