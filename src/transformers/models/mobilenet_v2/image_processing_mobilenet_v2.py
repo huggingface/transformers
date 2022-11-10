@@ -14,10 +14,11 @@
 # limitations under the License.
 """Image processor class for MobileNetV2."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
+from transformers.utils import is_torch_available, is_torch_tensor, is_vision_available
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -40,6 +41,13 @@ from ...image_utils import (
     valid_images,
 )
 from ...utils import logging
+
+
+if is_vision_available():
+    import PIL
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -328,3 +336,46 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
+        """
+        Args:
+        Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports
+        PyTorch.
+            outputs ([`MobileNetV2ForSemanticSegmentation`]):
+                Raw outputs of the model.
+            target_sizes (`List[Tuple]`, *optional*):
+                A list of length `batch_size`, where each item is a `Tuple[int, int]` corresponding to the requested
+                final size (height, width) of each prediction. If left to None, predictions will not be resized.
+        Returns:
+            `List[torch.Tensor]`:
+                A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
+                corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
+                `torch.Tensor` correspond to a semantic class id.
+        """
+        # TODO: add support for other frameworks
+        logits = outputs.logits
+
+        # Resize logits and compute semantic segmentation maps
+        if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+            if is_torch_tensor(target_sizes):
+                target_sizes = target_sizes.numpy()
+
+            semantic_segmentation = []
+
+            for idx in range(len(logits)):
+                resized_logits = torch.nn.functional.interpolate(
+                    logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                )
+                semantic_map = resized_logits[0].argmax(dim=0)
+                semantic_segmentation.append(semantic_map)
+        else:
+            semantic_segmentation = logits.argmax(dim=1)
+            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+
+        return semantic_segmentation
