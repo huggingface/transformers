@@ -27,7 +27,7 @@ class SpeechToSpeechConfig(PretrainedConfig):
     r"""
     [`SpeechToSpeechConfig`] is the configuration class to store the configuration of a [`SpeechToSpeechModel`]. It is
     used to instantiate an Encoder Decoder model according to the specified arguments, defining the encoder and decoder
-    configs.
+    configs, and optionally the vocoder.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -40,24 +40,28 @@ class SpeechToSpeechConfig(PretrainedConfig):
                   the encoder config.
                 - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
                   the decoder config.
+                - **vocoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
+                  the vpcpder config.
 
     Examples:
 
     ```python
-    >>> from transformers import BertConfig, Wav2Vec2Config, SpeechToSpeechConfig, SpeechToSpeechModel
+    >>> from transformers import BertConfig, Wav2Vec2Config, CodeHiFiGANConfig, SpeechToSpeechConfig, SpeechToSpeechModel
 
     >>> # Initializing a Wav2Vec2 & BERT style configuration
     >>> config_encoder = Wav2Vec2Config()
     >>> config_decoder = BertConfig()
+    >>> config_vocoder = CodeHiFiGANConfig()
 
-    >>> config = SpeechToSpeechConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
+    >>> config = SpeechToSpeechConfig.from_encoder_decoder_vocoder_configs(config_encoder, config_decoder, config_vocoder)
 
-    >>> # Initializing a Wav2Vec2Bert model from a Wav2Vec2 & bert-base-uncased style configurations
+    >>> # Initializing a Wav2Vec2Bert model from a Wav2Vec2, bert-base-uncased and CodeHiFiGAN style configurations
     >>> model = SpeechToSpeechModel(config=config)
 
     >>> # Accessing the model configuration
     >>> config_encoder = model.config.encoder
     >>> config_decoder = model.config.decoder
+    >>> config_vocoder = model.config.vocoder
     >>> # set decoder config to causal lm
     >>> config_decoder.is_decoder = True
     >>> config_decoder.add_cross_attention = True
@@ -66,8 +70,8 @@ class SpeechToSpeechConfig(PretrainedConfig):
     >>> model.save_pretrained("my-model")
 
     >>> # loading model and config from pretrained folder
-    >>> encoder_decoder_config = SpeechToSpeechConfig.from_pretrained("my-model")
-    >>> model = SpeechToSpeechModel.from_pretrained("my-model", config=encoder_decoder_config)
+    >>> encoder_decoder_vocoder_config = SpeechToSpeechConfig.from_pretrained("my-model")
+    >>> model = SpeechToSpeechModel.from_pretrained("my-model", config=encoder_decoder_vocoder_config)
     ```"""
     model_type = "speech-to-speech"
     is_composition = True
@@ -80,14 +84,25 @@ class SpeechToSpeechConfig(PretrainedConfig):
                 f" `decoder` sub-configurations are passed, but only {kwargs}"
             )
 
+        if "vocoder" not in kwargs:
+            logger.warning(
+                f"No `vocoder` configuration is passed. Instantiating a configuration of type {self.model_type}"
+                " without a vocoder."
+            )
+
         encoder_config = kwargs.pop("encoder")
         encoder_model_type = encoder_config.pop("model_type")
         decoder_config = kwargs.pop("decoder")
         decoder_model_type = decoder_config.pop("model_type")
+        vocoder_config = kwargs.pop("vocoder", None)
+        if vocoder_config is not None:
+            vocoder_model_type = vocoder_config.pop("model_type")
 
         self.encoder = AutoConfig.for_model(encoder_model_type, **encoder_config)
         self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)
         self.is_encoder_decoder = True
+        if vocoder_config is not None:
+            self.vocoder = AutoConfig.for_model(vocoder_model_type, **vocoder_config)
 
     @classmethod
     def from_encoder_decoder_configs(
@@ -116,5 +131,7 @@ class SpeechToSpeechConfig(PretrainedConfig):
         output = copy.deepcopy(self.__dict__)
         output["encoder"] = self.encoder.to_dict()
         output["decoder"] = self.decoder.to_dict()
+        if hasattr(self, 'vocoder'):
+            output["vocoder"] = self.vocoder.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
