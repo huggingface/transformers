@@ -380,6 +380,11 @@ class OnnxConfig(ABC):
             batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
             dummy_input = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
             return dict(preprocessor(images=dummy_input, return_tensors=framework))
+        elif isinstance(preprocessor, FeatureExtractionMixin) and preprocessor.model_input_names[0] == "pixel_values":
+            # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
+            batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
+            dummy_input = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
+            return dict(preprocessor(images=dummy_input, return_tensors=framework))
         elif (
             isinstance(preprocessor, FeatureExtractionMixin) and preprocessor.model_input_names[0] == "input_features"
         ):
