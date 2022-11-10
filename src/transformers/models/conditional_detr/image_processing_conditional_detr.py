@@ -220,6 +220,7 @@ def get_pad_size(images: List[np.ndarray]) -> Tuple[int, int]:
 def bottom_right_pad(
     image: np.ndarray,
     output_size: Tuple[int, int],
+    contant_values: Union[float, Iterable[float], Iterable[Tuple[float, float]]] = 0,
     input_channel_dimension: Optional[ChannelDimension] = None,
     data_format: Optional[ChannelDimension] = None,
 ) -> np.ndarray:
@@ -235,9 +236,9 @@ def bottom_right_pad(
     pad_right = output_width - input_width
 
     if input_channel_dimension == ChannelDimension.FIRST:
-        padded_image = np.pad(image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=0)
+        padded_image = np.pad(image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=contant_values)
     elif input_channel_dimension == ChannelDimension.LAST:
-        padded_image = np.pad(image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=0)
+        padded_image = np.pad(image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=contant_values)
     else:
         raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
 
@@ -756,7 +757,7 @@ def compute_segments(
 
 class ConditionalDetrImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a Detr image processor.
+    Constructs a Conditional Detr image processor.
 
     Args:
         format (`str`, *optional*, defaults to `"coco_detection"`): # FIXME
@@ -992,7 +993,8 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
     def pad(
         self,
         image: np.ndarray,
-        output_size: Tuple[int, int],
+        # output_size: Tuple[int, int],
+        output_size: Dict[str, int],
         input_channel_dimension: Optional[ChannelDimension] = None,
         data_format: Optional[ChannelDimension] = None,
     ) -> np.ndarray:
@@ -1013,6 +1015,15 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         # 2. pad pads a batch of images and returns a mask. This matches the behavior of `pad` tokenizers
         # (doesn't accept same input as tokenizer call however)
         # Keep `pad_and_create_pixel_mask` for now
+        # How to handle the size dicts?
+        size = get_size_dict(output_size, default_to_square=False)
+        if "shortest_edge" in size or "longest_edge" in size:
+            size = get_resize_output_image_size(image, size["shortest_edge"], size["longest_edge"], defaultdict=False)
+        elif "height" in size or "width" in size:
+            size = (size["width"], size["height"]) # FIXME
+        else:
+            raise ValueError(f"Size must contain 'shortest_edge' and 'longest_edge' keys. Got {size.keys()}.")
+
         return bottom_right_pad(
             image, output_size=output_size, input_channel_dimension=input_channel_dimension, data_format=data_format
         )
@@ -1039,6 +1050,50 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         **kwargs
     ) -> BatchFeature:
+        """
+        Preprocess an image or a batch of images so that it can be used by the model.
+
+        Args:
+            images (`ImageInput`):
+                Image or batch of images to preprocess.
+            annotations (`List[Dict]` or `List[List[Dict]]`, *optional*):
+                List of annotations associated with the image or batch of images.
+                If annotionation is for object detection, the annotations should be a dictionary with the following keys:
+                - "image_id" (`int`): The image id.
+                - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a dictionary. An image can have no annotations, in which case the list should be empty.
+                If annotionation is for segmentation, the annotations should be a dictionary with the following keys:
+                - "image_id" (`int`): The image id.
+                - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary. An image can have no segments, in which case the list should be empty.
+                - "file_name" (`str`): The file name of the image.
+            return_segmentation_masks (`bool`, *optional*, defaults to self.return_segmentation_masks):
+                Whether to return segmentation masks.
+            masks_path (`str` or `pathlib.Path`, *optional*):
+                Path to the directory containing the segmentation masks.
+            do_resize (`bool`, *optional*, defaults to self.do_resize):
+                Whether to resize the image.
+            size (`Dict[str, int]`, *optional*, defaults to self.size):
+                Size of the image after resizing.
+            resample (`PILImageResampling`, *optional*, defaults to self.resample):
+                Resampling filter to use when resizing the image.
+            do_rescale (`bool`, *optional*, defaults to self.do_rescale):
+                Whether to rescale the image.
+            rescale_factor (`float`, *optional*, defaults to self.rescale_factor):
+                Rescale factor to use when rescaling the image.
+            do_normalize (`bool`, *optional*, defaults to self.do_normalize):
+                Whether to normalize the image.
+            image_mean (`float` or `List[float]`, *optional*, defaults to self.image_mean):
+                Mean to use when normalizing the image.
+            image_std (`float` or `List[float]`, *optional*, defaults to self.image_std):
+                Standard deviation to use when normalizing the image.
+            do_pad (`bool`, *optional*, defaults to self.do_pad):
+                Whether to pad the image.
+            format (`str` or `AnnotionFormat`, *optional*, defaults to self.format):
+                Format of the annotations.
+            return_tensors (`str` or `TensorType`, *optional*, defaults to self.return_tensors):
+                Type of tensors to return. If `None`, will return the list of images.
+            data_format (`str` or `ChannelDimension`, *optional*, defaults to self.data_format):
+                The channel dimension format of the image. If not provided, it will be the same as the input image.
+        """
         if "pad_and_return_pixel_mask" in kwargs:
             warnings.warn(
                 "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "

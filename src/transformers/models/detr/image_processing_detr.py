@@ -212,6 +212,7 @@ def get_pad_size(images: List[np.ndarray]) -> Tuple[int, int]:
 def bottom_right_pad(
     image: np.ndarray,
     output_size: Tuple[int, int],
+    contant_values: Union[float, Iterable[float], Iterable[Tuple[float, float]]] = 0,
     input_channel_dimension: Optional[ChannelDimension] = None,
     data_format: Optional[ChannelDimension] = None,
 ) -> np.ndarray:
@@ -227,9 +228,9 @@ def bottom_right_pad(
     pad_right = output_width - input_width
 
     if input_channel_dimension == ChannelDimension.FIRST:
-        padded_image = np.pad(image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=0)
+        padded_image = np.pad(image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=contant_values)
     elif input_channel_dimension == ChannelDimension.LAST:
-        padded_image = np.pad(image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=0)
+        padded_image = np.pad(image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=contant_values)
     else:
         raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
 
@@ -587,6 +588,7 @@ def resize_annotation(
     return new_annotation
 
 
+# TODO - (Amy) make compatible with other frameworks
 def binary_mask_to_rle(mask):
     """
     Args:
@@ -608,6 +610,7 @@ def binary_mask_to_rle(mask):
     return [x for x in runs]
 
 
+# TODO - (Amy) make compatible with other frameworks
 def convert_segmentation_to_rle(segmentation):
     """
     Args:
