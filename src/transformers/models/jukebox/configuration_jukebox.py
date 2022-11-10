@@ -114,17 +114,30 @@ _RawColumnPreviousRowAttention = ["block_attn", "transpose_block_attn", "prev_bl
 _FullDenseAttention = ["dense_attention"]
 _PrimePrimeDenseAttention = ["prime_attn", "prime_attn", "dense_attn"]
 
+
+def FullDenseAttention(layer):
+    return _FullDenseAttention[0]
+
+
+def RawColumnPreviousRowAttention(layer):
+    return _RawColumnPreviousRowAttention[layer % 3]
+
+
+def large_separated_enc_dec_w_lyrics(layer):
+    return _LARGE_ATTENTION[layer % 79]
+
+
+def enc_dec_with_lyrics(layer):
+    if layer % 16 == 15:
+        return _PrimePrimeDenseAttention[layer % 3]
+    return _RawColumnPreviousRowAttention[layer % 3]
+
+
 ATTENTION_PATTERNS = {
-    "FullDenseAttention": lambda layer: _FullDenseAttention[0],
-    "RawColumnPreviousRowAttention": lambda layer: _RawColumnPreviousRowAttention[
-        layer % 3
-    ],  # Alternate row, column and previous row attn
-    "large_separated_enc_dec_w_lyrics": lambda layer: _LARGE_ATTENTION[
-        layer % 79
-    ],  # Used by large separated_enc_dec model with lyrics
-    "enc_dec_with_lyrics": lambda layer: _PrimePrimeDenseAttention[layer % 3]
-    if layer % 16 == 15
-    else _RawColumnPreviousRowAttention[layer % 3],  # Used by encoder_decoder model with lyrics
+    "FullDenseAttention": FullDenseAttention,
+    "RawColumnPreviousRowAttention": RawColumnPreviousRowAttention,  # Alternate row, column and previous row attn
+    "large_separated_enc_dec_w_lyrics": large_separated_enc_dec_w_lyrics,  # Used by large separated_enc_dec model with lyrics
+    "enc_dec_with_lyrics": enc_dec_with_lyrics,  # Used by encoder_decoder model with lyrics
 }
 
 
