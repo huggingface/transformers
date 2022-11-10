@@ -319,8 +319,7 @@ repo_utils_job = CircleCIJob(
     "repo_utils",
     install_steps=[
         "pip install --upgrade pip",
-        "pip install GitPython",
-        "pip install .[all,quality]",
+        "pip install .[all,quality,testing]",
     ],
     parallelism=None,
     pytest_num_workers=1,

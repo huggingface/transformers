@@ -509,6 +509,11 @@ class TFTapasModelTest(TFModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="The default test gets NaN losses with the test-generated inputs")
     def test_loss_computation(self):
         pass
+    
+    @require_torch
+    @require_scatter
+    def test_pt_tf_model_equivalence(self):
+        super().test_pt_tf_model_equivalence()
 
 
 def prepare_tapas_single_inputs_for_inference():
@@ -854,11 +859,6 @@ class TFTapasModelIntegrationTest(unittest.TestCase):
         tf.debugging.assert_equal(logits.shape, expected_shape)
         expected_slice = tf.constant([[0.795137286, 9.5572]])
         tf.debugging.assert_near(logits, expected_slice, atol=0.05)
-
-    @require_torch
-    @require_scatter
-    def test_pt_tf_model_equivalence(self):
-        super().test_pt_tf_model_equivalence()
 
 
 # Below: tests for Tapas utilities which are defined in modeling_tf_tapas.py.
