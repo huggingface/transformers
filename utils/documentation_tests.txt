@@ -99,6 +99,7 @@ src/transformers/models/longt5/modeling_longt5.py
 src/transformers/models/marian/modeling_marian.py
 src/transformers/models/markuplm/modeling_markuplm.py
 src/transformers/models/maskformer/configuration_maskformer.py
+src/transformers/models/maskformer/modeling_maskformer.py
 src/transformers/models/mbart/configuration_mbart.py
 src/transformers/models/mbart/modeling_mbart.py
 src/transformers/models/mctct/configuration_mctct.py
