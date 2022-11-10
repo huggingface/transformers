@@ -650,9 +650,9 @@ def _test_large_logits_librispeech(in_queue, out_queue, timeout):
         input_speech = _load_datasamples(1)
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        processed_inputs = processor(audio=input_speech, text="This part of the speech", return_tensors="tf")
-        input_features = processed_inputs.input_features
-        labels = processed_inputs.labels
+        processed_inputs = processor(audio=input_speech, return_tensors="tf")
+        input_features = processed_inputs.input_features.to(torch_device)
+        labels = torch.tensor([[5723,   644,   295,   220,  3322,  6218]])
 
         logits = model(
             input_features,
