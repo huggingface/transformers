@@ -15,12 +15,7 @@
 import unittest
 
 from huggingface_hub import hf_hub_download
-from transformers import (
-    MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
-    VideoMAEFeatureExtractor,
-    is_decord_available,
-    is_vision_available,
-)
+from transformers import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING, VideoMAEFeatureExtractor
 from transformers.pipelines import VideoClassificationPipeline, pipeline
 from transformers.testing_utils import (
     nested_simplify,
@@ -29,20 +24,9 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_or_tf,
     require_vision,
-    slow,
 )
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
-
-
-if is_vision_available():
-    from PIL import Image
-else:
-
-    class Image:
-        @staticmethod
-        def open(*args, **kwargs):
-            pass
 
 
 @require_torch_or_tf
@@ -58,20 +42,22 @@ class VideoClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         video_classifier = VideoClassificationPipeline(model=model, feature_extractor=feature_extractor, top_k=2)
         examples = [
             example_video_filepath,
+            "https://huggingface.co/datasets/nateraw/video-demo/resolve/main/archery.mp4",
         ]
         return video_classifier, examples
 
     def run_pipeline_test(self, video_classifier, examples):
 
-        outputs = video_classifier(examples[0])
+        for example in examples:
+            outputs = video_classifier(example)
 
-        self.assertEqual(
-            outputs,
-            [
-                {"score": ANY(float), "label": ANY(str)},
-                {"score": ANY(float), "label": ANY(str)},
-            ],
-        )
+            self.assertEqual(
+                outputs,
+                [
+                    {"score": ANY(float), "label": ANY(str)},
+                    {"score": ANY(float), "label": ANY(str)},
+                ],
+            )
 
     @require_torch
     def test_small_model_pt(self):
@@ -84,8 +70,8 @@ class VideoClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         video_file_path = hf_hub_download(repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset")
         outputs = video_classifier(video_file_path, top_k=2)
         self.assertEqual(
-            nested_simplify(outputs, decimals=3),
-            [{"score": 0.521, "label": "LABEL_0"}, {"score": 0.479, "label": "LABEL_1"}],
+            nested_simplify(outputs, decimals=4),
+            [{"score": 0.5209, "label": "LABEL_0"}, {"score": 0.4791, "label": "LABEL_1"}],
         )
 
         outputs = video_classifier(
@@ -96,10 +82,10 @@ class VideoClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
             top_k=2,
         )
         self.assertEqual(
-            nested_simplify(outputs, decimals=3),
+            nested_simplify(outputs, decimals=4),
             [
-                [{"score": 0.521, "label": "LABEL_0"}, {"score": 0.479, "label": "LABEL_1"}],
-                [{"score": 0.521, "label": "LABEL_0"}, {"score": 0.479, "label": "LABEL_1"}],
+                [{"score": 0.5209, "label": "LABEL_0"}, {"score": 0.4791, "label": "LABEL_1"}],
+                [{"score": 0.5209, "label": "LABEL_0"}, {"score": 0.4791, "label": "LABEL_1"}],
             ],
         )
 

@@ -1,22 +1,13 @@
 from typing import List, Union
 
-from ..utils import (
-    add_end_docstrings,
-    is_decord_available,
-    is_torch_available,
-    is_vision_available,
-    logging,
-    requires_backends,
-)
+from ..utils import add_end_docstrings, is_decord_available, is_torch_available, logging, requires_backends
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
 if is_decord_available():
-    from decord import VideoReader, cpu
-
-if is_vision_available():
     import numpy as np
-    from PIL import Image
+
+    from decord import VideoReader, cpu
 
 
 if is_torch_available():
@@ -52,21 +43,19 @@ class VideoClassificationPipeline(Pipeline):
             postprocess_params["top_k"] = top_k
         return {}, {}, postprocess_params
 
-    def __call__(self, videos: Union[str, List[str], List["Image.Image"], List[List["Image.Image"]]], **kwargs):
+    def __call__(self, videos: Union[str, List[str]], **kwargs):
         """
-        Assign labels to the image(s) passed as inputs.
+        Assign labels to the video(s) passed as inputs.
 
         Args:
-            videos (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            videos (`str`, `List[str]`):
                 The pipeline handles three types of videos:
 
                 - A string containing a http link pointing to a video
                 - A string containing a local path to an video
-                - An video's frames loaded in PIL directly
 
                 The pipeline accepts either a single video or a batch of videos, which must then be passed as a string.
-                Videos in a batch must all be in the same format: all as http links, all as local paths, or all as a
-                list (or list of lists) of PIL Images containing the frames of the video(s).
+                Videos in a batch must all be in the same format: all as http links or all as local paths.
             top_k (`int`, *optional*, defaults to 5):
                 The number of top labels that will be returned by the pipeline. If the provided number is higher than
                 the number of labels available in the model configuration, it will default to the number of labels.
@@ -85,20 +74,16 @@ class VideoClassificationPipeline(Pipeline):
 
     def preprocess(self, video):
 
-        if isinstance(video, str):
-            videoreader = VideoReader(video, num_threads=1, ctx=cpu(0))
-            videoreader.seek(0)
+        videoreader = VideoReader(video, num_threads=1, ctx=cpu(0))
+        videoreader.seek(0)
 
-            converted_len = int(self.num_frames * self.frame_sample_rate)
+        start_idx = 0
+        end_idx = int(self.num_frames * self.frame_sample_rate)
+        indices = np.linspace(start_idx, end_idx, num=self.num_frames)
+        indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
 
-            seg_len = len(videoreader)
-            end_idx = np.random.randint(converted_len, seg_len)
-            start_idx = end_idx - converted_len
-            indices = np.linspace(start_idx, end_idx, num=self.num_frames)
-            indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
-
-            video = videoreader.get_batch(indices).asnumpy()
-            video = list(video)
+        video = videoreader.get_batch(indices).asnumpy()
+        video = list(video)
 
         model_inputs = self.feature_extractor(video, return_tensors=self.framework)
         return model_inputs
