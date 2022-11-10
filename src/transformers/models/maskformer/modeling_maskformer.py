@@ -1246,7 +1246,7 @@ class MaskFormerPixelDecoder(nn.Module):
     def __init__(self, *args, feature_size: int = 256, mask_feature_size: int = 256, **kwargs):
         """
         Pixel Decoder Module proposed in [Per-Pixel Classification is Not All You Need for Semantic
-        Segmentation](https://arxiv.org/abs/2107.06278). It first runs the backbone's feature into a Feature Pyramid
+        Segmentation](https://arxiv.org/abs/2107.06278). It first runs the backbone's features into a Feature Pyramid
         Network creating a list of feature maps. Then, it projects the last one to the correct `mask_size`.
 
         Args:
@@ -1260,7 +1260,7 @@ class MaskFormerPixelDecoder(nn.Module):
         self.mask_projection = nn.Conv2d(feature_size, mask_feature_size, kernel_size=3, padding=1)
 
     def forward(self, features: List[Tensor], output_hidden_states: bool = False) -> MaskFormerPixelDecoderOutput:
-        fpn_features: List[Tensor] = self.fpn(features)
+        fpn_features = self.fpn(features)
         # we use the last feature map
         last_feature_projected = self.mask_projection(fpn_features[-1])
         return MaskFormerPixelDecoderOutput(
@@ -1575,9 +1575,7 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         if pixel_mask is None:
             pixel_mask = torch.ones((batch_size, height, width), device=pixel_values.device)
 
-        pixel_level_module_output: MaskFormerPixelLevelModuleOutput = self.pixel_level_module(
-            pixel_values, output_hidden_states
-        )
+        pixel_level_module_output = self.pixel_level_module(pixel_values, output_hidden_states)
         image_features = pixel_level_module_output.encoder_last_hidden_state
         pixel_embeddings = pixel_level_module_output.decoder_last_hidden_state
 

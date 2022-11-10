@@ -188,18 +188,18 @@ class MaskFormerResNetStage(nn.Module):
         return hidden_state
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetEncoder with ResNetStage->MaskFormerResNetStage
 class MaskFormerResNetEncoder(nn.Module):
     def __init__(self, config: ResNetConfig):
         super().__init__()
         self.stages = nn.ModuleList([])
         # based on `downsample_in_first_stage` the first layer of the first stage may or may not downsample the input
+        self.stride = (2 if config.downsample_in_first_stage else 1,)
         self.stages.append(
             MaskFormerResNetStage(
                 config,
                 config.embedding_size,
                 config.hidden_sizes[0],
-                stride=2 if config.downsample_in_first_stage else 1,
+                stride=self.stride,
                 depth=config.depths[0],
             )
         )
@@ -302,21 +302,56 @@ class MaskFormerResNetBackbone(Backbone):
             The configuration used by [`MaskFormerResNetModel`].
     """
 
-    def __init__(self, config: ResNetConfig, out_features):
+    def __init__(self, config: ResNetConfig):
         super().__init__()
+
         self.model = MaskFormerResNetModel(config)
 
-        current_stride = self.model.embedder.embedder.stride
-        self._out_feature_strides = {"stem": current_stride}
-        self._out_feature_channels = {"stem": config.embedding_size}
-        self._out_features = out_features
+        import numpy as np
+
+        # TODO we might need to make this configurable
+        self.out_features = ["res2", "res3", "res4", "res5"]
+
+        # TODO calculate strides appropriately
+        current_stride = self.model.embedder.embedder.convolution.stride[0]
+        self.out_feature_strides = {
+            "stem": current_stride,
+            "res2": current_stride * 2,
+            "res3": current_stride * 2,
+            "res4": current_stride * 2,
+            "res5": current_stride * 2,
+        }
+        # for idx, feat in enumerate(self.out_features):
+        #     # current_stride *= self.model.encoder.stages[idx].layers[-1].layer[-1].convolution.stride[0]
+        #     for layer_seq in self.model.encoder.stages[idx].layers:
+        #         current_stride *= layer_seq.layer.convolution.stride[0]
+        #         # current_stride *= layer.layer[-1].convolution.stride[0]
+        #     # current_stride = int(current_stride * np.prod([layer.layer.convolution.stride for layer in self.model.encoder.stages[idx].layers]))
+        #     print("Current stride:", current_stride)
+        #     self.out_feature_strides[feat] = current_stride
+
+        self.out_feature_channels = {
+            "stem": config.embedding_size,
+            "res2": config.hidden_sizes[0],
+            "res3": config.hidden_sizes[1],
+            "res4": config.hidden_sizes[2],
+            "res5": config.hidden_sizes[3],
+        }
 
     def forward(self, *args, **kwargs) -> List[Tensor]:
         output = self.model(*args, **kwargs, output_hidden_states=True)
-        return output
+
+        hidden_states = output.hidden_states
+
+        hidden_states = [hidden_states[i + 1] for i in [0, 1, 2, 3]]
+
+        return hidden_states
 
     def output_shape(self):
-        return {
-            name: ShapeSpec(channels=self._out_feature_channels[name], stride=self._out_feature_strides[name])
-            for name in self._out_features
+        output_shape = {
+            name: ShapeSpec(channels=self.out_feature_channels[name], stride=self.out_feature_strides[name])
+            for name in self.out_features
         }
+        for k, v in output_shape.items():
+            print(k, v.channels, v.stride)
+        return output_shape

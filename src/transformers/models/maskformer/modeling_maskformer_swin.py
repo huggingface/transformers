@@ -816,6 +816,9 @@ class MaskFormerSwinBackbone(Backbone):
 
     def __init__(self, config: SwinConfig):
         super().__init__()
+
+        self.model = MaskFormerSwinModel(config)
+
         num_features = [int(config.embed_dim * 2**i) for i in range(config.num_layers)]
         print("Number of features: ", num_features)
         self.num_features = num_features
@@ -837,7 +840,6 @@ class MaskFormerSwinBackbone(Backbone):
             "res5": self.num_features[3],
         }
 
-        self.model = MaskFormerSwinModel(config)
         self.hidden_states_norms = nn.ModuleList([nn.LayerNorm(x.channels) for x in self.output_shape().values()])
 
     def forward(self, *args, **kwargs) -> List[Tensor]:
@@ -860,9 +862,6 @@ class MaskFormerSwinBackbone(Backbone):
                 hidden_state_norm.permute(0, 2, 1).view((batch_size, hidden_size, height, width)).contiguous()
             )
             hidden_states_permuted.append(hidden_state_permuted)
-
-        for i in hidden_states_permuted:
-            print(i.shape)
 
         return hidden_states_permuted
 

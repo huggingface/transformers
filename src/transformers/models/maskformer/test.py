@@ -1,12 +1,15 @@
-from transformers import MaskFormerConfig, MaskFormerModel
 import torch
 
-config = MaskFormerConfig()
+from transformers import MaskFormerConfig, MaskFormerModel, ResNetConfig
+
+
+backbone_config = ResNetConfig()
+config = MaskFormerConfig(backbone_config)
 
 model = MaskFormerModel(config)
 
-# for name, param in model.named_parameters():
-#     print(name, param.shape)
+for name, param in model.named_parameters():
+    print(name, param.shape)
 
 pixel_values = torch.randn(1, 3, 224, 224)
 
