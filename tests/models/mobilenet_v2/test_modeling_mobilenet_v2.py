@@ -287,14 +287,14 @@ class MobileNetV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            MobileNetV2FeatureExtractor.from_pretrained("Matthijs/mobilenet_v2_1.0_224")
+            MobileNetV2FeatureExtractor.from_pretrained("google/mobilenet_v2_1.0_224")
             if is_vision_available()
             else None
         )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = MobileNetV2ForImageClassification.from_pretrained("Matthijs/mobilenet_v2_1.0_224").to(torch_device)
+        model = MobileNetV2ForImageClassification.from_pretrained("google/mobilenet_v2_1.0_224").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -314,10 +314,10 @@ class MobileNetV2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_semantic_segmentation(self):
-        model = MobileNetV2ForSemanticSegmentation.from_pretrained("Matthijs/deeplabv3_mobilenet_v2_1.0_513")
+        model = MobileNetV2ForSemanticSegmentation.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
         model = model.to(torch_device)
 
-        feature_extractor = MobileNetV2FeatureExtractor.from_pretrained("Matthijs/deeplabv3_mobilenet_v2_1.0_513")
+        feature_extractor = MobileNetV2FeatureExtractor.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
 
         image = prepare_img()
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)

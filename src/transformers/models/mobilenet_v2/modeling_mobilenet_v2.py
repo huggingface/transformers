@@ -46,19 +46,19 @@ _CONFIG_FOR_DOC = "MobileNetV2Config"
 _FEAT_EXTRACTOR_FOR_DOC = "MobileNetV2FeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "Matthijs/mobilenet_v2_1.0_224"
+_CHECKPOINT_FOR_DOC = "google/mobilenet_v2_1.0_224"
 _EXPECTED_OUTPUT_SHAPE = [1, 1280, 7, 7]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "Matthijs/mobilenet_v2_1.0_224"
+_IMAGE_CLASS_CHECKPOINT = "google/mobilenet_v2_1.0_224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Matthijs/mobilenet_v2_1.4_224",
-    "Matthijs/mobilenet_v2_1.0_224",
-    "Matthijs/mobilenet_v2_0.37_160",
-    "Matthijs/mobilenet_v2_0.35_96",
+    "google/mobilenet_v2_1.4_224",
+    "google/mobilenet_v2_1.0_224",
+    "google/mobilenet_v2_0.37_160",
+    "google/mobilenet_v2_0.35_96",
     # See all MobileNetV2 models at https://huggingface.co/models?filter=mobilenet_v2
 ]
 
@@ -823,8 +823,8 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = MobileNetV2FeatureExtractor.from_pretrained("Matthijs/deeplabv3_mobilenet_v2_1.0_513")
-        >>> model = MobileNetV2ForSemanticSegmentation.from_pretrained("Matthijs/deeplabv3_mobilenet_v2_1.0_513")
+        >>> feature_extractor = MobileNetV2FeatureExtractor.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
+        >>> model = MobileNetV2ForSemanticSegmentation.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
 

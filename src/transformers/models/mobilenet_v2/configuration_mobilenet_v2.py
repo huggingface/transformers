@@ -27,10 +27,10 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Matthijs/mobilenet_v2_1.4_224": "https://huggingface.co/Matthijs/mobilenet_v2_1.4_224/resolve/main/config.json",
-    "Matthijs/mobilenet_v2_1.0_224": "https://huggingface.co/Matthijs/mobilenet_v2_1.0_224/resolve/main/config.json",
-    "Matthijs/mobilenet_v2_0.75_160": "https://huggingface.co/Matthijs/mobilenet_v2_0.75_160/resolve/main/config.json",
-    "Matthijs/mobilenet_v2_0.35_96": "https://huggingface.co/Matthijs/mobilenet_v2_0.35_96/resolve/main/config.json",
+    "google/mobilenet_v2_1.4_224": "https://huggingface.co/Matthijs/mobilenet_v2_1.4_224/resolve/main/config.json",
+    "google/mobilenet_v2_1.0_224": "https://huggingface.co/Matthijs/mobilenet_v2_1.0_224/resolve/main/config.json",
+    "google/mobilenet_v2_0.75_160": "https://huggingface.co/Matthijs/mobilenet_v2_0.75_160/resolve/main/config.json",
+    "google/mobilenet_v2_0.35_96": "https://huggingface.co/Matthijs/mobilenet_v2_0.35_96/resolve/main/config.json",
     # See all MobileNetV2 models at https://huggingface.co/models?filter=mobilenet_v2
 }
 
