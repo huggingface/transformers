@@ -34,7 +34,7 @@ from transformers import (
     is_tf_available,
 )
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_scatter, require_tensorflow_probability, require_tf, slow
+from transformers.testing_utils import require_scatter, require_tensorflow_probability, require_tf, require_torch, slow
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -1047,6 +1047,7 @@ class TFTapasUtilsTest(unittest.TestCase):
         # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(result.numpy(), [[[1, 2], [3, 4]], [[7, 8], [5, 6]]])
 
+    @require_torch
     @require_scatter
     def test_pt_tf_model_equivalence(self):
         super().test_pt_tf_model_equivalence()
