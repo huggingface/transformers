@@ -21,7 +21,14 @@ import numpy as np
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import center_crop, get_resize_output_image_size, normalize, rescale, resize, to_channel_dimension_format
+from ...image_transforms import (
+    center_crop,
+    get_resize_output_image_size,
+    normalize,
+    rescale,
+    resize,
+    to_channel_dimension_format,
+)
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,

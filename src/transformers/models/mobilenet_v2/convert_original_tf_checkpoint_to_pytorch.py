@@ -27,9 +27,9 @@ import requests
 from huggingface_hub import hf_hub_download
 from transformers import (
     MobileNetV2Config,
-    MobileNetV2ImageProcessor,
     MobileNetV2ForImageClassification,
     MobileNetV2ForSemanticSegmentation,
+    MobileNetV2ImageProcessor,
     load_tf_weights_in_mobilenet_v2,
 )
 from transformers.utils import logging
@@ -101,7 +101,7 @@ def convert_movilevit_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     # Check outputs on an image, prepared by MobileNetV2ImageProcessor
     feature_extractor = MobileNetV2ImageProcessor(
         crop_size={"width": config.image_size, "height": config.image_size},
-        size={"shortest_edge": config.image_size + 32 },
+        size={"shortest_edge": config.image_size + 32},
     )
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     outputs = model(**encoding)
