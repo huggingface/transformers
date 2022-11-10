@@ -11,7 +11,8 @@ docs/source/en/model_doc/byt5.mdx
 docs/source/en/model_doc/tapex.mdx
 docs/source/en/model_doc/donut.mdx
 docs/source/en/model_doc/encoder-decoder.mdx
-src/transformers/generation_utils.py
+src/transformers/generation/utils.py
+src/transformers/generation/tf_utils.py
 src/transformers/models/albert/configuration_albert.py
 src/transformers/models/albert/modeling_albert.py
 src/transformers/models/albert/modeling_tf_albert.py
@@ -35,6 +36,7 @@ src/transformers/models/bloom/configuration_bloom.py
 src/transformers/models/camembert/configuration_camembert.py
 src/transformers/models/canine/configuration_canine.py
 src/transformers/models/clip/configuration_clip.py
+src/transformers/models/clipseg/modeling_clipseg.py
 src/transformers/models/codegen/configuration_codegen.py
 src/transformers/models/conditional_detr/configuration_conditional_detr.py
 src/transformers/models/conditional_detr/modeling_conditional_detr.py
@@ -97,6 +99,7 @@ src/transformers/models/longt5/modeling_longt5.py
 src/transformers/models/marian/modeling_marian.py
 src/transformers/models/markuplm/modeling_markuplm.py
 src/transformers/models/maskformer/configuration_maskformer.py
+src/transformers/models/maskformer/modeling_maskformer.py
 src/transformers/models/mbart/configuration_mbart.py
 src/transformers/models/mbart/modeling_mbart.py
 src/transformers/models/mctct/configuration_mctct.py
@@ -107,7 +110,7 @@ src/transformers/models/mobilebert/modeling_tf_mobilebert.py
 src/transformers/models/mobilevit/modeling_mobilevit.py
 src/transformers/models/mobilevit/modeling_tf_mobilevit.py
 src/transformers/models/nezha/configuration_nezha.py
-src/transformers/models/openai/configuration_openai.py 
+src/transformers/models/openai/configuration_openai.py
 src/transformers/models/opt/configuration_opt.py
 src/transformers/models/opt/modeling_opt.py
 src/transformers/models/opt/modeling_tf_opt.py
@@ -131,6 +134,8 @@ src/transformers/models/resnet/modeling_tf_resnet.py
 src/transformers/models/roberta/configuration_roberta.py
 src/transformers/models/roberta/modeling_roberta.py
 src/transformers/models/roberta/modeling_tf_roberta.py
+src/transformers/models/roc_bert/modeling_roc_bert.py
+src/transformers/models/roc_bert/tokenization_roc_bert.py
 src/transformers/models/segformer/modeling_segformer.py
 src/transformers/models/sew/configuration_sew.py
 src/transformers/models/sew/modeling_sew.py

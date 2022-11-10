@@ -26,7 +26,7 @@ from transformers.testing_utils import require_tf
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.generation_tf_logits_process import (
+    from transformers.generation import (
         TFForcedBOSTokenLogitsProcessor,
         TFForcedEOSTokenLogitsProcessor,
         TFForceTokensLogitsProcessor,

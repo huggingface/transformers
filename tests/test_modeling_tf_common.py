@@ -85,7 +85,7 @@ if is_tf_available():
         TFRagModel,
         TFSharedEmbeddings,
     )
-    from transformers.generation_tf_utils import (
+    from transformers.generation import (
         TFBeamSampleDecoderOnlyOutput,
         TFBeamSampleEncoderDecoderOutput,
         TFBeamSearchDecoderOnlyOutput,

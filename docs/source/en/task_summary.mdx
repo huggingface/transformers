@@ -544,7 +544,7 @@ Hugging Face is based in DUMBO, New York City, and ...
 This outputs a (hopefully) coherent next token following the original sequence, which in our case is the word *is* or
 *features*.
 
-In the next section, we show how [`generation_utils.GenerationMixin.generate`] can be used to
+In the next section, we show how [`generation.GenerationMixin.generate`] can be used to
 generate multiple tokens up to a specified length instead of one token at a time.
 
 ### Text Generation
@@ -1094,10 +1094,10 @@ The following examples demonstrate how to use a [`pipeline`] and a model and tok
 ...     images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 ... )
 >>> print("\n".join([f"Class {d['label']} with score {round(d['score'], 4)}" for d in result]))
-Class lynx, catamount with score 0.4335                                                    
+Class lynx, catamount with score 0.4335
 Class cougar, puma, catamount, mountain lion, painter, panther, Felis concolor with score 0.0348
-Class snow leopard, ounce, Panthera uncia with score 0.0324          
-Class Egyptian cat with score 0.0239                                                       
+Class snow leopard, ounce, Panthera uncia with score 0.0324
+Class Egyptian cat with score 0.0239
 Class tiger cat with score 0.0229
 ```
 

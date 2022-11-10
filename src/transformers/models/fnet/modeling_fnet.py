@@ -624,6 +624,8 @@ class FNetModel(FNetPreTrainedModel):
     FNET_START_DOCSTRING,
 )
 class FNetForPreTraining(FNetPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -716,6 +718,8 @@ class FNetForPreTraining(FNetPreTrainedModel):
 
 @add_start_docstrings("""FNet Model with a `language modeling` head on top.""", FNET_START_DOCSTRING)
 class FNetForMaskedLM(FNetPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 
