@@ -174,7 +174,7 @@ class VisionTextDualEncoderProcessorTest(unittest.TestCase):
         self.assertListEqual(decoded_tok, decoded_processor)
 
     def test_model_input_names(self):
-        feature_extractor = self.get_feature_extractor()
+        feature_extractor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
         processor = VisionTextDualEncoderProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
