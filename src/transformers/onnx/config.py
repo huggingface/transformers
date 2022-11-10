@@ -279,7 +279,7 @@ class OnnxConfig(ABC):
 
     def generate_dummy_inputs(
         self,
-        preprocessor: Union["PreTrainedTokenizerBase", "FeatureExtractionMixin"],
+        preprocessor: Union["PreTrainedTokenizerBase", "FeatureExtractionMixin", "ImageProcessingMixin"],
         batch_size: int = -1,
         seq_length: int = -1,
         num_choices: int = -1,
@@ -297,7 +297,7 @@ class OnnxConfig(ABC):
         Generate inputs to provide to the ONNX exporter for the specific framework
 
         Args:
-            preprocessor: ([`PreTrainedTokenizerBase`] or [`FeatureExtractionMixin`]):
+            preprocessor: ([`PreTrainedTokenizerBase`], [`FeatureExtractionMixin`], or [`ImageProcessingMixin`]):
                 The preprocessor associated with this model configuration.
             batch_size (`int`, *optional*, defaults to -1):
                 The batch size to export the model for (-1 means dynamic axis).
