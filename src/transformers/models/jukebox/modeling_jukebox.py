@@ -426,14 +426,11 @@ class JukeboxBottleneckBlock(nn.Module):
             self.codebook_sum = mu * self.codebook_sum + (1.0 - mu) * _codebook_sum
             self.codebook_elem = mu * self.codebook_elem + (1.0 - mu) * _codebook_elem  # nb_discrete_codes
             usage = (self.codebook_elem.view(nb_discrete_codes, 1) >= self.threshold).float()
-            self.codebook = (
-                usage
-                * (
-                    self.codebook_sum.view(nb_discrete_codes, codebook_width)
-                    / self.codebook_elem.view(nb_discrete_codes, 1)
-                )
-                + (1 - usage) * _random_codebook
+
+            norm_code = self.codebook_sum.view(nb_discrete_codes, codebook_width) / self.codebook_elem.view(
+                nb_discrete_codes, 1
             )
+            self.codebook = usage * (norm_code) + (1 - usage) * _random_codebook
             _codebook_prob = _codebook_elem / torch.sum(_codebook_elem)  # prob of each bin
             entropy = -torch.sum(_codebook_prob * torch.log(_codebook_prob + 1e-8))  # entropy ie how diverse
             used_curr = (_codebook_elem >= self.threshold).sum()
@@ -1715,7 +1712,7 @@ class JukeboxRangeEmbedding(nn.Module):
         return self.emb(bins_)
 
 
-class LabelConditioner(nn.Module):
+class JukeboxLabelConditioner(nn.Module):
     def __init__(self, config, include_time_signal):
         super().__init__()
 
@@ -1836,7 +1833,7 @@ class JukeboxPrior(PreTrainedModel):
         self.level = level if level is not None else config.level
 
         self.base_model_prefix = f"priors.{self.level}"
-        self._keys_to_ignore_on_load_unexpected = ["vqvae", r"priors.[^%d]." % self.level]
+        self._keys_to_ignore_on_load_unexpected += [r"priors.[^%d]." % self.level]
 
         self.n_ctx = config.n_ctx
 
@@ -1853,7 +1850,7 @@ class JukeboxPrior(PreTrainedModel):
         # metadata conditioning : contioning on timing, genres, and artist
         self.metadata_conditioning = config.metadata_conditioning
         if self.metadata_conditioning:
-            self.metadata_embedding = LabelConditioner(config, include_time_signal=not self.audio_conditioning)
+            self.metadata_embedding = JukeboxLabelConditioner(config, include_time_signal=not self.audio_conditioning)
 
         # define encoder-decoder or encoder and decoder
         self.is_encoder_decoder = config.is_encoder_decoder
