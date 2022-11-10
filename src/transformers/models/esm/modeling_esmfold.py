@@ -2272,7 +2272,9 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         )  # B=1 x L
         mask = collate_dense_tensors([aatype.new_ones(len(seq)) for seq in lst])
         position_ids = (
-            torch.arange(aatype.shape[1], device=device).expand(len(lst), -1) if position_ids is None else position_ids.to(device)
+            torch.arange(aatype.shape[1], device=device).expand(len(lst), -1)
+            if position_ids is None
+            else position_ids.to(device)
         )
         if position_ids.ndim == 1:
             position_ids = position_ids.unsqueeze(0)
