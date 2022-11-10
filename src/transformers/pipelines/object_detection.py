@@ -100,16 +100,18 @@ class ObjectDetectionPipeline(Pipeline):
     def postprocess(self, model_outputs, threshold=0.9):
         target_size = model_outputs["target_size"]
         if self.tokenizer is not None:
-            w, h = target_size[0].tolist()
+            # This is a LayoutLMForTokenClassification variant.
+            # The OCR got the boxes and the model classified the words.
+            width, height = target_size[0].tolist()
 
             def unnormalize(bbox):
                 return self._get_bounding_box(
                     torch.Tensor(
                         [
-                            (w * bbox[0] / 1000),
-                            (h * bbox[1] / 1000),
-                            (w * bbox[2] / 1000),
-                            (w * bbox[2] / 1000),
+                            (width * bbox[0] / 1000),
+                            (height * bbox[1] / 1000),
+                            (width * bbox[2] / 1000),
+                            (height * bbox[3] / 1000),
                         ]
                     )
                 )
@@ -120,6 +122,7 @@ class ObjectDetectionPipeline(Pipeline):
             keys = ["score", "label", "box"]
             annotation = [dict(zip(keys, vals)) for vals in zip(scores.tolist(), labels, boxes) if vals[0] > threshold]
         else:
+            # This is a regular ForObjectDetectionModel
             raw_annotations = self.feature_extractor.post_process_object_detection(
                 model_outputs, threshold, target_size
             )
