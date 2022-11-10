@@ -216,13 +216,8 @@ def load_tf_weights_in_mobilenet_v2(model, config, tf_checkpoint_path):
             else:
                 array = np.transpose(array, (3, 2, 0, 1))
 
-        try:
-            assert (
-                pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
-        except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
+        if pointer.shape != array.shape:
+            raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
 
         logger.info(f"Initialize PyTorch weight {name} {array.shape}")
         pointer.data = torch.from_numpy(array)
