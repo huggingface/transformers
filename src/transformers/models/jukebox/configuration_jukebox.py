@@ -115,11 +115,11 @@ _FullDenseAttention = ["dense_attention"]
 _PrimePrimeDenseAttention = ["prime_attn", "prime_attn", "dense_attn"]
 
 
-def FullDenseAttention(layer):
+def full_dense_attention(layer):
     return _FullDenseAttention[0]
 
 
-def RawColumnPreviousRowAttention(layer):
+def raw_column_previous_row_attention(layer):
     return _RawColumnPreviousRowAttention[layer % 3]
 
 
@@ -134,8 +134,8 @@ def enc_dec_with_lyrics(layer):
 
 
 ATTENTION_PATTERNS = {
-    "FullDenseAttention": FullDenseAttention,
-    "RawColumnPreviousRowAttention": RawColumnPreviousRowAttention,  # Alternate row, column and previous row attn
+    "full_dense_attention": full_dense_attention,
+    "raw_column_previous_row_attention": raw_column_previous_row_attention,  # Alternate row, column and previous row attn
     "large_separated_enc_dec_w_lyrics": large_separated_enc_dec_w_lyrics,  # Used by large separated_enc_dec model with lyrics
     "enc_dec_with_lyrics": enc_dec_with_lyrics,  # Used by encoder_decoder model with lyrics
 }
