@@ -148,9 +148,9 @@ def convert_movilevit_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
 
     if push_to_hub:
         print("Pushing to the hub...")
-        organization_name = "Matthijs"
-        feature_extractor.push_to_hub(model_name, organization=organization_name)
-        model.push_to_hub(model_name, organization=organization_name)
+        repo_id = "Matthijs/" + model_name
+        feature_extractor.push_to_hub(repo_id)
+        model.push_to_hub(repo_id)
 
 
 if __name__ == "__main__":

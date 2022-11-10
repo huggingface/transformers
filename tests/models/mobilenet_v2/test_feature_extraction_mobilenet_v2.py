@@ -43,11 +43,12 @@ class MobileNetV2FeatureExtractionTester(unittest.TestCase):
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        size=20,
+        size=None,
         do_center_crop=True,
-        crop_size=18,
-        do_flip_channel_order=True,
+        crop_size=None,
     ):
+        size = size if size is not None else {"shortest_edge": 20}
+        crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -58,7 +59,6 @@ class MobileNetV2FeatureExtractionTester(unittest.TestCase):
         self.size = size
         self.do_center_crop = do_center_crop
         self.crop_size = crop_size
-        self.do_flip_channel_order = do_flip_channel_order
 
     def prepare_feat_extract_dict(self):
         return {
@@ -66,7 +66,6 @@ class MobileNetV2FeatureExtractionTester(unittest.TestCase):
             "size": self.size,
             "do_center_crop": self.do_center_crop,
             "crop_size": self.crop_size,
-            "do_flip_channel_order": self.do_flip_channel_order,
         }
 
 
@@ -89,7 +88,6 @@ class MobileNetV2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittes
         self.assertTrue(hasattr(feature_extractor, "size"))
         self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
         self.assertTrue(hasattr(feature_extractor, "center_crop"))
-        self.assertTrue(hasattr(feature_extractor, "do_flip_channel_order"))
 
     def test_batch_feature(self):
         pass
@@ -109,8 +107,8 @@ class MobileNetV2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittes
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -121,8 +119,8 @@ class MobileNetV2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittes
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -141,8 +139,8 @@ class MobileNetV2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittes
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -153,8 +151,8 @@ class MobileNetV2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittes
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -173,8 +171,8 @@ class MobileNetV2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittes
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -185,7 +183,7 @@ class MobileNetV2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittes
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
