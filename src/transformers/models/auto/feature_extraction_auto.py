@@ -63,6 +63,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("mobilenetv2", "MobileNetV2FeatureExtractor"),
         ("mobilevit", "MobileViTFeatureExtractor"),
         ("owlvit", "OwlViTFeatureExtractor"),
+        ("perceiver", "PerceiverFeatureExtractor"),
         ("poolformer", "PoolFormerFeatureExtractor"),
         ("regnet", "ConvNextFeatureExtractor"),
         ("resnet", "ConvNextFeatureExtractor"),
