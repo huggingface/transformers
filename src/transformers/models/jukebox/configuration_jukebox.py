@@ -240,7 +240,6 @@ class JukeboxPriorConfig(PretrainedConfig):
 
     model_type = "jukebox_prior"
     attribute_map = {
-        "hidden_size": "vqvae_codebook_dimension",
         "max_position_embeddings": "n_positions",
         "num_attention_heads": "n_head",
     }
@@ -291,7 +290,6 @@ class JukeboxPriorConfig(PretrainedConfig):
         zero_out=False,
         **kwargs
     ):
-        super().__init__()
         self.act_fn = act_fn
         self.alignment_head = alignment_head
         self.alignment_layer = alignment_layer
@@ -450,7 +448,6 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         zero_out=False,
         **kwargs
     ):
-        super().__init__()
         self.hop_fraction = hop_fraction
         self.conv_input_shape = conv_input_shape
         self.sample_length = sample_length
