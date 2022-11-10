@@ -509,7 +509,7 @@ class TFTapasModelTest(TFModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="The default test gets NaN losses with the test-generated inputs")
     def test_loss_computation(self):
         pass
-    
+
     @require_torch
     @require_scatter
     def test_pt_tf_model_equivalence(self):
