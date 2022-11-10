@@ -27,7 +27,7 @@ import requests
 from huggingface_hub import hf_hub_download
 from transformers import (
     MobileNetV2Config,
-    MobileNetV2FeatureExtractor,
+    MobileNetV2ImageProcessor,
     MobileNetV2ForImageClassification,
     MobileNetV2ForSemanticSegmentation,
     load_tf_weights_in_mobilenet_v2,
@@ -60,8 +60,8 @@ def get_mobilenet_v2_config(model_name):
         config.num_labels = 1001
         filename = "imagenet-1k-id2label.json"
 
-    repo_id = "datasets/huggingface/label-files"
-    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    repo_id = "huggingface/label-files"
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
 
     if config.num_labels == 1001:
         id2label = {int(k) + 1: v for k, v in id2label.items()}
@@ -98,8 +98,11 @@ def convert_movilevit_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     # Load weights from TensorFlow checkpoint
     load_tf_weights_in_mobilenet_v2(model, config, checkpoint_path)
 
-    # Check outputs on an image, prepared by MobileNetV2FeatureExtractor
-    feature_extractor = MobileNetV2FeatureExtractor(crop_size=config.image_size, size=config.image_size + 32)
+    # Check outputs on an image, prepared by MobileNetV2ImageProcessor
+    feature_extractor = MobileNetV2ImageProcessor(
+        crop_size={"width": config.image_size, "height": config.image_size},
+        size={"shortest_edge": config.image_size + 32 },
+    )
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     outputs = model(**encoding)
     logits = outputs.logits
