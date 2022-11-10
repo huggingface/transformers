@@ -503,7 +503,7 @@ class JukeboxConfig(PretrainedConfig):
 
 
     The downsampling and stride are used to determine downsampling of the input sequence. For example, downsampling =
-    (5,3), and strides = (2, 2) will downsample the audio by 2**5 = 32 to get the first level of codes, and 2**8 = 256
+    (5,3), and strides = (2, 2) will downsample the audio by 2^5 = 32 to get the first level of codes, and 2**8 = 256
     to get the second level codes. This is mostly true for training the top level prior and the upsamplers.
 
     Args:

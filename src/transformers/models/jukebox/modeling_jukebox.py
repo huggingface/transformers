@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Pytorch Jukebox model."""
+"""PyTorch Jukebox model."""
 
 import math
 import os
@@ -179,10 +179,10 @@ def save_temp_audio(fname, lvl, metas, aud):
     for i in list(range(aud.shape[0])):
         if metas is not None:
             artists, genres, lyrics = list(metas)[i].values()
-            path = f"{fname}/lvl_{lvl}-{artists}-{genres}-{lyrics[:5]}-{i}.wav"
+            path = f"{fname}/lvl_{lvl}-{artists}-{genres}-{lyrics[:5]}-{i}"
             np.save(path, aud[i])
         else:
-            np.save(f"{fname}/lvl_{lvl}-sample-{i}.wav", aud[i])
+            np.save(f"{fname}/lvl_{lvl}-sample-{i}", aud[i])
 
 
 def get_mask(mask, query_length, key_value_length, blocks, spread, device, sample, sample_t):
@@ -582,8 +582,8 @@ JUKEBOX_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a Pytorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular Pytorch Module and refer to the Pytorch documentation for all matter related to general usage
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
     and behavior.
 
     Parameters:
@@ -1315,7 +1315,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             metadata_conditioning (`bool`, *optional*, defaults to `False`):
                 whether or not the prior supports conditionning on artitst, genres, lyrics and timing.
             is_encoder (`bool`, *optional*, defaults to `False`):
-                _description_
+                Whether the model is an encoder only model.
         """
 
         super().__init__()
@@ -1378,7 +1378,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             )
 
         target = tokens  # Target
-        hidden_states = self.embed_tokens(tokens)  # music_tokens embedding
+        hidden_states = self.embed_tokens(tokens)
         # Shift by 1, and fill in start token
         hidden_states = torch.cat((hidden_states[:, -1:], hidden_states[:, :-1]), dim=1)
         if self.metadata_conditioning:
@@ -1992,7 +1992,6 @@ class JukeboxPrior(PreTrainedModel):
         shared, prior_embed_dim_shift shifts the music token ids by nb_vocab. Only returns the music tokens.
         """
         batch_size = tokens.shape[0]
-        # dim (nb_lyric_tokens, codebook dim = latent_dim of the model)
         dims = (self.input_shapes[0], tokens.shape[1] - self.input_shapes[0])
         tokens = list(torch.split(tokens, dims, dim=1))
 
@@ -2457,9 +2456,10 @@ class JukeboxModel(JukeboxPreTrainedModel):
         the generated raw audio at each step.
 
         Args:
-           music_tokens (`List[torch.LongTensor] of length `self.levels` ) :
-                A sequence of music tokens which will be used as context to continue the sampling process. Should have
-                `self.levels` tensors, each corresponding to the generation at a certain level.
+           music_tokens (`List[torch.LongTensor]`):
+                A sequence of music tokens of length `self.levels` which will be used as context to continue the
+                sampling process. Should have `self.levels` tensors, each corresponding to the generation at a certain
+                level.
             labels (`List[torch.LongTensor]`):
                 List of length `n_sample`, and shape `(self.levels, 4 + self.config.max_nb_genre +
                 lyric_sequence_length)` metadata such as `artist_id`, `genre_id` and the full list of lyric tokens
