@@ -15,6 +15,8 @@
 """
 Image/Text processor class for OWL-ViT
 """
+
+import warnings
 from typing import List
 
 import numpy as np
@@ -27,29 +29,51 @@ from ...tokenization_utils_base import BatchEncoding
 
 class OwlViTProcessor(ProcessorMixin):
     r"""
-    Constructs an OWL-ViT processor which wraps [`OwlViTFeatureExtractor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`]
-    into a single processor that interits both the feature extractor and tokenizer functionalities. See the
+    Constructs an OWL-ViT processor which wraps [`OwlViTImageProcessor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`]
+    into a single processor that interits both the image processor and tokenizer functionalities. See the
     [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
 
     Args:
-        feature_extractor ([`OwlViTFeatureExtractor`]):
-            The feature extractor is a required input.
+        image_processor ([`OwlViTImageProcessor`]):
+            The image processor is a required input.
         tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
             The tokenizer is a required input.
     """
-    feature_extractor_class = "OwlViTFeatureExtractor"
+    image_processor_class = "OwlViTImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+        if "feature_extractor" in kwargs:
+            warnings.warn(
+                "The `feature_extractor` argument is deprecated and will be removed in v4.27, use `image_processor`"
+                " instead.",
+                FutureWarning,
+            )
+            feature_extractor = kwargs.pop("feature_extractor")
+
+        image_processor = image_processor if image_processor is not None else feature_extractor
+        if image_processor is None:
+            raise ValueError("You have to specify an image_processor.")
+        if tokenizer is None:
+            raise ValueError("You have to specify a tokenizer.")
+        super().__init__(image_processor, tokenizer)
+
+    @property
+    def feature_extractor_class(self):
+        warnings.warn(
+            "`feature_extractor_class` is deprecated and will be removed in v4.27. Use `image_processor_class`"
+            " instead.",
+            FutureWarning,
+        )
+        return self.image_processor_class
 
     def __call__(self, text=None, images=None, query_images=None, padding="max_length", return_tensors="np", **kwargs):
         """
         Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
         `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode:
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        CLIPFeatureExtractor's [`~CLIPFeatureExtractor.__call__`] if `images` is not `None`. Please refer to the
-        doctsring of the above two methods for more information.
+        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        of the above two methods for more information.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
@@ -142,7 +166,7 @@ class OwlViTProcessor(ProcessorMixin):
             encoding["query_pixel_values"] = query_pixel_values
 
         if images is not None:
-            image_features = self.feature_extractor(images, return_tensors=return_tensors, **kwargs)
+            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
 
         if text is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values
@@ -157,10 +181,10 @@ class OwlViTProcessor(ProcessorMixin):
 
     def post_process(self, *args, **kwargs):
         """
-        This method forwards all its arguments to [`OwlViTFeatureExtractor.post_process`]. Please refer to the
-        docstring of this method for more information.
+        This method forwards all its arguments to [`OwlViTImageProcessor.post_process`]. Please refer to the docstring
+        of this method for more information.
         """
-        return self.feature_extractor.post_process(*args, **kwargs)
+        return self.image_processor.post_process(*args, **kwargs)
 
     def post_process_image_guided_detection(self, *args, **kwargs):
         """
