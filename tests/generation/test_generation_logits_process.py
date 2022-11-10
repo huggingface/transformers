@@ -28,6 +28,7 @@ if is_torch_available():
 
     from transformers.generation_logits_process import (
         EncoderNoRepeatNGramLogitsProcessor,
+        EncoderRepetitionPenaltyLogitsProcessor,
         ExponentialDecayLengthPenalty,
         ForcedBOSTokenLogitsProcessor,
         ForcedEOSTokenLogitsProcessor,
@@ -40,7 +41,6 @@ if is_torch_available():
         NoRepeatNGramLogitsProcessor,
         PrefixConstrainedLogitsProcessor,
         RepetitionPenaltyLogitsProcessor,
-        EncoderRepetitionPenaltyLogitsProcessor,
         TemperatureLogitsWarper,
         TopKLogitsWarper,
         TopPLogitsWarper,
