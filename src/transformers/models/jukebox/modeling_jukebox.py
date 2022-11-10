@@ -50,7 +50,7 @@ def filter_logits(logits, top_k=0, top_p=0.0, filter_value=-float("Inf")):
         top_k (`int`, *optional*, defaults to 0):
             When `top_k >0` keep only top key tokens with highest probability (top-k filtering).
         top_p (`int`, *optional*, defaults to 0):
-            When  `top_p>0.0` keep the top tokens with cumulative probability >= `top_p` (nucleus filtering).
+            When `top_p>0.0` keep the top tokens with cumulative probability >= `top_p` (nucleus filtering).
     """
     logits = logits.clone()
     top_k = min(top_k, logits.size(-1))  # Safety check
@@ -1248,8 +1248,8 @@ class JukeboxLayerStack(nn.Module):
 
         Args:
             record_attn (`Union[bool,set]`):
-                Either a set of layer indices indicating which layers to store,
-                or a boolean value indicating Whether to dump all.
+                Either a set of layer indices indicating which layers to store, or a boolean value indicating Whether
+                to dump all.
         """
 
         def _should_record_attn(layer_idx):
@@ -1302,8 +1302,8 @@ class JukeboxConditionalAutoregressive(nn.Module):
         is_encoder=False,
     ):
         """
-        Autoregressive model on either lyric tokens or music tokens, or both. The attention pattern
-        should be properly set fro each configuration.
+        Autoregressive model on either lyric tokens or music tokens, or both. The attention pattern should be properly
+        set fro each configuration.
 
         Args:
             config (`JukeboxPriorConfig`):
@@ -1669,14 +1669,12 @@ class JukeboxMusicTokenConditioner(nn.Module):
 
 class JukeboxRangeEmbedding(nn.Module):
     """
-    The `JukeboxRangeEmbedding` interpolate the given [pos_start, pos_end] to obtain an equivalent of
-    time positional embedding of length `n_ctx`.
+    The `JukeboxRangeEmbedding` interpolate the given [pos_start, pos_end] to obtain an equivalent of time positional
+    embedding of length `n_ctx`.
 
-    Binning process :
-    For each pos in position tensor, find its bin
-    [start,end) mapped to [0,1,...,bins-1]
-    [start,end) -> [0,1) -> [0, bins) -> floor -> [0,...,bins-1]
-    NOTE: Open ended interval on right, so start <= pos < end, not <= end
+    Binning process : For each pos in position tensor, find its bin [start,end) mapped to [0,1,...,bins-1] [start,end)
+    -> [0,1) -> [0, bins) -> floor -> [0,...,bins-1] NOTE: Open ended interval on right, so start <= pos < end, not <=
+    end
     """
 
     def __init__(self, n_time, embed_dim, range, out_width, clamp=False):
@@ -1995,7 +1993,8 @@ class JukeboxPrior(PreTrainedModel):
     def prior_postprocess(self, tokens):
         """
         Shifts back the input tokens if the model uses an encoder decoder architecture. As the embedding layer is
-        shared, `prior_embed_dim_shift` shifts the music token ids by `lyric_vocab_size`. Only returns the music tokens.
+        shared, `prior_embed_dim_shift` shifts the music token ids by `lyric_vocab_size`. Only returns the music
+        tokens.
         """
         batch_size = tokens.shape[0]
         dims = (self.input_shapes[0], tokens.shape[1] - self.input_shapes[0])
@@ -2557,7 +2556,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 self.vqvae.to(music_tokens[level].device)
                 # Decode sample
                 with torch.no_grad():
-                    start_level = len(self.priors) - level - 1  #  vqvae levels are reversed
+                    start_level = len(self.priors) - level - 1  # vqvae levels are reversed
                     raw_audio = self.vqvae.decode(
                         music_tokens[: level + 1], start_level=start_level, bs_chunks=music_tokens[level].shape[0]
                     )
