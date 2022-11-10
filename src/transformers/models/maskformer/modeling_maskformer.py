@@ -1378,16 +1378,21 @@ class MaskFormerPixelLevelModule(nn.Module):
             self.encoder = MaskFormerSwinBackbone(config.backbone_config)
         elif config.backbone_config.model_type == "resnet":
             self.encoder = MaskFormerResNetBackbone(config.backbone_config)
+
+        input_shape = self.encoder.output_shape()
+        feature_channels = [v.channels for k, v in input_shape.items()]
+
         self.decoder = MaskFormerPixelDecoder(
-            in_features=self.encoder.outputs_shapes[-1],
+            in_features=feature_channels[-1],
             feature_size=config.fpn_feature_size,
             mask_feature_size=config.mask_feature_size,
-            lateral_widths=self.encoder.outputs_shapes[:-1],
+            lateral_widths=feature_channels[:-1],
         )
 
     def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> MaskFormerPixelLevelModuleOutput:
-        features: List[Tensor] = self.encoder(pixel_values)
-        decoder_output: MaskFormerPixelDecoderOutput = self.decoder(features, output_hidden_states)
+        features = self.encoder(pixel_values)
+        decoder_output = self.decoder(features, output_hidden_states)
+
         return MaskFormerPixelLevelModuleOutput(
             # the last feature is actually the output from the last layer
             encoder_last_hidden_state=features[-1],
@@ -1534,7 +1539,7 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         super().__init__(config)
         self.pixel_level_module = MaskFormerPixelLevelModule(config)
         self.transformer_module = MaskFormerTransformerModule(
-            in_features=self.pixel_level_module.encoder.outputs_shapes[-1], config=config
+            in_features=self.pixel_level_module.encoder.output_shape()["res5"].channels, config=config
         )
 
         self.post_init()

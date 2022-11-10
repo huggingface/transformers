@@ -20,7 +20,6 @@ from transformers import CONFIG_MAPPING
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto.configuration_auto import AutoConfig
 from ..detr import DetrConfig
 from ..swin import SwinConfig
 

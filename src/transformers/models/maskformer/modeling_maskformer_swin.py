@@ -816,8 +816,29 @@ class MaskFormerSwinBackbone(Backbone):
 
     def __init__(self, config: SwinConfig):
         super().__init__()
+        num_features = [int(config.embed_dim * 2**i) for i in range(config.num_layers)]
+        print("Number of features: ", num_features)
+        self.num_features = num_features
+
+        # TODO we might need to make this configurable
+        # perhaps define MaskFormerSwinConfig?
+        self.out_features = ["res2", "res3", "res4", "res5"]
+
+        self.out_feature_strides = {
+            "res2": 4,
+            "res3": 8,
+            "res4": 16,
+            "res5": 32,
+        }
+        self.out_feature_channels = {
+            "res2": self.num_features[0],
+            "res3": self.num_features[1],
+            "res4": self.num_features[2],
+            "res5": self.num_features[3],
+        }
+
         self.model = MaskFormerSwinModel(config)
-        self.hidden_states_norms = nn.ModuleList([nn.LayerNorm(out_shape) for out_shape in self.outputs_shapes])
+        self.hidden_states_norms = nn.ModuleList([nn.LayerNorm(x.channels) for x in self.output_shape().values()])
 
     def forward(self, *args, **kwargs) -> List[Tensor]:
         output = self.model(*args, **kwargs, output_hidden_states=True)
@@ -839,22 +860,29 @@ class MaskFormerSwinBackbone(Backbone):
                 hidden_state_norm.permute(0, 2, 1).view((batch_size, hidden_size, height, width)).contiguous()
             )
             hidden_states_permuted.append(hidden_state_permuted)
+
+        for i in hidden_states_permuted:
+            print(i.shape)
+
         return hidden_states_permuted
 
-    @property
-    def input_resolutions(self) -> List[int]:
-        return [layer.input_resolution for layer in self.model.encoder.layers]
+    # @property
+    # def input_resolutions(self) -> List[int]:
+    #     return [layer.input_resolution for layer in self.model.encoder.layers]
 
-    @property
-    def outputs_shapes(self) -> List[int]:
-        return [layer.dim for layer in self.model.encoder.layers]
+    # @property
+    # def outputs_shapes(self) -> List[int]:
+    #     print("Output shapes",  [layer.dim for layer in self.model.encoder.layers])
+    #     return [layer.dim for layer in self.model.encoder.layers]
 
     def output_shape(self):
+        """A dictionary that maps feature map names to their shapes (number of channels + stride)."""
+
         return {
-            name: ShapeSpec(channels=self._out_feature_channels[name], stride=self._out_feature_strides[name])
-            for name in self._out_features
+            name: ShapeSpec(channels=self.out_feature_channels[name], stride=self.out_feature_strides[name])
+            for name in self.out_features
         }
 
-    @property
-    def size_divisibility(self):
-        return 32
+    # @property
+    # def size_divisibility(self):
+    #     return 32
