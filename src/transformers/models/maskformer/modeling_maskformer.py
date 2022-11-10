@@ -33,7 +33,6 @@ from ...modeling_utils import ModuleUtilsMixin, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_scipy_available,
@@ -2357,13 +2356,7 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(MASKFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MaskFormerModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-    )
+    @replace_return_docstrings(output_type=MaskFormerModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Tensor,
@@ -2372,6 +2365,33 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> MaskFormerModelOutput:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import MaskFormerFeatureExtractor, MaskFormerModel
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
+        >>> feature_extractor = MaskFormerFeatureExtractor.from_pretrained("facebook/maskformer-swin-base-ade")
+        >>> model = MaskFormerModel.from_pretrained("facebook/maskformer-swin-base-ade")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = feature_extractor(image, return_tensors="pt")
+
+        >>> # forward pass
+        >>> outputs = model(**inputs)
+
+        >>> # the decoder of MaskFormer outputs hidden states of shape (batch_size, num_queries, hidden_size)
+        >>> transformer_decoder_last_hidden_state = outputs.transformer_decoder_last_hidden_state
+        >>> list(transformer_decoder_last_hidden_state.shape)
+        [1, 100, 256]
+        ```"""
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -2531,17 +2551,23 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
 
         Examples:
 
+        Semantic segmentation example:
+
         ```python
         >>> from transformers import MaskFormerFeatureExtractor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
         >>> import requests
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
         >>> feature_extractor = MaskFormerFeatureExtractor.from_pretrained("facebook/maskformer-swin-base-ade")
+        >>> model = MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-ade")
+
+        >>> url = (
+        ...     "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
+        ... )
+        >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
 
-        >>> model = MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-ade")
         >>> outputs = model(**inputs)
         >>> # model predicts class_queries_logits of shape `(batch_size, num_queries)`
         >>> # and masks_queries_logits of shape `(batch_size, num_queries, height, width)`
@@ -2549,9 +2575,43 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         >>> masks_queries_logits = outputs.masks_queries_logits
 
         >>> # you can pass them to feature_extractor for postprocessing
-        >>> output = feature_extractor.post_process_semantic_segmentation(outputs)
-        >>> output = feature_extractor.post_process_instance_segmentation(outputs)
-        >>> output = feature_extractor.post_process_panoptic_segmentation(outputs)
+        >>> predicted_semantic_map = feature_extractor.post_process_semantic_segmentation(
+        ...     outputs, target_sizes=[image.size[::-1]]
+        ... )[0]
+
+        >>> # we refer to the demo notebooks for visualization (see "Resources" section in the MaskFormer docs)
+        >>> list(predicted_semantic_map.shape)
+        [512, 683]
+        ```
+
+        Panoptic segmentation example:
+
+        ```python
+        >>> from transformers import MaskFormerFeatureExtractor, MaskFormerForInstanceSegmentation
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> # load MaskFormer fine-tuned on COCO panoptic segmentation
+        >>> feature_extractor = MaskFormerFeatureExtractor.from_pretrained("facebook/maskformer-swin-base-coco")
+        >>> model = MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-coco")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> # model predicts class_queries_logits of shape `(batch_size, num_queries)`
+        >>> # and masks_queries_logits of shape `(batch_size, num_queries, height, width)`
+        >>> class_queries_logits = outputs.class_queries_logits
+        >>> masks_queries_logits = outputs.masks_queries_logits
+
+        >>> # you can pass them to feature_extractor for postprocessing
+        >>> result = feature_extractor.post_process_panoptic_segmentation(outputs, target_sizes=[image.size[::-1]])[0]
+
+        >>> # we refer to the demo notebooks for visualization (see "Resources" section in the MaskFormer docs)
+        >>> predicted_panoptic_map = result["segmentation"]
+        >>> list(predicted_panoptic_map.shape)
+        [480, 640]
         ```
         """
 
