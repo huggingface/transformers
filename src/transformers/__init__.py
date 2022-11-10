@@ -249,6 +249,13 @@ _import_structure = {
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
     "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
+    "models.jukebox": [
+        "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "JukeboxConfig",
+        "JukeboxPriorConfig",
+        "JukeboxTokenizer",
+        "JukeboxVQVAEConfig",
+    ],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
     "models.layoutlmv2": [
         "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1481,6 +1488,15 @@ else:
             "ImageGPTModel",
             "ImageGPTPreTrainedModel",
             "load_tf_weights_in_imagegpt",
+        ]
+    )
+    _import_structure["models.jukebox"].extend(
+        [
+            "JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "JukeboxModel",
+            "JukeboxPreTrainedModel",
+            "JukeboxVQVAE",
+            "JukeboxPrior",
         ]
     )
     _import_structure["models.layoutlm"].extend(
@@ -3353,6 +3369,13 @@ if TYPE_CHECKING:
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
+    from .models.jukebox import (
+        JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        JukeboxConfig,
+        JukeboxPriorConfig,
+        JukeboxTokenizer,
+        JukeboxVQVAEConfig,
+    )
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
     from .models.layoutlmv2 import (
         LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4358,6 +4381,13 @@ if TYPE_CHECKING:
             ImageGPTModel,
             ImageGPTPreTrainedModel,
             load_tf_weights_in_imagegpt,
+        )
+        from .models.jukebox import (
+            JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
+            JukeboxModel,
+            JukeboxPreTrainedModel,
+            JukeboxPrior,
+            JukeboxVQVAE,
         )
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
