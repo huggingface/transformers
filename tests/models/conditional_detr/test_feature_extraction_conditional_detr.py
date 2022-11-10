@@ -49,7 +49,7 @@ class ConditionalDetrFeatureExtractionTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
         do_rescale=True,
-        rescale_factor=1/255,
+        rescale_factor=1 / 255,
         do_pad=True,
     ):
         # by setting size["longest_edge"] > max_resolution we're effectively not testing this :p

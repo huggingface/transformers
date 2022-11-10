@@ -16,14 +16,37 @@
 
 import math
 import warnings
-from typing import TYPE_CHECKING, List, Optional, Tuple, Dict, Union, Set, Iterable, Any
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
 
-from transformers.image_utils import PILImageResampling, is_batched, valid_images, ImageInput, ChannelDimension, infer_channel_dimension_format, get_image_size
-from transformers.image_processing_utils import get_size_dict, BatchFeature, BaseImageProcessor
-from transformers.image_transforms import normalize, rescale, resize, PILImageResampling, to_numpy_array, to_channel_dimension_format, get_resize_output_image_size
-from transformers.utils import is_torch_available, is_torch_tensor, IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, TensorType, logging
+from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from transformers.image_transforms import (
+    get_resize_output_image_size,
+    normalize,
+    rescale,
+    resize,
+    to_channel_dimension_format,
+    to_numpy_array,
+)
+from transformers.image_utils import (
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    get_image_size,
+    infer_channel_dimension_format,
+    is_batched,
+    valid_images,
+)
+from transformers.utils import (
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
+    TensorType,
+    is_torch_available,
+    is_torch_tensor,
+    logging,
+)
+
 
 logger = logging.get_logger(__name__)
 
@@ -35,7 +58,6 @@ if TYPE_CHECKING:
 if is_torch_available():
     import torch
     from torch import nn
-
 
 
 # Copied from transformers.models.detr.image_processing_detr.max_across_indices
@@ -83,9 +105,13 @@ def bottom_right_pad(
     pad_right = output_width - input_width
 
     if input_channel_dimension == ChannelDimension.FIRST:
-        padded_image = np.pad(image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=contant_values)
+        padded_image = np.pad(
+            image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=contant_values
+        )
     elif input_channel_dimension == ChannelDimension.LAST:
-        padded_image = np.pad(image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=contant_values)
+        padded_image = np.pad(
+            image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=contant_values
+        )
     else:
         raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
 
@@ -262,32 +288,68 @@ def compute_segments(
     return segmentation, segments
 
 
-def get_output_image_size(
-    input_image: np.ndarray,
+# TODO: (Amy) Move to image_transforms
+def convert_segmentation_map_to_binary_masks(
+    segmentation_map: "np.ndarray",
+    instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
+    reduce_labels: bool = False,
+):
+    # Get unique ids (class or instance ids based on input)
+    all_labels = np.unique(segmentation_map)
+
+    # Drop background label if applicable
+    if reduce_labels:
+        all_labels = all_labels[all_labels != 0]
+
+    # Generate a binary mask for each object instance
+    binary_masks = [np.ma.masked_where(segmentation_map == i, segmentation_map) for i in all_labels]
+    binary_masks = np.stack(binary_masks, axis=0)  # (num_labels, height, width)
+
+    # Convert instance ids to class ids
+    if instance_id_to_semantic_id is not None:
+        labels = np.zeros(all_labels.shape[0])
+
+        for label in all_labels:
+            class_id = instance_id_to_semantic_id[label]
+            labels[all_labels == label] = class_id
+    else:
+        labels = all_labels
+
+    # Decrement labels by 1
+    if reduce_labels:
+        labels -= 1
+
+    return binary_masks.astype(np.float32), labels.astype(np.int64)
+
+
+def get_maskformer_resize_output_image_size(
+    image: np.ndarray,
     size: Union[int, Tuple[int, int], List[int], Tuple[int]],
-    default_to_square: bool = True,
     max_size: Optional[int] = None,
     size_divisor: int = 0,
+    default_to_square: bool = True,
 ) -> tuple:
     """
     Computes the output size given the desired size.
 
     Args:
-        input_image (:obj:`np.ndarray`):
+        input_image (`np.ndarray`):
             The input image.
-        size (:obj:`int`, :obj:`Tuple[int, int]`, :obj:`List[int]`, :obj:`Tuple[int]`):
+        size (`int`, `Tuple[int, int]`, `List[int]`, `Tuple[int]`):
             The size of the output image.
-        default_to_square (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        default_to_square (`bool`, *optional*, defaults to `True`):
             Whether to default to square if no size is provided.
-        max_size (:obj:`int`, `optional`):
+        max_size (`int`, *optional*):
             The maximum size of the output image.
-        size_divisible (:obj:`int`, `optional`, defaults to :obj:`0`):
+        size_divisible (`int`, *optional*, defaults to `0`):
             If size_divisible is given, the output image size will be divisible by the number.
 
     Returns:
-        :obj:`Tuple[int, int]`: The output size.
+        `Tuple[int, int]`: The output size.
     """
-    output_size = get_resize_output_image_size(input_image=input_image, size=size, default_to_square=default_to_square, max_size=max_size)
+    output_size = get_resize_output_image_size(
+        input_image=image, size=size, default_to_square=default_to_square, max_size=max_size
+    )
 
     if size_divisor > 0:
         height, width = output_size
@@ -300,11 +362,11 @@ def get_output_image_size(
 
 class MaskFormerImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a MaskFormer image processor. The image processor can be used to prepare image(s) and optional
-    targets for the model.
+    Constructs a MaskFormer image processor. The image processor can be used to prepare image(s) and optional targets
+    for the model.
 
-    This image processor inherits from [`BaseImageProcessor`] which contains most of the main methods. Users
-    should refer to this superclass for more information regarding those methods.
+    This image processor inherits from [`BaseImageProcessor`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -322,7 +384,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
             `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
             to `True`.
-        size_divisibility (`int`, *optional*, defaults to 32):
+        size_divisor (`int`, *optional*, defaults to 32):
             Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
             Swin Transformer.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -336,8 +398,6 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         image_std (`int`, *optional*, defaults to `[0.229, 0.224, 0.225]`):
             The sequence of standard deviations for each channel, to be used when normalizing images. Defaults to the
             ImageNet std.
-        do_pad: (`bool`, *optional*, defaults to `True`):
-            Whether or not to pad the input to have a size divisible by `size_divisibility`.
         ignore_index (`int`, *optional*):
             Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
             denoted with 0 (background) will be replaced with `ignore_index`.
@@ -368,12 +428,14 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         if "size_divisibility" in kwargs:
             warnings.warn(
                 "The `size_divisibility` argument is deprecated and will be removed in v4.27. Please use "
-                "`size_divisibility` instead.", FutureWarning
+                "`size_divisibility` instead.",
+                FutureWarning,
             )
             size_divisor = kwargs.pop("size_divisibility")
         if "max_size" in kwargs:
             warnings.warn(
-                "The `max_size` argument is deprecated and will be removed in v4.27. Please use size['longest_edge'] instead.",
+                "The `max_size` argument is deprecated and will be removed in v4.27. Please use size['longest_edge']"
+                " instead.",
                 FutureWarning,
             )
             # We make max_size a private attribute so we can pass it as a default value in the preprocess method whilst
@@ -402,14 +464,16 @@ class MaskFormerImageProcessor(BaseImageProcessor):
     def size_divisibility(self):
         warnings.warn(
             "The `size_divisibility` property is deprecated and will be removed in v4.27. Please use "
-            "`size_divisor` instead.", FutureWarning
+            "`size_divisor` instead.",
+            FutureWarning,
         )
         return self.size_divisor
 
     @property
     def max_size(self):
         warnings.warn(
-            "The `max_size` property is deprecated and will be removed in v4.27. Please use size['longest_edge'] instead.",
+            "The `max_size` property is deprecated and will be removed in v4.27. Please use size['longest_edge']"
+            " instead.",
             FutureWarning,
         )
         return self.size["longest_edge"]
@@ -439,29 +503,142 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
         if "shortest_edge" not in size or "longest_edge" not in size:
             raise ValueError(f"Size must contain 'shortest_edge' and 'longest_edge' keys. Got {size.keys()}.")
-        size = get_output_image_size(image, size["shortest_edge"], size["longest_edge"])
+        size = get_maskformer_resize_output_image_size(
+            image=image,
+            size=size["shortest_edge"],
+            max_size=size["longest_edge"],
+            size_divisor=size_divisor,
+            default_to_square=False,
+        )
         image = resize(image, size=size, resample=resample, data_format=data_format)
         return image
 
-    def rescale(self, image: np.ndarray, rescale_factor: float) -> np.ndarray:
+    def rescale(
+        self, image: np.ndarray, rescale_factor: float, data_format: Optional[ChannelDimension] = None
+    ) -> np.ndarray:
         """
         Rescale the image by the given factor.
         """
-        return rescale_factor(image, rescale_factor)
+        return rescale(image, rescale_factor, data_format=data_format)
 
     def normalize(
-        self, image: np.ndarray, mean: Union[float, Iterable[float]], std: Union[float, Iterable[float]]
+        self,
+        image: np.ndarray,
+        mean: Union[float, Iterable[float]],
+        std: Union[float, Iterable[float]],
+        data_format: Optional[ChannelDimension] = None,
     ) -> np.ndarray:
         """
         Normalize the image with the given mean and standard deviation.
         """
-        return normalize(image, mean=mean, std=std)
+        return normalize(image, mean=mean, std=std, data_format=data_format)
+
+    def convert_segmentation_map_to_binary_masks(
+        self,
+        segmentation_map: "np.ndarray",
+        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
+        reduce_labels: bool = None,
+    ):
+        reduce_labels = reduce_labels if reduce_labels is not None else self.reduce_labels
+        return convert_segmentation_map_to_binary_masks(
+            segmentation_map=segmentation_map,
+            instance_id_to_semantic_id=instance_id_to_semantic_id,
+            reduce_labels=reduce_labels,
+        )
+
+    def __call__(self, images, segmentation_maps=None, **kwargs) -> BatchFeature:
+        return self.preprocess(images, segmentation_maps=segmentation_maps, **kwargs)
+
+    def _preprocess(
+        self,
+        image: ImageInput,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        size_divisor: int = None,
+        resample: PILImageResampling = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+    ):
+        if do_resize:
+            image = self.resize(image, size=size, size_divisor=size_divisor, resample=resample)
+        if do_rescale:
+            image = self.rescale(image, rescale_factor=rescale_factor)
+        if do_normalize:
+            image = self.normalize(image, mean=image_mean, std=image_std)
+        return image
+
+    def _preprocess_image(
+        self,
+        image: ImageInput,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        size_divisor: int = None,
+        resample: PILImageResampling = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.ndarray:
+        """Preprocesses a single image."""
+        # All transformations expect numpy arrays.
+        image = to_numpy_array(image)
+        image = self._preprocess(
+            image=image,
+            do_resize=do_resize,
+            size=size,
+            size_divisor=size_divisor,
+            resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+        )
+        if data_format is not None:
+            image = to_channel_dimension_format(image, data_format)
+        return image
+
+    def _preprocess_mask(
+        self,
+        segmentation_map: ImageInput,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        size_divisor: int = 0,
+    ) -> np.ndarray:
+        """Preprocesses a single mask."""
+        segmentation_map = to_numpy_array(segmentation_map)
+        # Add channel dimension if missing - needed for certain transformations
+        added_channel_dim = False
+        if segmentation_map.ndim == 2:
+            added_channel_dim = True
+            segmentation_map = segmentation_map[None, ...]
+        # TODO: (Amy)
+        # Remork segmentation map processing to include reducing labels and resizing which doesn't
+        # drop segment IDs > 255.
+        segmentation_map = self._preprocess(
+            image=segmentation_map,
+            do_resize=do_resize,
+            resample=PILImageResampling.NEAREST,
+            size=size,
+            size_divisor=size_divisor,
+            do_rescale=False,
+            do_normalize=False,
+        )
+        # Remove extra channel dimension if added for processing
+        if added_channel_dim:
+            segmentation_map = segmentation_map.squeeze(0)
+        return segmentation_map
 
     def preprocess(
         self,
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
-        instance_id_to_semantic_id: Optional[Dict[int, int]] = None, # FIXME
+        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,  # FIXME
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         size_divisor: Optional[int] = None,
@@ -478,7 +655,10 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
-            warnings.warn("The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version", FutureWarning,)
+            warnings.warn(
+                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version",
+                FutureWarning,
+            )
 
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -508,7 +688,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if not valid_images(segmentation_maps):
+        if segmentation_maps is not None and not valid_images(segmentation_maps):
             raise ValueError(
                 "Invalid segmentation map type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
@@ -518,33 +698,39 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             images = [images]
             segmentation_maps = [segmentation_maps] if segmentation_maps is not None else None
 
-
         if segmentation_maps is not None and len(images) != len(segmentation_maps):
             raise ValueError("Images and segmentation maps must have the same length.")
 
-        images = [to_numpy_array(image) for image in images]
+        images = [
+            self._preprocess_image(
+                image,
+                do_resize=do_resize,
+                size=size,
+                size_divisor=size_divisor,
+                resample=resample,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+                data_format=data_format,
+            )
+            for image in images
+        ]
+
         if segmentation_maps is not None:
-            segmentation_maps = [to_numpy_array(segmentation_map) for segmentation_map in segmentation_maps]
-
-        if do_resize:
-            images = self.resize(images, size, size_divisor, resample)
-            if segmentation_maps is not None:
-                # TODO: (Amy) add resize for segmentation maps which doesn't remove segment ids > 255
-                segmentation_maps = self.resize(segmentation_maps, size, size_divisor, PILImageResampling.NEAREST)
-
-        if do_rescale:
-            images = [self.rescale(image, rescale_factor) for image in images]
-
-        if do_normalize:
-            images = [self.normalize(image, image_mean, image_std) for image in images]
-
-        images = [to_channel_dimension_format(image, data_format) for image in images]
-        encoded_inputs = self.encode_inputs(images, segmentation_maps, ignore_index, instance_id_to_semantic_id, return_tensors)
+            segmentation_maps = [
+                self._preprocess_mask(segmentation_map, do_resize, size, size_divisor)
+                for segmentation_map in segmentation_maps
+            ]
+        encoded_inputs = self.encode_inputs(
+            images, segmentation_maps, ignore_index, instance_id_to_semantic_id, return_tensors
+        )
         return encoded_inputs
 
     def encode_inputs(
         self,
-        pixel_values_list: List["np.ndarray"],
+        pixel_values_list: List[ImageInput],
         segmentation_maps: ImageInput = None,
         ignore_index: Optional[int] = None,
         instance_id_to_semantic_id: Optional[Union[List[Dict[int, int]], Dict[int, int]]] = None,
@@ -561,11 +747,11 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         each mask.
 
         Args:
-            pixel_values_list (`List[torch.Tensor]`):
+            pixel_values_list (`List[ImageInput]`):
                 List of images (pixel values) to be padded. Each image should be a tensor of shape `(channels, height,
                 width)`.
 
-            segmentation_maps (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
+            segmentation_maps (`ImageInput`, *optional*):
                 The corresponding semantic segmentation maps with the pixel-wise annotations.
 
              (`bool`, *optional*, defaults to `True`):
@@ -590,8 +776,8 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **pixel_values** -- Pixel values to be fed to a model.
-            - **pixel_mask** -- Pixel mask to be fed to a model (when `=True` or if
-              `pixel_mask` is in `self.model_input_names`).
+            - **pixel_mask** -- Pixel mask to be fed to a model (when `=True` or if `pixel_mask` is in
+              `self.model_input_names`).
             - **mask_labels** -- Optional list of mask labels of shape `(labels, height, width)` to be fed to a model
               (when `annotations` are provided).
             - **class_labels** -- Optional list of class labels of shape `(labels)` to be fed to a model (when
@@ -601,7 +787,11 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         ignore_index = self.ignore_index if ignore_index is None else ignore_index
 
         if "pad_and_return_pixel_mask" in kwargs:
-            warnings.warn("The `pad_and_return_pixel_mask` argument has no effect and will be removed in v4.27", FutureWarning)
+            warnings.warn(
+                "The `pad_and_return_pixel_mask` argument has no effect and will be removed in v4.27", FutureWarning
+            )
+
+        pixel_values_list = [to_numpy_array(pixel_values) for pixel_values in pixel_values_list]
 
         pad_size = get_pad_size(pixel_values_list)
         pixel_values = [bottom_right_pad(image=image, output_size=pad_size) for image in pixel_values_list]
@@ -621,9 +811,15 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 else:
                     instance_id = instance_id_to_semantic_id
                 # Use instance2class_id mapping per image
-                mask, classes = self.convert_segmentation_map_to_binary_masks(segmentation_map, instance_id)
-                mask = bottom_right_pad(image=mask, output_size=pad_size, contant_values=ignore_index)
-                mask_labels.append(torch.from_numpy(mask))
+                masks, classes = self.convert_segmentation_map_to_binary_masks(segmentation_map, instance_id)
+                # We add an axis to make them compatible with the transformations library
+                # this will be removed in the future
+                masks = [mask[None, ...] for mask in masks]
+                masks = [
+                    bottom_right_pad(image=mask, output_size=pad_size, contant_values=ignore_index) for mask in masks
+                ]
+                masks = np.concatenate(masks, axis=0)
+                mask_labels.append(torch.from_numpy(masks))
                 class_labels.append(torch.from_numpy(classes))
 
             # we cannot batch them since they don't share a common class size
@@ -631,54 +827,6 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             encoded_inputs["class_labels"] = class_labels
 
         return encoded_inputs
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     def post_process_segmentation(
         self, outputs: "MaskFormerForInstanceSegmentationOutput", target_size: Tuple[int, int] = None

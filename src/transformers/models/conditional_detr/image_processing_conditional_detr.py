@@ -236,9 +236,13 @@ def bottom_right_pad(
     pad_right = output_width - input_width
 
     if input_channel_dimension == ChannelDimension.FIRST:
-        padded_image = np.pad(image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=contant_values)
+        padded_image = np.pad(
+            image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=contant_values
+        )
     elif input_channel_dimension == ChannelDimension.LAST:
-        padded_image = np.pad(image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=contant_values)
+        padded_image = np.pad(
+            image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=contant_values
+        )
     else:
         raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
 
@@ -1020,7 +1024,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         if "shortest_edge" in size or "longest_edge" in size:
             size = get_resize_output_image_size(image, size["shortest_edge"], size["longest_edge"], defaultdict=False)
         elif "height" in size or "width" in size:
-            size = (size["width"], size["height"]) # FIXME
+            size = (size["width"], size["height"])  # FIXME
         else:
             raise ValueError(f"Size must contain 'shortest_edge' and 'longest_edge' keys. Got {size.keys()}.")
 
@@ -1057,13 +1061,15 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image or batch of images to preprocess.
             annotations (`List[Dict]` or `List[List[Dict]]`, *optional*):
-                List of annotations associated with the image or batch of images.
-                If annotionation is for object detection, the annotations should be a dictionary with the following keys:
+                List of annotations associated with the image or batch of images. If annotionation is for object
+                detection, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
-                - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a dictionary. An image can have no annotations, in which case the list should be empty.
+                - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
+                  dictionary. An image can have no annotations, in which case the list should be empty.
                 If annotionation is for segmentation, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
-                - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary. An image can have no segments, in which case the list should be empty.
+                - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
+                  An image can have no segments, in which case the list should be empty.
                 - "file_name" (`str`): The file name of the image.
             return_segmentation_masks (`bool`, *optional*, defaults to self.return_segmentation_masks):
                 Whether to return segmentation masks.

@@ -100,9 +100,13 @@ def bottom_right_pad(
     pad_right = output_width - input_width
 
     if input_channel_dimension == ChannelDimension.FIRST:
-        padded_image = np.pad(image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=contant_values)
+        padded_image = np.pad(
+            image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=contant_values
+        )
     elif input_channel_dimension == ChannelDimension.LAST:
-        padded_image = np.pad(image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=contant_values)
+        padded_image = np.pad(
+            image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=contant_values
+        )
     else:
         raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
 
@@ -999,7 +1003,7 @@ class YolosImageProcessor(BaseImageProcessor):
         output_size: Tuple[int, int] = None,
         input_channel_dimension: Optional[ChannelDimension] = None,
         data_format: Optional[ChannelDimension] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None, # FIXME - write custom pad function
+        return_tensors: Optional[Union[str, TensorType]] = None,  # FIXME - write custom pad function
     ) -> np.ndarray:
         """
         Args:
@@ -1020,12 +1024,17 @@ class YolosImageProcessor(BaseImageProcessor):
         # Keep `pad_and_create_pixel_mask` for now
         # output_size = output_size or self.size
         output_size = get_pad_size(images)
-        images = [bottom_right_pad(
-            image, output_size=output_size, input_channel_dimension=input_channel_dimension, data_format=data_format
-        ) for image in images]
+        images = [
+            bottom_right_pad(
+                image,
+                output_size=output_size,
+                input_channel_dimension=input_channel_dimension,
+                data_format=data_format,
+            )
+            for image in images
+        ]
         # return BatchFeature({"pixel_values": images}, tensor_type=return_tensors)
         return images
-
 
     def pad(
         self,
@@ -1034,7 +1043,7 @@ class YolosImageProcessor(BaseImageProcessor):
         output_size: Tuple[int, int] = None,
         input_channel_dimension: Optional[ChannelDimension] = None,
         data_format: Optional[ChannelDimension] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None, # FIXME - write custom pad function
+        return_tensors: Optional[Union[str, TensorType]] = None,  # FIXME - write custom pad function
     ) -> np.ndarray:
         """
         Args:
@@ -1086,13 +1095,15 @@ class YolosImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image or batch of images to preprocess.
             annotations (`List[Dict]` or `List[List[Dict]]`, *optional*):
-                List of annotations associated with the image or batch of images.
-                If annotionation is for object detection, the annotations should be a dictionary with the following keys:
+                List of annotations associated with the image or batch of images. If annotionation is for object
+                detection, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
-                - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a dictionary. An image can have no annotations, in which case the list should be empty.
+                - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
+                  dictionary. An image can have no annotations, in which case the list should be empty.
                 If annotionation is for segmentation, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
-                - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary. An image can have no segments, in which case the list should be empty.
+                - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
+                  An image can have no segments, in which case the list should be empty.
                 - "file_name" (`str`): The file name of the image.
             return_segmentation_masks (`bool`, *optional*, defaults to self.return_segmentation_masks):
                 Whether to return segmentation masks.

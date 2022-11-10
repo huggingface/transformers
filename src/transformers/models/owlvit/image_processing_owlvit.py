@@ -14,13 +14,23 @@
 # limitations under the License.
 """Image processor class for OwlViT"""
 
+from typing import Dict, List, Optional, Union
+
 import numpy as np
 
-from typing import Optional, Union, Dict, List
-from transformers.utils import is_torch_available, logging, TensorType
-from transformers.image_transforms import center_to_corners_format, resize, center_crop, rescale, normalize, to_numpy_array, to_channel_dimension_format
-from transformers.image_processing_utils import BaseImageProcessor, get_size_dict, BatchFeature
-from transformers.image_utils import PILImageResampling, is_batched, valid_images, ChannelDimension, ImageInput
+from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from transformers.image_transforms import (
+    center_crop,
+    center_to_corners_format,
+    normalize,
+    rescale,
+    resize,
+    to_channel_dimension_format,
+    to_numpy_array,
+)
+from transformers.image_utils import ChannelDimension, ImageInput, PILImageResampling, is_batched, valid_images
+from transformers.utils import TensorType, is_torch_available, logging
+
 
 if is_torch_available():
     import torch
@@ -76,7 +86,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         do_center_crop=False,
         crop_size=None,
         do_rescale=True,
-        rescale_factor=1/255,
+        rescale_factor=1 / 255,
         do_normalize=True,
         image_mean=None,
         image_std=None,
@@ -107,7 +117,14 @@ class OwlViTImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else [0.48145466, 0.4578275, 0.40821073]
         self.image_std = image_std if image_std is not None else [0.26862954, 0.26130258, 0.27577711]
 
-    def resize(self, image: np.ndarray, size: Dict[str, int], resample: PILImageResampling.BICUBIC, data_format: Union[str, ChannelDimension], **kwargs) -> np.ndarray:
+    def resize(
+        self,
+        image: np.ndarray,
+        size: Dict[str, int],
+        resample: PILImageResampling.BICUBIC,
+        data_format: Union[str, ChannelDimension],
+        **kwargs
+    ) -> np.ndarray:
         """
         Resize an image to a certain size.
         """
@@ -117,7 +134,9 @@ class OwlViTImageProcessor(BaseImageProcessor):
 
         return resize(image, (size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs)
 
-    def center_crop(self, image: np.ndarray, crop_size: Dict[str, int], data_format: Union[str, ChannelDimension], **kwargs) -> np.ndarray:
+    def center_crop(
+        self, image: np.ndarray, crop_size: Dict[str, int], data_format: Union[str, ChannelDimension], **kwargs
+    ) -> np.ndarray:
         """
         Center crop an image to a certain size.
         """
@@ -166,23 +185,27 @@ class OwlViTImageProcessor(BaseImageProcessor):
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
                 The size to resize the input to. Only has an effect if `do_resize` is set to `True`.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                The resampling filter to use when resizing the input. Only has an effect if `do_resize` is set to `True`.
+                The resampling filter to use when resizing the input. Only has an effect if `do_resize` is set to
+                `True`.
             do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
                 Whether or not to center crop the input. If `True`, will center crop the input to the size specified by
                 `crop_size`.
             crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
                 The size to center crop the input to. Only has an effect if `do_center_crop` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether or not to rescale the input. If `True`, will rescale the input by dividing it by `rescale_factor`.
+                Whether or not to rescale the input. If `True`, will rescale the input by dividing it by
+                `rescale_factor`.
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
                 The factor to rescale the input by. Only has an effect if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether or not to normalize the input. If `True`, will normalize the input by subtracting `image_mean` and
-                dividing by `image_std`.
+                Whether or not to normalize the input. If `True`, will normalize the input by subtracting `image_mean`
+                and dividing by `image_std`.
             image_mean (`Union[float, List[float]]`, *optional*, defaults to `self.image_mean`):
-                The mean to subtract from the input when normalizing. Only has an effect if `do_normalize` is set to `True`.
+                The mean to subtract from the input when normalizing. Only has an effect if `do_normalize` is set to
+                `True`.
             image_std (`Union[float, List[float]]`, *optional*, defaults to `self.image_std`):
-                The standard deviation to divide the input by when normalizing. Only has an effect if `do_normalize` is set to `True`.
+                The standard deviation to divide the input by when normalizing. Only has an effect if `do_normalize` is
+                set to `True`.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
