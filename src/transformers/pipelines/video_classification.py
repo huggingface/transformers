@@ -2,7 +2,7 @@ from typing import List, Union
 
 from ..utils import (
     add_end_docstrings,
-    is_tf_available,
+    is_decord_available,
     is_torch_available,
     is_vision_available,
     logging,
@@ -11,20 +11,12 @@ from ..utils import (
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
-def is_decord_available():
-    try:
-        import decord
-
-        return True
-    except ImportError:
-        return False
-
 if is_decord_available():
     from decord import VideoReader, cpu
 
 if is_vision_available():
-    from PIL import Image
     import numpy as np
+    from PIL import Image
 
 
 if is_torch_available():
