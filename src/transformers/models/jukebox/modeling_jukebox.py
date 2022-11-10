@@ -2312,8 +2312,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
     def set_shared_params(self, model_config):
         """
-        Initialises the parameters that are shared. This has to be done here because the list of PiroConfig is nest,
-        and is thus unreachable in the `from_dict` function
+        Initialises the parameters that are shared. This has to be done here because the list of `JukeboxPriorConfig`
+        is nest, and is thus unreachable in the `from_dict` function
         """
         for config in model_config.prior_configs:
             config.sampling_rate = model_config.sampling_rate
@@ -2456,7 +2456,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         the generated raw audio at each step.
 
         Args:
-           music_tokens (`List[torch.LongTensor]`):
+            music_tokens (`List[torch.LongTensor]`):
                 A sequence of music tokens of length `self.levels` which will be used as context to continue the
                 sampling process. Should have `self.levels` tensors, each corresponding to the generation at a certain
                 level.
@@ -2509,13 +2509,14 @@ class JukeboxModel(JukeboxPreTrainedModel):
         >>> labels = tokenizer(**metas)["input_ids"]
         >>> set_seed(0)
         >>> zs = [torch.zeros(1, 0, dtype=torch.long) for _ in range(3)]
-        >>> zs = model._sample(zs, labels, [2], sample_length=40 * model.priors[-1].raw_to_tokens, save_results=False)
-        >>> zs[-1]
+        >>> zs = model._sample(zs, labels, [0], sample_length=40 * model.priors[0].raw_to_tokens, save_results=False)
+        >>> zs[0]
         tensor([[1853, 1369, 1150, 1869, 1379, 1789,  519,  710, 1306, 1100, 1229,  519,
               353, 1306, 1379, 1053,  519,  653, 1631, 1467, 1229, 1229,   10, 1647,
              1254, 1229, 1306, 1528, 1789,  216, 1631, 1434,  653,  475, 1150, 1528,
              1804,  541, 1804, 1434]])
-        ```"""
+        ```
+        """
 
         top_prior = self.priors[0]
         if sample_length is not None:
@@ -2604,9 +2605,10 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
         >>> with torch.no_grad():
         ...     model.decode(music_tokens)[:, :10].squeeze(-1)
-        tensor([[-0.0003, -0.0012,  0.0009,  0.0012,  0.0018,  0.0003, -0.0015, -0.0020,
-                 -0.0013,  0.0010]])
-        ```"""
+        tensor([[-0.0219, -0.0679, -0.1050, -0.1203, -0.1271, -0.0936, -0.0396, -0.0405,
+            -0.0818, -0.0697]])
+        ```
+        """
 
         sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors))))
         music_tokens = [
