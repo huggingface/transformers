@@ -532,6 +532,7 @@ _import_structure = {
         "add_start_docstrings",
         "is_apex_available",
         "is_datasets_available",
+        "is_decord_available",
         "is_faiss_available",
         "is_flax_available",
         "is_keras_nlp_available",
