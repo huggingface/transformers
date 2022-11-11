@@ -32,7 +32,6 @@ from .utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_flax_available,
-    is_scatter_available,
     is_sentencepiece_available,
     is_speech_available,
     is_tensorflow_text_available,

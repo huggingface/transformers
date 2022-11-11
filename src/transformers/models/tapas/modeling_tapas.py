@@ -23,7 +23,6 @@ from typing import Optional, Tuple
 
 import torch
 
-# torch.autograd.set_detect_anomaly(True)
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss

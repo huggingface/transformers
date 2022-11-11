@@ -145,6 +145,7 @@ except importlib_metadata.PackageNotFoundError:
     except importlib_metadata.PackageNotFoundError:
         _faiss_available = False
 
+
 _ftfy_available = importlib.util.find_spec("ftfy") is not None
 try:
     _ftfy_version = importlib_metadata.version("ftfy")
@@ -176,20 +177,13 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _tf2onnx_available = False
 
+
 _onnx_available = importlib.util.find_spec("onnxruntime") is not None
 try:
     _onxx_version = importlib_metadata.version("onnx")
     logger.debug(f"Successfully imported onnx version {_onxx_version}")
 except importlib_metadata.PackageNotFoundError:
     _onnx_available = False
-
-
-_scatter_available = importlib.util.find_spec("torch_scatter") is not None
-try:
-    _scatter_version = importlib_metadata.version("torch_scatter")
-    logger.debug(f"Successfully imported torch-scatter version {_scatter_version}")
-except importlib_metadata.PackageNotFoundError:
-    _scatter_available = False
 
 
 _pytorch_quantization_available = importlib.util.find_spec("pytorch_quantization") is not None
@@ -584,10 +578,6 @@ def is_in_notebook():
         return False
 
 
-def is_scatter_available():
-    return _scatter_available
-
-
 def is_pytorch_quantization_available():
     return _pytorch_quantization_available
 
@@ -826,13 +816,6 @@ installation section: https://github.com/rspeer/python-ftfy/tree/master#installi
 that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
-
-# docstyle-ignore
-SCATTER_IMPORT_ERROR = """
-{0} requires the torch-scatter library but it was not found in your environment. You can install it with pip as
-explained here: https://github.com/rusty1s/pytorch_scatter. Please note that you may need to restart your runtime after installation.
-"""
-
 # docstyle-ignore
 PYTORCH_QUANTIZATION_IMPORT_ERROR = """
 {0} requires the pytorch-quantization library but it was not found in your environment. You can install it with pip:
@@ -941,7 +924,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("sacremoses", (is_sacremoses_available, SACREMOSES_IMPORT_ERROR)),
-        ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
         ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
