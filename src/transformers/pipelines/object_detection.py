@@ -102,7 +102,7 @@ class ObjectDetectionPipeline(Pipeline):
         if self.tokenizer is not None:
             # This is a LayoutLMForTokenClassification variant.
             # The OCR got the boxes and the model classified the words.
-            width, height = target_size[0].tolist()
+            height, width = target_size[0].tolist()
 
             def unnormalize(bbox):
                 return self._get_bounding_box(
