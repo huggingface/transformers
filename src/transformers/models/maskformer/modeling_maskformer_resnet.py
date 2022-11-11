@@ -188,18 +188,18 @@ class MaskFormerResNetStage(nn.Module):
         return hidden_state
 
 
+# Copied from transformers.models.resnet.modeling_resnet.ResNetEncoder with ResNetStage->MaskFormerResNetStage
 class MaskFormerResNetEncoder(nn.Module):
     def __init__(self, config: ResNetConfig):
         super().__init__()
         self.stages = nn.ModuleList([])
         # based on `downsample_in_first_stage` the first layer of the first stage may or may not downsample the input
-        self.stride = (2 if config.downsample_in_first_stage else 1,)
         self.stages.append(
             MaskFormerResNetStage(
                 config,
                 config.embedding_size,
                 config.hidden_sizes[0],
-                stride=self.stride,
+                stride=2 if config.downsample_in_first_stage else 1,
                 depth=config.depths[0],
             )
         )
@@ -350,6 +350,4 @@ class MaskFormerResNetBackbone(Backbone):
             name: ShapeSpec(channels=self.out_feature_channels[name], stride=self.out_feature_strides[name])
             for name in self.out_features
         }
-        for k, v in output_shape.items():
-            print(k, v.channels, v.stride)
         return output_shape

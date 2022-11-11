@@ -23,7 +23,7 @@ import torch
 from PIL import Image
 
 import requests
-from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
+from transformers import MaskFormerConfig, MaskFormerFeatureExtractor, MaskFormerForInstanceSegmentation, ResNetConfig
 from transformers.utils import logging
 
 
@@ -39,13 +39,6 @@ def get_maskformer_config(model_name: str):
     config.num_labels = 150
 
     return config
-
-
-# def rename_key(name: str) -> str:
-#     # stem
-#     if "stem.conv1.weight" in name:
-#         name = name.replace("stem.conv1.weight", "embedder.embedder.convolution.weight")
-#     return name
 
 
 def create_rename_keys(config):
@@ -269,9 +262,6 @@ def convert_maskformer_checkpoint(
     for key, value in state_dict.items():
         state_dict[key] = torch.from_numpy(value)
 
-    # for name, param in state_dict.items():
-    #     print(name, param.shape)
-
     # load 🤗 model
     model = MaskFormerForInstanceSegmentation(config)
     model.eval()
@@ -279,16 +269,20 @@ def convert_maskformer_checkpoint(
     for name, param in model.named_parameters():
         print(name, param.shape)
 
-    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    print("Missing keys:", missing_keys)
-    print("Unexpected keys:")
-    for key in unexpected_keys:
-        if "running" not in key:
-            print(key)
+    model.load_state_dict(state_dict)
 
-    # TODO assert values
-    # assert torch.allclose(logits[0, :3, :3], expected_slice_logits, atol=1e-4)
-    # assert torch.allclose(pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4)
+    # verify results
+    image = prepare_img()
+    feature_extractor = MaskFormerFeatureExtractor(ignore_index=255, reduce_labels=True)
+
+    inputs = feature_extractor(image, return_tensors="pt")
+
+    outputs = model(**inputs)
+    expected_logits = torch.tensor([[ 6.7710, -0.1452, -3.5687],
+        [ 1.9165, -1.0010, -1.8614],
+        [ 3.6209, -0.2950, -1.3813]])
+    assert torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_logits, atol=1e-4)
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
