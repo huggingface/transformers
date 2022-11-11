@@ -20,7 +20,6 @@ import logging
 import os
 import socket
 
-import git
 import numpy as np
 import torch
 
