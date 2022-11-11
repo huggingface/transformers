@@ -259,7 +259,8 @@ def main():
         special_tok_ids[tok_name] = tokenizer.all_special_ids[idx]
     logger.info(f"Special tokens {special_tok_ids}")
     args.special_tok_ids = special_tok_ids
-    args.max_model_input_size = tokenizer.max_model_input_sizes[args.teacher_name]
+    if args.teacher_name in tokenizer.max_model_input_sizes:
+        args.max_model_input_size = min(args.max_model_input_size, tokenizer.max_model_input_sizes[args.teacher_name])
 
     # DATA LOADER #
     logger.info(f"Loading data from {args.data_file}")
@@ -311,7 +312,13 @@ def main():
     # SANITY CHECKS #
     assert student.config.vocab_size == teacher.config.vocab_size
     assert student.config.hidden_size == teacher.config.hidden_size
-    assert student.config.max_position_embeddings == teacher.config.max_position_embeddings
+    student_max_position_embeddings = 0
+    teacher_max_position_embeddings = 0
+    try:
+        student_max_position_embeddings = student.config.max_position_embeddings
+        teacher_max_position_embeddings = teacher.config.max_position_embeddings
+    finally:
+        assert student_max_position_embeddings == teacher_max_position_embeddings
     if args.mlm:
         assert token_probs.size(0) == stu_architecture_config.vocab_size
 
