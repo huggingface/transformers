@@ -429,7 +429,7 @@ class ResNetBackbone(Backbone):
     """
 
     def __init__(self, config: ResNetConfig):
-        super().__init__()
+        super().__init__(config)
 
         self.model = ResNetModel(config)
 

@@ -5,6 +5,8 @@ from typing import Dict, Optional
 
 import torch.nn as nn
 
+from .modeling_utils import PreTrainedModel
+
 
 @dataclass
 class ShapeSpec:
@@ -19,16 +21,10 @@ class ShapeSpec:
     stride: Optional[int] = None
 
 
-class Backbone(nn.Module, metaclass=ABCMeta):
+class Backbone(PreTrainedModel):
     """
     Abstract base class for network backbones.
     """
-
-    def __init__(self):
-        """
-        The `__init__` method of any subclass can specify its own set of arguments.
-        """
-        super().__init__()
 
     @abstractmethod
     def forward(self):
