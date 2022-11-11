@@ -1027,12 +1027,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
-        logger.warning(
-            "`return_base_image_embeds` is deprecated and will be removed in v4.27 of Transformers, one can "
-            " obtain the base (unprojected) image embeddings from outputs.vision_model_output.",
-            FutureWarning,
-        )
-
         # Use OWL-ViT model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1075,6 +1069,11 @@ class OwlViTModel(OwlViTPreTrainedModel):
             loss = owlvit_loss(logits_per_text)
 
         if return_base_image_embeds:
+            logger.warning(
+                "`return_base_image_embeds` is deprecated and will be removed in v4.27 of Transformers, one can "
+                " obtain the base (unprojected) image embeddings from outputs.vision_model_output.",
+                FutureWarning,
+            )
             last_hidden_state = vision_outputs[0]
             image_embeds = self.vision_model.post_layernorm(last_hidden_state)
 
