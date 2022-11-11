@@ -15,6 +15,7 @@
 """ PyTorch OWL-ViT model."""
 
 
+import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
 
@@ -1069,7 +1070,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
             loss = owlvit_loss(logits_per_text)
 
         if return_base_image_embeds:
-            logger.warning(
+            warnings.warn(
                 "`return_base_image_embeds` is deprecated and will be removed in v4.27 of Transformers, one can "
                 " obtain the base (unprojected) image embeddings from outputs.vision_model_output.",
                 FutureWarning,
