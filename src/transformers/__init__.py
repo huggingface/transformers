@@ -43,7 +43,6 @@ from .utils import (
     logging,
 )
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
@@ -725,7 +724,7 @@ else:
     _import_structure["models.conditional_detr"].append("ConditionalDetrFeatureExtractor")
     _import_structure["models.donut"].append("DonutFeatureExtractor")
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
-    _import_structure["models.fan"].extend(["FANFeatureExtractor"])
+    _import_structure["models.fan"].append("FANFeatureExtractor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaProcessor", "FlavaImageProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])

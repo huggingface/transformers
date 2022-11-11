@@ -32,6 +32,7 @@ original_feature_mapping = {
     "dropout_ratio": "decoder_dropout",
     "depth": "num_hidden_layers",
     "in_channels": "segmentation_in_channels",
+    "in_chans": "num_channels",
 }
 
 # TODO: FANConfig Attributes rewrite
@@ -59,20 +60,21 @@ class FANConfig(PretrainedConfig):
         se_mlp (`bool`, defaults to False):
             Wheter or not to use Squeeze-Excite in the FANEncoder layers MLP.
         mlp_ratio (`float`, defaults to 4.0):
-            Expand factor used in MLP blocks.
+            Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
+            encoder blocks.
         num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
         qkv_bias (`bool`, defaults to True):
             Whether or not to use bias in Query, Key and Value in attention layers.
-        depths (tuple(int)):
-            Number of blocks at each stage, when using hybrid backbone (ConvNeXt).
+        depths (`List[int]`, *optional*, defaults to None):
+            The number of layers in each encoder block, only applicable when using hybrid backbone (ConvNeXt).
         eta (`float` defatults to 1.0):
             Weight Initialization value for channel importance.
         use_pos_embed ( `bool`, defaults to True):
             Wheter or not to use positional_encoding in the embeddings.
-        img_size (tuple(int), defaults to (224,224)):
+        img_size (`List[int]`, defaults to (224,224)):
             The size of the images being passed to the model.
-        in_chans (int, defaults to 3):
+        num_channels (int, defaults to 3):
             Number of channels the input image has.
         num_classes (int, defaults to 1000):
             Number of classes used to predict, used for ImageClassification and  SemanticSegmentation tasks.
@@ -120,9 +122,6 @@ class FANConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
         Example:
 
     ```python
@@ -150,8 +149,8 @@ class FANConfig(PretrainedConfig):
         tokens_norm=True,  # HASCOMMENTS
         se_mlp=False,  # HASCOMMENTS
         initializer_range=1.0,  # HASCOMMENTS
-        img_size=(224, 224),  # HASCOMMENTS
-        in_chans=3,  # HASCOMMENTS
+        img_size=[224, 224],  # HASCOMMENTS
+        num_channels=3,  # HASCOMMENTS
         num_classes=1000,  # HASCOMMENTS
         backbone=None,  # HASCOMMENTS
         use_checkpoint=False,  # TODO: Rename for HF Consistency
@@ -189,7 +188,7 @@ class FANConfig(PretrainedConfig):
         self.se_mlp = se_mlp
         self.initializer_range = initializer_range
         self.img_size = img_size
-        self.in_chans = in_chans
+        self.num_channels = num_channels
         self.num_classes = num_classes
         self.backbone = backbone
         self.use_checkpoint = use_checkpoint

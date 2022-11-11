@@ -54,7 +54,6 @@ from ...utils import (
 )
 from .configuration_fan import FANConfig
 
-
 if is_timm_available():
     from timm.models.layers import trunc_normal_
 
@@ -1316,7 +1315,7 @@ class FANEmbeddings(FANPreTrainedModel):
             self.patch_embed = ConvPatchEmbed(
                 img_size=img_size,
                 patch_size=config.patch_size,
-                in_chans=config.in_chans,
+                in_chans=config.num_channels,
                 embed_dim=config.embed_dim,
                 act_layer=act_layer,
             )

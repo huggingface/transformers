@@ -17,8 +17,11 @@
 
 import unittest
 
+from PIL import Image
+
 from transformers import FANConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -26,21 +29,26 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor,
 if is_torch_available():
     import torch
 
-    from transformers import FANForImageClassification, FANForSemanticSegmentation, FANModel
+    from transformers import (
+        DeiTFeatureExtractor,
+        FANFeatureExtractor,
+        FANForImageClassification,
+        FANForSemanticSegmentation,
+        FANModel,
+    )
     from transformers.models.fan.modeling_fan import FAN_PRETRAINED_MODEL_ARCHIVE_LIST
 
-
+# Copied and adapted from transformers.tests.models.deit.test_modeling_deit.py
 class FANModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
-        seq_length=7,
+        batch_size=4,
+        image_size=224,
+        patch_size=16,
+        num_channels=3,
         is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=True,
         use_labels=True,
-        vocab_size=99,
         hidden_size=32,
         num_hidden_layers=5,
         num_attention_heads=4,
@@ -48,22 +56,19 @@ class FANModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
+        type_sequence_label_size=10,
         initializer_range=0.02,
         num_labels=3,
-        num_choices=4,
         scope=None,
+        encoder_stride=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.seq_length = seq_length
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
         self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
-        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -71,40 +76,31 @@ class FANModelTester:
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
         self.scope = scope
+        self.encoder_stride = encoder_stride
+
+        # in DeiT, the seq length equals the number of patches + 2 (we add 2 for the [CLS] and distilation tokens)
+        num_patches = (image_size // patch_size) ** 2
+        self.seq_length = num_patches + 2
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
+        labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
+            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return config, pixel_values, labels
 
     def get_config(self):
         return FANConfig(
-            vocab_size=self.vocab_size,
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+            num_channels=self.num_channels,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -112,38 +108,17 @@ class FANModelTester:
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            encoder_stride=self.encoder_stride,
         )
 
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        config.is_decoder = True
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
+    def create_and_check_model(self, config, pixel_values, labels):
+        model = FANModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -156,50 +131,32 @@ class FANModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_model_as_decoder(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.add_cross_attention = True
-        model = FANModel(config)
+    def create_and_check_for_image_classification(self, config, pixel_values, labels):
+        config.num_labels = self.type_sequence_label_size
+        model = FANForImageClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-        )
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            encoder_hidden_states=encoder_hidden_states,
-        )
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        result = model(pixel_values, labels=labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+
+        # test greyscale images
+        config.num_channels = 1
+        model = FANForImageClassification(config)
+        model.to(torch_device)
+        model.eval()
+
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        result = model(pixel_values, labels=labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
+            pixel_values,
+            labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
 
@@ -210,7 +167,7 @@ class FANModelTest(ModelTesterMixin, unittest.TestCase):
         (
             FANModel,
             FANForImageClassification,
-            FANForSemanticSegmentation,
+            # FANForSemanticSegmentation,
         )
         if is_torch_available()
         else ()
@@ -221,7 +178,7 @@ class FANModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FANModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FANConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=FANConfig, hidden_size=37, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -230,68 +187,46 @@ class FANModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_as_decoder(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
-
-    def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        ) = self.model_tester.prepare_config_and_inputs_for_decoder()
-
-        input_mask = None
-
-        self.model_tester.create_and_check_model_as_decoder(
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in FAN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = FANModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    def test_for_image_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+
+
+# We will verify our results on an image of cute cats
+# Copied from transformers.tests.models.deit.test_modeling_deit.py
+def prepare_img():
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    return image
+
 
 @require_torch
 class FANModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_feature_extractor(self):
+        return FANFeatureExtractor() if is_vision_available() else None
+
     @slow
-    def test_inference_masked_lm(self):
-        model = FANForMaskedLM.from_pretrained("nvidia/fan")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
+    def test_inference_image_classification_head(self):
+        IMG_CLF_PATH = "ksmcg/fan_base_18_p16_224"
+        model = FANForImageClassification.from_pretrained(IMG_CLF_PATH)
+        feature_extractor = self.default_feature_extractor
+        image = prepare_img()
+        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
 
-        # TODO Replace vocab size
-        vocab_size = 32000
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
 
-        expected_shape = torch.Size((1, 6, vocab_size))
-        self.assertEqual(output.shape, expected_shape)
+        # verify the logits
+        expected_shape = torch.Size((1, 1000))
+        self.assertEqual(outputs.logits.shape, expected_shape)
 
-        # TODO Replace values below with what was printed above.
-        expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
-        )
+        expected_slice = torch.tensor([-1.0266, 0.1912, -1.2861]).to(torch_device)
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
