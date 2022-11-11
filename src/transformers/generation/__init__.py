@@ -160,6 +160,7 @@ if TYPE_CHECKING:
         from .beam_search import BeamHypotheses, BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
         from .logits_process import (
             EncoderNoRepeatNGramLogitsProcessor,
+            EncoderRepetitionPenaltyLogitsProcessor,
             ExponentialDecayLengthPenalty,
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
