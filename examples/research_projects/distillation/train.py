@@ -319,11 +319,13 @@ def main():
     # SANITY CHECKS #
     assert student.config.vocab_size == teacher.config.vocab_size
     assert student.config.hidden_size == teacher.config.hidden_size
-    student_max_position_embeddings = 0
-    teacher_max_position_embeddings = 0
     try:
         student_max_position_embeddings = student.config.max_position_embeddings
         teacher_max_position_embeddings = teacher.config.max_position_embeddings
+    except:
+        logger.info("Could not compare max_position_embeddings.")
+        student_max_position_embeddings = 0
+        teacher_max_position_embeddings = 0
     finally:
         assert student_max_position_embeddings == teacher_max_position_embeddings
     if args.mlm:
