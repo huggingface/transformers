@@ -3251,6 +3251,20 @@ class MaskFormerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MaskFormerSwinModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MaskFormerSwinPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MBartForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -4434,6 +4448,13 @@ def load_tf_weights_in_rembert(*args, **kwargs):
 
 
 RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class ResNetBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class ResNetForImageClassification(metaclass=DummyObject):

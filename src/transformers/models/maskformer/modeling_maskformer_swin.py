@@ -26,7 +26,7 @@ from torch import Tensor, nn
 from ...activations import ACT2FN
 from ...backbone import Backbone, ShapeSpec
 from ...file_utils import ModelOutput
-from ...modeling_utils import ModuleUtilsMixin
+from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ..swin import SwinConfig
 
@@ -723,9 +723,39 @@ class MaskFormerSwinEncoder(nn.Module):
         )
 
 
-class MaskFormerSwinModel(nn.Module, ModuleUtilsMixin):
+# TODO: add Copied from here, taking into account config
+class MaskFormerSwinPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = SwinConfig
+    base_model_prefix = "swin"
+    main_input_name = "pixel_values"
+    supports_gradient_checkpointing = True
+
+    # Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel._init_weights
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, MaskFormerSwinEncoder):
+            module.gradient_checkpointing = value
+
+
+class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.num_layers = len(config.depths)
         self.num_features = int(config.embed_dim * 2 ** (self.num_layers - 1))
@@ -807,7 +837,7 @@ class MaskFormerSwinModel(nn.Module, ModuleUtilsMixin):
 class MaskFormerSwinBackbone(Backbone):
     """
     This class uses [`MaskFormerSwinModel`] to reshape its `hidden_states` from (`batch_size, sequence_length,
-    hidden_size)` to (`batch_size, num_channels, height, width)`).
+    hidden_size)` to (`batch_size, num_channels, height, width)`). It also adds additional layernorms to each stage.
 
     Args:
         config (`SwinConfig`):
@@ -865,15 +895,6 @@ class MaskFormerSwinBackbone(Backbone):
 
         return hidden_states_permuted
 
-    # @property
-    # def input_resolutions(self) -> List[int]:
-    #     return [layer.input_resolution for layer in self.model.encoder.layers]
-
-    # @property
-    # def outputs_shapes(self) -> List[int]:
-    #     print("Output shapes",  [layer.dim for layer in self.model.encoder.layers])
-    #     return [layer.dim for layer in self.model.encoder.layers]
-
     def output_shape(self):
         """A dictionary that maps feature map names to their shapes (number of channels + stride)."""
 
@@ -881,7 +902,3 @@ class MaskFormerSwinBackbone(Backbone):
             name: ShapeSpec(channels=self.out_feature_channels[name], stride=self.out_feature_strides[name])
             for name in self.out_features
         }
-
-    # @property
-    # def size_divisibility(self):
-    #     return 32

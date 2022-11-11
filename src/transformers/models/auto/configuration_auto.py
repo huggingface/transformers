@@ -95,6 +95,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("marian", "MarianConfig"),
         ("markuplm", "MarkupLMConfig"),
         ("maskformer", "MaskFormerConfig"),
+        ("maskformer-swin", "MaskFormerSwinConfig"),
         ("mbart", "MBartConfig"),
         ("mctct", "MCTCTConfig"),
         ("megatron-bert", "MegatronBertConfig"),
@@ -234,6 +235,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("m2m_100", "M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("markuplm", "MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("maskformer", "MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("maskformer-swin", "MASKFORMER_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mbart", "MBART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mctct", "MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("megatron-bert", "MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -378,6 +380,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("marian", "Marian"),
         ("markuplm", "MarkupLM"),
         ("maskformer", "MaskFormer"),
+        ("maskformer-swin", "MaskformerSwin"),
         ("mbart", "mBART"),
         ("mbart50", "mBART-50"),
         ("mctct", "M-CTC-T"),
@@ -470,6 +473,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("data2vec-text", "data2vec"),
         ("data2vec-vision", "data2vec"),
         ("donut-swin", "donut"),
+        ("maskformer-swin", "maskformer"),
         ("xclip", "x_clip"),
     ]
 )

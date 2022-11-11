@@ -22,7 +22,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig"],
-    "configuration_maskformer_resnet": ["MaskFormerResNetConfig"],
+    "configuration_maskformer_swin": ["MASKFORMER_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerSwinConfig"],
 }
 
 try:
@@ -46,9 +46,11 @@ else:
         "MaskFormerModel",
         "MaskFormerPreTrainedModel",
     ]
+    _import_structure["modeling_maskformer_swin"] = ["MaskFormerSwinModel", "MaskFormerSwinPreTrainedModel"]
 
 if TYPE_CHECKING:
     from .configuration_maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig
+    from .configuration_maskformer_swin import MASKFORMER_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskformerSwinConfig
 
     try:
         if not is_vision_available():
@@ -69,6 +71,7 @@ if TYPE_CHECKING:
             MaskFormerModel,
             MaskFormerPreTrainedModel,
         )
+        from .modeling_maskformer_swin import MaskFormerSwinModel, MaskFormerSwinPreTrainedModel
 
 
 else:

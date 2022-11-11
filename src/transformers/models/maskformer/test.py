@@ -18,5 +18,3 @@ config = MaskFormerConfig(backbone_config=backbone_config)
 model = MaskFormerForInstanceSegmentation(config)
 
 # Initializing using from_pretrained will load the weights from the pretrained model
-
-model = MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-rcnn-base-vg-finetuned-ade20k")

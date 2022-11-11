@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Donut Swin model. """
+""" Testing suite for the PyTorch MaskFormer Swin model. """
 
 import collections
 import inspect
 import unittest
 
-from transformers import DonutSwinConfig
+from transformers import SwinConfig
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available
 
@@ -30,11 +30,11 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import DonutSwinModel
-    from transformers.models.donut.modeling_donut_swin import DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import MaskFormerSwinModel
+    from transformers.models.swin.modeling_swin import SWIN_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
-class DonutSwinModelTester:
+class MaskFormerSwinModelTester:
     def __init__(
         self,
         parent,
@@ -99,7 +99,7 @@ class DonutSwinModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return DonutSwinConfig(
+        return SwinConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -121,7 +121,7 @@ class DonutSwinModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = DonutSwinModel(config=config)
+        model = MaskFormerSwinModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -143,18 +143,18 @@ class DonutSwinModelTester:
 
 
 @require_torch
-class DonutSwinModelTest(ModelTesterMixin, unittest.TestCase):
+class MaskFormerSwinModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (DonutSwinModel,) if is_torch_available() else ()
-    fx_compatible = True
-
+    all_model_classes = (MaskFormerSwinModel,) if is_torch_available() else ()
+    fx_compatible = False
+    test_torchscript = False
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = DonutSwinModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DonutSwinConfig, embed_dim=37)
+        self.model_tester = MaskFormerSwinModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=SwinConfig, embed_dim=37)
 
     def test_config(self):
         self.create_and_test_config_common_properties()
@@ -173,7 +173,7 @@ class DonutSwinModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_inputs_embeds(self):
-        # DonutSwin does not use inputs_embeds
+        # Swin does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):
@@ -272,7 +272,7 @@ class DonutSwinModelTest(ModelTesterMixin, unittest.TestCase):
         )
         self.assertEqual(len(hidden_states), expected_num_layers)
 
-        # DonutSwin has a different seq_length
+        # Swin has a different seq_length
         patch_size = (
             config.patch_size
             if isinstance(config.patch_size, collections.abc.Iterable)
@@ -344,11 +344,9 @@ class DonutSwinModelTest(ModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
             self.check_hidden_states_output(inputs_dict, config, model_class, (padded_height, padded_width))
 
-    @slow
+    @unittest.skip(reason="MaskFormerSwin doesn't have pretrained checkpoints")
     def test_model_from_pretrained(self):
-        for model_name in DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DonutSwinModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        pass
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

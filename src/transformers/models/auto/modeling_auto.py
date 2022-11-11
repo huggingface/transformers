@@ -94,6 +94,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("marian", "MarianModel"),
         ("markuplm", "MarkupLMModel"),
         ("maskformer", "MaskFormerModel"),
+        ("maskformer-swin", "MaskFormerSwinModel"),
         ("mbart", "MBartModel"),
         ("mctct", "MCTCTModel"),
         ("megatron-bert", "MegatronBertModel"),

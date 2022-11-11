@@ -23,7 +23,7 @@ import torch
 from PIL import Image
 
 import requests
-from transformers import MaskFormerConfig, MaskFormerFeatureExtractor, MaskFormerForInstanceSegmentation, MaskFormerResNetConfig
+from transformers import MaskFormerConfig, MaskFormerFeatureExtractor, MaskFormerForInstanceSegmentation, ResNetConfig
 from transformers.utils import logging
 
 
@@ -33,11 +33,11 @@ logger = logging.get_logger(__name__)
 
 def get_maskformer_config(model_name: str):
     if "resnet101-c" in model_name:
-        backbone_config = MaskFormerResNetConfig.from_pretrained("microsoft/resnet-101", use_deeplab_stem=True)
+        backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-101", use_deeplab_stem=True)
     elif "resnet101" in model_name:
-        backbone_config = MaskFormerResNetConfig.from_pretrained("microsoft/resnet-101")
+        backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-101", out_indices=[0, 1, 2, 3])
     else:
-        backbone_config = MaskFormerResNetConfig.from_pretrained("microsoft/resnet-50")
+        backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-50", out_indices=[0, 1, 2, 3])
     config = MaskFormerConfig(backbone_config=backbone_config)
 
     # TODO id2label mappings
@@ -49,50 +49,13 @@ def get_maskformer_config(model_name: str):
 def create_rename_keys(config):
     rename_keys = []
     # stem
-    if config.backbone_config.use_deeplab_stem:
-        rename_keys.append(("backbone.stem.conv1.weight", "model.pixel_level_module.encoder.model.embedder.conv1.weight")),
-        rename_keys.append(("backbone.stem.conv1.norm.weight", "model.pixel_level_module.encoder.model.embedder.norm1.weight")),
-        rename_keys.append(("backbone.stem.conv1.norm.bias", "model.pixel_level_module.encoder.model.embedder.norm1.bias")),
-        rename_keys.append(("backbone.stem.conv1.norm.running_mean", "model.pixel_level_module.encoder.model.embedder.norm1.running_mean")),
-        rename_keys.append(("backbone.stem.conv1.norm.running_var", "model.pixel_level_module.encoder.model.embedder.norm1.running_var")),
-        rename_keys.append(("backbone.stem.conv2.weight", "model.pixel_level_module.encoder.model.embedder.conv2.weight")),
-        rename_keys.append(("backbone.stem.conv2.norm.weight", "model.pixel_level_module.encoder.model.embedder.norm2.weight")),
-        rename_keys.append(("backbone.stem.conv2.norm.bias", "model.pixel_level_module.encoder.model.embedder.norm2.bias")),
-        rename_keys.append(("backbone.stem.conv2.norm.running_mean", "model.pixel_level_module.encoder.model.embedder.norm2.running_mean")),
-        rename_keys.append(("backbone.stem.conv2.norm.running_var", "model.pixel_level_module.encoder.model.embedder.norm2.running_var")),
-        rename_keys.append(("backbone.stem.conv3.weight", "model.pixel_level_module.encoder.model.embedder.conv3.weight")),
-        rename_keys.append(("backbone.stem.conv3.norm.weight", "model.pixel_level_module.encoder.model.embedder.norm3.weight")),
-        rename_keys.append(("backbone.stem.conv3.norm.bias", "model.pixel_level_module.encoder.model.embedder.norm3.bias")),
-        rename_keys.append(("backbone.stem.conv3.norm.running_mean", "model.pixel_level_module.encoder.model.embedder.norm3.running_mean")),
-        rename_keys.append(("backbone.stem.conv3.norm.running_var", "model.pixel_level_module.encoder.model.embedder.norm3.running_var")),
-    else:
-        rename_keys.append(
-            ("backbone.stem.conv1.weight", "model.pixel_level_module.encoder.model.embedder.embedder.convolution.weight")
-        )
-        rename_keys.append(
-            (
-                "backbone.stem.conv1.norm.weight",
-                "model.pixel_level_module.encoder.model.embedder.embedder.normalization.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                "backbone.stem.conv1.norm.bias",
-                "model.pixel_level_module.encoder.model.embedder.embedder.normalization.bias",
-            )
-        )
-        rename_keys.append(
-            (
-                "backbone.stem.conv1.norm.running_mean",
-                "model.pixel_level_module.encoder.model.embedder.embedder.normalization.running_mean",
-            )
-        )
-        rename_keys.append(
-            (
-                "backbone.stem.conv1.norm.running_var",
-                "model.pixel_level_module.encoder.model.embedder.embedder.normalization.running_var",
-            )
-        )
+    # fmt: off
+    rename_keys.append(("backbone.stem.conv1.weight", "model.pixel_level_module.encoder.model.embedder.embedder.convolution.weight"))
+    rename_keys.append(("backbone.stem.conv1.norm.weight", "model.pixel_level_module.encoder.model.embedder.embedder.normalization.weight"))
+    rename_keys.append(("backbone.stem.conv1.norm.bias", "model.pixel_level_module.encoder.model.embedder.embedder.normalization.bias"))
+    rename_keys.append(("backbone.stem.conv1.norm.running_mean", "model.pixel_level_module.encoder.model.embedder.embedder.normalization.running_mean"))
+    rename_keys.append(("backbone.stem.conv1.norm.running_var", "model.pixel_level_module.encoder.model.embedder.embedder.normalization.running_var"))
+    # fmt: on
     # stages
     for stage_idx in range(len(config.backbone_config.depths)):
         for layer_idx in range(config.backbone_config.depths[stage_idx]):

@@ -39,8 +39,8 @@ from ...utils import (
     requires_backends,
 )
 from ..detr import DetrConfig
+from ..resnet import ResNetBackbone
 from .configuration_maskformer import MaskFormerConfig
-from .modeling_maskformer_resnet import MaskFormerResNetBackbone
 from .modeling_maskformer_swin import MaskFormerSwinBackbone, MaskFormerSwinEncoder
 
 
@@ -1377,7 +1377,7 @@ class MaskFormerPixelLevelModule(nn.Module):
         if config.backbone_config.model_type == "swin":
             self.encoder = MaskFormerSwinBackbone(config.backbone_config)
         elif config.backbone_config.model_type == "resnet":
-            self.encoder = MaskFormerResNetBackbone(config.backbone_config)
+            self.encoder = ResNetBackbone(config.backbone_config)
 
         input_shape = self.encoder.output_shape()
         feature_channels = [v.channels for k, v in input_shape.items()]

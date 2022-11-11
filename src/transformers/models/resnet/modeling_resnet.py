@@ -14,7 +14,7 @@
 # limitations under the License.
 """ PyTorch ResNet model."""
 
-from typing import Optional
+from typing import List, Optional
 
 import torch
 import torch.utils.checkpoint
@@ -22,6 +22,7 @@ from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...backbone import Backbone, ShapeSpec
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
@@ -416,3 +417,63 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
             return (loss,) + output if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+
+class ResNetBackbone(Backbone):
+    """
+    This class converts [`ResNetModel`] into a generic backbone to be consumed by frameworks like DETR and MaskFormer.
+
+    Args:
+        config (`ResNetConfig`):
+            The configuration used by [`ResNetModel`].
+    """
+
+    def __init__(self, config: ResNetConfig):
+        super().__init__()
+
+        self.model = ResNetModel(config)
+
+        # TODO we might need to make this configurable
+        self.out_features = ["res2", "res3", "res4", "res5"]
+
+        # TODO calculate strides appropriately
+        current_stride = self.model.embedder.embedder.convolution.stride[0]
+        self.out_feature_strides = {
+            "stem": current_stride,
+            "res2": current_stride * 2,
+            "res3": current_stride * 2,
+            "res4": current_stride * 2,
+            "res5": current_stride * 2,
+        }
+        # for idx, feat in enumerate(self.out_features):
+        #     # current_stride *= self.model.encoder.stages[idx].layers[-1].layer[-1].convolution.stride[0]
+        #     for layer_seq in self.model.encoder.stages[idx].layers:
+        #         current_stride *= layer_seq.layer.convolution.stride[0]
+        #         # current_stride *= layer.layer[-1].convolution.stride[0]
+        #     # current_stride = int(current_stride * np.prod([layer.layer.convolution.stride for layer in self.model.encoder.stages[idx].layers]))
+        #     print("Current stride:", current_stride)
+        #     self.out_feature_strides[feat] = current_stride
+
+        self.out_feature_channels = {
+            "stem": config.embedding_size,
+            "res2": config.hidden_sizes[0],
+            "res3": config.hidden_sizes[1],
+            "res4": config.hidden_sizes[2],
+            "res5": config.hidden_sizes[3],
+        }
+
+    def forward(self, *args, **kwargs) -> List[Tensor]:
+        output = self.model(*args, **kwargs, output_hidden_states=True)
+
+        hidden_states = output.hidden_states
+
+        hidden_states = [hidden_states[i + 1] for i in [0, 1, 2, 3]]
+
+        return hidden_states
+
+    def output_shape(self):
+        output_shape = {
+            name: ShapeSpec(channels=self.out_feature_channels[name], stride=self.out_feature_strides[name])
+            for name in self.out_features
+        }
+        return output_shape

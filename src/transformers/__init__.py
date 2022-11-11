@@ -282,7 +282,7 @@ _import_structure = {
         "MarkupLMProcessor",
         "MarkupLMTokenizer",
     ],
-    "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig", "MaskFormerResNetConfig"],
+    "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig", "MaskFormerSwinConfig"],
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
     "models.mctct": ["MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCTConfig", "MCTCTProcessor"],
@@ -1593,6 +1593,8 @@ else:
             "MaskFormerForInstanceSegmentation",
             "MaskFormerModel",
             "MaskFormerPreTrainedModel",
+            "MaskFormerSwinModel",
+            "MaskFormerSwinPreTrainedModel",
         ]
     )
     _import_structure["models.markuplm"].extend(
@@ -1865,6 +1867,7 @@ else:
             "ResNetForImageClassification",
             "ResNetModel",
             "ResNetPreTrainedModel",
+            "ResNetBackbone",
         ]
     )
     _import_structure["models.retribert"].extend(
@@ -3377,7 +3380,7 @@ if TYPE_CHECKING:
         MarkupLMProcessor,
         MarkupLMTokenizer,
     )
-    from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, MaskFormerResNetConfig
+    from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, MaskformerSwinConfig
     from .models.mbart import MBartConfig
     from .models.mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig, MCTCTProcessor
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
@@ -4458,6 +4461,8 @@ if TYPE_CHECKING:
             MaskFormerForInstanceSegmentation,
             MaskFormerModel,
             MaskFormerPreTrainedModel,
+            MaskFormerSwinModel,
+            MaskFormerSwinPreTrainedModel,
         )
         from .models.mbart import (
             MBartForCausalLM,
@@ -4678,6 +4683,7 @@ if TYPE_CHECKING:
         )
         from .models.resnet import (
             RESNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ResNetBackbone,
             ResNetForImageClassification,
             ResNetModel,
             ResNetPreTrainedModel,

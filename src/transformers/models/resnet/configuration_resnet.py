@@ -58,6 +58,8 @@ class ResNetConfig(PretrainedConfig):
             are supported.
         downsample_in_first_stage (`bool`, *optional*, defaults to `False`):
             If `True`, the first stage will downsample the inputs using a `stride` of 2.
+        out_indices (`List[int]`, *optional*)
+            If used as a backbone, list of stage indices to output.
 
     Example:
     ```python
@@ -85,6 +87,7 @@ class ResNetConfig(PretrainedConfig):
         layer_type="bottleneck",
         hidden_act="relu",
         downsample_in_first_stage=False,
+        out_indices=None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -97,6 +100,7 @@ class ResNetConfig(PretrainedConfig):
         self.layer_type = layer_type
         self.hidden_act = hidden_act
         self.downsample_in_first_stage = downsample_in_first_stage
+        self.out_indices = out_indices
 
 
 class ResNetOnnxConfig(OnnxConfig):
