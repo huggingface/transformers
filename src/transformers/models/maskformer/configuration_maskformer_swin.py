@@ -23,8 +23,8 @@ logger = logging.get_logger(__name__)
 
 class MaskFormerSwinConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MaskFormerSwinModel`]. It is used to instantiate a
-    Donut model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    This is the configuration class to store the configuration of a [`MaskFormerSwinModel`]. It is used to instantiate
+    a Donut model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Swin
     [naver-clova-ix/donut-base](https://huggingface.co/naver-clova-ix/donut-base) architecture.
 

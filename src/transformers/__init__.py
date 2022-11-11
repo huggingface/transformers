@@ -1596,6 +1596,7 @@ else:
             "MaskFormerPreTrainedModel",
             "MaskFormerSwinModel",
             "MaskFormerSwinPreTrainedModel",
+            "MaskFormerSwinBackbone",
         ]
     )
     _import_structure["models.markuplm"].extend(
@@ -3915,8 +3916,8 @@ if TYPE_CHECKING:
             MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
-            AutoModel,
             AutoBackbone,
+            AutoModel,
             AutoModelForAudioClassification,
             AutoModelForAudioFrameClassification,
             AutoModelForAudioXVector,
@@ -4463,6 +4464,7 @@ if TYPE_CHECKING:
             MaskFormerForInstanceSegmentation,
             MaskFormerModel,
             MaskFormerPreTrainedModel,
+            MaskFormerSwinBackbone,
             MaskFormerSwinModel,
             MaskFormerSwinPreTrainedModel,
         )

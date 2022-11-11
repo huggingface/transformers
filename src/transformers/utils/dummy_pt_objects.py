@@ -430,6 +430,13 @@ MODEL_MAPPING = None
 MODEL_WITH_LM_HEAD_MAPPING = None
 
 
+class AutoBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class AutoModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -3245,6 +3252,13 @@ class MaskFormerModel(metaclass=DummyObject):
 
 
 class MaskFormerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MaskFormerSwinBackbone(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

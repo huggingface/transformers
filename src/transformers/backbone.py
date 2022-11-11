@@ -1,9 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
-from abc import ABCMeta, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Dict, Optional
-
-import torch.nn as nn
 
 from .modeling_utils import PreTrainedModel
 

@@ -24,6 +24,7 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
+from transformers import AutoBackbone
 from transformers.utils import logging
 
 from ...activations import ACT2FN
@@ -39,7 +40,6 @@ from ...utils import (
     requires_backends,
 )
 from ..detr import DetrConfig
-from transformers import AutoBackbone
 from .configuration_maskformer import MaskFormerConfig
 from .modeling_maskformer_swin import MaskFormerSwinEncoder
 
@@ -1374,6 +1374,7 @@ class MaskFormerPixelLevelModule(nn.Module):
                 The configuration used to instantiate this model.
         """
         super().__init__()
+        # TODD: add method to load pretrained weights of backbone
         self.encoder = AutoBackbone.from_config(config.backbone_config)
 
         # if config.backbone_config.model_type == "swin":

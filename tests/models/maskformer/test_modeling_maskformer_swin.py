@@ -19,7 +19,7 @@ import inspect
 import unittest
 
 from transformers import SwinConfig
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, torch_device
 from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
@@ -31,7 +31,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MaskFormerSwinModel
-    from transformers.models.swin.modeling_swin import SWIN_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class MaskFormerSwinModelTester:

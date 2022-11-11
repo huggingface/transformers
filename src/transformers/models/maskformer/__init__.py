@@ -46,7 +46,11 @@ else:
         "MaskFormerModel",
         "MaskFormerPreTrainedModel",
     ]
-    _import_structure["modeling_maskformer_swin"] = ["MaskFormerSwinModel", "MaskFormerSwinPreTrainedModel"]
+    _import_structure["modeling_maskformer_swin"] = [
+        "MaskFormerSwinModel",
+        "MaskFormerSwinPreTrainedModel",
+        "MaskFormerSwinBackbone",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig
@@ -71,7 +75,11 @@ if TYPE_CHECKING:
             MaskFormerModel,
             MaskFormerPreTrainedModel,
         )
-        from .modeling_maskformer_swin import MaskFormerSwinModel, MaskFormerSwinPreTrainedModel
+        from .modeling_maskformer_swin import (
+            MaskFormerSwinBackbone,
+            MaskFormerSwinModel,
+            MaskFormerSwinPreTrainedModel,
+        )
 
 
 else:

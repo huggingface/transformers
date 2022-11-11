@@ -46,6 +46,8 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "MaskFormerSwinBackbone",  # we should write separate tests for backbones
+    "ResNetBackbone",  # we should write separate tests for backbones
     "CLIPSegDecoder",  # Building part of bigger (tested) model.
     "TableTransformerEncoder",  # Building part of bigger (tested) model.
     "TableTransformerDecoder",  # Building part of bigger (tested) model.

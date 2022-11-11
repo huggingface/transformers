@@ -831,11 +831,12 @@ _MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 BACKBONE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Instance Segmentation mapping
-        ("resnet", "ResNetBackbone"),
         ("maskformer-swin", "MaskFormerSwinBackbone"),
+        ("resnet", "ResNetBackbone"),
     ]
 )
 
+BACKBONE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, BACKBONE_MAPPING_NAMES)
 MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_MAPPING_NAMES)
 MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_PRETRAINING_MAPPING_NAMES)
 MODEL_WITH_LM_HEAD_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_WITH_LM_HEAD_MAPPING_NAMES)
@@ -907,6 +908,7 @@ BACKBOONE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, BACKBONE_MAPPING_NAME
 
 class AutoBackbone(_BaseAutoModelClass):
     _model_mapping = BACKBOONE_MAPPING
+
 
 class AutoModel(_BaseAutoModelClass):
     _model_mapping = MODEL_MAPPING
