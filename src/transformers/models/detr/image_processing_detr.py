@@ -870,7 +870,7 @@ class DetrImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format=None,
+        data_format: Optional[ChannelDimension] = None,
         **kwargs
     ) -> np.ndarray:
         """
@@ -894,27 +894,27 @@ class DetrImageProcessor(BaseImageProcessor):
         return image
 
     def resize_annotation(
-        self, annotation, orig_size, size, resample: PILImageResampling = PILImageResampling.NEAREST
+        self, annotation, orig_size, size, resample: PILImageResampling = PILImageResampling.NEAREST, data_format: Optional[ChannelDimension] = None,
     ) -> Dict:
         """
         Resize the annotation to match the resized image. If size is an int, smaller edge of the mask will be matched
         to this number.
         """
-        return resize_annotation(annotation, orig_size=orig_size, target_size=size, resample=resample)
+        return resize_annotation(annotation, orig_size=orig_size, target_size=size, resample=resample, data_format=data_format)
 
-    def rescale(self, image: np.ndarray, rescale_factor: Union[float, int]) -> np.ndarray:
+    def rescale(self, image: np.ndarray, rescale_factor: Union[float, int], data_format: Optional[ChannelDimension] = None) -> np.ndarray:
         """
         Rescale the image by the given factor.
         """
-        return rescale(image, rescale_factor)
+        return rescale(image, rescale_factor, data_format=data_format)
 
     def normalize(
-        self, image: np.ndarray, mean: Union[float, Iterable[float]], std: Union[float, Iterable[float]]
+        self, image: np.ndarray, mean: Union[float, Iterable[float]], std: Union[float, Iterable[float]], data_format: Optional[ChannelDimension] = None
     ) -> np.ndarray:
         """
         Normalize the image with the given mean and standard deviation.
         """
-        return normalize(image, mean=mean, std=std)
+        return normalize(image, mean=mean, std=std, data_format=data_format)
 
     def normalize_annotation(self, annotation: Dict, image_size: Tuple[int, int]) -> Dict:
         """
@@ -964,7 +964,6 @@ class DetrImageProcessor(BaseImageProcessor):
     def pad(
         self,
         image: np.ndarray,
-        # output_size: Tuple[int, int],
         output_size: Dict[str, int],
         input_channel_dimension: Optional[ChannelDimension] = None,
         data_format: Optional[ChannelDimension] = None,
