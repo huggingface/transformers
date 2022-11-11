@@ -24,7 +24,7 @@ from transformers import DeformableDetrConfig, is_timm_available, is_vision_avai
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_timm, require_torch_gpu, require_vision, slow, torch_device
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 

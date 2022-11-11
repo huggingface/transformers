@@ -92,8 +92,8 @@ VISION_ENCODER_DECODER_START_DOCSTRING = r"""
 VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using a feature extractor (e.g. if you use ViT as the encoder,
-            you should use [`ViTFeatureExtractor`]). See [`ViTFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using an image processor (e.g. if you use ViT as the encoder,
+            you should use [`ViTImageProcessor`]). See [`ViTImageProcessor.__call__`] for details.
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -248,17 +248,17 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import VisionEncoderDecoderModel, ViTFeatureExtractor, GPT2Tokenizer
+        >>> from transformers import VisionEncoderDecoderModel, ViTImageProcessor, GPT2Tokenizer
         >>> from PIL import Image
         >>> import requests
 
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("ydshieh/vit-gpt2-coco-en")
+        >>> image_processor = ViTImageProcessor.from_pretrained("ydshieh/vit-gpt2-coco-en")
         >>> decoder_tokenizer = GPT2Tokenizer.from_pretrained("ydshieh/vit-gpt2-coco-en")
         >>> model = VisionEncoderDecoderModel.from_pretrained("ydshieh/vit-gpt2-coco-en")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> img = Image.open(requests.get(url, stream=True).raw)
-        >>> pixel_values = feature_extractor(images=img, return_tensors="pt").pixel_values  # Batch size 1
+        >>> pixel_values = image_processor(images=img, return_tensors="pt").pixel_values  # Batch size 1
 
         >>> output_ids = model.generate(
         ...     pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True
