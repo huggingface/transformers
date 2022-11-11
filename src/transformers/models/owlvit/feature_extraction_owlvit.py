@@ -56,11 +56,10 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
             The size to use for resizing the image. Only has an effect if `do_resize` is set to `True`. If `size` is a
             sequence like (h, w), output size will be matched to this. If `size` is an int, then image will be resized
             to (size, size).
-        resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BICUBIC`):
-            An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
-            `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
-            `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
-            to `True`.
+        resample (`int`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+            An optional resampling filter. This can be one of `PILImageResampling.NEAREST`, `PILImageResampling.BOX`,
+            `PILImageResampling.BILINEAR`, `PILImageResampling.HAMMING`, `PILImageResampling.BICUBIC` or
+            `PILImageResampling.LANCZOS`. Only has an effect if `do_resize` is set to `True`.
         do_center_crop (`bool`, *optional*, defaults to `False`):
             Whether to crop the input at the center. If the input size is smaller than `crop_size` along any edge, the
             image is padded with 0's and then center cropped.
