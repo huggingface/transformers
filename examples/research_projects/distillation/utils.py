@@ -15,7 +15,6 @@
 """ Utils to train DistilBERT
     adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM)
 """
-import json
 import logging
 import os
 import socket

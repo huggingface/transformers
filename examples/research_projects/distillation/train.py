@@ -322,7 +322,7 @@ def main():
     try:
         student_max_position_embeddings = student.config.max_position_embeddings
         teacher_max_position_embeddings = teacher.config.max_position_embeddings
-    except:
+    except Exception:
         logger.info("Could not compare max_position_embeddings.")
         student_max_position_embeddings = 0
         teacher_max_position_embeddings = 0
