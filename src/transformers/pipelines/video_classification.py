@@ -1,4 +1,7 @@
+from io import BytesIO
 from typing import List, Union
+
+import requests
 
 from ..utils import add_end_docstrings, is_decord_available, is_torch_available, logging, requires_backends
 from .base import PIPELINE_INIT_ARGS, Pipeline
@@ -31,10 +34,10 @@ class VideoClassificationPipeline(Pipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        requires_backends(self, "vision")
+        requires_backends(self, "decord")
         self.check_model_type(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING)
 
-        self.frame_sample_rate = kwargs.pop("frame_sample_rate", 4)
+        self.frame_sampling_rate = kwargs.pop("frame_sample_rate", 4)
         self.num_frames = self.model.config.num_frames
 
     def _sanitize_parameters(self, top_k=None):
@@ -74,13 +77,16 @@ class VideoClassificationPipeline(Pipeline):
 
     def preprocess(self, video):
 
+        if video.startswith("http://") or video.startswith("https://"):
+            video = BytesIO(requests.get(video).content)
+
         videoreader = VideoReader(video, num_threads=1, ctx=cpu(0))
         videoreader.seek(0)
 
         start_idx = 0
-        end_idx = int(self.num_frames * self.frame_sample_rate)
+        end_idx = self.num_frames * self.frame_sampling_rate - 1
         indices = np.linspace(start_idx, end_idx, num=self.num_frames)
-        indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
+        indices = np.clip(indices, start_idx, end_idx).astype(np.int64)
 
         video = videoreader.get_batch(indices).asnumpy()
         video = list(video)
