@@ -1,0 +1,225 @@
+.Dd May 18, 2004
+.\" ttx is not specific to any OS, but contrary to what groff_mdoc(7)
+.\" seems to imply, entirely omitting the .Os macro causes 'BSD' to
+.\" be used, so I give a zero-width space as its argument.
+.Os \&
+.\" The "FontTools Manual" argument apparently has no effect in
+.\" groff 1.18.1. I think it is a bug in the -mdoc groff package.
+.Dt TTX 1 "FontTools Manual"
+.Sh NAME
+.Nm ttx
+.Nd tool for manipulating TrueType and OpenType fonts
+.Sh SYNOPSIS
+.Nm
+.Bk
+.Op Ar option ...
+.Ek
+.Bk
+.Ar file ...
+.Ek
+.Sh DESCRIPTION
+.Nm
+is a tool for manipulating TrueType and OpenType fonts.  It can convert
+TrueType and OpenType fonts to and from an
+.Tn XML Ns -based format called
+.Tn TTX .
+.Tn TTX
+files have a
+.Ql .ttx
+extension.
+.Pp
+For each
+.Ar file
+argument it is given,
+.Nm
+detects whether it is a
+.Ql .ttf ,
+.Ql .otf
+or
+.Ql .ttx
+file and acts accordingly: if it is a
+.Ql .ttf
+or
+.Ql .otf
+file, it generates a
+.Ql .ttx
+file; if it is a
+.Ql .ttx
+file, it generates a
+.Ql .ttf
+or
+.Ql .otf
+file.
+.Pp
+By default, every output file is created in the same directory as the
+corresponding input file and with the same name except for the
+extension, which is substituted appropriately.
+.Nm
+never overwrites existing files; if necessary, it appends a suffix to
+the output file name before the extension, as in
+.Pa Arial#1.ttf .
+.Ss "General options"
+.Bl -tag -width ".Fl t Ar table"
+.It Fl h
+Display usage information.
+.It Fl d Ar dir
+Write the output files to directory
+.Ar dir
+instead of writing every output file to the same directory as the
+corresponding input file.
+.It Fl o Ar file
+Write the output to
+.Ar file
+instead of writing it to the same directory as the
+corresponding input file.
+.It Fl v
+Be verbose.  Write more messages to the standard output describing what
+is being done.
+.It Fl a
+Allow virtual glyphs ID's on compile or decompile.
+.El
+.Ss "Dump options"
+The following options control the process of dumping font files
+(TrueType or OpenType) to
+.Tn TTX
+files.
+.Bl -tag -width ".Fl t Ar table"
+.It Fl l
+List table information.  Instead of dumping the font to a
+.Tn TTX
+file, display minimal information about each table.
+.It Fl t Ar table
+Dump table
+.Ar table .
+This option may be given multiple times to dump several tables at
+once.  When not specified, all tables are dumped.
+.It Fl x Ar table
+Exclude table
+.Ar table
+from the list of tables to dump.  This option may be given multiple
+times to exclude several tables from the dump.  The
+.Fl t
+and
+.Fl x
+options are mutually exclusive.
+.It Fl s
+Split tables.  Dump each table to a separate
+.Tn TTX
+file and write (under the name that would have been used for the output
+file if the
+.Fl s
+option had not been given) one small
+.Tn TTX
+file containing references to the individual table dump files.  This
+file can be used as input to
+.Nm
+as long as the referenced files can be found in the same directory.
+.It Fl i
+.\" XXX: I suppose OpenType programs (exist and) are also affected.
+Don't disassemble TrueType instructions.  When this option is specified,
+all TrueType programs (glyph programs, the font program and the
+pre-program) are written to the
+.Tn TTX
+file as hexadecimal data instead of
+assembly.  This saves some time and results in smaller
+.Tn TTX
+files.
+.It Fl y Ar n
+When decompiling a TrueType Collection (TTC) file,
+decompile font number
+.Ar n ,
+starting from 0.
+.El
+.Ss "Compilation options"
+The following options control the process of compiling
+.Tn TTX
+files into font files (TrueType or OpenType):
+.Bl -tag -width ".Fl t Ar table"
+.It Fl m Ar fontfile
+Merge the input
+.Tn TTX
+file
+.Ar file
+with
+.Ar fontfile .
+No more than one
+.Ar file
+argument can be specified when this option is used.
+.It Fl b
+Don't recalculate glyph bounding boxes.  Use the values in the
+.Tn TTX
+file as is.
+.El
+.Sh "THE TTX FILE FORMAT"
+You can find some information about the
+.Tn TTX
+file format in
+.Pa documentation.html .
+In particular, you will find in that file the list of tables understood by
+.Nm
+and the relations between TrueType GlyphIDs and the glyph names used in
+.Tn TTX
+files.
+.Sh EXAMPLES
+In the following examples, all files are read from and written to the
+current directory.  Additionally, the name given for the output file
+assumes in every case that it did not exist before
+.Nm
+was invoked.
+.Pp
+Dump the TrueType font contained in
+.Pa FreeSans.ttf
+to
+.Pa FreeSans.ttx :
+.Pp
+.Dl ttx FreeSans.ttf
+.Pp
+Compile
+.Pa MyFont.ttx
+into a TrueType or OpenType font file:
+.Pp
+.Dl ttx MyFont.ttx
+.Pp
+List the tables in
+.Pa FreeSans.ttf
+along with some information:
+.Pp
+.Dl ttx -l FreeSans.ttf
+.Pp
+Dump the
+.Sq cmap
+table from
+.Pa FreeSans.ttf
+to
+.Pa FreeSans.ttx :
+.Pp
+.Dl ttx -t cmap FreeSans.ttf
+.Sh NOTES
+On MS\-Windows and MacOS,
+.Nm
+is available as a graphical application to which files can be dropped.
+.Sh SEE ALSO
+.Pa documentation.html
+.Pp
+.Xr fontforge 1 ,
+.Xr ftinfo 1 ,
+.Xr gfontview 1 ,
+.Xr xmbdfed 1 ,
+.Xr Font::TTF 3pm
+.Sh AUTHORS
+.Nm
+was written by
+.An -nosplit
+.An "Just van Rossum" Aq just@letterror.com .
+.Pp
+This manual page was written by
+.An "Florent Rougon" Aq f.rougon@free.fr
+for the Debian GNU/Linux system based on the existing FontTools
+documentation.  It may be freely used, modified and distributed without
+restrictions.
+.\" For Emacs:
+.\" Local Variables:
+.\" fill-column: 72
+.\" sentence-end: "[.?!][]\"')}]*\\($\\| $\\|   \\|  \\)[   \n]*"
+.\" sentence-end-double-space: t
+.\" End:

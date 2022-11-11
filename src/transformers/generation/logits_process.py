@@ -168,6 +168,32 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
 
 class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
+     r"""
+     [`LogitsProcessor`] enforcing an exponential penalty on tokens that are not in the original input.
+
+     Args:
+         hallucination_penalty (`float`):
+             The parameter for hallucination penalty. 1.0 means no penalty.
+     """
+
+     def __init__(self, penalty: float, encoder_input_ids: torch.LongTensor):
+         if not isinstance(penalty, float) or not (penalty > 0):
+             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
+
+         self.penalty = 1 / penalty
+         self.encoder_input_ids = encoder_input_ids
+
+     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+         score = torch.gather(scores, 1, self.encoder_input_ids)
+
+         # if score < 0 then repetition penalty has to be multiplied to reduce the previous token probability
+         score = torch.where(score < 0, score * self.penalty, score / self.penalty)
+
+         scores.scatter_(1, self.encoder_input_ids, score)
+         return scores
+
+
+class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] enforcing an exponential penalty on tokens that are not in the original input.
 

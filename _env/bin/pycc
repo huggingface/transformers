@@ -1,0 +1,3 @@
+#!/Users/karimfoda/Documents/STUDIES/PYTHON/TRANSFORMERS/_env/bin/python3
+from numba.pycc import main
+main()
