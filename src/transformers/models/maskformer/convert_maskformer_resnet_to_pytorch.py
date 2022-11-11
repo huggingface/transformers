@@ -160,6 +160,34 @@ def rename_key(dct, old, new):
     dct[new] = val
 
 
+# we split up the matrix of each encoder layer into queries, keys and values
+def read_in_decoder_q_k_v(state_dict, config):
+    # fmt: off
+    hidden_size = config.decoder_config.hidden_size
+    for idx in range(config.decoder_config.decoder_layers):
+        # read in weights + bias of self-attention input projection layer (in the original implementation, this is a single matrix + bias)
+        in_proj_weight = state_dict.pop(f"sem_seg_head.predictor.transformer.decoder.layers.{idx}.self_attn.in_proj_weight")
+        in_proj_bias = state_dict.pop(f"sem_seg_head.predictor.transformer.decoder.layers.{idx}.self_attn.in_proj_bias")
+        # next, add query, keys and values (in that order) to the state dict
+        state_dict[f"model.transformer_module.decoder.layers.{idx}.self_attn.q_proj.weight"] = in_proj_weight[: hidden_size, :]
+        state_dict[f"model.transformer_module.decoder.layers.{idx}.self_attn.q_proj.bias"] = in_proj_bias[:config.hidden_size]
+        state_dict[f"model.transformer_module.decoder.layers.{idx}.self_attn.k_proj.weight"] = in_proj_weight[hidden_size : hidden_size * 2, :]
+        state_dict[f"model.transformer_module.decoder.layers.{idx}.self_attn.k_proj.bias"] = in_proj_bias[hidden_size : hidden_size * 2]
+        state_dict[f"model.transformer_module.decoder.layers.{idx}.self_attn.v_proj.weight"] = in_proj_weight[-hidden_size :, :]
+        state_dict[f"model.transformer_module.decoder.layers.{idx}.self_attn.v_proj.bias"] = in_proj_bias[-hidden_size :]
+        # read in weights + bias of cross-attention input projection layer (in the original implementation, this is a single matrix + bias)
+        in_proj_weight = state_dict.pop(f"sem_seg_head.predictor.transformer.decoder.layers.{idx}.multihead_attn.in_proj_weight")
+        in_proj_bias = state_dict.pop(f"sem_seg_head.predictor.transformer.decoder.layers.{idx}.multihead_attn.in_proj_bias")
+        # next, add query, keys and values (in that order) to the state dict
+        state_dict[f"model.transformer_module.decoder.layers.{idx}.encoder_attn.q_proj.weight"] = in_proj_weight[: hidden_size, :]
+        state_dict[f"model.transformer_module.decoder.layers.{idx}.encoder_attn.q_proj.bias"] = in_proj_bias[:config.hidden_size]
+        state_dict[f"model.transformer_module.decoder.layers.{idx}.encoder_attn.k_proj.weight"] = in_proj_weight[hidden_size : hidden_size * 2, :]
+        state_dict[f"model.transformer_module.decoder.layers.{idx}.encoder_attn.k_proj.bias"] = in_proj_bias[hidden_size : hidden_size * 2]
+        state_dict[f"model.transformer_module.decoder.layers.{idx}.encoder_attn.v_proj.weight"] = in_proj_weight[-hidden_size :, :]
+        state_dict[f"model.transformer_module.decoder.layers.{idx}.encoder_attn.v_proj.bias"] = in_proj_bias[-hidden_size :]
+    # fmt: off
+
+
 # We will verify our results on an image of cute cats
 def prepare_img() -> torch.Tensor:
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -185,6 +213,7 @@ def convert_maskformer_checkpoint(
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
+    read_in_decoder_q_k_v(state_dict, config)
 
     # update to torch tensors
     for key, value in state_dict.items():
