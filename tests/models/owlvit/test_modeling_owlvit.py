@@ -120,7 +120,7 @@ class OwlViTVisionModelTester:
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         num_patches = (self.image_size // self.patch_size) ** 2
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
