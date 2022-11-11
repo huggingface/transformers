@@ -1,0 +1,11 @@
+{
+	"initializer_range": 0.02,
+	"layer_norm_epsilon": 0.00001,
+	"n_embd": 768,
+	"n_head": 8,
+	"n_layer": 5,
+	"n_positions": 1024,
+  "n_ctx": 1024,
+  "n_embd": 1024,
+	"vocab_size": 250880
+}

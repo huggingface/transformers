@@ -33,21 +33,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def git_log(folder_path: str):
-    """
-    Log commit info.
-    """
-    repo = git.Repo(search_parent_directories=True)
-    repo_infos = {
-        "repo_id": str(repo),
-        "repo_sha": str(repo.head.object.hexsha),
-        "repo_branch": str(repo.active_branch),
-    }
-
-    with open(os.path.join(folder_path, "git_log.json"), "w") as f:
-        json.dump(repo_infos, f, indent=4)
-
-
 def init_gpu_params(params):
     """
     Handle single and multi-GPU / multi-node.

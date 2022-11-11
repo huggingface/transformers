@@ -31,6 +31,9 @@ from transformers import (
     BertConfig,
     BertForMaskedLM,
     BertTokenizer,
+    BloomConfig,
+    BloomForCausalLM,
+    BloomTokenizerFast,
     DistilBertConfig,
     DistilBertForMaskedLM,
     DistilBertTokenizer,
@@ -41,13 +44,14 @@ from transformers import (
     RobertaForMaskedLM,
     RobertaTokenizer,
 )
-from utils import git_log, init_gpu_params, logger, set_seed
+from utils import init_gpu_params, logger, set_seed
 
 
 MODEL_CLASSES = {
     "distilbert": (DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer),
     "roberta": (RobertaConfig, RobertaForMaskedLM, RobertaTokenizer),
     "bert": (BertConfig, BertForMaskedLM, BertTokenizer),
+    "bloom": (BloomConfig, BloomForCausalLM, BloomTokenizerFast),
     "gpt2": (GPT2Config, GPT2LMHeadModel, GPT2Tokenizer),
 }
 
@@ -62,11 +66,11 @@ def sanity_checks(args):
         assert os.path.isfile(args.token_counts)
         assert (args.student_type in ["roberta", "distilbert"]) and (args.teacher_type in ["roberta", "bert"])
     else:
-        assert (args.student_type in ["gpt2"]) and (args.teacher_type in ["gpt2"])
+        assert (args.student_type in ["bloom", "gpt2"]) and (args.teacher_type in ["bloom", "gpt2"])
 
     assert args.teacher_type == args.student_type or (
         args.student_type == "distilbert" and args.teacher_type == "bert"
-    )
+    ) or (args.student_type == "gpt2" and args.teacher_type == "bloom")
     assert os.path.isfile(args.student_config)
     if args.student_pretrained_weights is not None:
         assert os.path.isfile(args.student_pretrained_weights)
@@ -111,7 +115,7 @@ def main():
     parser.add_argument(
         "--student_type",
         type=str,
-        choices=["distilbert", "roberta", "gpt2"],
+        choices=["bloom", "distilbert", "roberta", "gpt2"],
         required=True,
         help="The student type (DistilBERT, RoBERTa).",
     )
@@ -121,7 +125,7 @@ def main():
     )
 
     parser.add_argument(
-        "--teacher_type", choices=["bert", "roberta", "gpt2"], required=True, help="Teacher type (BERT, RoBERTa)."
+        "--teacher_type", choices=["bert", "bloom", "roberta", "gpt2"], required=True, help="Teacher type (BERT, RoBERTa)."
     )
     parser.add_argument("--teacher_name", type=str, required=True, help="The teacher model.")
 
@@ -218,6 +222,7 @@ def main():
 
     parser.add_argument("--log_interval", type=int, default=500, help="Tensorboard logging interval.")
     parser.add_argument("--checkpoint_interval", type=int, default=4000, help="Checkpoint interval.")
+    parser.add_argument("--max_model_input_size", type=int, default=1024, help="Maximum size of sequences used during training.")
     args = parser.parse_args()
     sanity_checks(args)
 
@@ -242,7 +247,6 @@ def main():
         logger.info(f"Param: {args}")
         with open(os.path.join(args.dump_path, "parameters.json"), "w") as f:
             json.dump(vars(args), f, indent=4)
-        git_log(args.dump_path)
 
     student_config_class, student_model_class, _ = MODEL_CLASSES[args.student_type]
     teacher_config_class, teacher_model_class, teacher_tokenizer_class = MODEL_CLASSES[args.teacher_type]

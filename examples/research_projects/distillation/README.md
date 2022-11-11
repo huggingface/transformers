@@ -113,6 +113,16 @@ python scripts/binarized_data.py \
     --dump_file data/binarized_text
 ```
 
+For user-uploaded models on the Hub, put the name in quotes. The slash will be replaced by an underscore in the filename.
+
+```bash
+python scripts/binarized_data.py \
+    --file_path data/dump.txt \
+    --tokenizer_type bloom \
+    --tokenizer_name 'bigscience/bloom-560m' \
+    --dump_file data/binarized_text
+```
+
 Our implementation of masked language modeling loss follows [XLM](https://github.com/facebookresearch/XLM)'s one and smooths the probability of masking with a factor that put more emphasis on rare words. Thus we count the occurrences of each tokens in the data:
 
 ```bash
