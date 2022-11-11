@@ -103,18 +103,26 @@ def create_rename_keys(config):
                         f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.weight",
                     )
                 )
+                rename_keys.append(
+                    (
+                        f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i+1}.norm.bias",
+                        f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.bias",
+                    )
+                )
 
     # FPN
-    rename_keys.extend(("sem_seg_head.layer_4.weight", "model.pixel_level_module.decoder.fpn.stem.0.weight"))
-    rename_keys.extend(("sem_seg_head.layer_4.norm.weight", "model.pixel_level_module.decoder.fpn.stem.1.weight"))
-    rename_keys.extend(("sem_seg_head.layer_4.norm.bias", "model.pixel_level_module.decoder.fpn.stem.1.bias"))
-    # for src_i, dst_i in zip(range(3, 0, -1), range(0, 3)):
-    #     rename_keys.extend(
-    #         (f"sem_seg_head.adapter_{src_i}", f"model.pixel_level_module.decoder.fpn.layers.{dst_i}.proj")
-    #     )
-    #     rename_keys.extend(
-    #         (f"sem_seg_head.layer_{src_i}", f"model.pixel_level_module.decoder.fpn.layers.{dst_i}.block")
-    #     )
+    # fmt: off
+    rename_keys.append(("sem_seg_head.layer_4.weight", "model.pixel_level_module.decoder.fpn.stem.0.weight"))
+    rename_keys.append(("sem_seg_head.layer_4.norm.weight", "model.pixel_level_module.decoder.fpn.stem.1.weight"))
+    rename_keys.append(("sem_seg_head.layer_4.norm.bias", "model.pixel_level_module.decoder.fpn.stem.1.bias"))
+    for source_index, target_index in zip(range(3, 0, -1), range(0, 3)):
+        rename_keys.append((f"sem_seg_head.adapter_{source_index}.weight", f"model.pixel_level_module.decoder.fpn.layers.{target_index}.proj.0.weight"))
+        rename_keys.append((f"sem_seg_head.adapter_{source_index}.norm.weight", f"model.pixel_level_module.decoder.fpn.layers.{target_index}.proj.1.weight"))
+        rename_keys.append((f"sem_seg_head.adapter_{source_index}.norm.bias", f"model.pixel_level_module.decoder.fpn.layers.{target_index}.proj.1.bias"))
+        rename_keys.append((f"sem_seg_head.layer_{source_index}.weight", f"model.pixel_level_module.decoder.fpn.layers.{target_index}.block.0.weight"))
+        rename_keys.append((f"sem_seg_head.layer_{source_index}.norm.weight", f"model.pixel_level_module.decoder.fpn.layers.{target_index}.block.1.weight"))
+        rename_keys.append((f"sem_seg_head.layer_{source_index}.norm.bias", f"model.pixel_level_module.decoder.fpn.layers.{target_index}.block.1.bias"))
+    # fmt: on
 
     return rename_keys
 
@@ -161,14 +169,14 @@ def convert_maskformer_checkpoint(
     model = MaskFormerForInstanceSegmentation(config)
     model.eval()
 
-    for name, param in model.named_parameters():
-        print(name, param.shape)
+    # for name, param in model.named_parameters():
+    #     print(name, param.shape)
 
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    # print("Unexpected keys:")
-    # for key in unexpected_keys:
-    #     if "running" not in key:
-    #         print(key)
+    print("Unexpected keys:")
+    for key in unexpected_keys:
+        if "running" not in key:
+            print(key)
 
     # TODO assert values
     # assert torch.allclose(logits[0, :3, :3], expected_slice_logits, atol=1e-4)
