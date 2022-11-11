@@ -36,6 +36,7 @@ def get_maskformer_config(model_name: str):
     config = MaskFormerConfig(backbone_config=backbone_config)
 
     # TODO id2label mappings
+    config.num_labels = 150
 
     return config
 
@@ -44,69 +45,6 @@ def get_maskformer_config(model_name: str):
 #     # stem
 #     if "stem.conv1.weight" in name:
 #         name = name.replace("stem.conv1.weight", "embedder.embedder.convolution.weight")
-#     if "stem.conv1.norm" in name:
-#         name = name.replace("stem.conv1.norm", "embedder.embedder.norm")
-#     if "backbone" in name and "norm" in name:
-#         name = name.replace("norm", "normalization")
-#     if "backbone" in name and "conv1" in name:
-#         name = name.replace("conv1", "convolution")
-#     if "backbone" in name and "conv2" in name:
-#         name = name.replace("conv2", "convolution")
-#     if "backbone" in name and "conv3" in name:
-#         name = name.replace("conv3", "convolution")
-#     if "backbone" in name:
-#         name = name.replace("backbone", "model.pixel_level_module.encoder.model")
-#     # first stage, first block
-#     if "res2.0" in name:
-#         name = name.replace("res2.0", "encoder.stages.0.layers.0")
-#     if "shortcut" in name:
-#         name = name.replace("shortcut", "shortcut.convolution")
-#     # first stage, second block
-#     if "res2.1" in name:
-#         name = name.replace("res2.1", "encoder.stages.0.layers.1")
-#     # first stage, third block
-#     if "res2.2" in name:
-#         name = name.replace("res2.2", "encoder.stages.0.layers.2")
-#     # second stage, first block
-#     if "res3.0" in name:
-#         name = name.replace("res3.0", "encoder.stages.1.layers.0")
-#     # second stage, second block
-#     if "res3.1" in name:
-#         name = name.replace("res3.1", "encoder.stages.1.layers.1")
-#     # second stage, third block
-#     if "res3.2" in name:
-#         name = name.replace("res3.2", "encoder.stages.1.layers.2")
-#     # second stage, fourth block
-#     if "res3.3" in name:
-#         name = name.replace("res3.3", "encoder.stages.1.layers.3")
-#     # third stage, first block
-#     if "res4.0" in name:
-#         name = name.replace("res4.0", "encoder.stages.2.layers.0")
-#     # third stage, second block
-#     if "res4.1" in name:
-#         name = name.replace("res4.1", "encoder.stages.2.layers.1")
-#     # third stage, third block
-#     if "res4.2" in name:
-#         name = name.replace("res4.2", "encoder.stages.2.layers.2")
-#     # third stage, fourth block
-#     if "res4.3" in name:
-#         name = name.replace("res4.3", "encoder.stages.2.layers.3")
-#     # third stage, fifth block
-#     if "res4.4" in name:
-#         name = name.replace("res4.4", "encoder.stages.2.layers.4")
-#     # third stage, sixth block
-#     if "res4.5" in name:
-#         name = name.replace("res4.5", "encoder.stages.2.layers.5")
-#     # fourth stage, first block
-#     if "res5.0" in name:
-#         name = name.replace("res5.0", "encoder.stages.3.layers.0")
-#     # fourth stage, second block
-#     if "res5.1" in name:
-#         name = name.replace("res5.1", "encoder.stages.3.layers.1")
-#     # fourth stage, third block
-#     if "res5.2" in name:
-#         name = name.replace("res5.2", "encoder.stages.3.layers.2")
-
 #     return name
 
 
@@ -166,6 +104,18 @@ def create_rename_keys(config):
                     )
                 )
 
+    # FPN
+    rename_keys.extend(("sem_seg_head.layer_4.weight", "model.pixel_level_module.decoder.fpn.stem.0.weight"))
+    rename_keys.extend(("sem_seg_head.layer_4.norm.weight", "model.pixel_level_module.decoder.fpn.stem.1.weight"))
+    rename_keys.extend(("sem_seg_head.layer_4.norm.bias", "model.pixel_level_module.decoder.fpn.stem.1.bias"))
+    # for src_i, dst_i in zip(range(3, 0, -1), range(0, 3)):
+    #     rename_keys.extend(
+    #         (f"sem_seg_head.adapter_{src_i}", f"model.pixel_level_module.decoder.fpn.layers.{dst_i}.proj")
+    #     )
+    #     rename_keys.extend(
+    #         (f"sem_seg_head.layer_{src_i}", f"model.pixel_level_module.decoder.fpn.layers.{dst_i}.block")
+    #     )
+
     return rename_keys
 
 
@@ -204,21 +154,21 @@ def convert_maskformer_checkpoint(
     for key, value in state_dict.items():
         state_dict[key] = torch.from_numpy(value)
 
-    for name, param in state_dict.items():
-        print(name, param.shape)
+    # for name, param in state_dict.items():
+    #     print(name, param.shape)
 
     # load 🤗 model
     model = MaskFormerForInstanceSegmentation(config)
     model.eval()
 
-    # for name, param in model.named_parameters():
-    #     print(name, param.shape)
+    for name, param in model.named_parameters():
+        print(name, param.shape)
 
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    print("Unexpected keys:")
-    for key in unexpected_keys:
-        if "running" not in key:
-            print(key)
+    # print("Unexpected keys:")
+    # for key in unexpected_keys:
+    #     if "running" not in key:
+    #         print(key)
 
     # TODO assert values
     # assert torch.allclose(logits[0, :3, :3], expected_slice_logits, atol=1e-4)
