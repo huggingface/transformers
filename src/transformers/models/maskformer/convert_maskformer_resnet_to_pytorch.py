@@ -66,6 +66,18 @@ def create_rename_keys(config):
             "model.pixel_level_module.encoder.model.embedder.embedder.normalization.bias",
         )
     )
+    rename_keys.append(
+        (
+            "backbone.stem.conv1.norm.running_mean",
+            "model.pixel_level_module.encoder.model.embedder.embedder.normalization.running_mean",
+        )
+    )
+    rename_keys.append(
+        (
+            "backbone.stem.conv1.norm.running_var",
+            "model.pixel_level_module.encoder.model.embedder.embedder.normalization.running_var",
+        )
+    )
     # stages
     for stage_idx in range(len(config.backbone_config.depths)):
         for layer_idx in range(config.backbone_config.depths[stage_idx]):
@@ -89,6 +101,14 @@ def create_rename_keys(config):
                         f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.bias",
                     )
                 )
+                rename_keys.append(
+                    (f"backbone.res{stage_idx + 2}.{layer_idx}.shortcut.norm.running_mean",
+                     f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.running_mean")
+                )
+                rename_keys.append(
+                    (f"backbone.res{stage_idx + 2}.{layer_idx}.shortcut.norm.running_var",
+                     f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.running_var")
+                )
             # 3 convs
             for i in range(3):
                 rename_keys.append(
@@ -107,6 +127,18 @@ def create_rename_keys(config):
                     (
                         f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i+1}.norm.bias",
                         f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.bias",
+                    )
+                )
+                rename_keys.append(
+                    (
+                        f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i+1}.norm.running_mean",
+                        f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_mean",
+                    )
+                )
+                rename_keys.append(
+                    (
+                        f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i+1}.norm.running_var",
+                        f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_var",
                     )
                 )
 
@@ -150,6 +182,24 @@ def create_rename_keys(config):
         # layernorm 3 (final layernorm)
         rename_keys.append((f"sem_seg_head.predictor.transformer.decoder.layers.{idx}.norm3.weight", f"model.transformer_module.decoder.layers.{idx}.final_layer_norm.weight"))
         rename_keys.append((f"sem_seg_head.predictor.transformer.decoder.layers.{idx}.norm3.bias", f"model.transformer_module.decoder.layers.{idx}.final_layer_norm.bias"))
+
+    rename_keys.append(("sem_seg_head.predictor.transformer.decoder.norm.weight", "model.transformer_module.decoder.layernorm.weight"))
+    rename_keys.append(("sem_seg_head.predictor.transformer.decoder.norm.bias", "model.transformer_module.decoder.layernorm.bias"))
+    # fmt: on
+
+    # heads on top
+    # fmt: off
+    rename_keys.append(("sem_seg_head.predictor.query_embed.weight", "model.transformer_module.queries_embedder.weight"))
+
+    rename_keys.append(("sem_seg_head.predictor.input_proj.weight", "model.transformer_module.input_projection.weight"))
+    rename_keys.append(("sem_seg_head.predictor.input_proj.bias", "model.transformer_module.input_projection.bias"))
+
+    rename_keys.append(("sem_seg_head.predictor.class_embed.weight", "class_predictor.weight"))
+    rename_keys.append(("sem_seg_head.predictor.class_embed.bias", "class_predictor.bias"))
+
+    for i in range(3):
+        rename_keys.append((f"sem_seg_head.predictor.mask_embed.layers.{i}.weight", f"mask_embedder.{i}.0.weight"))
+        rename_keys.append((f"sem_seg_head.predictor.mask_embed.layers.{i}.bias", f"mask_embedder.{i}.0.bias"))
     # fmt: on
 
     return rename_keys
@@ -230,6 +280,7 @@ def convert_maskformer_checkpoint(
         print(name, param.shape)
 
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+    print("Missing keys:", missing_keys)
     print("Unexpected keys:")
     for key in unexpected_keys:
         if "running" not in key:
