@@ -22,13 +22,7 @@ from transformers import (
     TFAutoModelForTableQuestionAnswering,
     pipeline,
 )
-from transformers.testing_utils import (
-    require_pandas,
-    require_tensorflow_probability,
-    require_tf,
-    require_torch,
-    slow,
-)
+from transformers.testing_utils import require_pandas, require_tensorflow_probability, require_tf, require_torch, slow
 
 from .test_pipelines_common import PipelineTestCaseMeta
 
