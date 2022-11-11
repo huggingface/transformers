@@ -68,14 +68,18 @@ class ViTEmbeddings(nn.Module):
         super().__init__()
 
         self.cls_token = nn.Parameter(
-            nn.init.trunc_normal_(torch.zeros(1, 1, config.hidden_size), mean=0.0, std=config.initializer_range)
+            nn.init.trunc_normal_(
+                torch.zeros(1, 1, config.hidden_size, dtype=torch.float32), mean=0.0, std=config.initializer_range
+            )
         )
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
         self.patch_embeddings = ViTPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(
             nn.init.trunc_normal_(
-                torch.zeros(1, num_patches + 1, config.hidden_size), mean=0.0, std=config.initializer_range
+                torch.zeros(1, num_patches + 1, config.hidden_size, dtype=torch.float32),
+                mean=0.0,
+                std=config.initializer_range,
             )
         )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -442,6 +446,7 @@ class ViTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = []
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -557,6 +562,11 @@ class ViTModel(ViTPreTrainedModel):
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+
+        # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
+        expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
+        if pixel_values.dtype != expected_dtype:
+            pixel_values = pixel_values.to(expected_dtype)
 
         embedding_output = self.embeddings(
             pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
