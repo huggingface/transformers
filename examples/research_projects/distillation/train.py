@@ -68,9 +68,11 @@ def sanity_checks(args):
     else:
         assert (args.student_type in ["bloom", "gpt2"]) and (args.teacher_type in ["bloom", "gpt2"])
 
-    assert args.teacher_type == args.student_type or (
-        args.student_type == "distilbert" and args.teacher_type == "bert"
-    ) or (args.student_type == "gpt2" and args.teacher_type == "bloom")
+    assert (
+        args.teacher_type == args.student_type
+        or (args.student_type == "distilbert" and args.teacher_type == "bert")
+        or (args.student_type == "gpt2" and args.teacher_type == "bloom")
+    )
     assert os.path.isfile(args.student_config)
     if args.student_pretrained_weights is not None:
         assert os.path.isfile(args.student_pretrained_weights)
@@ -125,7 +127,10 @@ def main():
     )
 
     parser.add_argument(
-        "--teacher_type", choices=["bert", "bloom", "roberta", "gpt2"], required=True, help="Teacher type (BERT, RoBERTa)."
+        "--teacher_type",
+        choices=["bert", "bloom", "roberta", "gpt2"],
+        required=True,
+        help="Teacher type (BERT, RoBERTa).",
     )
     parser.add_argument("--teacher_name", type=str, required=True, help="The teacher model.")
 
@@ -222,7 +227,9 @@ def main():
 
     parser.add_argument("--log_interval", type=int, default=500, help="Tensorboard logging interval.")
     parser.add_argument("--checkpoint_interval", type=int, default=4000, help="Checkpoint interval.")
-    parser.add_argument("--max_model_input_size", type=int, default=1024, help="Maximum size of sequences used during training.")
+    parser.add_argument(
+        "--max_model_input_size", type=int, default=1024, help="Maximum size of sequences used during training."
+    )
     args = parser.parse_args()
     sanity_checks(args)
 

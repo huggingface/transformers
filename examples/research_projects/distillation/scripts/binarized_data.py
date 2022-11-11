@@ -84,7 +84,7 @@ def main():
     logger.info("Finished binarization")
     logger.info(f"{len(data)} examples processed.")
 
-    tokenizer_name = args.tokenizer_name.replace('/', '_')
+    tokenizer_name = args.tokenizer_name.replace("/", "_")
     dp_file = f"{args.dump_file}.{tokenizer_name}.pickle"
     vocab_size = tokenizer.vocab_size
     if vocab_size < (1 << 16):
