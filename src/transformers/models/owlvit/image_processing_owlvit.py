@@ -122,7 +122,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: Dict[str, int],
         resample: PILImageResampling.BICUBIC,
-        data_format: Union[str, ChannelDimension],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
     ) -> np.ndarray:
         """
@@ -135,7 +135,11 @@ class OwlViTImageProcessor(BaseImageProcessor):
         return resize(image, (size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs)
 
     def center_crop(
-        self, image: np.ndarray, crop_size: Dict[str, int], data_format: Union[str, ChannelDimension], **kwargs
+        self,
+        image: np.ndarray,
+        crop_size: Dict[str, int],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs
     ) -> np.ndarray:
         """
         Center crop an image to a certain size.
@@ -146,24 +150,37 @@ class OwlViTImageProcessor(BaseImageProcessor):
 
         return center_crop(image, (crop_size["height"], crop_size["width"]), data_format=data_format, **kwargs)
 
-    def rescale(self, image: np.ndarray, rescale_factor: float, **kwargs) -> np.ndarray:
+    def rescale(
+        self,
+        image: np.ndarray,
+        rescale_factor: float,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs
+    ) -> np.ndarray:
         """
         Rescale an image by a certain factor.
         """
-        return rescale(image, rescale_factor, **kwargs)
+        return rescale(image, rescale_factor, data_format=data_format, **kwargs)
 
-    def normalize(self, image: np.ndarray, mean: List[float], std: List[float], **kwargs) -> np.ndarray:
+    def normalize(
+        self,
+        image: np.ndarray,
+        mean: List[float],
+        std: List[float],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs
+    ) -> np.ndarray:
         """
         Normalize an image with a certain mean and standard deviation.
         """
-        return normalize(image, mean, std, **kwargs)
+        return normalize(image, mean, std, data_format=data_format, **kwargs)
 
     def preprocess(
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
-        resample: Optional["PILImageResampling"] = None,
+        resample: PILImageResampling = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[Dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
@@ -261,13 +278,13 @@ class OwlViTImageProcessor(BaseImageProcessor):
             images = [self.center_crop(image, crop_size=crop_size) for image in images]
 
         if do_rescale:
-            images = [self.rescale(image, scale=rescale_factor) for image in images]
+            images = [self.rescale(image, rescale_factor=rescale_factor) for image in images]
 
         if do_normalize:
             images = [self.normalize(image, mean=image_mean, std=image_std) for image in images]
 
         images = [to_channel_dimension_format(image, data_format) for image in images]
-        encoded_inputs = BatchFeature(data={"pixel_values": images}, return_tensors=return_tensors)
+        encoded_inputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
         return encoded_inputs
 
     def post_process(self, outputs, target_sizes):
