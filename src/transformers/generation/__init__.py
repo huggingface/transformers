@@ -55,6 +55,7 @@ else:
         "NoRepeatNGramLogitsProcessor",
         "PrefixConstrainedLogitsProcessor",
         "RepetitionPenaltyLogitsProcessor",
+        "EncoderRepetitionPenaltyLogitsProcessor",
         "TemperatureLogitsWarper",
         "TopKLogitsWarper",
         "TopPLogitsWarper",
