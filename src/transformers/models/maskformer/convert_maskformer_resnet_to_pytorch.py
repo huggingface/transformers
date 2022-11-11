@@ -95,12 +95,16 @@ def create_rename_keys(config):
                     )
                 )
                 rename_keys.append(
-                    (f"backbone.res{stage_idx + 2}.{layer_idx}.shortcut.norm.running_mean",
-                     f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.running_mean")
+                    (
+                        f"backbone.res{stage_idx + 2}.{layer_idx}.shortcut.norm.running_mean",
+                        f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.running_mean",
+                    )
                 )
                 rename_keys.append(
-                    (f"backbone.res{stage_idx + 2}.{layer_idx}.shortcut.norm.running_var",
-                     f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.running_var")
+                    (
+                        f"backbone.res{stage_idx + 2}.{layer_idx}.shortcut.norm.running_var",
+                        f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.running_var",
+                    )
                 )
             # 3 convs
             for i in range(3):
@@ -228,7 +232,7 @@ def read_in_decoder_q_k_v(state_dict, config):
         state_dict[f"model.transformer_module.decoder.layers.{idx}.encoder_attn.k_proj.bias"] = in_proj_bias[hidden_size : hidden_size * 2]
         state_dict[f"model.transformer_module.decoder.layers.{idx}.encoder_attn.v_proj.weight"] = in_proj_weight[-hidden_size :, :]
         state_dict[f"model.transformer_module.decoder.layers.{idx}.encoder_attn.v_proj.bias"] = in_proj_bias[-hidden_size :]
-    # fmt: off
+    # fmt: on
 
 
 # We will verify our results on an image of cute cats
@@ -278,9 +282,9 @@ def convert_maskformer_checkpoint(
     inputs = feature_extractor(image, return_tensors="pt")
 
     outputs = model(**inputs)
-    expected_logits = torch.tensor([[ 6.7710, -0.1452, -3.5687],
-        [ 1.9165, -1.0010, -1.8614],
-        [ 3.6209, -0.2950, -1.3813]])
+    expected_logits = torch.tensor(
+        [[6.7710, -0.1452, -3.5687], [1.9165, -1.0010, -1.8614], [3.6209, -0.2950, -1.3813]]
+    )
     assert torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_logits, atol=1e-4)
     print("Looks ok!")
 
