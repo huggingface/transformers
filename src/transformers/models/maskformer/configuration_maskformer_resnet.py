@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MaskFormer ResNet model configuration"""
+""" MaskFormer ResNet model configuration. Includes support for Deeplab stem."""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -33,7 +33,7 @@ class MaskFormerResNetConfig(PretrainedConfig):
     [microsoft/resnet-50](https://huggingface.co/microsoft/resnet-50) architecture. Configuration objects inherit from
     [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from [`PretrainedConfig`]
     for more information.
-    
+
     Args:
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
@@ -55,9 +55,9 @@ class MaskFormerResNetConfig(PretrainedConfig):
             If `True`, the stem will use a Deeplab style stem, as introduced in [Chen et al.,
             2016](https://arxiv.org/abs/1606.00915). See here:
             https://github.com/facebookresearch/detectron2/blob/2d6106bb9251f388fdac0ce21c50514fba827fb4/projects/DeepLab/deeplab/resnet.py#L15.
-        
+
     Example:
-    
+
     ```python
     >>> from transformers import MaskFormerResNetConfig, MaskFormerResNetModel
 

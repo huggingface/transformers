@@ -24,10 +24,63 @@ from ...backbone import Backbone, ShapeSpec
 from ...modeling_outputs import BaseModelOutputWithNoAttention, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from ..resnet import ResNetConfig
+from .configuration_maskformer_resnet import MaskFormerResNetConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+class MaskFormerDeeplabResnetStem(nn.Module):
+    """Deeplab stem.
+
+    Source:
+    https://github.com/facebookresearch/detectron2/blob/2d6106bb9251f388fdac0ce21c50514fba827fb4/projects/DeepLab/deeplab/resnet.py#L15.
+    """
+
+    def __init__(self, config: MaskFormerResNetConfig):
+        super().__init__()
+
+        out_channels = config.embedding_size * 2
+        self.conv1 = nn.Conv2d(
+            config.num_channels,
+            out_channels // 2,
+            kernel_size=3,
+            stride=2,
+            padding=1,
+            bias=False,
+        )
+        self.norm1 = nn.BatchNorm2d(out_channels // 2)
+        self.conv2 = nn.Conv2d(
+            out_channels // 2,
+            out_channels // 2,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False,
+        )
+        self.norm2 = nn.BatchNorm2d(out_channels // 2)
+        self.conv3 = nn.Conv2d(
+            out_channels // 2,
+            out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False,
+        )
+        self.norm3 = nn.BatchNorm2d(out_channels)
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = self.conv1(x)
+        x = self.norm1(x)
+        x = nn.functional.relu_(x)
+        x = self.conv2(x)
+        x = self.norm2(x)
+        x = nn.functional.relu_(x)
+        x = self.conv3(x)
+        x = self.norm3(x)
+        x = nn.functional.relu_(x)
+        x = nn.functional.max_pool2d(x, kernel_size=3, stride=2, padding=1)
+        return x
 
 
 # Copied from transformers.models.resnet.modeling_resnet.ResNetConvLayer with ResNet->MaskFormerResNet
@@ -49,13 +102,13 @@ class MaskFormerResNetConvLayer(nn.Module):
         return hidden_state
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetEmbeddings with ResNetConvLayer->MaskFormerResNetConvLayer
+# Copied from transformers.models.resnet.modeling_resnet.ResNetEmbeddings with ResNetConvLayer->MaskFormerResNetConvLayer, ResNetConfig->MaskFormerResNetConfig
 class MaskFormerResNetEmbeddings(nn.Module):
     """
     ResNet Embeddings (stem) composed of a single aggressive convolution.
     """
 
-    def __init__(self, config: ResNetConfig):
+    def __init__(self, config: MaskFormerResNetConfig):
         super().__init__()
         self.embedder = MaskFormerResNetConvLayer(
             config.num_channels, config.embedding_size, kernel_size=7, stride=2, activation=config.hidden_act
@@ -157,7 +210,7 @@ class MaskFormerResNetBottleNeckLayer(nn.Module):
         return hidden_state
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetStage with ResNetBottleNeckLayer->MaskFormerResNetBottleNeckLayer, ResNetBasicLayer->MaskFormerResNetBasicLayer
+# Copied from transformers.models.resnet.modeling_resnet.ResNetStage with ResNetBottleNeckLayer->MaskFormerResNetBottleNeckLayer, ResNetBasicLayer->MaskFormerResNetBasicLayer, ResNetConfig->MaskFormerResNetConfig
 class MaskFormerResNetStage(nn.Module):
     """
     A ResNet stage composed by stacked layers.
@@ -165,7 +218,7 @@ class MaskFormerResNetStage(nn.Module):
 
     def __init__(
         self,
-        config: ResNetConfig,
+        config: MaskFormerResNetConfig,
         in_channels: int,
         out_channels: int,
         stride: int = 2,
@@ -188,9 +241,9 @@ class MaskFormerResNetStage(nn.Module):
         return hidden_state
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetEncoder with ResNetStage->MaskFormerResNetStage
+# Copied from transformers.models.resnet.modeling_resnet.ResNetEncoder with ResNetStage->MaskFormerResNetStage, ResNetConfig->MaskFormerResNetConfig
 class MaskFormerResNetEncoder(nn.Module):
-    def __init__(self, config: ResNetConfig):
+    def __init__(self, config: MaskFormerResNetConfig):
         super().__init__()
         self.stages = nn.ModuleList([])
         # based on `downsample_in_first_stage` the first layer of the first stage may or may not downsample the input
@@ -230,14 +283,14 @@ class MaskFormerResNetEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNetModel->MaskFormerResNetModel
+# Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNetModel->MaskFormerResNetModel, ResNetConfig->MaskFormerResNetConfig
 class MaskFormerResNetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ResNetConfig
+    config_class = MaskFormerResNetConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -255,11 +308,12 @@ class MaskFormerResNetPreTrainedModel(PreTrainedModel):
 
 
 class MaskFormerResNetModel(MaskFormerResNetPreTrainedModel):
-    # Copied from transformers.models.resnet.modeling_resnet.ResNetModel.__init__ with ResNet->MaskFormerResNet
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        self.embedder = MaskFormerResNetEmbeddings(config)
+        self.embedder = (
+            MaskFormerDeeplabResnetStem(config) if config.use_deeplab_stem else MaskFormerResNetEmbeddings(config)
+        )
         self.encoder = MaskFormerResNetEncoder(config)
         self.pooler = nn.AdaptiveAvgPool2d((1, 1))
         # Initialize weights and apply final processing
@@ -298,11 +352,11 @@ class MaskFormerResNetBackbone(Backbone):
     This class converts [`MaskFormerResNetModel`] into a generic backbone.
 
     Args:
-        config (`ResNetConfig`):
+        config (`MaskFormerResNetConfig`):
             The configuration used by [`MaskFormerResNetModel`].
     """
 
-    def __init__(self, config: ResNetConfig):
+    def __init__(self, config: MaskFormerResNetConfig):
         super().__init__()
 
         self.model = MaskFormerResNetModel(config)
@@ -311,7 +365,7 @@ class MaskFormerResNetBackbone(Backbone):
         self.out_features = ["res2", "res3", "res4", "res5"]
 
         # TODO calculate strides appropriately
-        current_stride = self.model.embedder.embedder.convolution.stride[0]
+        current_stride = self.model.embedder.embedder.convolution.stride[0] if not config.use_deeplab_stem else 1
         self.out_feature_strides = {
             "stem": current_stride,
             "res2": current_stride * 2,
