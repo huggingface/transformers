@@ -37,6 +37,7 @@ from . import (
     camembert,
     canine,
     clip,
+    chinese_clip,
     clipseg,
     codegen,
     conditional_detr,

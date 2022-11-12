@@ -41,6 +41,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("camembert", "CamembertModel"),
         ("canine", "CanineModel"),
         ("clip", "CLIPModel"),
+        ("chinese-clip", "ChineseCLIPModel"),
         ("clipseg", "CLIPSegModel"),
         ("codegen", "CodeGenModel"),
         ("conditional_detr", "ConditionalDetrModel"),
@@ -824,6 +825,7 @@ _MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Zero Shot Image Classification mapping
         ("clip", "CLIPModel"),
+        ("chinese-clip", "ChineseCLIPModel"),
         ("clipseg", "CLIPSegModel"),
     ]
 )
