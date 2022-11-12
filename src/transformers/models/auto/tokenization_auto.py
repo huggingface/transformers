@@ -89,8 +89,8 @@ else:
             (
                 "chinese-clip",
                 (
-                    "CLIPTokenizer",
-                    "CLIPTokenizerFast" if is_tokenizers_available() else None,
+                    "BertTokenizer",
+                    "BertTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             (

@@ -17,7 +17,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_tokenizers_available,
+    is_torch_available,
+    is_vision_available,
+)
 
 
 _import_structure = {
@@ -25,9 +31,8 @@ _import_structure = {
         "CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ChineseCLIPConfig",
         "ChineseCLIPOnnxConfig",
-        "ChineseCLIPTextConfig",
-        "ChineseCLIPVisionConfig",
     ],
+    "processing_chinese_clip": ["ChineseCLIPProcessor"],
 }
 
 try:
@@ -40,18 +45,42 @@ else:
         "CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ChineseCLIPModel",
         "ChineseCLIPPreTrainedModel",
-        "ChineseCLIPTextModel",
-        "ChineseCLIPVisionModel",
     ]
 
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["feature_extraction_chinese_clip"] = ["ChineseCLIPFeatureExtractor"]
+    _import_structure["image_processing_chinese_clip"] = ["ChineseCLIPImageProcessor"]
+
 if TYPE_CHECKING:
+    from ..bert import BertTokenizer
     from .configuration_chinese_clip import (
         CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ChineseCLIPConfig,
         ChineseCLIPOnnxConfig,
-        ChineseCLIPTextConfig,
-        ChineseCLIPVisionConfig,
     )
+    from .processing_chinese_clip import ChineseCLIPProcessor
+
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from ..bert import BertTokenizerFast
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .feature_extraction_chinese_clip import ChineseCLIPFeatureExtractor
+        from .feature_extraction_chinese_clip import ChineseCLIPImageProcessor
 
     try:
         if not is_torch_available():
@@ -63,8 +92,6 @@ if TYPE_CHECKING:
             CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             ChineseCLIPModel,
             ChineseCLIPPreTrainedModel,
-            ChineseCLIPTextModel,
-            ChineseCLIPVisionModel,
         )
 
 else:
