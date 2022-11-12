@@ -1602,10 +1602,7 @@ class FANModel(FANPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
-
-    def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
+        return self.embeddings.patch_embed
 
     def _prune_heads(self, heads_to_prune):
         """Prunes heads of the model.

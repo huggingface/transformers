@@ -34,7 +34,7 @@ original_feature_mapping = {
     "in_channels": "segmentation_in_channels",
     "in_chans": "num_channels",
 }
-
+# TODO: Rename embed_dim to hidden_size
 # TODO: FANConfig Attributes rewrite
 # TODO: FANConfig features rename
 # ISSUE: Move configuration to nvidia/fan
