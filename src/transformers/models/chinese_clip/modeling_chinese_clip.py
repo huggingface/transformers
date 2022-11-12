@@ -44,7 +44,7 @@ _CHECKPOINT_FOR_DOC = "OFA-Sys/chinese-clip-vit-base-patch16"
 
 CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "OFA-Sys/chinese-clip-vit-base-patch16",
-    # See all Chinese-CLIP models at https://huggingface.co/models?filter=chineseclip
+    # See all Chinese-CLIP models at https://huggingface.co/models?filter=chinese-clip
 ]
 
 
