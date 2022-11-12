@@ -70,22 +70,24 @@ TF_BEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionModelOutputWithPooling with Data2VecVision->Beit
 class TFBeitModelOutputWithPooling(TFBaseModelOutputWithPooling):
     """
     Class for outputs of [`BeitModel`].
+    
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+        pooler_output (`tf.Tensor` of shape `(batch_size, hidden_size)`):
             Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if
             *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
             will be returned.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
+        hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -97,7 +99,8 @@ class TFBeitModelOutputWithPooling(TFBaseModelOutputWithPooling):
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
     
-    
+
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionDropPath with Data2VecVision->Beit
 class TFBeitDropPath(tf.keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
     References:
@@ -117,7 +120,8 @@ class TFBeitDropPath(tf.keras.layers.Layer):
             return (x / keep_prob) * random_tensor
         return x
       
-      
+
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionEmbeddings with Data2VecVision->Beit
 class TFBeitEmbeddings(tf.keras.layers.Layer):
     """
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
@@ -184,7 +188,8 @@ class TFBeitEmbeddings(tf.keras.layers.Layer):
 
         return embeddings
       
-      
+
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionPatchEmbeddings with Data2VecVision->Beit        
 class TFBeitPatchEmbeddings(tf.keras.layers.Layer):
     """
     Image to Patch Embedding.
@@ -245,7 +250,8 @@ class TFBeitPatchEmbeddings(tf.keras.layers.Layer):
 
         return tf.reshape(tensor=projection, shape=(batch_size, num_patches, -1))
     
-    
+
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionSelfAttention with Data2VecVision->Beit    
 class TFBeitSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None, **kwargs):
         super().__init__(**kwargs)
@@ -342,6 +348,7 @@ class TFBeitSelfAttention(tf.keras.layers.Layer):
         return outputs
     
    
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionSelfOutput with Data2VecVision->Beit
 class TFBeitSelfOutput(tf.keras.layers.Layer):
     """
     The residual connection is defined in TFBeitLayer instead of here (as is the case with other models), due
@@ -362,7 +369,8 @@ class TFBeitSelfOutput(tf.keras.layers.Layer):
 
         return hidden_states
     
-    
+
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionAttention with Data2VecVision->Beit
 class TFBeitAttention(tf.keras.layers.Layer):
     def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None, **kwargs):
         super().__init__(**kwargs)
@@ -396,7 +404,7 @@ class TFBeitAttention(tf.keras.layers.Layer):
         return outputs
     
     
-# Copied from transformers.models.vit.modeling_tf_vit.TFViTIntermediate with ViT->Beit
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionIntermediate with Data2VecVision->Beit
 class TFBeitIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: BeitConfig, **kwargs):
         super().__init__(**kwargs)
@@ -416,7 +424,8 @@ class TFBeitIntermediate(tf.keras.layers.Layer):
 
         return hidden_states
     
-    
+
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionOutput with Data2VecVision->Beit
 class TFBeitOutput(tf.keras.layers.Layer):
     def __init__(self, config: BeitConfig, **kwargs):
         super().__init__(**kwargs)
@@ -432,7 +441,8 @@ class TFBeitOutput(tf.keras.layers.Layer):
 
         return hidden_states
     
-    
+
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionLayer with Data2VecVision->Beit
 class TFBeitLayer(tf.keras.layers.Layer):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -525,8 +535,7 @@ class TFBeitLayer(tf.keras.layers.Layer):
         return outputs
     
     
-# Taken and modified from here:
-# https://github.com/leondgarse/keras_cv_attention_models/blob/main/keras_cv_attention_models/beit/beit.py#L28
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionRelativePositionBias with Data2VecVision->Beit
 class TFBeitRelativePositionBias(tf.keras.layers.Layer):
     def __init__(self, config: BeitConfig, window_size: tuple, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -582,7 +591,8 @@ class TFBeitRelativePositionBias(tf.keras.layers.Layer):
         relative_position_bias = tf.gather(self.relative_position_bias_table, self.relative_position_index, axis=0)
         return tf.transpose(relative_position_bias, [2, 0, 1])
     
-    
+
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionEncoder with Data2VecVision->Beit
 class TFBeitEncoder(tf.keras.layers.Layer):
     def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None, **kwargs):
         super().__init__(**kwargs)
@@ -649,6 +659,7 @@ class TFBeitEncoder(tf.keras.layers.Layer):
     
     
 @keras_serializable
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionMainLayer with Data2VecVision->Beit
 class TFBeitMainLayer(tf.keras.layers.Layer):
     config_class = BeitConfig
 
@@ -738,7 +749,8 @@ class TFBeitMainLayer(tf.keras.layers.Layer):
             attentions=encoder_outputs.attentions,
         )
     
-    
+
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionPooler with Data2VecVision->Beit
 class TFBeitPooler(tf.keras.layers.Layer):
     def __init__(self, config: BeitConfig, **kwargs):
         super().__init__(**kwargs)
@@ -758,8 +770,167 @@ class TFBeitPooler(tf.keras.layers.Layer):
             pooled_output = hidden_states[:, 0]
 
         return pooled_output
-
     
+
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionPreTrainedModel with Data2VecVision->Beit
+class TFBeitPreTrainedModel(TFPreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = BeitConfig
+    base_model_prefix = "beit"
+    main_input_name = "pixel_values"
+    _keys_to_ignore_on_load_unexpected = [r"relative_position_index"]
+
+    @property
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        """
+        Dummy inputs to build the network. Returns:
+            `Dict[str, tf.Tensor]`: The dummy inputs.
+        """
+        VISION_DUMMY_INPUTS = tf.random.uniform(
+            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size),
+            dtype=tf.float32,
+        )
+        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
+
+    @tf.function(
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        """
+        Method used for serving the model.
+        Args:
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+        return self.serving_output(output)
+
+
+BEIT_START_DOCSTRING = r"""
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.).
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
+    behavior.
+    <Tip>
+    TensorFlow models and layers in `transformers` accept two formats as input:
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional argument.
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
+    - a single Tensor with `pixel_values` only and nothing else: `model(pixel_values)`
+    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+    `model([pixel_values, attention_mask])` or `model([pixel_values, attention_mask, token_type_ids])`
+    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+    `model({"pixel_values": pixel_values, "token_type_ids": token_type_ids})`
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
+    </Tip>
+    Args:
+        config ([`BeitConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+BEIT_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`BeitFeatureExtractor`]. See
+            [`BeitFeatureExtractor.__call__`] for details.
+        head_mask (`np.ndarray` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple. This argument can be used
+            in eager mode, in graph mode the value will always be set to True.
+        training (`bool`, *optional*, defaults to `False``):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
+"""
+
+@add_start_docstrings(
+    "The bare BEIT Model transformer outputting raw hidden-states without any specific head on top.",
+    BEIT_START_DOCSTRING,
+)
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionModel with Data2VecVision->Beit
+class TFBeitModel(TFBeitPreTrainedModel):
+    def __init__(self, config: BeitConfig, add_pooling_layer: bool = False, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.config = config
+
+        self.data2vec_vision = TFBeitMainLayer(
+            config, add_pooling_layer=add_pooling_layer, name="beit"
+        )
+
+    def get_input_embeddings(self):
+        return self.beit.get_input_embeddings()
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TFBeitModelOutputWithPooling,
+        config_class=_CONFIG_FOR_DOC,
+        modality="vision",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+    )
+    def call(
+        self,
+        pixel_values: Optional[TFModelInputType] = None,
+        bool_masked_pos: Optional[tf.Tensor] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
+    ) -> Union[tuple, TFBeitModelOutputWithPooling]:
+
+        outputs = self.beit(
+            pixel_values=pixel_values,
+            bool_masked_pos=bool_masked_pos,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+
+        return outputs
+
+    def serving_output(self, output: TFBeitModelOutputWithPooling) -> TFBeitModelOutputWithPooling:
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBeitModelOutputWithPooling(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=hidden_states,
+            attentions=attentions,
+        )
+
+
 @add_start_docstrings(
     """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
     visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
@@ -854,6 +1025,7 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
     """,
     BEIT_START_DOCSTRING,
 )
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionForImageClassification with Data2VecVision->Beit
 class TFBeitForImageClassification(TFBeitPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: BeitConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -925,7 +1097,8 @@ class TFBeitForImageClassification(TFBeitPreTrainedModel, TFSequenceClassificati
 
         return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
     
-    
+
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionConvModule with Data2VecVision->Beit    
 class TFBeitConvModule(tf.keras.layers.Layer):
     """
     A convolutional block that bundles conv/norm/activation layers. This block simplifies the usage of convolution
@@ -961,8 +1134,7 @@ class TFBeitConvModule(tf.keras.layers.Layer):
         return output
     
     
-# Copied from:
-# https://gist.github.com/Rocketknight1/43abbe6e73f1008e6e459486e01e0ceb
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFAdaptiveAvgPool1D 
 class TFAdaptiveAvgPool1D(tf.keras.layers.Layer):
     def __init__(self, output_dim, mode="dense", **kwargs):
         super().__init__(**kwargs)
@@ -1018,6 +1190,7 @@ class TFAdaptiveAvgPool1D(tf.keras.layers.Layer):
         return config
 
 
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFAdaptiveAvgPool2D
 class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
     def __init__(self, output_shape, mode="dense", **kwargs):
         super().__init__(**kwargs)
@@ -1043,7 +1216,8 @@ class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
         config.update({"mode": self.mode})
         return config
     
-    
+
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionPyramidPoolingModule with Data2VecVision->Beit
 class TFBeitPyramidPoolingModule(tf.keras.layers.Layer):
     """
     Pyramid Pooling Module (PPM) used in PSPNet.
@@ -1082,7 +1256,8 @@ class TFBeitPyramidPoolingModule(tf.keras.layers.Layer):
             ppm_outs.append(upsampled_ppm_out)
         return ppm_outs
     
-    
+
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionUperHead with Data2VecVision->Beit
 class TFBeitUperHead(tf.keras.layers.Layer):
     """
     Unified Perceptual Parsing for Scene Understanding. This head is the implementation of
@@ -1150,7 +1325,8 @@ class TFBeitUperHead(tf.keras.layers.Layer):
 
         return output
     
-    
+
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionFCNHead with Data2VecVision->Beit
 class TFBeitFCNHead(tf.keras.layers.Layer):
     """
     Fully Convolution Networks for Semantic Segmentation. This head is implemented from
@@ -1226,6 +1402,7 @@ class TFBeitFCNHead(tf.keras.layers.Layer):
     """,
     BEIT_START_DOCSTRING,
 )
+# Copied from transformers.models.data2vec.modeling_data2vec_vision.TFData2VecVisionForSemanticSegmentation with Data2VecVision->Beit
 class TFBeitForSemanticSegmentation(TFBeitPreTrainedModel):
     def __init__(self, config: BeitConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
@@ -1305,7 +1482,7 @@ class TFBeitForSemanticSegmentation(TFBeitPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
         >>> model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = feature_extractor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs)
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
