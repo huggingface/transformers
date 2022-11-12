@@ -591,7 +591,6 @@ class TokenMixing(nn.Module):
         B, N, C = x.shape
         q = self.q(x).reshape(B, N, self.num_attention_heads, C // self.num_attention_heads).permute(0, 2, 1, 3)
 
-        # import pdb;pdb.set_trace()
         kv = (
             self.kv(x)
             .reshape(B, -1, 2, self.num_attention_heads, C // self.num_attention_heads)
@@ -605,7 +604,7 @@ class TokenMixing(nn.Module):
         x = (attn @ v).transpose(1, 2).reshape(B, N, C)
         x = self.proj(x)
         x = self.proj_drop(x)
-        return x, attn @ v
+        return x, attn
 
 
 class HybridEmbed(nn.Module):
@@ -812,12 +811,12 @@ class FANBlock_SE(nn.Module):
         self.weight1 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
         self.weight2 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
 
-    def forward(self, x, H: int, W: int, attn=None):
-        x_new, _ = self.attn(self.norm1(x), H, W)
+    def forward(self, x, Hp: int, Wp: int, attn=None):
+        x_new, attn_s = self.attn(self.norm1(x), Hp, Wp)
         x = x + self.drop_path(self.weight1 * x_new)
-        x_new, H, W = self.mlp(self.norm2(x), H, W)
+        x_new, Hp, Wp = self.mlp(self.norm2(x), Hp, Wp)
         x = x + self.drop_path(self.weight2 * x_new)
-        return x, H, W
+        return x, Hp, Wp, attn_s
 
 
 class FANBlock(nn.Module):
@@ -887,7 +886,7 @@ class FANBlock(nn.Module):
         if self.downsample is not None:
             x, Hp, Wp = self.downsample(x, Hp, Wp)
         # self.H, self.W = H, W
-        return x, Hp, Wp
+        return x, Hp, Wp, attn_s
 
 
 class OverlapPatchEmbed(nn.Module):
@@ -1422,8 +1421,8 @@ class FANEncoderLayer(FANPreTrainedModel):
         )
 
     def forward(self, hidden_state, Hp, Wp):
-        hidden_state, Hp, Wp = self.block(hidden_state, Hp, Wp)
-        return hidden_state, Hp, Wp
+        hidden_state, Hp, Wp, attn = self.block(hidden_state, Hp, Wp)
+        return hidden_state, Hp, Wp, attn
 
 
 # TODO: Update Docstring
@@ -1509,9 +1508,14 @@ class FANEncoder(FANPreTrainedModel):
             # blk.H, blk.W = Hp, Wp
 
             if self.gradient_checkpointing:
-                current_hidden_state, Hp, Wp = torch.utils.checkpoint.checkpoint(blk, current_hidden_state, Hp, Wp)
+                current_hidden_state, Hp, Wp, attn = torch.utils.checkpoint.checkpoint(
+                    blk, current_hidden_state, Hp, Wp
+                )
             else:
-                (current_hidden_state, Hp, Wp) = blk(current_hidden_state, Hp, Wp)
+                (current_hidden_state, Hp, Wp, attn) = blk(current_hidden_state, Hp, Wp)
+
+            if output_attentions:
+                all_attentions = all_attentions + (attn,)
 
             if idx in out_index and output_hidden_states:
                 hidden_state_reshaped = (
@@ -1526,7 +1530,7 @@ class FANEncoder(FANPreTrainedModel):
         for blk in self.cls_attn_blocks:
             if output_attentions:
                 current_hidden_state, attn = blk(current_hidden_state, output_attentions)
-                all_attentions = all_attentions + (attn,)
+                # all_attentions = all_attentions + (attn,)
             else:
                 current_hidden_state = blk(current_hidden_state)
 
@@ -1756,7 +1760,11 @@ class FANForImageClassification(FANPreTrainedModel):
         ```"""
 
         outputs = self.fan(
-            pixel_values, pixel_mask=None, output_attentions=None, output_hidden_states=None, return_dict=None
+            pixel_values,
+            pixel_mask=None,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=None,
         )
         logits = self.head(outputs.last_hidden_state)
 

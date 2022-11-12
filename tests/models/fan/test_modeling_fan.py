@@ -83,7 +83,7 @@ class FANModelTester:
 
         # in DeiT, the seq length equals the number of patches + 2 (we add 2 for the [CLS] and distilation tokens)
         num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 2
+        self.seq_length = num_patches
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -95,6 +95,16 @@ class FANModelTester:
         config = self.get_config()
 
         return config, pixel_values, labels
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            pixel_values,
+            labels,
+        ) = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values}
+        return config, inputs_dict
 
     def get_config(self):
         return FANConfig(
