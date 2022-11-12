@@ -17,6 +17,7 @@
 
 import math
 import random
+import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -2211,6 +2212,8 @@ class LEDDecoder(LEDPreTrainedModel):
     LED_START_DOCSTRING,
 )
 class LEDModel(LEDPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+
     def __init__(self, config: LEDConfig):
         super().__init__(config)
 
@@ -2340,6 +2343,8 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
         r"encoder.version",
         r"decoder.version",
         r"lm_head.weight",
+        "decoder.embed_tokens.weight",
+        "encoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: LEDConfig):
@@ -2527,7 +2532,15 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
     LED_START_DOCSTRING,
 )
 class LEDForSequenceClassification(LEDPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+
     def __init__(self, config: LEDConfig, **kwargs):
+        warnings.warn(
+            "The `transformers.LEDForSequenceClassification` class is deprecated and will be removed in version 5 of"
+            " Transformers. No actual method were provided in the original paper on how to perfom"
+            " sequence classification.",
+            FutureWarning,
+        )
         super().__init__(config, **kwargs)
         self.led = LEDModel(config)
         self.classification_head = LEDClassificationHead(
@@ -2655,6 +2668,8 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
     LED_START_DOCSTRING,
 )
 class LEDForQuestionAnswering(LEDPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 

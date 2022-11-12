@@ -112,6 +112,10 @@ jobs:
           rm -rf tests/models/__pycache__
           rm -rf reports
 
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
       - name: Fetch the tests to run
         working-directory: /transformers
         # TODO: add `git-python` in the docker images
@@ -212,6 +216,10 @@ jobs:
         run: |
           python3 utils/print_env.py
 
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
       - name: Run all non-slow selected tests on GPU
         working-directory: /transformers
         run: |
@@ -297,6 +305,10 @@ jobs:
         run: |
           python3 utils/print_env.py
 
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
       - name: Run all non-slow selected tests on GPU
         env:
           MKL_SERVICE_FORCE_INTEL: 1
@@ -380,6 +392,10 @@ jobs:
         run: |
           python utils/print_env.py
 
+      - name: Show installed libraries and their versions
+        working-directory: /workspace/transformers
+        run: pip freeze
+
       - name: Run all non-slow selected tests on GPU
         working-directory: /workspace/transformers
         # TODO: Here we pass all tests in the 2 folders for simplicity. It's better to pass only the identified tests.
@@ -461,6 +477,10 @@ jobs:
         working-directory: /workspace/transformers
         run: |
           python utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /workspace/transformers
+        run: pip freeze
 
       - name: Run all non-slow selected tests on GPU
         working-directory: /workspace/transformers
@@ -560,4 +580,5 @@ jobs:
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |
           pip install slack_sdk
+          pip show slack_sdk
           python utils/notification_service.py "${{ needs.setup.outputs.matrix }}"

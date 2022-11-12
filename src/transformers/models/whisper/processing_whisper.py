@@ -70,7 +70,7 @@ class WhisperProcessor(ProcessorMixin):
             forced_decoder_tokens += f"<|{task}|>"
 
         forced_decoder_tokens += "<|notimestamps|>" if no_timestamps else ""
-        ids = self.tokenizer.encode(forced_decoder_tokens)
+        ids = self.tokenizer.encode(forced_decoder_tokens, add_special_tokens=False)
         forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(ids)]
         return forced_decoder_ids
 
@@ -85,6 +85,7 @@ class WhisperProcessor(ProcessorMixin):
             return self.current_processor(*args, **kwargs)
 
         audio = kwargs.pop("audio", None)
+        sampling_rate = kwargs.pop("sampling_rate", None)
         text = kwargs.pop("text", None)
         if len(args) > 0:
             audio = args[0]
@@ -94,7 +95,7 @@ class WhisperProcessor(ProcessorMixin):
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
 
         if audio is not None:
-            inputs = self.feature_extractor(audio, *args, **kwargs)
+            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
         if text is not None:
             encodings = self.tokenizer(text, **kwargs)
 

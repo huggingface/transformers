@@ -117,6 +117,36 @@ if is_torch_available():
     )
     from transformers.modeling_utils import shard_checkpoint
 
+    # Fake pretrained models for tests
+    class BaseModel(PreTrainedModel):
+        config_class = PretrainedConfig
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(4, 5)
+            self.linear_2 = nn.Linear(5, 6)
+
+        def forward(self, x):
+            return self.linear_2(self.linear(x))
+
+    class ModelWithHead(PreTrainedModel):
+        base_model_prefix = "base"
+        config_class = PretrainedConfig
+
+        def _init_weights(self, module):
+            pass
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.base = BaseModel(config)
+            # linear is a common name between Base and Head on purpose.
+            self.linear = nn.Linear(6, 3)
+            self.linear2 = nn.Linear(3, 5)
+
+        def forward(self, x):
+            return self.linear2(self.linear(self.base(x)))
+
+
 if is_tf_available():
     import tensorflow as tf
 
@@ -805,17 +835,14 @@ class ModelTesterMixin:
                     filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
                     input_names = list(filtered_inputs.keys())
 
-                    model_output = model(**filtered_inputs)
-
-                    if (
-                        isinstance(model, tuple(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values()))
-                        and not hasattr(model.config, "problem_type")
-                        or model.config.problem_type is None
+                    if isinstance(model, tuple(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values())) and (
+                        not hasattr(model.config, "problem_type") or model.config.problem_type is None
                     ):
                         model.config.problem_type = "single_label_classification"
 
                     traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
+                    model_output = model(**filtered_inputs)
 
             except Exception as e:
                 self.fail(f"Couldn't trace module: {e}")
@@ -839,20 +866,6 @@ class ModelTesterMixin:
                 self.assertTrue(
                     torch.allclose(model_output[i], traced_output[i]),
                     f"traced {i}th output doesn't match model {i}th output for {model_class}",
-                )
-
-            # Test that the model can be TorchScripted
-            try:
-                scripted = torch.jit.script(traced_model)
-            except Exception as e:
-                self.fail(f"Could not TorchScript the traced model: {e}")
-            scripted_output = scripted(**filtered_inputs)
-            scripted_output = flatten_output(scripted_output)
-
-            for i in range(num_outputs):
-                self.assertTrue(
-                    torch.allclose(model_output[i], scripted_output[i]),
-                    f"scripted {i}th output doesn't match model {i}th output for {model_class}",
                 )
 
             # Test that the model can be serialized and restored properly
@@ -1455,11 +1468,24 @@ class ModelTesterMixin:
             base_model_prefix = model.base_model_prefix
 
             if hasattr(model, base_model_prefix):
+
+                extra_params = {k: v for k, v in model.named_parameters() if not k.startswith(base_model_prefix)}
+                extra_params.update({k: v for k, v in model.named_buffers() if not k.startswith(base_model_prefix)})
+                # Some models define this as None
+                if model._keys_to_ignore_on_load_missing:
+                    for key in model._keys_to_ignore_on_load_missing:
+                        extra_params.pop(key, None)
+
+                if not extra_params:
+                    # In that case, we *are* on a head model, but every
+                    # single key is not actual parameters and this is
+                    # tested in `test_tied_model_weights_key_ignore` test.
+                    continue
+
                 with tempfile.TemporaryDirectory() as temp_dir_name:
                     model.base_model.save_pretrained(temp_dir_name)
                     model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
-                    with self.subTest(msg=f"Missing keys for {model.__class__.__name__}"):
-                        self.assertGreater(len(loading_info["missing_keys"]), 0)
+                    self.assertGreater(len(loading_info["missing_keys"]), 0, model.__class__.__name__)
 
     def test_tie_model_weights(self):
         if not self.test_torchscript:
@@ -1508,6 +1534,54 @@ class ModelTesterMixin:
             # # Check that the embedding layer and decoding layer are the same in size and in value
             # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
+
+    def test_tied_model_weights_key_ignore(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model_tied = model_class(config)
+            with tempfile.TemporaryDirectory() as d:
+                model_tied.save_pretrained(d)
+
+                # We are nuking ALL weights on file, so every parameter should
+                # yell on load. We're going to detect if we yell too much, or too little.
+                with open(os.path.join(d, "pytorch_model.bin"), "wb") as f:
+                    torch.save({}, f)
+                model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
+
+                # ! Actually we could use `state_dict()` and check iteratively the tensors which are the same (for instance using `tensor.data_ptr()`). to detect the duplicates.
+                # ```python
+                # model = GPT2LMHeadModel.from_pretrained("gpt2")
+                # "lm_head.weight" in model.state_dict().keys()  # True
+                # "lm_head.weight" in model.named_parameters() # False
+                # In [6]: model.lm_head.weight.data_ptr()
+                # Out[6]: 139901378371648
+                # In [9]: model.transformer.wte.weight.data_ptr()
+                # Out[9]: 139901378371648  # Same PTR, it's the same DATA ! we would need to check for stride too to be 100% accurate.
+                # ```
+
+                prefix = f"{model_reloaded.base_model_prefix}."
+                params = dict(model_reloaded.named_parameters())
+                params.update(dict(model_reloaded.named_buffers()))
+                # param_names = set(k[len(prefix) :] if k.startswith(prefix) else k for k in params.keys())
+                param_names = set(k[len(prefix) :] if k.startswith(prefix) else k for k in params.keys())
+
+                missing_keys = set(infos["missing_keys"])
+
+                extra_missing = missing_keys - param_names
+                # missed_missing = param_names - missing_keys
+
+                self.assertEqual(
+                    extra_missing,
+                    set(),
+                    f"This model {model_class.__name__} might be missing some `keys_to_ignore`: {extra_missing}",
+                )
+
+                # self.assertEqual(
+                #     missed_missing,
+                #     set(),
+                #     f"This model {model_class.__name__} ignores keys {missed_missing} but they look like real"
+                #     " parameters",
+                # )
 
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -3038,6 +3112,28 @@ class ModelUtilsTest(TestCasePlus):
         # Check models are equal
         for p1, p2 in zip(safetensors_model.parameters(), pytorch_model.parameters()):
             self.assertTrue(torch.allclose(p1, p2))
+
+    def test_base_model_to_head_model_load(self):
+        base_model = BaseModel(PretrainedConfig())
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_model.save_pretrained(tmp_dir)
+
+            # Can load a base model in a model with head
+            model = ModelWithHead.from_pretrained(tmp_dir)
+            for p1, p2 in zip(model.base.parameters(), base_model.parameters()):
+                self.assertTrue(torch.allclose(p1, p2))
+
+            # It doesn't work if the state dict has a mix of keys of the head and base without prefix though.
+            base_state_dict = base_model.state_dict()
+            head_state_dict = model.state_dict()
+            base_state_dict["linear2.weight"] = head_state_dict["linear2.weight"]
+            base_state_dict["linear2.bias"] = head_state_dict["linear2.bias"]
+            torch.save(base_state_dict, os.path.join(tmp_dir, WEIGHTS_NAME))
+
+            with self.assertRaisesRegex(
+                ValueError, "The state dictionary of the model you are trying to load is corrupted."
+            ):
+                _ = ModelWithHead.from_pretrained(tmp_dir)
 
 
 @require_torch

@@ -21,11 +21,14 @@ import os
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
-import sentencepiece as spm
-
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
-from ...utils import logging
+from ...utils import is_sentencepiece_available, logging
 
+
+if is_sentencepiece_available():
+    import sentencepiece as spm
+else:
+    spm = None
 
 logger = logging.get_logger(__name__)
 

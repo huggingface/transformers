@@ -57,12 +57,11 @@ require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/sema
 
 
 def pad_if_smaller(img, size, fill=0):
-    min_size = min(img.size)
-    if min_size < size:
-        original_width, original_height = img.size
-        pad_height = size - original_height if original_height < size else 0
-        pad_width = size - original_width if original_width < size else 0
-        img = functional.pad(img, (0, 0, pad_width, pad_height), fill=fill)
+    size = (size, size) if isinstance(size, int) else size
+    original_width, original_height = img.size
+    pad_height = size[1] - original_height if original_height < size[1] else 0
+    pad_width = size[0] - original_width if original_width < size[0] else 0
+    img = functional.pad(img, (0, 0, pad_width, pad_height), fill=fill)
     return img
 
 
@@ -110,12 +109,12 @@ class RandomResize:
 
 class RandomCrop:
     def __init__(self, size):
-        self.size = size
+        self.size = size if isinstance(size, tuple) else (size, size)
 
     def __call__(self, image, target):
         image = pad_if_smaller(image, self.size)
         target = pad_if_smaller(target, self.size, fill=255)
-        crop_params = transforms.RandomCrop.get_params(image, (self.size, self.size))
+        crop_params = transforms.RandomCrop.get_params(image, self.size)
         image = functional.crop(image, *crop_params)
         target = functional.crop(target, *crop_params)
         return image, target
@@ -359,7 +358,7 @@ def main():
             references=labels,
             num_labels=len(id2label),
             ignore_index=0,
-            reduce_labels=feature_extractor.reduce_labels,
+            reduce_labels=feature_extractor.do_reduce_labels,
         )
         # add per category metrics as individual key-value pairs
         per_category_accuracy = metrics.pop("per_category_accuracy").tolist()
@@ -396,10 +395,15 @@ def main():
     # Define torchvision transforms to be applied to each image + target.
     # Not that straightforward in torchvision: https://github.com/pytorch/vision/issues/9
     # Currently based on official torchvision references: https://github.com/pytorch/vision/blob/main/references/segmentation/transforms.py
+    if "shortest_edge" in feature_extractor.size:
+        # We instead set the target size as (shortest_edge, shortest_edge) to here to ensure all images are batchable.
+        size = (feature_extractor.size["shortest_edge"], feature_extractor.size["shortest_edge"])
+    else:
+        size = (feature_extractor.size["height"], feature_extractor.size["width"])
     train_transforms = Compose(
         [
             ReduceLabels() if data_args.reduce_labels else Identity(),
-            RandomCrop(size=feature_extractor.size),
+            RandomCrop(size=size),
             RandomHorizontalFlip(flip_prob=0.5),
             PILToTensor(),
             ConvertImageDtype(torch.float),
@@ -411,7 +415,7 @@ def main():
     val_transforms = Compose(
         [
             ReduceLabels() if data_args.reduce_labels else Identity(),
-            Resize(size=(feature_extractor.size, feature_extractor.size)),
+            Resize(size=size),
             PILToTensor(),
             ConvertImageDtype(torch.float),
             Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std),
