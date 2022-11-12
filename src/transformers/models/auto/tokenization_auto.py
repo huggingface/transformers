@@ -87,18 +87,19 @@ else:
             ),
             ("canine", ("CanineTokenizer", None)),
             (
-                "clip",
+                "chinese-clip",
                 (
                     "CLIPTokenizer",
                     "CLIPTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             (
-                "chinese-clip",
+                "clip",
                 (
                     "CLIPTokenizer",
                     "CLIPTokenizerFast" if is_tokenizers_available() else None,
                 ),
+            ),
             (
                 "clipseg",
                 (

@@ -32,16 +32,17 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "OFA-Sys/chinese-clip-vit-base-patch16": "https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16/resolve/main/config.json",
+    "OFA-Sys/chinese-clip-vit-base-patch16": (
+        "https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16/resolve/main/config.json"
+    ),
 }
-
 
 
 class ChineseCLIPTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used to instantiate an ChineseCLIP
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the ChineseCLIP
+    This is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used to instantiate an
+    ChineseCLIP model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the ChineseCLIP
     [OFA-Sys/chinese-clip-vit-base-patch16](https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -50,8 +51,8 @@ class ChineseCLIPTextConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
-            Vocabulary size of the ChineseCLIP text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`ChineseCLIPModel`].
+            Vocabulary size of the ChineseCLIP text model. Defines the number of different tokens that can be
+            represented by the `inputs_ids` passed when calling [`ChineseCLIPModel`].
         hidden_size (`int`, *optional*, defaults to 512):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 2048):
@@ -147,9 +148,9 @@ class ChineseCLIPTextConfig(PretrainedConfig):
 
 class ChineseCLIPVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used to instantiate an ChineseCLIP
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the ChineseCLIP
+    This is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used to instantiate an
+    ChineseCLIP model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the ChineseCLIP
     [OFA-Sys/chinese-clip-vit-base-patch16](https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -253,10 +254,11 @@ class ChineseCLIPVisionConfig(PretrainedConfig):
 
 class ChineseCLIPConfig(PretrainedConfig):
     r"""
-    [`ChineseCLIPConfig`] is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used to instantiate
-    ChineseCLIP model according to the specified arguments, defining the text model and vision model configs. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the ChineseCLIP
-    [OFA-Sys/chinese-clip-vit-base-patch16](https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16) architecture.
+    [`ChineseCLIPConfig`] is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used
+    to instantiate ChineseCLIP model according to the specified arguments, defining the text model and vision model
+    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    ChineseCLIP [OFA-Sys/chinese-clip-vit-base-patch16](https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -269,7 +271,8 @@ class ChineseCLIPConfig(PretrainedConfig):
         projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original ChineseCLIP implementation.
+            The inital value of the *logit_scale* paramter. Default is used as per the original ChineseCLIP
+            implementation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -328,10 +331,12 @@ class ChineseCLIPConfig(PretrainedConfig):
         self.initializer_factor = 1.0
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: ChineseCLIPTextConfig, vision_config: ChineseCLIPVisionConfig, **kwargs):
+    def from_text_vision_configs(
+        cls, text_config: ChineseCLIPTextConfig, vision_config: ChineseCLIPVisionConfig, **kwargs
+    ):
         r"""
-        Instantiate a [`ChineseCLIPConfig`] (or a derived class) from chinese_clip text model configuration and chinese_clip vision model
-        configuration.
+        Instantiate a [`ChineseCLIPConfig`] (or a derived class) from chinese_clip text model configuration and
+        chinese_clip vision model configuration.
 
         Returns:
             [`ChineseCLIPConfig`]: An instance of a configuration object

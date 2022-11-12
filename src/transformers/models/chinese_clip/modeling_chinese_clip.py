@@ -45,7 +45,6 @@ CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 # Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
@@ -86,9 +85,11 @@ class ChineseCLIPOutput(ModelOutput):
             The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
             similarity scores.
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`ChineseCLIPTextModel`].
+            The text embeddings obtained by applying the projection layer to the pooled output of
+            [`ChineseCLIPTextModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`ChineseCLIPVisionModel`].
+            The image embeddings obtained by applying the projection layer to the pooled output of
+            [`ChineseCLIPVisionModel`].
         text_model_output(`BaseModelOutputWithPooling`):
             The output of the [`ChineseCLIPTextModel`].
         vision_model_output(`BaseModelOutputWithPooling`):

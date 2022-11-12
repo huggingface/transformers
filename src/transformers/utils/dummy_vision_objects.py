@@ -43,6 +43,13 @@ class BeitImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class ChineseCLIPImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class CLIPFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 

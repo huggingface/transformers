@@ -40,8 +40,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("bloom", "BloomModel"),
         ("camembert", "CamembertModel"),
         ("canine", "CanineModel"),
-        ("clip", "CLIPModel"),
         ("chinese-clip", "ChineseCLIPModel"),
+        ("clip", "CLIPModel"),
         ("clipseg", "CLIPSegModel"),
         ("codegen", "CodeGenModel"),
         ("conditional_detr", "ConditionalDetrModel"),
@@ -824,8 +824,8 @@ MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
 _MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Zero Shot Image Classification mapping
-        ("clip", "CLIPModel"),
         ("chinese-clip", "ChineseCLIPModel"),
+        ("clip", "CLIPModel"),
         ("clipseg", "CLIPSegModel"),
     ]
 )
