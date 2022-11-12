@@ -1,0 +1,27 @@
+{
+  "apply_residual_connection_post_layernorm": false,
+  "attention_dropout": 0.0,
+  "attention_softmax_in_fp32": true,
+  "bias_dropout_fusion": true,
+  "bos_token_id": 1,
+  "architectures": [
+    "BloomModel"
+  ],
+  "eos_token_id": 2,
+  "pad_token_id": 3,
+  "unk_token_id": 0,
+  "hidden_dropout": 0.0,
+  "initializer_range": 0.02,
+  "layer_norm_epsilon": 1e-05,
+  "masked_softmax_fusion": true,
+  "model_type": "bloom",
+  "n_embed": 1536,
+  "n_inner": null,
+  "n_layer": 10,
+  "num_attention_heads": 8,
+  "offset_alibi": 100,
+  "pretraining_tp": 1,
+  "skip_bias_add": true,
+  "skip_bias_add_qkv": false,
+  "vocab_size": 250880
+}
