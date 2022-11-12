@@ -317,23 +317,23 @@ class ConvPatchEmbed(nn.Module):
         else:
             raise ("For convolutional projection, patch size has to be in [8, 16]")
 
-        self.apply(self._init_weights)
+    #     self.apply(self._init_weights)
 
-    def _init_weights(self, m):
-        # if isinstance(m, nn.Linear):
-        #     trunc_normal_(m.weight, std=0.02)
-        #     if isinstance(m, nn.Linear) and m.bias is not None:
-        #         nn.init.constant_(m.bias, 0)
-        # elif isinstance(m, nn.LayerNorm):
-        #     nn.init.constant_(m.bias, 0)
-        #     nn.init.constant_(m.weight, 1.0)
-        if isinstance(m, nn.Conv2d):
-            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-            fan_out //= m.groups
-            m.weight.data = trunc_normal_(m.weight.data, 0, math.sqrt(2.0 / fan_out), 0, 1)
-            # m.weight.data = torch.clamp(m.weight.data, 0, math.sqrt(2.0 / fan_out), 0, 1)
-            if m.bias is not None:
-                m.bias.data.zero_()
+    # def _init_weights(self, m):
+    #     # if isinstance(m, nn.Linear):
+    #     #     trunc_normal_(m.weight, std=0.02)
+    #     #     if isinstance(m, nn.Linear) and m.bias is not None:
+    #     #         nn.init.constant_(m.bias, 0)
+    #     # elif isinstance(m, nn.LayerNorm):
+    #     #     nn.init.constant_(m.bias, 0)
+    #     #     nn.init.constant_(m.weight, 1.0)
+    #     if isinstance(m, nn.Conv2d):
+    #         fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+    #         fan_out //= m.groups
+    #         m.weight.data = trunc_normal_(m.weight.data, 0, math.sqrt(2.0 / fan_out), 0, 1)
+    #         # m.weight.data = torch.clamp(m.weight.data, 0, math.sqrt(2.0 / fan_out), 0, 1)
+    #         if m.bias is not None:
+    #             m.bias.data.zero_()
 
     def forward(self, x, return_feat=False):
         x = self.proj(x)
@@ -1233,18 +1233,12 @@ class FANPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data = nn.init.trunc_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -1570,6 +1564,7 @@ class FANEncoder(FANPreTrainedModel):
         )
 
 
+# TODO: Cleanup unused parameters in forward calls
 @add_start_docstrings(
     "The bare FAN Model transformer outputting raw hidden-states without any specific head on top.",
     FAN_START_DOCSTRING,
