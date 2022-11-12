@@ -359,7 +359,7 @@ class TFBeitModelTest(TFModelTesterMixin, unittest.TestCase):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             # Since `TFData2VecVisionModel` cannot operate with the default `fit()` method.
-            if model_class.__name__ != "TFData2VecVisionModel":
+            if model_class.__name__ != "TFBeitModel":
                 model = model_class(config)
                 if getattr(model, "hf_compute_loss", None):
                     # Test that model correctly compute the loss with kwargs
@@ -404,7 +404,7 @@ class TFBeitModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             # Since `TFData2VecVisionModel` won't have labels against which we
             # could compute loss.
-            if model_class.__name__ != "TFData2VecVisionModel":
+            if model_class.__name__ != "TFBeitModel":
                 model = model_class(config)
                 if getattr(model, "hf_compute_loss", None):
                     # The number of elements in the loss should be the same as the number of elements in the label
