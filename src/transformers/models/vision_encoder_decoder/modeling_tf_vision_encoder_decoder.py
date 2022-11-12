@@ -87,8 +87,8 @@ VISION_ENCODER_DECODER_START_DOCSTRING = r"""
 VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using the vision's model's feature extractor. For example, using
-            [`ViTFeatureExtractor`]. See [`ViTFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using the vision's model's image processor. For example, using
+            [`ViTImageProcessor`]. See [`ViTImageProcessor.__call__`] for details.
         decoder_input_ids (`np.ndarray` or `tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -299,17 +299,17 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         Example:
 
         ```python
-        >>> from transformers import TFVisionEncoderDecoderModel, ViTFeatureExtractor, GPT2Tokenizer
+        >>> from transformers import TFVisionEncoderDecoderModel, ViTImageProcessor, GPT2Tokenizer
         >>> from PIL import Image
         >>> import requests
 
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("ydshieh/vit-gpt2-coco-en")
+        >>> image_processor = ViTImageProcessor.from_pretrained("ydshieh/vit-gpt2-coco-en")
         >>> decoder_tokenizer = GPT2Tokenizer.from_pretrained("ydshieh/vit-gpt2-coco-en")
         >>> model = TFVisionEncoderDecoderModel.from_pretrained("ydshieh/vit-gpt2-coco-en")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> img = Image.open(requests.get(url, stream=True).raw)
-        >>> pixel_values = feature_extractor(images=img, return_tensors="tf").pixel_values  # Batch size 1
+        >>> pixel_values = image_processor(images=img, return_tensors="tf").pixel_values  # Batch size 1
 
         >>> output_ids = model.generate(
         ...     pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True
@@ -555,11 +555,11 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, AutoTokenizer, TFVisionEncoderDecoderModel
+        >>> from transformers import AutoImageProcessor, AutoTokenizer, TFVisionEncoderDecoderModel
         >>> from PIL import Image
         >>> import requests
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
+        >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
         >>> decoder_tokenizer = AutoTokenizer.from_pretrained("gpt2")
 
         >>> # initialize a bert2gpt2 from a pretrained BERT and GPT2 models. Note that the cross-attention layers will be randomly initialized
@@ -571,7 +571,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         >>> img = Image.open(requests.get(url, stream=True).raw)
 
         >>> # forward
-        >>> pixel_values = feature_extractor(images=img, return_tensors="tf").pixel_values  # Batch size 1
+        >>> pixel_values = image_processor(images=img, return_tensors="tf").pixel_values  # Batch size 1
         >>> decoder_input_ids = decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids  # Batch size 1
         >>> outputs = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
 

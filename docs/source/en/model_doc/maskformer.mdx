@@ -41,6 +41,12 @@ The figure below illustrates the architecture of MaskFormer. Taken from the [ori
 
 This model was contributed by [francesco](https://huggingface.co/francesco). The original code can be found [here](https://github.com/facebookresearch/MaskFormer).
 
+## Resources
+
+<PipelineTag pipeline="image-segmentation"/>
+
+- All notebooks that illustrate inference as well as fine-tuning on custom data with MaskFormer can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/MaskFormer).
+
 ## MaskFormer specific outputs
 
 [[autodoc]] models.maskformer.modeling_maskformer.MaskFormerModelOutput
@@ -56,7 +62,6 @@ This model was contributed by [francesco](https://huggingface.co/francesco). The
 [[autodoc]] MaskFormerFeatureExtractor
     - __call__
     - encode_inputs
-    - post_process_segmentation
     - post_process_semantic_segmentation
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation

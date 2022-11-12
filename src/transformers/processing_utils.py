@@ -37,6 +37,7 @@ transformers_module = spec.loader.load_module()
 AUTO_TO_BASE_CLASS_MAPPING = {
     "AutoTokenizer": "PreTrainedTokenizerBase",
     "AutoFeatureExtractor": "FeatureExtractionMixin",
+    "AutoImageProcessor": "ImageProcessingMixin",
 }
 
 
@@ -225,6 +226,11 @@ class ProcessorMixin(PushToHubMixin):
 
             args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
         return args
+
+    @property
+    def model_input_names(self):
+        first_attribute = getattr(self, self.attributes[0])
+        return getattr(first_attribute, "model_input_names", None)
 
 
 ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)

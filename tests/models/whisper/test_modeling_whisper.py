@@ -25,7 +25,7 @@ from transformers.testing_utils import is_torch_available, require_torch, requir
 from transformers.utils import cached_property
 from transformers.utils.import_utils import is_datasets_available
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 

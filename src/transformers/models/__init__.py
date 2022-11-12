@@ -78,6 +78,7 @@ from . import (
     hubert,
     ibert,
     imagegpt,
+    jukebox,
     layoutlm,
     layoutlmv2,
     layoutlmv3,
