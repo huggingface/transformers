@@ -50,7 +50,7 @@ class FANModelTester:
         num_channels=3,
         is_training=True,
         use_labels=True,
-        hidden_size=32,
+        hidden_size=384,
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
@@ -129,18 +129,10 @@ class FANModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = FANModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        # seq_length +1 to account for class tokens
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.seq_length + 1, self.hidden_size)
+        )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -197,6 +189,10 @@ class FANModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @unittest.skip(reason="DeiT does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

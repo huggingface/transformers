@@ -317,6 +317,24 @@ class ConvPatchEmbed(nn.Module):
         else:
             raise ("For convolutional projection, patch size has to be in [8, 16]")
 
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        # if isinstance(m, nn.Linear):
+        #     trunc_normal_(m.weight, std=0.02)
+        #     if isinstance(m, nn.Linear) and m.bias is not None:
+        #         nn.init.constant_(m.bias, 0)
+        # elif isinstance(m, nn.LayerNorm):
+        #     nn.init.constant_(m.bias, 0)
+        #     nn.init.constant_(m.weight, 1.0)
+        if isinstance(m, nn.Conv2d):
+            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            fan_out //= m.groups
+            m.weight.data = trunc_normal_(m.weight.data, 0, math.sqrt(2.0 / fan_out), 0, 1)
+            # m.weight.data = torch.clamp(m.weight.data, 0, math.sqrt(2.0 / fan_out), 0, 1)
+            if m.bias is not None:
+                m.bias.data.zero_()
+
     def forward(self, x, return_feat=False):
         x = self.proj(x)
         Hp, Wp = x.shape[2], x.shape[3]
