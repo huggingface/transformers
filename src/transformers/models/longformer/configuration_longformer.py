@@ -183,6 +183,7 @@ class LongformerOnnxConfig(OnnxConfig):
                 ("input_ids", dynamic_axis),
                 ("attention_mask", dynamic_axis),
                 ("global_attention_mask", dynamic_axis),
+                ("token_type_ids", dynamic_axis),
             ]
         )
 
