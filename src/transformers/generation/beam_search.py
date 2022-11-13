@@ -21,8 +21,8 @@ from typing import List, Optional, Tuple
 import numpy as np
 import torch
 
-from .generation_beam_constraints import Constraint, ConstraintListState
-from .utils import add_start_docstrings
+from ..utils import add_start_docstrings
+from .beam_constraints import Constraint, ConstraintListState
 
 
 PROCESS_INPUTS_DOCSTRING = r"""

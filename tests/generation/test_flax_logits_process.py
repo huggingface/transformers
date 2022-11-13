@@ -27,7 +27,7 @@ from ..test_modeling_flax_common import ids_tensor
 if is_flax_available():
     import jax
     import jax.numpy as jnp
-    from transformers.generation_flax_logits_process import (
+    from transformers.generation import (
         FlaxForcedBOSTokenLogitsProcessor,
         FlaxForcedEOSTokenLogitsProcessor,
         FlaxLogitsProcessorList,

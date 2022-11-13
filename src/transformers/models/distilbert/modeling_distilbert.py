@@ -579,6 +579,8 @@ class DistilBertModel(DistilBertPreTrainedModel):
     DISTILBERT_START_DOCSTRING,
 )
 class DistilBertForMaskedLM(DistilBertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["vocab_projector.weight"]
+
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
 

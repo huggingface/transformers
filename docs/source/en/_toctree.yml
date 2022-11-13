@@ -183,6 +183,8 @@
       title: DeepSpeed Integration
     - local: main_classes/feature_extractor
       title: Feature Extractor
+    - local: main_classes/image_processor
+      title: Image Processor
     title: Main Classes
   - sections:
     - isExpanded: false
@@ -273,6 +275,8 @@
         title: HerBERT
       - local: model_doc/ibert
         title: I-BERT
+      - local: model_doc/jukebox
+        title: Jukebox
       - local: model_doc/layoutlm
         title: LayoutLM
       - local: model_doc/led
@@ -339,6 +343,8 @@
         title: RetriBERT
       - local: model_doc/roberta
         title: RoBERTa
+      - local: model_doc/roc_bert
+        title: RoCBert
       - local: model_doc/roformer
         title: RoFormer
       - local: model_doc/splinter
@@ -466,6 +472,8 @@
       sections:
       - local: model_doc/clip
         title: CLIP
+      - local: model_doc/clipseg
+        title: CLIPSeg
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/donut

@@ -37,6 +37,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_segformer"] = ["SegformerFeatureExtractor"]
+    _import_structure["image_processing_segformer"] = ["SegformerImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -80,6 +81,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_segformer import SegformerFeatureExtractor
+        from .image_processing_segformer import SegformerImageProcessor
 
     try:
         if not is_torch_available():

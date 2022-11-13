@@ -763,6 +763,8 @@ CONVBERT_INPUTS_DOCSTRING = r"""
     CONVBERT_START_DOCSTRING,
 )
 class ConvBertModel(ConvBertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["embeddings.position_ids"]
+
     def __init__(self, config):
         super().__init__(config)
         self.embeddings = ConvBertEmbeddings(config)
@@ -877,6 +879,8 @@ class ConvBertGeneratorPredictions(nn.Module):
 
 @add_start_docstrings("""ConvBERT Model with a `language modeling` head on top.""", CONVBERT_START_DOCSTRING)
 class ConvBertForMaskedLM(ConvBertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["embeddings.position_ids", "generator.lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -987,6 +991,8 @@ class ConvBertClassificationHead(nn.Module):
     CONVBERT_START_DOCSTRING,
 )
 class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["embeddings.position_ids"]
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1083,6 +1089,8 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
     CONVBERT_START_DOCSTRING,
 )
 class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["embeddings.position_ids"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1177,6 +1185,8 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
     CONVBERT_START_DOCSTRING,
 )
 class ConvBertForTokenClassification(ConvBertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["embeddings.position_ids"]
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1259,6 +1269,8 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
     CONVBERT_START_DOCSTRING,
 )
 class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["embeddings.position_ids"]
+
     def __init__(self, config):
         super().__init__(config)
 
