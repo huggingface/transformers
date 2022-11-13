@@ -833,6 +833,7 @@ BACKBONE_MAPPING_NAMES = OrderedDict(
         # Model for Instance Segmentation mapping
         ("maskformer-swin", "MaskFormerSwinBackbone"),
         ("resnet", "ResNetBackbone"),
+        ("swin", "MaskFormerSwinBackbone"),  # for backward compatibility
     ]
 )
 

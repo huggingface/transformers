@@ -33,11 +33,16 @@ logger = logging.get_logger(__name__)
 
 def get_maskformer_config(model_name: str):
     if "resnet101-c" in model_name:
+        # TODO use ResNet-C model here instead
         backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-101", use_deeplab_stem=True)
     elif "resnet101" in model_name:
-        backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-101", out_indices=[0, 1, 2, 3])
+        backbone_config = ResNetConfig.from_pretrained(
+            "microsoft/resnet-101", out_features=["stage1", "stage2", "stage3", "stage4"]
+        )
     else:
-        backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-50", out_indices=[0, 1, 2, 3])
+        backbone_config = ResNetConfig.from_pretrained(
+            "microsoft/resnet-50", out_features=["stage1", "stage2", "stage3", "stage4"]
+        )
     config = MaskFormerConfig(backbone_config=backbone_config)
 
     # TODO id2label mappings

@@ -1394,6 +1394,7 @@ class MaskFormerPixelLevelModule(nn.Module):
 
     def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> MaskFormerPixelLevelModuleOutput:
         features = self.encoder(pixel_values)
+        features = list(features.values())
         decoder_output = self.decoder(features, output_hidden_states)
 
         return MaskFormerPixelLevelModuleOutput(
@@ -1541,8 +1542,9 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
     def __init__(self, config: MaskFormerConfig):
         super().__init__(config)
         self.pixel_level_module = MaskFormerPixelLevelModule(config)
+        last_stage_name = self.pixel_level_module.encoder.stage_names[-1]
         self.transformer_module = MaskFormerTransformerModule(
-            in_features=self.pixel_level_module.encoder.output_shape()["res5"].channels, config=config
+            in_features=self.pixel_level_module.encoder.output_shape()[last_stage_name].channels, config=config
         )
 
         self.post_init()

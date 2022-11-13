@@ -67,6 +67,8 @@ class MaskFormerSwinConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        out_features (`List[str]`, *optional*, defaults to `None`):
+            If used as a backbone, list of feature names to output, e.g. ["stem", "stage1"].
 
     Example:
 
@@ -108,6 +110,7 @@ class MaskFormerSwinConfig(PretrainedConfig):
         patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
+        out_features=None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -133,3 +136,4 @@ class MaskFormerSwinConfig(PretrainedConfig):
         # we set the hidden_size attribute in order to make Swin work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
+        self.out_features = out_features

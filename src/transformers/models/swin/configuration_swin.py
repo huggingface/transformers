@@ -125,6 +125,7 @@ class SwinConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         encoder_stride=32,
+        out_features=["stage1", "stage2", "stage3", "stage4"],
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -151,6 +152,7 @@ class SwinConfig(PretrainedConfig):
         # we set the hidden_size attribute in order to make Swin work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
+        self.out_features = out_features
 
 
 class SwinOnnxConfig(OnnxConfig):

@@ -433,17 +433,18 @@ class ResNetBackbone(Backbone):
 
         self.model = ResNetModel(config)
 
-        # TODO we might need to make this configurable
-        self.out_features = ["res2", "res3", "res4", "res5"]
+        # note that this assumes there are always 4 stages
+        self.stage_names = ["stage1", "stage2", "stage3", "stage4"]
+        self.out_features = config.out_features
 
         # TODO calculate strides appropriately
         current_stride = self.model.embedder.embedder.convolution.stride[0]
         self.out_feature_strides = {
             "stem": current_stride,
-            "res2": current_stride * 2,
-            "res3": current_stride * 2,
-            "res4": current_stride * 2,
-            "res5": current_stride * 2,
+            "stage1": current_stride * 2,
+            "stage2": current_stride * 2,
+            "stage3": current_stride * 2,
+            "stage4": current_stride * 2,
         }
         # for idx, feat in enumerate(self.out_features):
         #     # current_stride *= self.model.encoder.stages[idx].layers[-1].layer[-1].convolution.stride[0]
@@ -456,10 +457,10 @@ class ResNetBackbone(Backbone):
 
         self.out_feature_channels = {
             "stem": config.embedding_size,
-            "res2": config.hidden_sizes[0],
-            "res3": config.hidden_sizes[1],
-            "res4": config.hidden_sizes[2],
-            "res5": config.hidden_sizes[3],
+            "stage1": config.hidden_sizes[0],
+            "stage2": config.hidden_sizes[1],
+            "stage3": config.hidden_sizes[2],
+            "stage4": config.hidden_sizes[3],
         }
 
     def forward(self, *args, **kwargs) -> List[Tensor]:
@@ -467,9 +468,16 @@ class ResNetBackbone(Backbone):
 
         hidden_states = output.hidden_states
 
-        hidden_states = [hidden_states[i + 1] for i in [0, 1, 2, 3]]
+        outputs = {}
+        if "stem" in self.out_features:
+            outputs["stem"] = hidden_states[0]
 
-        return hidden_states
+        for idx, stage in enumerate(self.stage_names):
+            if stage in self.out_features:
+                outputs[stage] = hidden_states[idx + 1]
+        # hidden_states = [hidden_states[i + 1] for i in [0, 1, 2, 3]]
+
+        return outputs
 
     def output_shape(self):
         output_shape = {

@@ -812,7 +812,7 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = encoder_outputs.last_hidden_state
+        sequence_output = encoder_outputs.last_hidden_state if return_dict else encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
 
         pooled_output = None
@@ -845,36 +845,39 @@ class MaskFormerSwinBackbone(Backbone):
     """
 
     def __init__(self, config: SwinConfig):
-        super().__init__()
+        super().__init__(config)
 
         self.model = MaskFormerSwinModel(config)
 
-        num_features = [int(config.embed_dim * 2**i) for i in range(config.num_layers)]
-        print("Number of features: ", num_features)
-        self.num_features = num_features
+        self.stage_names = [f"stage{i+1}" for i in range(len(config.depths))]
 
-        # TODO we might need to make this configurable
-        # perhaps define MaskFormerSwinConfig?
-        self.out_features = ["res2", "res3", "res4", "res5"]
+        self.out_features = config.out_features
 
+        # TODO properly compute strides and channels
         self.out_feature_strides = {
-            "res2": 4,
-            "res3": 8,
-            "res4": 16,
-            "res5": 32,
+            "stage1": 4,
+            "stage2": 8,
+            "stage3": 16,
+            "stage4": 32,
         }
+        num_features = [int(config.embed_dim * 2**i) for i in range(config.num_layers)]
+        self.num_features = num_features
         self.out_feature_channels = {
-            "res2": self.num_features[0],
-            "res3": self.num_features[1],
-            "res4": self.num_features[2],
-            "res5": self.num_features[3],
+            "stage1": self.num_features[0],
+            "stage2": self.num_features[1],
+            "stage3": self.num_features[2],
+            "stage4": self.num_features[3],
         }
 
         self.hidden_states_norms = nn.ModuleList([nn.LayerNorm(x.channels) for x in self.output_shape().values()])
 
     def forward(self, *args, **kwargs) -> List[Tensor]:
         output = self.model(*args, **kwargs, output_hidden_states=True)
-        hidden_states_permuted: List[Tensor] = []
+
+        hidden_states = output.hidden_states
+
+        outputs = {}
+
         # we need to reshape the hidden state to their original spatial dimensions
         # skipping the embeddings
         hidden_states: Tuple[Tuple[Tensor]] = output.hidden_states[1:]
@@ -891,9 +894,9 @@ class MaskFormerSwinBackbone(Backbone):
             hidden_state_permuted = (
                 hidden_state_norm.permute(0, 2, 1).view((batch_size, hidden_size, height, width)).contiguous()
             )
-            hidden_states_permuted.append(hidden_state_permuted)
+            outputs[f"stage{i+1}"] = hidden_state_permuted
 
-        return hidden_states_permuted
+        return outputs
 
     def output_shape(self):
         """A dictionary that maps feature map names to their shapes (number of channels + stride)."""
