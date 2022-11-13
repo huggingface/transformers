@@ -92,7 +92,7 @@ def whitespace_tokenize(text):
 # Copied from transformers.models.bert.tokenization_bert.BertTokenizer with Bert->Electra
 class ElectraTokenizer(PreTrainedTokenizer):
     r"""
-    Construct a BERT tokenizer. Based on WordPiece.
+    Construct a Electra tokenizer. Based on WordPiece.
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
