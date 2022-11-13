@@ -21,6 +21,7 @@ import collections.abc
 import math
 import os
 from collections import OrderedDict
+from dataclasses import dataclass
 from functools import partial
 from itertools import repeat
 from typing import Optional, Tuple, Union
@@ -36,6 +37,7 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     ImageClassifierOutput,
+    ModelOutput,
     SemanticSegmenterOutput,
 )
 from ...modeling_utils import PreTrainedModel, SequenceSummary
@@ -85,6 +87,33 @@ def _ntuple(n):
 
 
 to_2tuple = _ntuple(2)
+
+
+@dataclass
+class BackboneModelOutput(ModelOutput):
+    """
+    Base class for model's outputs, with potential hidden states and attentions.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    backbone_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # BELOW: utilities copied from
@@ -197,22 +226,23 @@ class SEMlp(nn.Module):
         if self.linear:
             self.relu = nn.ReLU(inplace=True)
         self.se = SqueezeExcite(out_features, se_ratio=0.25) if use_se else nn.Identity()
-        self.apply(self._init_weights)
 
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=0.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
-        elif isinstance(m, nn.Conv2d):
-            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-            fan_out //= m.groups
-            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
-            if m.bias is not None:
-                m.bias.data.zero_()
+    #     self.apply(self._init_weights)
+
+    # def _init_weights(self, m):
+    #     if isinstance(m, nn.Linear):
+    #         trunc_normal_(m.weight, std=0.02)
+    #         if isinstance(m, nn.Linear) and m.bias is not None:
+    #             nn.init.constant_(m.bias, 0)
+    #     elif isinstance(m, nn.LayerNorm):
+    #         nn.init.constant_(m.bias, 0)
+    #         nn.init.constant_(m.weight, 1.0)
+    #     elif isinstance(m, nn.Conv2d):
+    #         fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+    #         fan_out //= m.groups
+    #         m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
+    #         if m.bias is not None:
+    #             m.bias.data.zero_()
 
     def forward(self, x, H, W):
         B, N, C = x.shape
@@ -249,22 +279,23 @@ class Mlp(nn.Module):
         self.linear = linear
         if self.linear:
             self.relu = nn.ReLU(inplace=True)
-        self.apply(self._init_weights)
 
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=0.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
-        elif isinstance(m, nn.Conv2d):
-            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-            fan_out //= m.groups
-            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
-            if m.bias is not None:
-                m.bias.data.zero_()
+    #     self.apply(self._init_weights)
+
+    # def _init_weights(self, m):
+    #     if isinstance(m, nn.Linear):
+    #         trunc_normal_(m.weight, std=0.02)
+    #         if isinstance(m, nn.Linear) and m.bias is not None:
+    #             nn.init.constant_(m.bias, 0)
+    #     elif isinstance(m, nn.LayerNorm):
+    #         nn.init.constant_(m.bias, 0)
+    #         nn.init.constant_(m.weight, 1.0)
+    #     elif isinstance(m, nn.Conv2d):
+    #         fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+    #         fan_out //= m.groups
+    #         m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
+    #         if m.bias is not None:
+    #             m.bias.data.zero_()
 
     def forward(self, x, H, W):
         x = self.fc1(x)
@@ -588,22 +619,23 @@ class TokenMixing(nn.Module):
         self.proj_drop = nn.Dropout(proj_drop)
         self.linear = linear
         # self.sr_ratio = sr_ratio
-        self.apply(self._init_weights)
 
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=0.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
-        elif isinstance(m, nn.Conv2d):
-            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-            fan_out //= m.groups
-            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
-            if m.bias is not None:
-                m.bias.data.zero_()
+    #     self.apply(self._init_weights)
+
+    # def _init_weights(self, m):
+    #     if isinstance(m, nn.Linear):
+    #         trunc_normal_(m.weight, std=0.02)
+    #         if isinstance(m, nn.Linear) and m.bias is not None:
+    #             nn.init.constant_(m.bias, 0)
+    #     elif isinstance(m, nn.LayerNorm):
+    #         nn.init.constant_(m.bias, 0)
+    #         nn.init.constant_(m.weight, 1.0)
+    #     elif isinstance(m, nn.Conv2d):
+    #         fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+    #         fan_out //= m.groups
+    #         m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
+    #         if m.bias is not None:
+    #             m.bias.data.zero_()
 
     def forward(self, x, H, W, atten=None, return_attention=False):
         B, N, C = x.shape
@@ -727,22 +759,22 @@ class ChannelProcessing(nn.Module):
 
         self.attn_drop = nn.Dropout(attn_drop)
 
-        self.apply(self._init_weights)
+    #     self.apply(self._init_weights)
 
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=0.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
-        elif isinstance(m, nn.Conv2d):
-            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-            fan_out //= m.groups
-            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
-            if m.bias is not None:
-                m.bias.data.zero_()
+    # def _init_weights(self, m):
+    #     if isinstance(m, nn.Linear):
+    #         trunc_normal_(m.weight, std=0.02)
+    #         if isinstance(m, nn.Linear) and m.bias is not None:
+    #             nn.init.constant_(m.bias, 0)
+    #     elif isinstance(m, nn.LayerNorm):
+    #         nn.init.constant_(m.bias, 0)
+    #         nn.init.constant_(m.weight, 1.0)
+    #     elif isinstance(m, nn.Conv2d):
+    #         fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+    #         fan_out //= m.groups
+    #         m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
+    #         if m.bias is not None:
+    #             m.bias.data.zero_()
 
     def _gen_attn(self, q, k):
         q = q.softmax(-2).transpose(-1, -2)
@@ -928,22 +960,22 @@ class OverlapPatchEmbed(nn.Module):
         )
         self.norm = nn.LayerNorm(embed_dim)
 
-        self.apply(self._init_weights)
+    #     self.apply(self._init_weights)
 
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=0.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
-        elif isinstance(m, nn.Conv2d):
-            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-            fan_out //= m.groups
-            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
-            if m.bias is not None:
-                m.bias.data.zero_()
+    # def _init_weights(self, m):
+    #     if isinstance(m, nn.Linear):
+    #         trunc_normal_(m.weight, std=0.02)
+    #         if isinstance(m, nn.Linear) and m.bias is not None:
+    #             nn.init.constant_(m.bias, 0)
+    #     elif isinstance(m, nn.LayerNorm):
+    #         nn.init.constant_(m.bias, 0)
+    #         nn.init.constant_(m.weight, 1.0)
+    #     elif isinstance(m, nn.Conv2d):
+    #         fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+    #         fan_out //= m.groups
+    #         m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
+    #         if m.bias is not None:
+    #             m.bias.data.zero_()
 
     def forward(self, x, H, W):
         B, N, C = x.shape
@@ -1497,22 +1529,19 @@ class FANEncoder(FANPreTrainedModel):
         inputs_embeds=None,
         Hp=None,
         Wp=None,
-        hidden_states=None,
-        attention_mask=None,
-        position_embeddings=None,
+        embedding_hidden_states=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
         batch_size = inputs_embeds.shape[0]
-        out_index = [4, 7, 11]
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         is_backbone_hybrid = self.config.backbone == "hybrid"
-
-        if output_hidden_states and is_backbone_hybrid:
-            encoder_states = encoder_states + hidden_states
-            out_index = [self.config.out_index]
+        # out_index = [4, 7, 11]
+        # if output_hidden_states and is_backbone_hybrid:
+        #     encoder_states = encoder_states + embedding_hidden_states
+        #     out_index = [self.config.out_index]
 
         current_hidden_state = inputs_embeds
         # TODO: Add all Hidden States, use out_index for segmentation selection
@@ -1529,7 +1558,9 @@ class FANEncoder(FANPreTrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + (attn,)
 
-            if idx in out_index and output_hidden_states:
+            # if idx in out_index and output_hidden_states:
+            if output_hidden_states:
+
                 hidden_state_reshaped = (
                     current_hidden_state.reshape(batch_size, Hp, Wp, -1).permute(0, 3, 1, 2).contiguous()
                 )
@@ -1558,9 +1589,12 @@ class FANEncoder(FANPreTrainedModel):
                 encoder_states = encoder_states + (hidden_state_reshaped,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=current_hidden_state, hidden_states=encoder_states, attentions=all_attentions
+            return tuple(v for v in [embedding_hidden_states, encoder_states, all_attentions] if v is not None)
+        return BackboneModelOutput(
+            last_hidden_state=current_hidden_state,
+            hidden_states=encoder_states,
+            attentions=all_attentions,
+            backbone_hidden_states=embedding_hidden_states,
         )
 
 
@@ -1673,10 +1707,11 @@ class FANModel(FANPreTrainedModel):
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return BackboneModelOutput(
             last_hidden_state=sequence_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+            backbone_hidden_states=embeddings_encoder_states,
         )
 
 
@@ -1831,11 +1866,20 @@ class FANDecodeHead(FANPreTrainedModel):
 
         self.config = config
 
-    def forward(self, encoder_hidden_states):
+    def forward(self, encoder_hidden_states, backbone_hidden_states=None):
         batch_size = encoder_hidden_states[-1].shape[0]
+        is_backbone_hybrid = self.config.backbone == "hybrid"
+        out_index = [4, 7, 11]
+        if is_backbone_hybrid:
+            encoder_states = backbone_hidden_states + (
+                encoder_hidden_states[self.config.out_index],
+                encoder_hidden_states[-1],
+            )
+        else:
+            encoder_states = (encoder_hidden_states[idx] for idx in out_index) + (encoder_hidden_state[-1],)
 
         all_hidden_states = ()
-        for encoder_hidden_state, mlp in zip(encoder_hidden_states, self.linear_c):
+        for encoder_hidden_state, mlp in zip(encoder_states, self.linear_c):
             if self.config.reshape_last_stage is False and encoder_hidden_state.ndim == 3:
                 height = width = int(math.sqrt(encoder_hidden_state.shape[-1]))
                 encoder_hidden_state = (
@@ -1849,7 +1893,7 @@ class FANDecodeHead(FANPreTrainedModel):
             encoder_hidden_state = encoder_hidden_state.reshape(batch_size, -1, height, width)
             # upsample
             encoder_hidden_state = nn.functional.interpolate(
-                encoder_hidden_state, size=encoder_hidden_states[0].size()[2:], mode="bilinear", align_corners=False
+                encoder_hidden_state, size=encoder_states[0].size()[2:], mode="bilinear", align_corners=False
             )
             all_hidden_states += (encoder_hidden_state,)
 
@@ -1928,8 +1972,9 @@ class FANForSemanticSegmentation(FANPreTrainedModel):
         )
 
         encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
+        backbone_hidden_states = outputs.backbone_hidden_states
 
-        logits = self.decode_head(encoder_hidden_states)
+        logits = self.decode_head(encoder_hidden_states, backbone_hidden_states)
 
         loss = None
         if labels is not None:
