@@ -825,6 +825,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
         r"model.embed_positions.weights",
+        r"embed_positions.weights",
         r"lm_head.weight",
     ]
     _keys_to_ignore_on_save = [
