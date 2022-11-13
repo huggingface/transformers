@@ -68,11 +68,10 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
     return [max(values_i) for values_i in zip(*values)]
 
 
-# Copied from transformers.models.detr.image_processing_detr.get_pad_size
-def get_pad_size(images: List[np.ndarray]) -> Tuple[int, int]:
+# Copied from transformers.models.detr.image_processing_detr.get_max_height_width
+def get_max_height_width(images: List[np.ndarray]) -> List[int]:
     """
-    Computes the padding size for a list of images, where the padding size is the maximum width and height across all
-    images in a batch.
+    Get the maximum height and width across all images in a batch.
     """
     input_channel_dimension = infer_channel_dimension_format(images[0])
 
@@ -85,16 +84,26 @@ def get_pad_size(images: List[np.ndarray]) -> Tuple[int, int]:
     return (max_height, max_width)
 
 
-# Copied from transformers.models.detr.image_processing_detr.bottom_right_pad
-def bottom_right_pad(
+# Copied from transformers.models.detr.image_processing_detr.pad
+def pad(
     image: np.ndarray,
     output_size: Tuple[int, int],
-    contant_values: Union[float, Iterable[float], Iterable[Tuple[float, float]]] = 0,
+    constant_values: Union[float, Tuple[float, float], Iterable[Tuple[float, float]]] = 0,
     input_channel_dimension: Optional[ChannelDimension] = None,
     data_format: Optional[ChannelDimension] = None,
 ) -> np.ndarray:
     """
-    Pad the bottom and right of the image with zeros to make it up to the output size.
+    Pad the bottom and right of the image with zeros to the output size.
+
+    Args:
+        image (`np.ndarray`):
+            Image to pad.
+        output_size (`Tuple[int, int]`):
+            Output size of the image.
+        input_channel_dimension (`ChannelDimension`, *optional*):
+            The channel dimension format of the image. If not provided, it will be inferred from the input image.
+        data_format (`str` or `ChannelDimension`, *optional*):
+            The channel dimension format of the image. If not provided, it will be the same as the input image.
     """
     if input_channel_dimension is None:
         input_channel_dimension = infer_channel_dimension_format(image)
@@ -106,11 +115,11 @@ def bottom_right_pad(
 
     if input_channel_dimension == ChannelDimension.FIRST:
         padded_image = np.pad(
-            image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=contant_values
+            image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=constant_values
         )
     elif input_channel_dimension == ChannelDimension.LAST:
         padded_image = np.pad(
-            image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=contant_values
+            image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=constant_values
         )
     else:
         raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
@@ -638,7 +647,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
-        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,  # FIXME
+        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         size_divisor: Optional[int] = None,
@@ -793,8 +802,8 @@ class MaskFormerImageProcessor(BaseImageProcessor):
 
         pixel_values_list = [to_numpy_array(pixel_values) for pixel_values in pixel_values_list]
 
-        pad_size = get_pad_size(pixel_values_list)
-        pixel_values = [bottom_right_pad(image=image, output_size=pad_size) for image in pixel_values_list]
+        pad_size = get_max_height_width(pixel_values_list)
+        pixel_values = [pad(image=image, output_size=pad_size) for image in pixel_values_list]
         pixel_mask = [make_pixel_mask(image=image, output_size=pad_size) for image in pixel_values_list]
 
         data = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
@@ -815,9 +824,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 # We add an axis to make them compatible with the transformations library
                 # this will be removed in the future
                 masks = [mask[None, ...] for mask in masks]
-                masks = [
-                    bottom_right_pad(image=mask, output_size=pad_size, contant_values=ignore_index) for mask in masks
-                ]
+                masks = [pad(image=mask, output_size=pad_size, contant_values=ignore_index) for mask in masks]
                 masks = np.concatenate(masks, axis=0)
                 mask_labels.append(torch.from_numpy(masks))
                 class_labels.append(torch.from_numpy(classes))

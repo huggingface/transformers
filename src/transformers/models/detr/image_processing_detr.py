@@ -127,7 +127,6 @@ def get_resize_output_image_size(
     """
     image_size = get_image_size(input_image)
     if isinstance(size, (list, tuple)):
-        # FIXME - is the size in the configuration in (width, height) format?
         return size
 
     return get_size_with_aspect_ratio(image_size, size, max_size)
@@ -177,7 +176,6 @@ def normalize_annotation(annotation: Dict, image_size: Tuple[int, int]) -> Dict:
         if key == "boxes":
             boxes = value
             boxes = corners_to_center_format(boxes)
-            # FIXME - check height width order
             boxes /= np.asarray([image_width, image_height, image_width, image_height], dtype=np.float32)
             norm_annotation[key] = boxes
         else:
@@ -192,10 +190,9 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
     return [max(values_i) for values_i in zip(*values)]
 
 
-def get_pad_size(images: List[np.ndarray]) -> Tuple[int, int]:
+def get_max_height_width(images: List[np.ndarray]) -> List[int]:
     """
-    Computes the padding size for a list of images, where the padding size is the maximum width and height across all
-    images in a batch.
+    Get the maximum height and width across all images in a batch.
     """
     input_channel_dimension = infer_channel_dimension_format(images[0])
 
@@ -208,16 +205,26 @@ def get_pad_size(images: List[np.ndarray]) -> Tuple[int, int]:
     return (max_height, max_width)
 
 
-# FIXME - update once pad transform is added
-def bottom_right_pad(
+# TODO: (Amy) - update once pad transform is added
+def pad(
     image: np.ndarray,
     output_size: Tuple[int, int],
-    contant_values: Union[float, Iterable[float], Iterable[Tuple[float, float]]] = 0,
+    constant_values: Union[float, Tuple[float, float], Iterable[Tuple[float, float]]] = 0,
     input_channel_dimension: Optional[ChannelDimension] = None,
     data_format: Optional[ChannelDimension] = None,
 ) -> np.ndarray:
     """
-    Pad the bottom and right of the image with zeros to make it up to the output size.
+    Pad the bottom and right of the image with zeros to the output size.
+
+    Args:
+        image (`np.ndarray`):
+            Image to pad.
+        output_size (`Tuple[int, int]`):
+            Output size of the image.
+        input_channel_dimension (`ChannelDimension`, *optional*):
+            The channel dimension format of the image. If not provided, it will be inferred from the input image.
+        data_format (`str` or `ChannelDimension`, *optional*):
+            The channel dimension format of the image. If not provided, it will be the same as the input image.
     """
     if input_channel_dimension is None:
         input_channel_dimension = infer_channel_dimension_format(image)
@@ -229,11 +236,11 @@ def bottom_right_pad(
 
     if input_channel_dimension == ChannelDimension.FIRST:
         padded_image = np.pad(
-            image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=contant_values
+            image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=constant_values
         )
     elif input_channel_dimension == ChannelDimension.LAST:
         padded_image = np.pad(
-            image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=contant_values
+            image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=constant_values
         )
     else:
         raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
@@ -574,12 +581,10 @@ def resize_annotation(
     for key, value in annotation.items():
         if key == "boxes":
             boxes = value
-            # FIXME - is having (w, h) rather than (h, w) correct here?
             scaled_boxes = boxes * np.asarray([ratio_width, ratio_height, ratio_width, ratio_height], dtype=np.float32)
             new_annotation["boxes"] = scaled_boxes
         elif key == "area":
             area = value
-            # FIXME - is having (w, h) rather than (h, w) correct here?
             scaled_area = area * (ratio_width * ratio_height)
             new_annotation["area"] = scaled_area
         elif key == "masks":
@@ -745,7 +750,7 @@ class DetrImageProcessor(BaseImageProcessor):
     Constructs a Detr image processor.
 
     Args:
-        format (`str`, *optional*, defaults to `"coco_detection"`): # FIXME
+        format (`str`, *optional*, defaults to `"coco_detection"`):
             Data format of the annotations. One of "coco_detection" or "coco_panoptic".
         do_resize (`bool`, *optional*, defaults to `True`):
             Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be
@@ -894,22 +899,35 @@ class DetrImageProcessor(BaseImageProcessor):
         return image
 
     def resize_annotation(
-        self, annotation, orig_size, size, resample: PILImageResampling = PILImageResampling.NEAREST, data_format: Optional[ChannelDimension] = None,
+        self,
+        annotation,
+        orig_size,
+        size,
+        resample: PILImageResampling = PILImageResampling.NEAREST,
+        data_format: Optional[ChannelDimension] = None,
     ) -> Dict:
         """
         Resize the annotation to match the resized image. If size is an int, smaller edge of the mask will be matched
         to this number.
         """
-        return resize_annotation(annotation, orig_size=orig_size, target_size=size, resample=resample, data_format=data_format)
+        return resize_annotation(
+            annotation, orig_size=orig_size, target_size=size, resample=resample, data_format=data_format
+        )
 
-    def rescale(self, image: np.ndarray, rescale_factor: Union[float, int], data_format: Optional[ChannelDimension] = None) -> np.ndarray:
+    def rescale(
+        self, image: np.ndarray, rescale_factor: Union[float, int], data_format: Optional[ChannelDimension] = None
+    ) -> np.ndarray:
         """
         Rescale the image by the given factor.
         """
         return rescale(image, rescale_factor, data_format=data_format)
 
     def normalize(
-        self, image: np.ndarray, mean: Union[float, Iterable[float]], std: Union[float, Iterable[float]], data_format: Optional[ChannelDimension] = None
+        self,
+        image: np.ndarray,
+        mean: Union[float, Iterable[float]],
+        std: Union[float, Iterable[float]],
+        data_format: Optional[ChannelDimension] = None,
     ) -> np.ndarray:
         """
         Normalize the image with the given mean and standard deviation.
@@ -922,88 +940,77 @@ class DetrImageProcessor(BaseImageProcessor):
         """
         return normalize_annotation(annotation, image_size=image_size)
 
-    def _pad_and_create_pixel_mask(
-        self, pixel_values_list: List["torch.Tensor"], data_format: Optional[Union[str, ChannelDimension]] = None
-    ) -> Dict:
-        pad_size = get_pad_size(pixel_values_list)
-        padded_images = [
-            self.pad(image=image, output_size=pad_size, data_format=data_format) for image in pixel_values_list
-        ]
-        masks = [make_pixel_mask(image=image, output_size=pad_size) for image in pixel_values_list]
-        return {"pixel_values": padded_images, "pixel_mask": masks}
-
     def pad_and_create_pixel_mask(
         self,
-        pixel_values_list: List["torch.Tensor"],
+        pixel_values_list: List[ImageInput],
         return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-    ):
+        data_format: Optional[ChannelDimension] = None,
+    ) -> BatchFeature:
         """
-        Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
+        Pads a batch of images with zeros to the size of largest height and width in the batch and returns their
+        corresponding pixel mask.
 
         Args:
-            pixel_values_list (`List[torch.Tensor]`):
-                List of images (pixel values) to be padded. Each image should be a tensor of shape (C, H, W).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
-                objects.
-            data_format (`str` or [`~utils.ChannelDimension`], *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format of the images.
-
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **pixel_values** -- Pixel values to be fed to a model.
-            - **pixel_mask** -- Pixel mask to be fed to a model (when `pad_and_return_pixel_mask=True` or if
-              *"pixel_mask"* is in `self.model_input_names`).
-
+            images (`List[np.ndarray]`):
+                Batch of images to pad.
+            return_tensors (`str` or `TensorType`, *optional*):
+                The type of tensors to return. Can be one of:
+                    - Unset: Return a list of `np.ndarray`.
+                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
+                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        data = self._pad_and_create_pixel_mask(pixel_values_list, data_format)
-        return BatchFeature(data, tensor_type=return_tensors)
+        warnings.warn(
+            "This method is deprecated and will be removed in v4.27.0. Please use pad instead.", FutureWarning
+        )
+        # pad expects a list of np.ndarray, but the previous feature extractors expected torch tensors
+        images = [to_numpy_array(image) for image in pixel_values_list]
+        return self.pad(
+            images=images,
+            return_pixel_mask=True,
+            return_tensors=return_tensors,
+            data_format=data_format,
+        )
 
     def pad(
         self,
-        image: np.ndarray,
-        output_size: Dict[str, int],
-        input_channel_dimension: Optional[ChannelDimension] = None,
+        images: List[np.ndarray],
+        return_pixel_mask: bool = True,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
     ) -> np.ndarray:
         """
+        Pads a batch of images with zeros to the size of largest height and width in the batch and optionally returns
+        their corresponding pixel mask.
+
         Args:
         Pad the bottom and right of the image with zeros to the output size.
             image (`np.ndarray`):
                 Image to pad.
-            output_size (`Tuple[int, int]`):
-                Output size of the image.
+            return_pixel_mask (`bool`, *optional*, defaults to `True`):
+                Whether to return a pixel mask.
             input_channel_dimension (`ChannelDimension`, *optional*, defaults to `None`):
                 The channel dimension format of the image. If not provided, it will be inferred from the input image.
             data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        # FIXME - what should the pattern here be?
-        # 1. pad pads an individual image. This matches the behavior of the other transforms e.g. resize.
-        # 2. pad pads a batch of images and returns a mask. This matches the behavior of `pad` tokenizers
-        # (doesn't accept same input as tokenizer call however)
-        # Keep `pad_and_create_pixel_mask` for now
-        # How to handle the size dicts?
-        size = get_size_dict(output_size, default_to_square=False)
-        if "shortest_edge" in size or "longest_edge" in size:
-            size = get_resize_output_image_size(image, size["shortest_edge"], size["longest_edge"], defaultdict=False)
-        elif "height" in size or "width" in size:
-            size = (size["width"], size["height"])  # FIXME
-        else:
-            raise ValueError(f"Size must contain 'shortest_edge' and 'longest_edge' keys. Got {size.keys()}.")
+        pad_size = get_max_height_width(images)
+        padded_images = [pad(image=image, output_size=pad_size, data_format=data_format) for image in images]
+        data = {"pixel_values": padded_images}
+        if return_pixel_mask:
+            masks = [make_pixel_mask(image=image, output_size=pad_size) for image in images]
+            data["pixel_mask"] = masks
 
-        return bottom_right_pad(
-            image, output_size=output_size, input_channel_dimension=input_channel_dimension, data_format=data_format
-        )
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     def preprocess(
         self,
         images: ImageInput,
         annotations: Optional[Union[List[Dict], List[List[Dict]]]] = None,
-        # return_segmentation_masks: bool = False,
-        return_segmentation_masks: bool = None,  # FIXME
+        return_segmentation_masks: bool = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
@@ -1193,7 +1200,7 @@ class DetrImageProcessor(BaseImageProcessor):
 
         if do_pad:
             # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
-            data = self._pad_and_create_pixel_mask(images, data_format=data_format)
+            data = self.pad(images, return_pixel_mask=True, data_format=data_format)
         else:
             images = [to_channel_dimension_format(image, data_format) for image in images]
             data = {"pixel_values": images}
