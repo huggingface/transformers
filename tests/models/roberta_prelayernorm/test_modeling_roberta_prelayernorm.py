@@ -43,8 +43,6 @@ if is_torch_available():
         create_position_ids_from_input_ids,
     )
 
-ROBERTA_PRELAYERNORM_TINY = "sshleifer/tiny-distilprinceton-nlp/efficient_mlm_m0.40"
-
 
 class RobertaPreLayerNormModelTester:
     def __init__(
@@ -518,12 +516,15 @@ class RobertaPreLayerNormModelIntegrationTest(TestCasePlus):
         self.assertEqual(output.shape, expected_shape)
         # compare the actual values for a slice.
         expected_slice = torch.tensor(
-            [[[33.8802, -4.3103, 22.7761], [4.6539, -2.8098, 13.6253], [1.8228, -3.6898, 8.8600]]]
+            [[[40.4880, 18.0199, -5.2367], [-1.8877, -4.0885, 10.7085], [-2.2613, -5.6110, 7.2665]]]
         )
 
-        # roberta_prelayernorm = torch.hub.load('pytorch/fairseq', 'roberta_prelayernorm.base')
-        # roberta_prelayernorm.eval()
-        # expected_slice = roberta_prelayernorm.model.forward(input_ids)[0][:, :3, :3].detach()
+        # huggingface refers to the huggingface directory in https://github.com/princeton-nlp/dinkytrain
+        # it does not relate to any module provided by corporation Hugging Face.
+        # from huggingface.modeling_roberta_prelayernorm import RobertaForMaskedLM
+        # model = RobertaForMaskedLM.from_pretrained("princeton-nlp/efficient_mlm_m0.40")
+        # with torch.no_grad():
+        #     expected_slice = model(input_ids)[0][:, :3, :3].detach()
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
 
@@ -536,48 +537,12 @@ class RobertaPreLayerNormModelIntegrationTest(TestCasePlus):
             output = model(input_ids)[0]
         # compare the actual values for a slice.
         expected_slice = torch.tensor(
-            [[[-0.0231, 0.0782, 0.0074], [-0.1854, 0.0540, -0.0175], [0.0548, 0.0799, 0.1687]]]
+            [[[0.0208, -0.0356, 0.0237], [-0.1569, -0.0411, -0.2626], [0.1879, 0.0125, -0.0089]]]
         )
 
-        # roberta_prelayernorm = torch.hub.load('pytorch/fairseq', 'roberta_prelayernorm.base')
-        # roberta_prelayernorm.eval()
-        # expected_slice = roberta_prelayernorm.extract_features(input_ids)[:, :3, :3].detach()
+        # from huggingface.modeling_roberta_prelayernorm import RobertaModel
+        # model = RobertaForMaskedLM.from_pretrained("princeton-nlp/efficient_mlm_m0.40")
+        # with torch.no_grad():
+        #     expected_slice = model(input_ids)[0][:, :3, :3].detach()
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
-
-    @slow
-    def test_inference_classification_head(self):
-        model = RobertaPreLayerNormForSequenceClassification.from_pretrained("roberta_prelayernorm-large-mnli")
-
-        input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        with torch.no_grad():
-            output = model(input_ids)[0]
-        expected_shape = torch.Size((1, 3))
-        self.assertEqual(output.shape, expected_shape)
-        expected_tensor = torch.tensor([[-0.9469, 0.3913, 0.5118]])
-
-        # roberta_prelayernorm = torch.hub.load('pytorch/fairseq', 'roberta_prelayernorm.large.mnli')
-        # roberta_prelayernorm.eval()
-        # expected_tensor = roberta_prelayernorm.predict("mnli", input_ids, return_logits=True).detach()
-
-        self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-4))
-
-    # XXX: this might be a candidate for common tests if we have many of those
-    def test_lm_head_ignore_keys(self):
-        keys_to_ignore_on_save_tied = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
-        keys_to_ignore_on_save_untied = [r"lm_head.decoder.bias"]
-        config = RobertaPreLayerNormConfig.from_pretrained(ROBERTA_PRELAYERNORM_TINY)
-        config_tied = deepcopy(config)
-        config_tied.tie_word_embeddings = True
-        config_untied = deepcopy(config)
-        config_untied.tie_word_embeddings = False
-        for cls in [RobertaPreLayerNormForMaskedLM, RobertaPreLayerNormForCausalLM]:
-            model = cls(config_tied)
-            self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_tied, cls)
-
-            # the keys should be different when embeddings aren't tied
-            model = cls(config_untied)
-            self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_untied, cls)
-
-            # test that saving works with updated ignore keys - just testing that it doesn't fail
-            model.save_pretrained(self.get_auto_remove_tmp_dir())

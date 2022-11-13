@@ -651,7 +651,7 @@ class TFRobertaPreLayerNormModelTest(TFModelTesterMixin, unittest.TestCase):
 class TFRobertaPreLayerNormModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = TFRobertaPreLayerNormForMaskedLM.from_pretrained("princeton-nlp/efficient_mlm_m0.40")
+        model = TFRobertaPreLayerNormForMaskedLM.from_pretrained("princeton-nlp/efficient_mlm_m0.40", from_pt=True)
 
         input_ids = tf.constant([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]
@@ -659,29 +659,18 @@ class TFRobertaPreLayerNormModelIntegrationTest(unittest.TestCase):
         self.assertEqual(list(output.numpy().shape), expected_shape)
         # compare the actual values for a slice.
         expected_slice = tf.constant(
-            [[[33.8802, -4.3103, 22.7761], [4.6539, -2.8098, 13.6253], [1.8228, -3.6898, 8.8600]]]
+            [[[40.4880, 18.0199, -5.2367], [-1.8877, -4.0885, 10.7085], [-2.2613, -5.6110, 7.2665]]]
         )
         self.assertTrue(numpy.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-4))
 
     @slow
     def test_inference_no_head(self):
-        model = TFRobertaPreLayerNormModel.from_pretrained("princeton-nlp/efficient_mlm_m0.40")
+        model = TFRobertaPreLayerNormModel.from_pretrained("princeton-nlp/efficient_mlm_m0.40", from_pt=True)
 
         input_ids = tf.constant([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]
         # compare the actual values for a slice.
         expected_slice = tf.constant(
-            [[[-0.0231, 0.0782, 0.0074], [-0.1854, 0.0540, -0.0175], [0.0548, 0.0799, 0.1687]]]
+            [[[0.0208, -0.0356, 0.0237], [-0.1569, -0.0411, -0.2626], [0.1879, 0.0125, -0.0089]]]
         )
         self.assertTrue(numpy.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-4))
-
-    @slow
-    def test_inference_classification_head(self):
-        model = TFRobertaPreLayerNormForSequenceClassification.from_pretrained("roberta_prelayernorm-large-mnli")
-
-        input_ids = tf.constant([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        output = model(input_ids)[0]
-        expected_shape = [1, 3]
-        self.assertEqual(list(output.numpy().shape), expected_shape)
-        expected_tensor = tf.constant([[-0.9469, 0.3913, 0.5118]])
-        self.assertTrue(numpy.allclose(output.numpy(), expected_tensor.numpy(), atol=1e-4))
