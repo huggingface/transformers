@@ -33,6 +33,8 @@ original_feature_mapping = {
     "depth": "num_hidden_layers",
     "in_channels": "segmentation_in_channels",
     "in_chans": "num_channels",
+    "num_classes": "num_labels",
+    "embed_dim": "hidden_size",
 }
 # TODO: Rename embed_dim to hidden_size
 # DONE: Rename num_classes to num_labels
@@ -54,7 +56,7 @@ class FANConfig(PretrainedConfig):
     Args:
         patch_size (int, defaults to 16):
             Size of each patch to generated the embedding tokens from the image
-        embed_dim (`int`, *optional*, defaults to 384):
+        hidden_size (`int`, *optional*, defaults to 384):
             Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
@@ -98,7 +100,7 @@ class FANConfig(PretrainedConfig):
             Only appliable with hybrid backbone.
         channel_dims (`tuple(int)`, *optional*, defaults to None):
             List of Input channels for each of the encoder layers.
-            If None it defaults to [config.embed_dim] * config.num_hidden_layers.
+            If None it defaults to [config.hidden_size] * config.num_hidden_layers.
         rounding_mode (`string`, *optional*, defaults to 'floor'):
             Torch Divison rounding mode used for positional encoding.
             Should be set to None in Semantic Segmentation tasks to be compatible with original paper implementation.
@@ -142,7 +144,7 @@ class FANConfig(PretrainedConfig):
     def __init__(
         self,
         patch_size=16,  # HASCOMMENTS
-        embed_dim=384,  # HASCOMMENTS
+        hidden_size=384,  # HASCOMMENTS
         num_hidden_layers=12,  # HASCOMMENTS
         num_attention_heads=8,  # HASCOMMENTS
         depths=None,  # HASCOMMENTS
@@ -152,7 +154,7 @@ class FANConfig(PretrainedConfig):
         initializer_range=1.0,  # HASCOMMENTS
         img_size=[224, 224],  # HASCOMMENTS
         num_channels=3,  # HASCOMMENTS
-        num_labels=1000,  # HASCOMMENTS
+        # num_labels=1000,  # HASCOMMENTS
         backbone=None,  # HASCOMMENTS
         use_checkpoint=False,  # TODO: Rename for HF Consistency
         use_pos_embed=True,  # HASCOMMENTS
@@ -180,7 +182,7 @@ class FANConfig(PretrainedConfig):
     ):
 
         self.patch_size = patch_size
-        self.embed_dim = embed_dim
+        self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.depths = depths
         self.num_attention_heads = num_attention_heads
@@ -190,7 +192,7 @@ class FANConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.img_size = img_size
         self.num_channels = num_channels
-        self.num_labels = num_labels
+        # self.num_labels = num_labels
         self.backbone = backbone
         self.use_checkpoint = use_checkpoint
         self.use_pos_embed = use_pos_embed

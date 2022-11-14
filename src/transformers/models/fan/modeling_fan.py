@@ -305,7 +305,7 @@ class Mlp(nn.Module):
 class ConvPatchEmbed(nn.Module):
     """Image to Patch Embedding using multiple convolutional layers"""
 
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768, act_layer=nn.GELU):
+    def __init__(self, img_size=224, patch_size=16, in_chans=3, hidden_size=768, act_layer=nn.GELU):
         super().__init__()
         img_size = to_2tuple(img_size)
         num_patches = (img_size[1] // patch_size) * (img_size[0] // patch_size)
@@ -316,29 +316,29 @@ class ConvPatchEmbed(nn.Module):
 
         if patch_size == 16:
             self.proj = torch.nn.Sequential(
-                conv3x3(in_chans, embed_dim // 8, 2),
+                conv3x3(in_chans, hidden_size // 8, 2),
                 act_layer(),
-                conv3x3(embed_dim // 8, embed_dim // 4, 2),
+                conv3x3(hidden_size // 8, hidden_size // 4, 2),
                 act_layer(),
-                conv3x3(embed_dim // 4, embed_dim // 2, 2),
+                conv3x3(hidden_size // 4, hidden_size // 2, 2),
                 act_layer(),
-                conv3x3(embed_dim // 2, embed_dim, 2),
+                conv3x3(hidden_size // 2, hidden_size, 2),
             )
         elif patch_size == 8:
             self.proj = torch.nn.Sequential(
-                conv3x3(in_chans, embed_dim // 4, 2),
+                conv3x3(in_chans, hidden_size // 4, 2),
                 act_layer(),
-                conv3x3(embed_dim // 4, embed_dim // 2, 2),
+                conv3x3(hidden_size // 4, hidden_size // 2, 2),
                 act_layer(),
-                conv3x3(embed_dim // 2, embed_dim, 2),
+                conv3x3(hidden_size // 2, hidden_size, 2),
             )
         elif patch_size == 4:
             self.proj = torch.nn.Sequential(
-                conv3x3(in_chans, embed_dim // 4, 2),
+                conv3x3(in_chans, hidden_size // 4, 2),
                 act_layer(),
-                conv3x3(embed_dim // 4, embed_dim // 1, 2),
+                conv3x3(hidden_size // 4, hidden_size // 1, 2),
                 # act_layer(),
-                # conv3x3(embed_dim // 2, embed_dim, 2),
+                # conv3x3(hidden_size // 2, hidden_size, 2),
             )
         else:
             raise ("For convolutional projection, patch size has to be in [8, 16]")
@@ -629,7 +629,7 @@ class HybridEmbed(nn.Module):
         patch_size=2,
         feature_size=None,
         in_chans=3,
-        embed_dim=384,
+        hidden_size=384,
     ):
         super().__init__()
         assert isinstance(backbone, nn.Module)
@@ -662,7 +662,7 @@ class HybridEmbed(nn.Module):
             feature_size[1] // patch_size[1],
         )
         self.num_patches = self.grid_size[0] * self.grid_size[1]
-        self.proj = nn.Conv2d(feature_dim, embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.proj = nn.Conv2d(feature_dim, hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, x, return_feat=False):
         x, out_list = self.backbone.forward_features(x, return_feat=return_feat)
@@ -885,7 +885,7 @@ class FANBlock(nn.Module):
 class OverlapPatchEmbed(nn.Module):
     """Image to Patch Embedding"""
 
-    def __init__(self, img_size=224, patch_size=7, stride=4, in_chans=3, embed_dim=768):
+    def __init__(self, img_size=224, patch_size=7, stride=4, in_chans=3, hidden_size=768):
         super().__init__()
         img_size = to_2tuple(img_size)
         patch_size = to_2tuple(patch_size)
@@ -896,12 +896,12 @@ class OverlapPatchEmbed(nn.Module):
         self.num_patches = self.H * self.W
         self.proj = nn.Conv2d(
             in_chans,
-            embed_dim,
+            hidden_size,
             kernel_size=patch_size,
             stride=stride,
             padding=(patch_size[0] // 2, patch_size[1] // 2),
         )
-        self.norm = nn.LayerNorm(embed_dim)
+        self.norm = nn.LayerNorm(hidden_size)
 
     def forward(self, x, H, W):
         B, N, C = x.shape
@@ -1285,18 +1285,18 @@ class FANEmbeddings(FANPreTrainedModel):
                 img_size=img_size,
                 patch_size=config.patch_size,
                 in_chans=config.num_channels,
-                embed_dim=config.embed_dim,
+                hidden_size=config.hidden_size,
                 act_layer=act_layer,
             )
         elif config.backbone == "hybrid":
             backbone = ConvNeXt(depths=self.config.depths, dims=self.config.dims, use_head=False)
             self.patch_embed = HybridEmbed(
-                backbone=backbone, patch_size=config.hybrid_patch_size, embed_dim=config.embed_dim
+                backbone=backbone, patch_size=config.hybrid_patch_size, hidden_size=config.hidden_size
             )
         else:
             raise ValueError(f"{config.backbone} has to be either hybrid or None")
         if config.use_pos_embed:
-            self.pos_embed = PositionalEncodingFourier(dim=config.embed_dim, rounding_mode=self.config.rounding_mode)
+            self.pos_embed = PositionalEncodingFourier(dim=config.hidden_size, rounding_mode=self.config.rounding_mode)
         self.pos_drop = nn.Dropout(p=config.drop_rate)
 
     def forward(
@@ -1355,7 +1355,7 @@ class FANEncoderLayer(FANPreTrainedModel):
             else config.num_attention_heads
         )
         channel_dims = (
-            [config.embed_dim] * config.num_hidden_layers if config.channel_dims is None else config.channel_dims
+            [config.hidden_size] * config.num_hidden_layers if config.channel_dims is None else config.channel_dims
         )
         norm_layer = config.norm_layer or partial(nn.LayerNorm, eps=1e-6)
         act_layer = config.act_layer or nn.GELU
@@ -1371,7 +1371,7 @@ class FANEncoderLayer(FANPreTrainedModel):
                 patch_size=3,
                 stride=2,
                 in_chans=channel_dims[index],
-                embed_dim=channel_dims[index + 1],
+                hidden_size=channel_dims[index + 1],
             )
 
         self.block = build_block(
@@ -1411,12 +1411,12 @@ class FANEncoder(FANPreTrainedModel):
             else config.num_attention_heads
         )
         channel_dims = (
-            [config.embed_dim] * config.num_hidden_layers if config.channel_dims is None else config.channel_dims
+            [config.hidden_size] * config.num_hidden_layers if config.channel_dims is None else config.channel_dims
         )
         norm_layer = config.norm_layer or partial(nn.LayerNorm, eps=1e-6)
         act_layer = config.act_layer or nn.GELU
         self.blocks = nn.ModuleList([FANEncoderLayer(config, i) for i in range(config.num_hidden_layers)])
-        self.num_features = self.embed_dim = channel_dims[-1]
+        self.num_features = self.hidden_size = channel_dims[-1]
         self.cls_token = nn.Parameter(torch.zeros(1, 1, channel_dims[-1]))
         self.cls_attn_blocks = nn.ModuleList(
             [
@@ -1437,7 +1437,7 @@ class FANEncoder(FANPreTrainedModel):
         )
         if self.config.backbone == "hybrid" and self.config.feat_downsample:
             self.learnable_downsample = nn.Conv2d(
-                in_channels=self.config.embed_dim,
+                in_channels=self.config.hidden_size,
                 out_channels=768,
                 kernel_size=3,
                 stride=2,
@@ -1674,7 +1674,7 @@ class FANForImageClassification(FANPreTrainedModel):
         # DETR encoder-decoder model
         self.fan = FANModel(config)
 
-        num_features = config.embed_dim if config.channel_dims is None else config.channel_dims[-1]
+        num_features = config.hidden_size if config.channel_dims is None else config.channel_dims[-1]
         # Object detection heads
         self.head = FANClassificationHead(config.num_labels, num_features, config.norm_layer)
 
