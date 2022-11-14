@@ -1214,9 +1214,7 @@ class ErnieForCausalLM(ErniePreTrainedModel):
         )
 
     # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.prepare_inputs_for_generation
-    def prepare_inputs_for_generation(
-        self, input_ids, past=None, attention_mask=None, use_cache=False, **model_kwargs
-    ):
+    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=True, **model_kwargs):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
