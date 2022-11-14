@@ -416,9 +416,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         >>> url = "https://clip-cn-beijing.oss-cn-beijing.aliyuncs.com/pokemon.jpeg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(
-        ...     text=["杰尼龟", "妙蛙种子", "小火龙", "皮卡丘"], images=image, return_tensors="pt", padding=True
-        ... )
+        >>> inputs = processor(text=["杰尼龟", "妙蛙种子", "小火龙", "皮卡丘"], images=image, return_tensors="pt", padding=True)
 
         >>> outputs = model(**inputs)
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
