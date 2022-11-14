@@ -728,7 +728,7 @@ class MaskFormerSwinEncoder(nn.Module):
         )
 
 
-# TODO: add Copied from here, taking into account config
+# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->MaskFormerSwin
 class MaskFormerSwinPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -740,7 +740,6 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
-    # Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel._init_weights
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
