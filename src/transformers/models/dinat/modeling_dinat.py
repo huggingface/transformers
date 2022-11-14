@@ -49,11 +49,11 @@ _CONFIG_FOR_DOC = "DiNATConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "shi-labs/dinat-tiny-in1k-224"
+_CHECKPOINT_FOR_DOC = "shi-labs/dinat-mini-in1k-224"
 _EXPECTED_OUTPUT_SHAPE = [1, 49, 768]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "shi-labs/dinat-tiny-in1k-224"
+_IMAGE_CLASS_CHECKPOINT = "shi-labs/dinat-mini-in1k-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
@@ -201,7 +201,7 @@ class DiNATTokenizer(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        _, patch_size = config.image_size, config.patch_size
+        patch_size = config.patch_size
         num_channels, hidden_size = config.num_channels, config.embed_dim
         self.num_channels = num_channels
 
@@ -489,7 +489,7 @@ class DiNATStage(nn.Module):
         super().__init__()
         self.config = config
         self.dim = dim
-        self.blocks = nn.ModuleList(
+        self.layers = nn.ModuleList(
             [
                 DiNATLayer(
                     config=config,
@@ -516,7 +516,7 @@ class DiNATStage(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         _, height, width, _ = hidden_states.size()
-        for i, layer_module in enumerate(self.blocks):
+        for i, layer_module in enumerate(self.layers):
             layer_outputs = layer_module(hidden_states, output_attentions)
             hidden_states = layer_outputs[0]
 
@@ -537,10 +537,10 @@ class DiNATStage(nn.Module):
 class DiNATEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.num_layers = len(config.depths)
+        self.num_levels = len(config.depths)
         self.config = config
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
-        self.layers = nn.ModuleList(
+        self.levels = nn.ModuleList(
             [
                 DiNATStage(
                     config=config,
@@ -549,9 +549,9 @@ class DiNATEncoder(nn.Module):
                     num_heads=config.num_heads[i_layer],
                     dilations=config.dilations[i_layer],
                     drop_path_rate=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                    downsample=DiNATDownsampler if (i_layer < self.num_layers - 1) else None,
+                    downsample=DiNATDownsampler if (i_layer < self.num_levels - 1) else None,
                 )
-                for i_layer in range(self.num_layers)
+                for i_layer in range(self.num_levels)
             ]
         )
 
@@ -572,7 +572,7 @@ class DiNATEncoder(nn.Module):
             all_hidden_states += (hidden_states,)
             all_reshaped_hidden_states += (reshaped_hidden_state,)
 
-        for i, layer_module in enumerate(self.layers):
+        for i, layer_module in enumerate(self.levels):
             layer_outputs = layer_module(hidden_states, output_attentions)
 
             hidden_states = layer_outputs[0]
@@ -660,8 +660,8 @@ class DiNATModel(DiNATPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
-        self.num_layers = len(config.depths)
-        self.num_features = int(config.embed_dim * 2 ** (self.num_layers - 1))
+        self.num_levels = len(config.depths)
+        self.num_features = int(config.embed_dim * 2 ** (self.num_levels - 1))
 
         self.embeddings = DiNATEmbeddings(config)
         self.encoder = DiNATEncoder(config)
