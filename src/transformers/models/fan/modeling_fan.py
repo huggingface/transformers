@@ -1455,7 +1455,7 @@ class FANEncoder(FANPreTrainedModel):
         embedding_hidden_states=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=None,
+        return_dict=True,
     ):
         batch_size = inputs_embeds.shape[0]
         encoder_states = () if output_hidden_states else None
@@ -1581,7 +1581,7 @@ class FANModel(FANPreTrainedModel):
         pixel_mask=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=None,
+        return_dict=True,
     ):
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -1694,7 +1694,7 @@ class FANForImageClassification(FANPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=None,
+        return_dict=True,
     ):
         # TODO: Update Docstring appropiately
         r"""
@@ -1896,7 +1896,7 @@ class FANForSemanticSegmentation(FANPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        return_dict: Optional[bool] = True,
     ) -> Union[Tuple, SemanticSegmenterOutput]:
         # TODO: Update Docstring
         r"""
