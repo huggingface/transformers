@@ -494,6 +494,7 @@ SPECIAL_MODEL_NAMES = {
     "Data2VecVision": "Data2Vec",
     "DonutSwin": "Donut",
     "Marian": "MarianMT",
+    "MaskFormerSwin": "MaskFormer",
     "OpenAI GPT-2": "GPT-2",
     "OpenAI GPT": "GPT",
     "Perceiver": "Perceiver IO",
