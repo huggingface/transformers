@@ -202,6 +202,7 @@ _import_structure = {
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
     "models.dialogpt": [],
+    "models.dinat": ["DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DiNATConfig"],
     "models.distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertConfig", "DistilBertTokenizer"],
     "models.dit": [],
     "models.donut": ["DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "DonutProcessor", "DonutSwinConfig"],
@@ -1237,6 +1238,14 @@ else:
             "DistilBertForTokenClassification",
             "DistilBertModel",
             "DistilBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.dinat"].extend(
+        [
+            "DINAT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DiNATForImageClassification",
+            "DiNATModel",
+            "DiNATPreTrainedModel",
         ]
     )
     _import_structure["models.donut"].extend(
@@ -3345,6 +3354,7 @@ if TYPE_CHECKING:
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
+    from .models.dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DiNATConfig
     from .models.donut import DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, DonutProcessor, DonutSwinConfig
     from .models.dpr import (
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4206,6 +4216,12 @@ if TYPE_CHECKING:
             DistilBertForTokenClassification,
             DistilBertModel,
             DistilBertPreTrainedModel,
+        )
+        from .models.dinat import (
+            DINAT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DiNATForImageClassification,
+            DiNATModel,
+            DiNATPreTrainedModel,
         )
         from .models.donut import DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST, DonutSwinModel, DonutSwinPreTrainedModel
         from .models.dpr import (

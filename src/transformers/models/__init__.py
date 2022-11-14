@@ -53,6 +53,7 @@ from . import (
     deit,
     detr,
     dialogpt,
+    dinat,
     distilbert,
     dit,
     donut,

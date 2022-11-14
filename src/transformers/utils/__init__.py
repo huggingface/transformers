@@ -140,6 +140,7 @@ from .import_utils import (
     is_tf2onnx_available,
     is_tf_available,
     is_timm_available,
+    is_natten_available,
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available,
