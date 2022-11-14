@@ -312,6 +312,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
+        >>> text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True)
         ```"""
         # Use CHINESE_CLIP model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -364,6 +365,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         >>> inputs = processor(images=image, return_tensors="pt")
 
         >>> image_features = model.get_image_features(**inputs)
+        >>> image_features = image_features / image_features.norm(p=2, dim=-1, keepdim=True)
         ```"""
         # Use CHINESE_CLIP model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
