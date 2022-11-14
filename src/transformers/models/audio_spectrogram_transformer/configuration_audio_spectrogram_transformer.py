@@ -22,8 +22,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    # TODO update to appropriate organization
-    "nielsr/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593": "https://huggingface.co/nielsr/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593/resolve/main/config.json",
+    "MIT/ast-finetuned-audioset-10-10-0.4593": (
+        "https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593/resolve/main/config.json"
+    ),
 }
 
 
@@ -33,7 +34,7 @@ class AudioSpectrogramTransformerConfig(PretrainedConfig):
     instantiate an AudioSpectrogramTransformer model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     AudioSpectrogramTransformer
-    [nielsr/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593](https://huggingface.co/nielsr/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593)
+    [MIT/ast-finetuned-audioset-10-10-0.4593](https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593)
     architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -75,12 +76,12 @@ class AudioSpectrogramTransformerConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import AudioSpectrogramTransformerModel, AudioSpectrogramTransformerConfig
+    >>> from transformers import AudioSpectrogramTransformerConfig, AudioSpectrogramTransformerModel
 
-    >>> # Initializing a AudioSpectrogramTransformer audio_spectrogram_transformer-base-patch16-224 style configuration
+    >>> # Initializing a AudioSpectrogramTransformer MIT/ast-finetuned-audioset-10-10-0.4593 style configuration
     >>> configuration = AudioSpectrogramTransformerConfig()
 
-    >>> # Initializing a model from the audio_spectrogram_transformer-base-patch16-224 style configuration
+    >>> # Initializing a model (with random weights) from the MIT/ast-finetuned-audioset-10-10-0.4593 style configuration
     >>> model = AudioSpectrogramTransformerModel(configuration)
 
     >>> # Accessing the model configuration

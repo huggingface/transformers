@@ -162,28 +162,28 @@ def convert_audio_spectrogram_transformer_checkpoint(model_name, pytorch_dump_fo
     config = get_audio_spectrogram_transformer_config(model_name)
 
     model_name_to_url = {
-        "audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593": (
+        "ast-finetuned-audioset-10-10-0.4593": (
             "https://www.dropbox.com/s/ca0b1v2nlxzyeb4/audioset_10_10_0.4593.pth?dl=1"
         ),
-        "audio-spectrogram-transformer-finetuned-audioset-10-10-0.450": (
+        "ast-finetuned-audioset-10-10-0.450": (
             "https://www.dropbox.com/s/1tv0hovue1bxupk/audioset_10_10_0.4495.pth?dl=1"
         ),
-        "audio-spectrogram-transformer-finetuned-audioset-10-10-0.448": (
+        "ast-finetuned-audioset-10-10-0.448": (
             "https://www.dropbox.com/s/6u5sikl4b9wo4u5/audioset_10_10_0.4483.pth?dl=1"
         ),
-        "audio-spectrogram-transformer-finetuned-audioset-10-10-0.448-v2": (
+        "ast-finetuned-audioset-10-10-0.448-v2": (
             "https://www.dropbox.com/s/kt6i0v9fvfm1mbq/audioset_10_10_0.4475.pth?dl=1"
         ),
-        "audio-spectrogram-transformer-finetuned-audioset-12-12-0.447": (
+        "ast-finetuned-audioset-12-12-0.447": (
             "https://www.dropbox.com/s/snfhx3tizr4nuc8/audioset_12_12_0.4467.pth?dl=1"
         ),
-        "audio-spectrogram-transformer-finetuned-audioset-14-14-0.443": (
+        "ast-finetuned-audioset-14-14-0.443": (
             "https://www.dropbox.com/s/z18s6pemtnxm4k7/audioset_14_14_0.4431.pth?dl=1"
         ),
-        "audio-spectrogram-transformer-finetuned-audioset-16-16-0.442": (
+        "ast-finetuned-audioset-16-16-0.442": (
             "https://www.dropbox.com/s/mdsa4t1xmcimia6/audioset_16_16_0.4422.pth?dl=1"
         ),
-        "audio-spectrogram-transformer-finetuned-speech-commands-v2": (
+        "ast-finetuned-speech-commands-v2": (
             "https://www.dropbox.com/s/q0tbqpwv44pquwy/speechcommands_10_10_0.9812.pth?dl=1"
         ),
     }
@@ -228,21 +228,21 @@ def convert_audio_spectrogram_transformer_checkpoint(model_name, pytorch_dump_fo
     outputs = model(**inputs)
     logits = outputs.logits
 
-    if model_name == "audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593":
+    if model_name == "ast-finetuned-audioset-10-10-0.4593":
         expected_slice = torch.tensor([-0.8760, -7.0042, -8.6602])
-    elif model_name == "audio-spectrogram-transformer-finetuned-audioset-10-10-0.450":
+    elif model_name == "ast-finetuned-audioset-10-10-0.450":
         expected_slice = torch.tensor([-1.1986, -7.0903, -8.2718])
-    elif model_name == "audio-spectrogram-transformer-finetuned-audioset-10-10-0.448":
+    elif model_name == "ast-finetuned-audioset-10-10-0.448":
         expected_slice = torch.tensor([-2.6128, -8.0080, -9.4344])
-    elif model_name == "audio-spectrogram-transformer-finetuned-audioset-10-10-0.448-v2":
+    elif model_name == "ast-finetuned-audioset-10-10-0.448-v2":
         expected_slice = torch.tensor([-1.5080, -7.4534, -8.8917])
-    elif model_name == "audio-spectrogram-transformer-finetuned-audioset-12-12-0.447":
+    elif model_name == "ast-finetuned-audioset-12-12-0.447":
         expected_slice = torch.tensor([-0.5050, -6.5833, -8.0843])
-    elif model_name == "audio-spectrogram-transformer-finetuned-audioset-14-14-0.443":
+    elif model_name == "ast-finetuned-audioset-14-14-0.443":
         expected_slice = torch.tensor([-0.3826, -7.0336, -8.2413])
-    elif model_name == "audio-spectrogram-transformer-finetuned-audioset-16-16-0.442":
+    elif model_name == "ast-finetuned-audioset-16-16-0.442":
         expected_slice = torch.tensor([-1.2113, -6.9101, -8.3470])
-    elif model_name == "audio-spectrogram-transformer-finetuned-speech-commands-v2":
+    elif model_name == "ast-finetuned-speech-commands-v2":
         expected_slice = torch.tensor([6.1589, -8.0566, -8.7984])
     else:
         raise ValueError("Unknown model name")
@@ -268,7 +268,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593",
+        default="ast-finetuned-audioset-10-10-0.4593",
         type=str,
         help="Name of the Audio Spectrogram Transformer model you'd like to convert.",
     )

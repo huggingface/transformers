@@ -37,20 +37,17 @@ _CONFIG_FOR_DOC = "AudioSpectrogramTransformerConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "AudioSpectrogramTransformerFeatureExtractor"
 
 # Base docstring
-# TODO update to appropriate organization
-_CHECKPOINT_FOR_DOC = "nielsr/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593"
+_CHECKPOINT_FOR_DOC = "MIT/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593"
 _EXPECTED_OUTPUT_SHAPE = [1, 1214, 768]
 
 # Audio classification docstring
-# TODO update to appropriate organization
-_SEQ_CLASS_CHECKPOINT = "nielsr/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593"
+_SEQ_CLASS_CHECKPOINT = "MIT/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'Speech'"
 _SEQ_CLASS_EXPECTED_LOSS = 0.17
 
 
 AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # TODO update to appropriate organization
-    "nielsr/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593",
+    "MIT/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593",
     # See all Audio Spectrogram Transformer models at https://huggingface.co/models?filter=audio-spectrogram-transformer
 ]
 
@@ -530,7 +527,7 @@ class AudioSpectrogramTransformerModel(AudioSpectrogramTransformerPreTrainedMode
 @add_start_docstrings(
     """
     Audio Spectrogram Transformer model with an audio classification head on top (a linear layer on top of the pooled
-    output) e.g. for AudioSet, Speech Commands v2.
+    output) e.g. for datasets like AudioSet, Speech Commands v2.
     """,
     AUDIO_SPECTROGRAM_TRANSFORMER_START_DOCSTRING,
 )

@@ -34,18 +34,18 @@ class AudioSpectrogramTransformerFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Audio Spectrogram Transformer feature extractor.
 
-    This feature extractor inherits from [`AudioSpectrogramTransformerFeatureExtractor`] which contains most of the
-    main methods. Users should refer to this superclass for more information regarding those methods.
+    This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
+    most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
     This class extracts mel-filter bank features from raw speech using TorchAudio and applies utterance-level cepstral
     mean and variance normalization to the extracted features.
 
     Args:
-        feature_size (`int`, defaults to 1):
+        feature_size (`int`, *optional*, defaults to 1):
             The feature dimension of the extracted features.
-        sampling_rate (`int`, defaults to 16000):
+        sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
-        num_mel_bins (`int`, defaults to 128):
+        num_mel_bins (`int`, *optional*, defaults to 128):
             Number of Mel-frequency bins.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the log-Mel features using `mean` and `std`.
