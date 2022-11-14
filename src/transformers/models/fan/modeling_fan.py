@@ -1487,7 +1487,7 @@ class FANEncoder(FANPreTrainedModel):
                 hidden_state_reshaped = (
                     current_hidden_state.reshape(batch_size, Hp, Wp, -1).permute(0, 3, 1, 2).contiguous()
                 )
-                encoder_states = encoder_states + (hidden_state_reshaped,)
+                encoder_states = encoder_states + (current_hidden_state,)
             # Hp, Wp = blk.H, blk.W
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
@@ -1814,14 +1814,24 @@ class FANDecodeHead(FANPreTrainedModel):
     def forward(self, encoder_hidden_states, backbone_hidden_states=None):
         batch_size = encoder_hidden_states[-1].shape[0]
         is_backbone_hybrid = self.config.backbone == "hybrid"
+
+        def reshape_hidden_state(hidden_state):
+            Hp = self.config.img_size[0] // self.config.patch_size
+            Wp = self.config.img_size[1] // self.config.patch_size
+
+            hidden_state_reshaped = hidden_state.reshape(batch_size, Hp, Wp, -1).permute(0, 3, 1, 2).contiguous()
+            return hidden_state_reshaped
+
         out_index = [4, 7, 11]
         if is_backbone_hybrid:
             encoder_states = backbone_hidden_states + (
-                encoder_hidden_states[self.config.out_index],
+                reshape_hidden_state(encoder_hidden_states[self.config.out_index]),
                 encoder_hidden_states[-1],
             )
         else:
-            encoder_states = (encoder_hidden_states[idx] for idx in out_index) + (encoder_hidden_state[-1],)
+            encoder_states = (reshape_hidden_state(encoder_hidden_states[idx]) for idx in out_index) + (
+                encoder_hidden_state[-1],
+            )
 
         all_hidden_states = ()
         for encoder_hidden_state, mlp in zip(encoder_states, self.linear_c):
