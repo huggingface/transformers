@@ -49,7 +49,13 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import CLIPModel, CLIPTextModel, CLIPVisionModel
+    from transformers import (
+        CLIPModel,
+        CLIPTextModel,
+        CLIPTextModelWithProjection,
+        CLIPVisionModel,
+        CLIPVisionModelWithProjection,
+    )
     from transformers.models.clip.modeling_clip import CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -141,7 +147,7 @@ class CLIPVisionModelTester:
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_model_with_projection(self, config, pixel_values):
-        model = CLIPVisionModel(config=config, with_projection=True)
+        model = CLIPVisionModelWithProjection(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -168,7 +174,7 @@ class CLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (CLIPVisionModel,) if is_torch_available() else ()
+    all_model_classes = (CLIPVisionModel, CLIPVisionModelWithProjection) if is_torch_available() else ()
     fx_compatible = True
     test_pruning = False
     test_resize_embeddings = False
@@ -237,7 +243,7 @@ class CLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_with_projection_from_pretrained(self):
         for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLIPVisionModel.from_pretrained(model_name, with_projection=True)
+            model = CLIPVisionModelWithProjection.from_pretrained(model_name)
             self.assertIsNotNone(model)
             self.assertTrue(hasattr(model, "visual_projection"))
 
@@ -324,7 +330,7 @@ class CLIPTextModelTester:
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_model_with_projection(self, config, input_ids, input_mask):
-        model = CLIPTextModel(config=config, with_projection=True)
+        model = CLIPTextModelWithProjection(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -344,7 +350,7 @@ class CLIPTextModelTester:
 @require_torch
 class CLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (CLIPTextModel,) if is_torch_available() else ()
+    all_model_classes = (CLIPTextModel, CLIPTextModelWithProjection) if is_torch_available() else ()
     fx_compatible = True
     test_pruning = False
     test_head_masking = False
@@ -391,7 +397,7 @@ class CLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_with_projection_from_pretrained(self):
         for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLIPTextModel.from_pretrained(model_name, with_projection=True)
+            model = CLIPTextModelWithProjection.from_pretrained(model_name)
             self.assertIsNotNone(model)
             self.assertTrue(hasattr(model, "text_projection"))
 
