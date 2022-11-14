@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from .configuration_dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DiNATConfig
 
     try:
-        if not is_torch_available():
+        if not is_torch_available() or not is_natten_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass

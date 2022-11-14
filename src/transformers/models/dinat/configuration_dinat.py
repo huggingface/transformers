@@ -21,9 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "shi-labs/dinat-mini-in1k-224": (
-        "https://huggingface.co/shi-labs/dinat-mini-in1k-224/resolve/main/config.json"
-    ),
+    "shi-labs/dinat-mini-in1k-224": ("https://huggingface.co/shi-labs/dinat-mini-in1k-224/resolve/main/config.json"),
     # See all DiNAT models at https://huggingface.co/models?filter=dinat
 }
 
@@ -106,10 +104,7 @@ class DiNATConfig(PretrainedConfig):
         depths=[3, 4, 6, 5],
         num_heads=[2, 4, 8, 16],
         kernel_size=7,
-        dilations=[[1, 8, 1],
-                   [1, 4, 1, 4],
-                   [1, 2, 1, 2, 1, 2],
-                   [1, 1, 1, 1, 1]],
+        dilations=[[1, 8, 1], [1, 4, 1, 4], [1, 2, 1, 2, 1, 2], [1, 1, 1, 1, 1]],
         mlp_ratio=3.0,
         qkv_bias=True,
         hidden_dropout_prob=0.0,

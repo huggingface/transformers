@@ -33,7 +33,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
-    is_natten_available
+    is_natten_available,
 )
 from .configuration_dinat import DiNATConfig
 
@@ -183,8 +183,7 @@ class DiNATEmbeddings(nn.Module):
         self.norm = nn.LayerNorm(config.embed_dim)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(
-        self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor]:
+    def forward(self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor]:
         embeddings = self.patch_embeddings(pixel_values)
         embeddings = self.norm(embeddings)
 
@@ -299,9 +298,7 @@ class NeighborhoodAttention(nn.Module):
         self.kernel_size = kernel_size
         self.dilation = dilation
 
-        self.rpb = nn.Parameter(
-            torch.zeros(num_heads, (2 * self.kernel_size - 1), (2 * self.kernel_size - 1))
-        )
+        self.rpb = nn.Parameter(torch.zeros(num_heads, (2 * self.kernel_size - 1), (2 * self.kernel_size - 1)))
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
@@ -426,15 +423,16 @@ class DiNATOutput(nn.Module):
 
 
 class DiNATLayer(nn.Module):
-    def __init__(self, config, dim, num_heads, dilation, drop_path_rate=0.):
+    def __init__(self, config, dim, num_heads, dilation, drop_path_rate=0.0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.kernel_size = config.kernel_size
         self.dilation = dilation
         self.window_size = self.kernel_size * self.dilation
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.attention = NeighborhoodAttentionModule(config, dim, num_heads,
-                                                     kernel_size=self.kernel_size, dilation=self.dilation)
+        self.attention = NeighborhoodAttentionModule(
+            config, dim, num_heads, kernel_size=self.kernel_size, dilation=self.dilation
+        )
         self.drop_path = DiNATDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.intermediate = DiNATIntermediate(config, dim)
@@ -465,9 +463,7 @@ class DiNATLayer(nn.Module):
 
         _, height_pad, width_pad, _ = hidden_states.shape
 
-        attention_outputs = self.attention(
-            hidden_states, output_attentions=output_attentions
-        )
+        attention_outputs = self.attention(hidden_states, output_attentions=output_attentions)
 
         attention_output = attention_outputs[0]
 
