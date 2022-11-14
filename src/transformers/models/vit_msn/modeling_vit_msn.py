@@ -525,7 +525,7 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         Returns:
 
