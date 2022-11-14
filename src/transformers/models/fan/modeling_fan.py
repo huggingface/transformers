@@ -117,6 +117,45 @@ class FANModelOutput(ModelOutput):
 
 
 @dataclass
+class FANSemanticSegmenterOutput(ModelOutput):
+    """
+    Base class for outputs of semantic segmentation models.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Classification (or regression if config.num_labels==1) loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels, logits_height, logits_width)`):
+            Classification scores for each pixel.
+
+            <Tip warning={true}>
+
+            The logits returned do not necessarily have the same size as the `pixel_values` passed as inputs. This is
+            to avoid doing two interpolations and lose some quality when a user needs to resize the logits to the
+            original image size as post-processing. You should always check your logits shape and resize as needed.
+
+            </Tip>
+
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, patch_size, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, patch_size,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    backbone_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
 class FANImageClassifierOutput(ModelOutput):
     """
     Base class for outputs of image classification models.
@@ -1916,7 +1955,7 @@ class FANForSemanticSegmentation(FANPreTrainedModel):
             pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=True,  # we need the intermediate hidden states
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
@@ -1936,16 +1975,30 @@ class FANForSemanticSegmentation(FANPreTrainedModel):
                 loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
                 loss = loss_fct(upsampled_logits, labels)
 
-        if not return_dict:
-            if output_hidden_states:
-                output = (logits,) + outputs[1:]
-            else:
-                output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+        # if not return_dict:
+        #     if output_hidden_states:
+        #         output = (logits,) + outputs[1:]
+        #     else:
+        #         output = (logits,) + outputs[2:]
+        #     return ((loss,) + output) if loss is not None else output
 
-        return SemanticSegmenterOutput(
+        if not return_dict:
+            return tuple(
+                v
+                for v in [
+                    loss,
+                    logits,
+                    outputs.hidden_states if output_hidden_states else None,
+                    outputs.attentions if output_attentions else None,
+                    outputs.backbone_hidden_states if output_hidden_states else None,
+                ]
+                if v is not None
+            )
+
+        return FANSemanticSegmenterOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=outputs.attentions,
+            attentions=outputs.attentions if output_attentions else None,
+            backbone_hidden_states=outputs.backbone_hidden_states if output_hidden_states else None,
         )
