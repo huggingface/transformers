@@ -104,7 +104,7 @@ class CLIPVisionModelOutput(ModelOutput):
 @dataclass
 class CLIPTextModelOutput(ModelOutput):
     """
-    Base class for model's outputs that also contains a pooling of the last hidden states.
+    Base class for text model's outputs that also contains a pooling of the last hidden states.
 
     Args:
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim` *optional* returned when model is initialized with `with_projection=True`):
