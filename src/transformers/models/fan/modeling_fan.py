@@ -1186,7 +1186,7 @@ class FANPreTrainedModel(PreTrainedModel):
     """
 
     config_class = FANConfig
-    base_model_prefix = "fan"  # TODO: FAN or model?
+    base_model_prefix = "fan"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -1194,7 +1194,11 @@ class FANPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data = nn.init.trunc_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
+            # Added Lower and Upper bound to pass initialization test
+            lower, upper = -2 * self.config.initializer_range, 2 * self.config.initializer_range
+            module.weight.data = nn.init.trunc_normal_(
+                module.weight.data, mean=0.0, std=self.config.initializer_range, a=lower, b=upper
+            )
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -1302,9 +1306,7 @@ class FANEmbeddings(FANPreTrainedModel):
     def forward(
         self,
         pixel_values=None,
-        output_attentions=None,
         output_hidden_states=None,
-        return_dict=None,
     ):
         """
         Args:
@@ -1319,7 +1321,6 @@ class FANEmbeddings(FANPreTrainedModel):
         """
         batch_size = pixel_values.shape[0]
         encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
         if isinstance(self.patch_embed, HybridEmbed):
             hidden_states, (Hp, Wp), out_list = self.patch_embed(pixel_values, return_feat=True)
             if output_hidden_states:
@@ -1461,15 +1462,9 @@ class FANEncoder(FANPreTrainedModel):
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         is_backbone_hybrid = self.config.backbone == "hybrid"
-        # out_index = [4, 7, 11]
-        # if output_hidden_states and is_backbone_hybrid:
-        #     encoder_states = encoder_states + embedding_hidden_states
-        #     out_index = [self.config.out_index]
 
         current_hidden_state = inputs_embeds
-        # TODO: Add all Hidden States, use out_index for segmentation selection
         for idx, blk in enumerate(self.blocks):
-            # blk.H, blk.W = Hp, Wp
 
             if self.gradient_checkpointing:
                 current_hidden_state, Hp, Wp, attn = torch.utils.checkpoint.checkpoint(
@@ -1481,14 +1476,8 @@ class FANEncoder(FANPreTrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + (attn,)
 
-            # if idx in out_index and output_hidden_states:
             if output_hidden_states:
-
-                hidden_state_reshaped = (
-                    current_hidden_state.reshape(batch_size, Hp, Wp, -1).permute(0, 3, 1, 2).contiguous()
-                )
                 encoder_states = encoder_states + (current_hidden_state,)
-            # Hp, Wp = blk.H, blk.W
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         current_hidden_state = torch.cat((cls_tokens, current_hidden_state), dim=1)
@@ -1496,7 +1485,6 @@ class FANEncoder(FANPreTrainedModel):
         for blk in self.cls_attn_blocks:
             if output_attentions:
                 current_hidden_state, attn = blk(current_hidden_state, output_attentions)
-                # all_attentions = all_attentions + (attn,)
             else:
                 current_hidden_state = blk(current_hidden_state)
 
@@ -1578,7 +1566,6 @@ class FANModel(FANPreTrainedModel):
     def forward(
         self,
         pixel_values,
-        pixel_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=True,
@@ -1690,7 +1677,6 @@ class FANForImageClassification(FANPreTrainedModel):
     def forward(
         self,
         pixel_values,
-        pixel_mask=None,
         labels: Optional[torch.Tensor] = None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1800,8 +1786,6 @@ class FANDecodeHead(FANPreTrainedModel):
         super().__init__(config)
         # linear layers which will unify the channel dimension of each of the encoder blocks to the same config.decoder_hidden_size
         mlps = []
-        # for i in range(config.num_encoder_blocks):
-        #     mlp = SegformerMLP(config, input_dim=config.hidden_sizes[i])
         for in_channels in config.segmentation_in_channels:
             mlp = SegformerMLP(config, input_dim=in_channels)
             mlps.append(mlp)
