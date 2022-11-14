@@ -1052,6 +1052,10 @@ class ConvNeXtBlock(nn.Module):
         self.mlp = mlp_layer(dim, int(mlp_ratio * dim), act_layer=nn.GELU)
         self.weight = nn.Parameter(ls_init_value * torch.ones(dim)) if ls_init_value > 0 else None
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        # Added This initialization to pass initialization Test
+        self.weight.data = nn.init.trunc_normal_(
+            self.weight.data, std=ls_init_value, a=-2 * ls_init_value, b=2 * ls_init_value
+        )
 
     def forward(self, x):
         shortcut = x
@@ -1332,7 +1336,12 @@ class FANEmbeddings(FANPreTrainedModel):
                 act_layer=act_layer,
             )
         elif config.backbone == "hybrid":
-            backbone = ConvNeXt(depths=self.config.depths, dims=self.config.dims, use_head=False)
+            backbone = ConvNeXt(
+                depths=self.config.depths,
+                dims=self.config.dims,
+                use_head=False,
+                ls_init_value=self.config.initializer_range,
+            )
             self.patch_embed = HybridEmbed(
                 backbone=backbone, patch_size=config.hybrid_patch_size, hidden_size=config.hidden_size
             )
