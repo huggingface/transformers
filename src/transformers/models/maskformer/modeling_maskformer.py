@@ -40,6 +40,7 @@ from ...utils import (
     requires_backends,
 )
 from ..detr import DetrConfig
+from ..swin import SwinConfig
 from .configuration_maskformer import MaskFormerConfig
 from .modeling_maskformer_swin import MaskFormerSwinEncoder
 
@@ -1375,12 +1376,11 @@ class MaskFormerPixelLevelModule(nn.Module):
         """
         super().__init__()
         # TODD: add method to load pretrained weights of backbone
+        backbone_config = config.backbone_config
+        if isinstance(backbone_config, SwinConfig):
+            # for backwards compatibility
+            backbone_config.out_features = ["stage1", "stage2", "stage3", "stage4"]
         self.encoder = AutoBackbone.from_config(config.backbone_config)
-
-        # if config.backbone_config.model_type == "swin":
-        #     self.encoder = MaskFormerSwinBackbone(config.backbone_config)
-        # elif config.backbone_config.model_type == "resnet":
-        #     self.encoder = ResNetBackbone(config.backbone_config)
 
         input_shape = self.encoder.output_shape()
         feature_channels = [v.channels for k, v in input_shape.items()]

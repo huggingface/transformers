@@ -125,7 +125,7 @@ class SwinConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         encoder_stride=32,
-        out_features=["stage1", "stage2", "stage3", "stage4"],
+        out_features=None,
         **kwargs
     ):
         super().__init__(**kwargs)
