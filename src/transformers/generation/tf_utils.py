@@ -2671,7 +2671,7 @@ class TFGenerationMixin:
         >>> outputs = model.sample(input_ids, logits_processor=logits_processor, logits_warper=logits_warper)
 
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Today is a beautiful day, and it\'s all about the future."\n\nThe announcement comes three']
+        ['Today is a beautiful day, and I love my country. But when I look at Donald Trump,']
         ```"""
 
         # 1. init greedy_search values
