@@ -672,8 +672,7 @@ class GenerationMixin:
 
         return input_ids, model_kwargs
 
-    @staticmethod
-    def _extract_past_from_model_output(outputs: ModelOutput):
+    def _extract_past_from_model_output(self, outputs: ModelOutput, standardize_cache_format: bool = False):
         past = None
         if "past_key_values" in outputs:
             past = outputs.past_key_values
@@ -681,13 +680,24 @@ class GenerationMixin:
             past = outputs.mems
         elif "past_buckets_states" in outputs:
             past = outputs.past_buckets_states
+
+        # Bloom fix: standardizes the cache format when requested
+        if standardize_cache_format and hasattr(self, "_convert_to_standard_cache"):
+            batch_size = outputs.logits.shape[0]
+            past = self._convert_to_standard_cache(past, batch_size=batch_size)
         return past
 
     def _update_model_kwargs_for_generation(
-        self, outputs: ModelOutput, model_kwargs: Dict[str, Any], is_encoder_decoder: bool = False
+        self,
+        outputs: ModelOutput,
+        model_kwargs: Dict[str, Any],
+        is_encoder_decoder: bool = False,
+        standardize_cache_format: bool = False,
     ) -> Dict[str, Any]:
         # update past
-        model_kwargs["past"] = self._extract_past_from_model_output(outputs)
+        model_kwargs["past"] = self._extract_past_from_model_output(
+            outputs, standardize_cache_format=standardize_cache_format
+        )
 
         # update token_type_ids with last value
         if "token_type_ids" in model_kwargs:
@@ -1939,7 +1949,10 @@ class GenerationMixin:
                 logit_for_next_step = outputs.logits[:, -1, :]
 
                 model_kwargs = self._update_model_kwargs_for_generation(
-                    outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
+                    outputs,
+                    model_kwargs,
+                    is_encoder_decoder=self.config.is_encoder_decoder,
+                    standardize_cache_format=True,
                 )
 
                 # Expands model inputs top_k times, for batched forward passes (akin to beam search).
@@ -2001,7 +2014,7 @@ class GenerationMixin:
             outputs = self(
                 **next_model_inputs, return_dict=True, output_hidden_states=True, output_attentions=output_attentions
             )
-            next_past_key_values = self._extract_past_from_model_output(outputs)
+            next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
 
             logits = outputs.logits[:, -1, :]
             # name is different for encoder-decoder and decoder-only models
