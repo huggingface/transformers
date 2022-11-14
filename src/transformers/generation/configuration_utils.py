@@ -19,7 +19,7 @@ import json
 import copy
 from typing import Any, Dict, Union
 from .. import __version__
-from ..utils import PushToHubMixin, logging, GENERATION_CONFIG_NAME
+from ..utils import cached_file, extract_commit_hash, download_url, is_remote_url, PushToHubMixin, logging, GENERATION_CONFIG_NAME
 
 logger = logging.get_logger(__name__)
 
@@ -203,6 +203,249 @@ class GenerationConfig(PushToHubMixin):
         self._commit_hash = kwargs.pop("_commit_hash", None)
         self.transformers_version = kwargs.pop("transformers_version", None)
 
+    def save_pretrained(self, save_directory: Union[str, os.PathLike], config_name: str = GENERATION_CONFIG_NAME, push_to_hub: bool = False, **kwargs):
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # REVIEWERS: As discussed on Slack, this config file has an argument to specify the file name, to facilitate
+        # the creation of multiple generation config files in the root directory of a model.
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        """
+        Save a generation configuration object to the directory `save_directory`, so that it can be re-loaded using the
+        [`~GenerationConfig.from_pretrained`] class method.
+        Args:
+            save_directory (`str` or `os.PathLike`):
+                Directory where the configuration JSON file will be saved (will be created if it does not exist).
+            config_name (`str`, *optional*, defaults to `"generation_config.json"`):
+                Name of the generation configuration JSON file to be saved in `save_directory`.
+            push_to_hub (`bool`, *optional*, defaults to `False`):
+                Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
+                repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
+                namespace).
+            kwargs:
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
+        """
+        if os.path.isfile(save_directory):
+            raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
+
+        os.makedirs(save_directory, exist_ok=True)
+
+        if push_to_hub:
+            commit_message = kwargs.pop("commit_message", None)
+            repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            repo_id, token = self._create_repo(repo_id, **kwargs)
+            files_timestamps = self._get_files_timestamps(save_directory)
+
+        output_config_file = os.path.join(save_directory, config_name)
+        self.to_json_file(output_config_file, use_diff=True)
+        logger.info(f"Configuration saved in {output_config_file}")
+
+        if push_to_hub:
+            self._upload_modified_files(
+                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
+            )
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name: Union[str, os.PathLike], config_name: str = GENERATION_CONFIG_NAME, **kwargs) -> "GenerationConfig":
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # REVIEWERS: Contrarily to the model config, the first argument is a folder (as opposed to a folder OR a
+        # file). This is because saving the generation config expects two arguments as well: the folder and the file
+        # name.
+
+        # I think maintaing consistency with the save function is more important than with other config classes.
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        r"""
+        Instantiate a [`GenerationConfig`] from a generation configuration file.
+
+        Args:
+            pretrained_model_name (`str` or `os.PathLike`):
+                This can be either:
+
+                - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
+                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
+                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                - a path to a *directory* containing a configuration file saved using the
+                  [`~GenerationConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
+            config_name (`str`, *optional*, defaults to `"generation_config.json"`):
+                Name of the generation configuration JSON file to be loaded from `pretrained_model_name`.
+            cache_dir (`str` or `os.PathLike`, *optional*):
+                Path to a directory in which a downloaded pretrained model configuration should be cached if the
+                standard cache should not be used.
+            force_download (`bool`, *optional*, defaults to `False`):
+                Whether or not to force to (re-)download the configuration files and override the cached versions if
+                they exist.
+            resume_download (`bool`, *optional*, defaults to `False`):
+                Whether or not to delete incompletely received file. Attempts to resume the download if such a file
+                exists.
+            proxies (`Dict[str, str]`, *optional*):
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+            use_auth_token (`str` or `bool`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
+                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+            revision (`str`, *optional*, defaults to `"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
+                identifier allowed by git.
+
+                <Tip>
+
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+
+                </Tip>
+
+            return_unused_kwargs (`bool`, *optional*, defaults to `False`):
+                If `False`, then this function returns just the final configuration object.
+
+                If `True`, then this functions returns a `Tuple(config, unused_kwargs)` where *unused_kwargs* is a
+                dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e., the
+                part of `kwargs` which has not been used to update `config` and is otherwise ignored.
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+                specify the folder name here.
+            kwargs (`Dict[str, Any]`, *optional*):
+                The values in kwargs of any keys which are configuration attributes will be used to override the loaded
+                values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
+                by the `return_unused_kwargs` keyword parameter.
+
+        Returns:
+            [`GenerationConfig`]: The configuration object instantiated from this pretrained model.
+
+        Examples:
+
+        ```python
+        generation_config = GenerationConfig.from_pretrained(
+            "gpt2"
+        )  # Download configuration from huggingface.co and cache.
+        generation_config = GenerationConfig.from_pretrained(
+            "./test/saved_model/"
+        )  # E.g. config was saved using *save_pretrained('./test/saved_model/')*
+        generation_config = GenerationConfig.from_pretrained("./test/saved_model/", "my_configuration.json")
+        config = GenerationConfig.from_pretrained("gpt2", top_k=1)
+        assert config.top_k == 1
+        config, unused_kwargs = GenerationConfig.from_pretrained("gpt2", top_k=1, foo=False, return_unused_kwargs=True)
+        assert config.top_k == 1
+        assert unused_kwargs == {"foo": False}
+        ```"""
+        # TODO: convert the examples above to doctest when we have public examples on the hub
+        cache_dir = kwargs.pop("cache_dir", None)
+        force_download = kwargs.pop("force_download", False)
+        resume_download = kwargs.pop("resume_download", False)
+        proxies = kwargs.pop("proxies", None)
+        use_auth_token = kwargs.pop("use_auth_token", None)
+        local_files_only = kwargs.pop("local_files_only", False)
+        revision = kwargs.pop("revision", None)
+        subfolder = kwargs.pop("subfolder", "")
+        from_pipeline = kwargs.pop("_from_pipeline", None)
+        from_auto_class = kwargs.pop("_from_auto", False)
+        commit_hash = kwargs.pop("_commit_hash", None)
+
+        user_agent = {"file_type": "config", "from_auto_class": from_auto_class}
+        if from_pipeline is not None:
+            user_agent["using_pipeline"] = from_pipeline
+
+        config_path = os.path.join(pretrained_model_name, config_name)
+        config_path = str(config_path)
+
+        is_local = os.path.exists(config_path)
+        if os.path.isfile(os.path.join(subfolder, config_path)):
+            # Special case when config_path is a local file
+            resolved_config_file = config_path
+            is_local = True
+        elif is_remote_url(config_path):
+            configuration_file = config_path
+            resolved_config_file = download_url(config_path)
+        else:
+            configuration_file = config_name
+            try:
+                # Load from local folder or from cache or download from model Hub and cache
+                resolved_config_file = cached_file(
+                    pretrained_model_name,
+                    configuration_file,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
+                    use_auth_token=use_auth_token,
+                    user_agent=user_agent,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _commit_hash=commit_hash,
+                )
+                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
+            except EnvironmentError:
+                # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
+                # the original exception.
+                raise
+            except Exception:
+                # For any other exception, we throw a generic error.
+                raise EnvironmentError(
+                    f"Can't load the configuration of '{pretrained_model_name}'. If you were trying to load it"
+                    " from 'https://huggingface.co/models', make sure you don't have a local directory with the same"
+                    f" name. Otherwise, make sure '{pretrained_model_name}' is the correct path to a directory"
+                    f" containing a {configuration_file} file"
+                )
+
+        try:
+            # Load config dict
+            config_dict = cls._dict_from_json_file(resolved_config_file)
+            config_dict["_commit_hash"] = commit_hash
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            raise EnvironmentError(
+                f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file."
+            )
+
+        if is_local:
+            logger.info(f"loading configuration file {resolved_config_file}")
+        else:
+            logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
+
+        return cls.from_dict(config_dict, **kwargs)
+
+    @classmethod
+    def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):
+        with open(json_file, "r", encoding="utf-8") as reader:
+            text = reader.read()
+        return json.loads(text)
+
+    @classmethod
+    def from_dict(cls, config_dict: Dict[str, Any], **kwargs) -> "GenerationConfig":
+        """
+        Instantiates a [`GenerationConfig`] from a Python dictionary of parameters.
+
+        Args:
+            config_dict (`Dict[str, Any]`):
+                Dictionary that will be used to instantiate the configuration object.
+            kwargs (`Dict[str, Any]`):
+                Additional parameters from which to initialize the configuration object.
+
+        Returns:
+            [`GenerationConfig`]: The configuration object instantiated from those parameters.
+        """
+        return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+        # Those arguments may be passed along for our internal telemetry.
+        # We remove them so they don't appear in `return_unused_kwargs`.
+        kwargs.pop("_from_auto", None)
+        kwargs.pop("_from_pipeline", None)
+        # The commit hash might have been updated in the `config_dict`, we don't want the kwargs to erase that update.
+        if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
+            kwargs["_commit_hash"] = config_dict["_commit_hash"]
+
+        config = cls(**config_dict)
+
+        to_remove = []
+        for key, value in kwargs.items():
+            if hasattr(config, key):
+                setattr(config, key, value)
+                to_remove.append(key)
+        for key in to_remove:
+            kwargs.pop(key, None)
+
+        logger.info(f"Generate config {config}")
+        if return_unused_kwargs:
+            return config, kwargs
+        else:
+            return config
+
     def to_diff_dict(self) -> Dict[str, Any]:
         """
         Removes all attributes from config which correspond to the default config attributes for better readability and
@@ -279,138 +522,3 @@ class GenerationConfig(PushToHubMixin):
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string(use_diff=use_diff))
-
-    def save_pretrained(self, save_directory: Union[str, os.PathLike], config_name: str = GENERATION_CONFIG_NAME, push_to_hub: bool = False, **kwargs):
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # REVIEWERS: As discussed on Slack, this config file has an argument to specify the file name, to facilitate
-        # the creation of multiple generation config files in the root directory of a model.
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        """
-        Save a generation configuration object to the directory `save_directory`, so that it can be re-loaded using the
-        [`~GenerationConfig.from_pretrained`] class method.
-        Args:
-            save_directory (`str` or `os.PathLike`):
-                Directory where the configuration JSON file will be saved (will be created if it does not exist).
-            config_name (`str`, *optional*, defaults to `"generation_config.json"`):
-                Name of the generation configuration JSON file to be saved in `save_directory`.
-            push_to_hub (`bool`, *optional*, defaults to `False`):
-                Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
-                repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
-                namespace).
-            kwargs:
-                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
-        """
-        if os.path.isfile(save_directory):
-            raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
-
-        os.makedirs(save_directory, exist_ok=True)
-
-        if push_to_hub:
-            commit_message = kwargs.pop("commit_message", None)
-            repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id, token = self._create_repo(repo_id, **kwargs)
-            files_timestamps = self._get_files_timestamps(save_directory)
-
-        output_config_file = os.path.join(save_directory, config_name)
-        self.to_json_file(output_config_file, use_diff=True)
-        logger.info(f"Configuration saved in {output_config_file}")
-
-        if push_to_hub:
-            self._upload_modified_files(
-                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
-            )
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name: Union[str, os.PathLike], config_name: str = GENERATION_CONFIG_NAME, **kwargs) -> "GenerationConfig":
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # REVIEWERS: Contrarily to the model config, the first argument is a folder (as opposed to a folder OR a
-        # file). This is because saving the generation config expects two arguments as well: the folder and the file
-        # name.
-
-        # I think maintaing consistency with the save function is more important than with other config classes.
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        r"""
-        Instantiate a [`GenerationConfig`] from a generation configuration file.
-
-        Args:
-            pretrained_model_name_or_path (`str` or `os.PathLike`):
-                This can be either:
-
-                - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
-                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
-                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
-                - a path to a *directory* containing a configuration file saved using the
-                  [`~GenerationConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
-                - a path or url to a saved configuration JSON *file*, e.g., `./my_model_directory/configuration.json`.
-            config_name (`str`, *optional*, defaults to `"generation_config.json"`):
-                Name of the generation configuration JSON file to be loaded. This argument will only be used if
-                `pretrained_model_name_or_path` is not a file.
-            cache_dir (`str` or `os.PathLike`, *optional*):
-                Path to a directory in which a downloaded pretrained model configuration should be cached if the
-                standard cache should not be used.
-            force_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to force to (re-)download the configuration files and override the cached versions if
-                they exist.
-            resume_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to delete incompletely received file. Attempts to resume the download if such a file
-                exists.
-            proxies (`Dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-            use_auth_token (`str` or `bool`, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
-                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
-            revision (`str`, *optional*, defaults to `"main"`):
-                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-                git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
-                identifier allowed by git.
-
-                <Tip>
-
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
-
-                </Tip>
-
-            return_unused_kwargs (`bool`, *optional*, defaults to `False`):
-                If `False`, then this function returns just the final configuration object.
-
-                If `True`, then this functions returns a `Tuple(config, unused_kwargs)` where *unused_kwargs* is a
-                dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e., the
-                part of `kwargs` which has not been used to update `config` and is otherwise ignored.
-            subfolder (`str`, *optional*, defaults to `""`):
-                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
-                specify the folder name here.
-            kwargs (`Dict[str, Any]`, *optional*):
-                The values in kwargs of any keys which are configuration attributes will be used to override the loaded
-                values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
-                by the `return_unused_kwargs` keyword parameter.
-
-        Returns:
-            [`GenerationConfig`]: The configuration object instantiated from this pretrained model.
-
-        Examples:
-
-        ```python
-        generation_config = GenerationConfig.from_pretrained(
-            "gpt2"
-        )  # Download configuration from huggingface.co and cache.
-        generation_config = GenerationConfig.from_pretrained(
-            "./test/saved_model/"
-        )  # E.g. config was saved using *save_pretrained('./test/saved_model/')*
-        generation_config = GenerationConfig.from_pretrained("./test/saved_model/my_configuration.json")
-        config = GenerationConfig.from_pretrained("gpt2", top_k=1)
-        assert config.output_attentions == True
-        config, unused_kwargs = GenerationConfig.from_pretrained(
-            "bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
-        )
-        assert config.output_attentions == True
-        assert unused_kwargs == {"foo": False}
-        ```"""
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
