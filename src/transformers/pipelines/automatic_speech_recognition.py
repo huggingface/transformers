@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import inspect
 from collections import defaultdict
 from typing import TYPE_CHECKING, Dict, Optional, Union
 
@@ -289,10 +288,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         is_last = model_inputs.pop("is_last")
         if self.type == "seq2seq":
             encoder = self.model.get_encoder()
-            # we need to pass `processed.get("attention_mask")` here since audio encoder
-            # attention mask  length is different from expected text decoder `encoder_attention_mask` length
-            # `generate` magic to create the mask automatically won't work, we basically need to help
-            # it here.
             # Consume values so we can let extra information flow freely through
             # the pipeline (important for `partial` in microphone)
             if "input_features" in model_inputs:
@@ -305,15 +300,15 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     f"`input_features` or `input_values` key, but only has {model_inputs.keys()}"
                 )
 
-            accepts_attention_mask = "attention_mask" in set(inspect.signature(encoder.forward).parameters.keys())
-            if accepts_attention_mask:
-                attention_mask = model_inputs.pop("attention_mask", None)
-                tokens = self.model.generate(
-                    encoder_outputs=encoder(inputs, attention_mask=attention_mask),
-                    attention_mask=attention_mask,
-                )
-            else:
-                tokens = self.model.generate(inputs)
+            # we need to pass `processed.get("attention_mask")` here since audio encoder
+            # attention mask  length is different from expected text decoder `encoder_attention_mask` length
+            # `generate` magic to create the mask automatically won't work, we basically need to help
+            # it here.
+            attention_mask = model_inputs.pop("attention_mask", None)
+            tokens = self.model.generate(
+                encoder_outputs=encoder(inputs, attention_mask=attention_mask),
+                attention_mask=attention_mask,
+            )
 
             out = {"tokens": tokens}
 
