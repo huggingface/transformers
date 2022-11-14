@@ -1081,7 +1081,7 @@ class ConvNeXt(nn.Module):
 
     Args:
         in_chans (int): Number of input image channels. Default: 3
-        num_classes (int): Number of classes for classification head. Default: 1000
+        num_labels (int): Number of classes for classification head. Default: 1000
         depths (tuple(int)): Number of blocks at each stage. Default: [3, 3, 9, 3]
         dims (tuple(int)): Feature dimension at each stage. Default: [96, 192, 384, 768]
         drop_rate (float): Head dropout rate
@@ -1093,7 +1093,7 @@ class ConvNeXt(nn.Module):
     def __init__(
         self,
         in_chans=3,
-        num_classes=1000,
+        num_labels=1000,
         global_pool="avg",
         output_stride=32,
         patch_size=4,
@@ -1119,7 +1119,7 @@ class ConvNeXt(nn.Module):
             ), "If a norm_layer is specified, conv MLP must be used so all norm expect rank-4, channels-first input"
             cl_norm_layer = norm_layer
 
-        self.num_classes = num_classes
+        self.num_labels = num_labels
         self.drop_rate = drop_rate
         self.feature_info = []
 
@@ -1647,11 +1647,11 @@ class FANClassificationHead(nn.Module):
 
     """
 
-    def __init__(self, num_classes, num_features, norm_layer):
+    def __init__(self, num_labels, num_features, norm_layer):
         super().__init__()
         norm_layer = norm_layer or partial(nn.LayerNorm, eps=1e-6)
         self.norm = norm_layer(num_features)
-        self.head = nn.Linear(num_features, num_classes) if num_classes > 0 else nn.Identity()
+        self.head = nn.Linear(num_features, num_labels) if num_labels > 0 else nn.Identity()
 
     def forward(self, x):
         x = self.norm(x)[:, 0]
@@ -1676,7 +1676,7 @@ class FANForImageClassification(FANPreTrainedModel):
 
         num_features = config.embed_dim if config.channel_dims is None else config.channel_dims[-1]
         # Object detection heads
-        self.head = FANClassificationHead(config.num_classes, num_features, config.norm_layer)
+        self.head = FANClassificationHead(config.num_labels, num_features, config.norm_layer)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1738,8 +1738,26 @@ class FANForImageClassification(FANPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.config.num_classes), labels.view(-1))
+            if self.config.problem_type is None:
+                if self.config.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.config.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.config.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
 
         return FANImageClassifierOutput(
             loss=loss,
@@ -1789,7 +1807,7 @@ class FANDecodeHead(FANPreTrainedModel):
         self.activation = nn.ReLU()
 
         self.dropout = nn.Dropout(config.decoder_dropout)
-        self.classifier = nn.Conv2d(config.decoder_hidden_size, config.num_classes, kernel_size=1)
+        self.classifier = nn.Conv2d(config.decoder_hidden_size, config.num_labels, kernel_size=1)
 
         self.config = config
 

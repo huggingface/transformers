@@ -35,6 +35,7 @@ original_feature_mapping = {
     "in_chans": "num_channels",
 }
 # TODO: Rename embed_dim to hidden_size
+# DONE: Rename num_classes to num_labels
 # TODO: FANConfig Attributes rewrite
 # TODO: FANConfig features rename
 # ISSUE: Move configuration to nvidia/fan
@@ -74,9 +75,9 @@ class FANConfig(PretrainedConfig):
             Wheter or not to use positional_encoding in the embeddings.
         img_size (`List[int]`, defaults to (224,224)):
             The size of the images being passed to the model.
-        num_channels (int, defaults to 3):
+        num_channels (`int`, defaults to 3):
             Number of channels the input image has.
-        num_classes (int, defaults to 1000):
+        num_labels (`int`, defaults to 1000):
             Number of classes used to predict, used for ImageClassification and  SemanticSegmentation tasks.
         backbone (`string`, *optional*, defaults to None):
             Wheter or not to use 'hybrid' backbone.
@@ -151,7 +152,7 @@ class FANConfig(PretrainedConfig):
         initializer_range=1.0,  # HASCOMMENTS
         img_size=[224, 224],  # HASCOMMENTS
         num_channels=3,  # HASCOMMENTS
-        num_classes=1000,  # HASCOMMENTS
+        num_labels=1000,  # HASCOMMENTS
         backbone=None,  # HASCOMMENTS
         use_checkpoint=False,  # TODO: Rename for HF Consistency
         use_pos_embed=True,  # HASCOMMENTS
@@ -189,7 +190,7 @@ class FANConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.img_size = img_size
         self.num_channels = num_channels
-        self.num_classes = num_classes
+        self.num_labels = num_labels
         self.backbone = backbone
         self.use_checkpoint = use_checkpoint
         self.use_pos_embed = use_pos_embed
