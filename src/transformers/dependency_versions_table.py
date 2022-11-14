@@ -63,7 +63,7 @@ deps = {
     "librosa": "librosa",
     "starlette": "starlette",
     "tensorflow-cpu": "tensorflow-cpu>=2.3",
-    "tensorflow-macos": "tensorflow-macos>=2.4",
+    "tensorflow": "tensorflow>=2.4",
     "tensorflow-text": "tensorflow-text",
     "tf2onnx": "tf2onnx",
     "timeout-decorator": "timeout-decorator",

@@ -146,6 +146,10 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertAlmostEqual(scores[1, 0].item(), (1 / vocab_size) * 2)
         self.assertAlmostEqual(scores[1, 5].item(), (4 / vocab_size) * 2)
 
+        # check that values not in the encoder ids were NOT changed
+        self.assertAlmostEqual(scores[0, 2].item(), (1 / vocab_size))
+        self.assertAlmostEqual(scores[1, 2].item(), (1 / vocab_size))
+
     def test_top_k_dist_warper(self):
         input_ids = None
         vocab_size = 10
