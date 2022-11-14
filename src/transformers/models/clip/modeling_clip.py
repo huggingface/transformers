@@ -874,9 +874,8 @@ class CLIPVisionModel(CLIPPreTrainedModel):
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: CLIPVisionConfig, with_projection=False):
+    def __init__(self, config: CLIPVisionConfig):
         super().__init__(config)
-        self.with_projection = with_projection
         self.vision_model = CLIPVisionTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
@@ -1232,10 +1231,9 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: CLIPVisionConfig, with_projection=False):
+    def __init__(self, config: CLIPVisionConfig):
         super().__init__(config)
 
-        self.with_projection = with_projection
         self.vision_model = CLIPVisionTransformer(config)
 
         self.visual_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
