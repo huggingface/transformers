@@ -276,14 +276,20 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         ]
         expected_masks = [Image.open(requests.get(image, stream=True).raw) for image in expected_masks]
 
-        for output_mask, expected_mask in zip(output_masks, expected_masks):
-            output_mask = np.array(output_mask)
-            expected_mask = np.array(expected_mask)
-            self.assertEqual(output_mask.shape, expected_mask.shape)
-            # With un-trained tiny random models, the output `logits` tensor is very likely to contain many values
-            # close to each other, which cause `argmax` to give quite different results when running the test on 2
-            # environments. We use a lower threshold `0.9` here to avoid flakiness.
-            self.assertGreaterEqual(np.mean(output_mask == expected_mask), 0.9)
+        # Convert masks to numpy array
+        output_masks = [np.array(x) for x in output_masks]
+        expected_masks = [np.array(x) for x in expected_masks]
+
+        self.assertEqual(output_masks[0].shape, expected_masks[0].shape)
+        self.assertEqual(output_masks[1].shape, expected_masks[1].shape)
+        self.assertEqual(output_masks[2].shape, expected_masks[2].shape)
+
+        # With un-trained tiny random models, the output `logits` tensor is very likely to contain many values
+        # close to each other, which cause `argmax` to give quite different results when running the test on 2
+        # environments. We use a lower threshold `0.9` here to avoid flakiness.
+        self.assertGreaterEqual(np.mean(output_masks[0] == expected_masks[0]), 0.9)
+        self.assertGreaterEqual(np.mean(output_masks[1] == expected_masks[1]), 0.9)
+        self.assertGreaterEqual(np.mean(output_masks[2] == expected_masks[2]), 0.9)
 
         for o in output:
             o["mask"] = mask_to_test_readable_only_shape(o["mask"])
