@@ -100,7 +100,7 @@ class ModelArguments:
     freeze_encoder: bool = field(
         default=False, metadata={"help": "Whether to freeze the entire encoder of the seq2seq model."}
     )
-    forced_decoder_ids: list = field(
+    forced_decoder_ids: List[List[int]] = field(
         default=None,
         metadata={
             "help": (
@@ -110,7 +110,7 @@ class ModelArguments:
             )
         },
     )
-    suppress_tokens: list = field(
+    suppress_tokens: List[int] = field(
         default=None, metadata={"help": "A list of tokens that will be suppressed at generation."}
     )
 
