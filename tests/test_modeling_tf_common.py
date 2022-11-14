@@ -214,6 +214,7 @@ class TFModelTesterMixin:
 
         return inputs_dict
 
+
     def test_initialization(self):
         pass
 
@@ -279,6 +280,7 @@ class TFModelTesterMixin:
             model = model_class(config)
             inputs = self._prepare_for_class(inputs_dict, model_class)
             outputs = model(inputs)
+            print("<<< ", len(outputs[0]))
             serving_outputs = model.serving_output(outputs)
 
             for k, v in serving_outputs.items():
@@ -1113,6 +1115,7 @@ class TFModelTesterMixin:
                         model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
                     )
 
+    # BartForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -1915,6 +1918,10 @@ def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):
     values = []
     for _ in range(total_dims):
         values.append(rng.randint(0, vocab_size - 1))
+        # x = rng.randint(0, vocab_size - 1)
+        # if x == 2:
+        #     x = 9
+        # values.append(x)
 
     output = tf.constant(values, shape=shape, dtype=dtype if dtype is not None else tf.int32)
 

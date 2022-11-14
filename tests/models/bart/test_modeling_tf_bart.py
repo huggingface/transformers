@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import unittest
 
 import numpy as np
@@ -29,7 +30,7 @@ from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFBartForConditionalGeneration, TFBartModel
+    from transformers import TFBartForConditionalGeneration, TFBartForSequenceClassification, TFBartModel
 
 
 @require_tf
@@ -76,7 +77,7 @@ class TFBartModelTester:
         self.bos_token_id = bos_token_id
 
     def prepare_config_and_inputs_for_common(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
+        input_ids = tf.clip_by_value(ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size), clip_value_min=self.eos_token_id+1, clip_value_max=self.vocab_size+1)
         eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size), 1)
         input_ids = tf.concat([input_ids, eos_tensor], axis=1)
 
@@ -181,7 +182,7 @@ def prepare_bart_inputs_dict(
 
 @require_tf
 class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TFBartForConditionalGeneration, TFBartModel) if is_tf_available() else ()
+    all_model_classes = (TFBartForConditionalGeneration, TFBartForSequenceClassification, TFBartModel) if is_tf_available() else ()
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
@@ -227,6 +228,34 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
     @unittest.skip("Onnx compliancy broke with TF 2.10")
     def test_onnx_compliancy(self):
         pass
+
+    # TFBartForSequenceClassification does not support inputs_embeds
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in (TFBartForConditionalGeneration, TFBartModel):
+            model = model_class(config)
+
+            inputs = copy.deepcopy(inputs_dict)
+
+            if not self.is_encoder_decoder:
+                input_ids = inputs["input_ids"]
+                del inputs["input_ids"]
+            else:
+                encoder_input_ids = inputs["input_ids"]
+                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+                del inputs["input_ids"]
+                inputs.pop("decoder_input_ids", None)
+
+            if not self.is_encoder_decoder:
+                inputs["inputs_embeds"] = model.get_input_embeddings()(input_ids)
+            else:
+                inputs["inputs_embeds"] = model.get_input_embeddings()(encoder_input_ids)
+                inputs["decoder_inputs_embeds"] = model.get_input_embeddings()(decoder_input_ids)
+
+            inputs = self._prepare_for_class(inputs, model_class)
+
+            model(inputs)
 
 
 def _long_tensor(tok_lst):
