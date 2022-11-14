@@ -577,7 +577,6 @@ class DiNATEncoder(nn.Module):
             layer_outputs = layer_module(hidden_states, output_attentions)
 
             hidden_states = layer_outputs[0]
-            output_dimensions = layer_outputs[1]
 
             if output_hidden_states:
                 # rearrange b h w c -> b c h w

@@ -14,11 +14,6 @@
 # limitations under the License.
 """ Dilated Neighborhood Attention Transformer model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
-
-from packaging import version
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
