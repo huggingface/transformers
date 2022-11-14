@@ -461,7 +461,7 @@ def center_to_corners_format(bboxes_center: TensorType) -> TensorType:
     """
     Converts bounding boxes from center format to corners format.
 
-    center format: contains the coordinate for the center of the box and its the width, height dimensions
+    center format: contains the coordinate for the center of the box and its width, height dimensions
         (center_x, center_y, width, height)
     corners format: contains the coodinates for the top-left and bottom-right corners of the box
         (top_left_x, top_left_y, bottom_right_x, bottom_right_y)
