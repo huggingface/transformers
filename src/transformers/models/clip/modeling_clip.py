@@ -75,18 +75,13 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 @dataclass
 class CLIPVisionModelOutput(ModelOutput):
     """
-    Base class for model's outputs that also contains a pooling of the last hidden states.
+    Base class for vision model's outputs that also contains a pooling of the last hidden states.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Last layer hidden-state of the first token of the sequence (classification token) after further processing
-            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
-            the classification token after processing through a linear layer and a tanh activation function. The linear
-            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim` *optional* returned when model is initialized with `with_projection=True`):
             The image embeddings obtained by applying the projection layer to the pooler_output.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -100,9 +95,8 @@ class CLIPVisionModelOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
     image_embeds: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -113,15 +107,10 @@ class CLIPTextModelOutput(ModelOutput):
     Base class for model's outputs that also contains a pooling of the last hidden states.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Last layer hidden-state of the first token of the sequence (classification token) after further processing
-            through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
-            the classification token after processing through a linear layer and a tanh activation function. The linear
-            layer weights are trained from the next sentence prediction (classification) objective during pretraining.
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim` *optional* returned when model is initialized with `with_projection=True`):
             The text embeddings obtained by applying the projection layer to the pooler_output.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -135,9 +124,8 @@ class CLIPTextModelOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
     text_embeds: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1182,7 +1170,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
         self.text_model.embeddings.token_embedding = value
 
     @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPTextConfig)
+    @replace_return_docstrings(output_type=CLIPTextModelOutput, config_class=CLIPTextConfig)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1191,23 +1179,22 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[Tuple, CLIPTextModelOutput]:
         r"""
         Returns:
 
         Examples:
 
         ```python
-        >>> from transformers import CLIPTokenizer, CLIPTextModel
+        >>> from transformers import CLIPTokenizer, CLIPTextModelWithProjection
 
-        >>> model = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = CLIPTextModelWithProjection.from_pretrained("openai/clip-vit-base-patch32")
         >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
         >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
+        >>> text_embeds = outputs.text_embeds
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1225,13 +1212,12 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
         text_embeds = self.text_projection(pooled_output)
 
         if not return_dict:
-            outputs = (text_outputs[0], pooled_output, text_embeds) + text_outputs[2:]
+            outputs = (text_embeds, text_outputs[0]) + text_outputs[2:]
             return tuple(output for output in outputs if output is not None)
 
         return CLIPTextModelOutput(
-            last_hidden_state=text_outputs.last_hidden_state,
-            pooler_output=pooled_output,
             text_embeds=text_embeds,
+            last_hidden_state=text_outputs.last_hidden_state,
             hidden_states=text_outputs.hidden_states,
             attentions=text_outputs.attentions,
         )
@@ -1271,9 +1257,9 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, CLIPVisionModel
+        >>> from transformers import CLIPProcessor, CLIPVisionModelWithProjection
 
-        >>> model = CLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = CLIPVisionModelWithProjection.from_pretrained("openai/clip-vit-base-patch32")
         >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1282,8 +1268,7 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
         >>> inputs = processor(images=image, return_tensors="pt")
 
         >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled CLS states
+        >>> image_embeds = outputs.image_embeds
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1299,13 +1284,12 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
         image_embeds = self.visual_projection(pooled_output)
 
         if not return_dict:
-            outputs = (vision_outputs[0], pooled_output, image_embeds) + vision_outputs[2:]
+            outputs = (image_embeds, vision_outputs[0]) + vision_outputs[2:]
             return tuple(output for output in outputs if output is not None)
 
         return CLIPVisionModelOutput(
-            last_hidden_state=vision_outputs.last_hidden_state,
-            pooler_output=pooled_output,
             image_embeds=image_embeds,
+            last_hidden_state=vision_outputs.last_hidden_state,
             hidden_states=vision_outputs.hidden_states,
             attentions=vision_outputs.attentions,
         )
