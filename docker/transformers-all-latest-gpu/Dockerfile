@@ -41,9 +41,6 @@ RUN python3 -m pip uninstall -y flax jax
 # TODO: remove this line once the conflict is resolved in these libraries.
 RUN python3 -m pip install --no-cache-dir git+https://github.com/onnx/tensorflow-onnx.git@ddca3a5eb2d912f20fe7e0568dd1a3013aee9fa3
 
-# Use installed torch version for `torch-scatter` to avid to deal with PYTORCH='pre'.
-# If torch is nightly version, the link is likely to be invalid, but the installation falls back to the latest torch-scatter
-RUN python3 -m pip install --no-cache-dir torch-scatter -f https://data.pyg.org/whl/torch-$(python3 -c "from torch import version; print(version.__version__.split('+')[0])")+$CUDA.html
 RUN python3 -m pip install --no-cache-dir intel_extension_for_pytorch==$INTEL_TORCH_EXT+cpu -f https://software.intel.com/ipex-whl-stable
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/facebookresearch/detectron2.git pytesseract
