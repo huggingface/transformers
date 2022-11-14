@@ -610,6 +610,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
     def forward(
         self,
         input_features,
+        attention_mask=None,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -624,12 +625,14 @@ class WhisperEncoder(WhisperPreTrainedModel):
                 `input_features`, the [`WhisperFeatureExtractor`] should be used for extracting the mel features,
                 padding and conversion into a tensor of type `torch.FloatTensor`. See
                 [`~WhisperFeatureExtractor.__call__`]
+            attention_mask (`torch.Tensor`)`, *optional*):
+                Whisper does not support masking of the `input_features`, this argument is preserved for compatibility,
+                but it is not used. By default the silence in the input log mel spectrogram are ignored.
             head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
                 Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
-
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
