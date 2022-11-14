@@ -125,6 +125,7 @@ _deps = [
     "jieba",
     "kenlm",
     "nltk",
+    "natten>=0.14.4",
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
