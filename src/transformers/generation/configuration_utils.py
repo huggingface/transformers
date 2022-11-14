@@ -199,11 +199,8 @@ class GenerationConfig(PushToHubMixin):
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
 
         # The remaining attributes do not parametrize `.generate()`, but are used by the the hub interface.
-        # Name or path to the pretrained checkpoint
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
-        # Config hash
         self._commit_hash = kwargs.pop("_commit_hash", None)
-        # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
 
     def to_diff_dict(self) -> Dict[str, Any]:
@@ -260,7 +257,9 @@ class GenerationConfig(PushToHubMixin):
         Returns:
             `str`: String containing all the attributes that make up this configuration instance in JSON format.
         """
-        # REVIEWERS: maybe we want to store everything that's non-None (and not just the diff)?
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # REVIEWERS: maybe we want to store all generation attributes that are non-None (and not just the diff)?
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         if use_diff is True:
             config_dict = self.to_diff_dict()
         else:
@@ -281,13 +280,19 @@ class GenerationConfig(PushToHubMixin):
         with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string(use_diff=use_diff))
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
+    def save_pretrained(self, save_directory: Union[str, os.PathLike], config_name: str = GENERATION_CONFIG_NAME, push_to_hub: bool = False, **kwargs):
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # REVIEWERS: As discussed on Slack, this config file has an argument to specify the file name, to facilitate
+        # the creation of multiple generation config files in the root directory of a model.
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         """
         Save a generation configuration object to the directory `save_directory`, so that it can be re-loaded using the
         [`~GenerationConfig.from_pretrained`] class method.
         Args:
             save_directory (`str` or `os.PathLike`):
                 Directory where the configuration JSON file will be saved (will be created if it does not exist).
+            config_name (`str`, *optional*, defaults to `"generation_config.json"`):
+                Name of the generation configuration JSON file to be saved in `save_directory`.
             push_to_hub (`bool`, *optional*, defaults to `False`):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
@@ -306,10 +311,7 @@ class GenerationConfig(PushToHubMixin):
             repo_id, token = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
-        # If we save using the predefined names, we can load using `from_pretrained`
-        # REVIEWERS: maybe add arg to specify filename and store all files in a folder?
-        output_config_file = os.path.join(save_directory, GENERATION_CONFIG_NAME)
-
+        output_config_file = os.path.join(save_directory, config_name)
         self.to_json_file(output_config_file, use_diff=True)
         logger.info(f"Configuration saved in {output_config_file}")
 
@@ -317,3 +319,98 @@ class GenerationConfig(PushToHubMixin):
             self._upload_modified_files(
                 save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
             )
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name: Union[str, os.PathLike], config_name: str = GENERATION_CONFIG_NAME, **kwargs) -> "GenerationConfig":
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # REVIEWERS: Contrarily to the model config, the first argument is a folder (as opposed to a folder OR a
+        # file). This is because saving the generation config expects two arguments as well: the folder and the file
+        # name.
+
+        # I think maintaing consistency with the save function is more important than with other config classes.
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        r"""
+        Instantiate a [`GenerationConfig`] from a generation configuration file.
+
+        Args:
+            pretrained_model_name_or_path (`str` or `os.PathLike`):
+                This can be either:
+
+                - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
+                  huggingface.co. Valid model ids can be located at the root-level, like `bert-base-uncased`, or
+                  namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
+                - a path to a *directory* containing a configuration file saved using the
+                  [`~GenerationConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
+                - a path or url to a saved configuration JSON *file*, e.g., `./my_model_directory/configuration.json`.
+            config_name (`str`, *optional*, defaults to `"generation_config.json"`):
+                Name of the generation configuration JSON file to be loaded. This argument will only be used if
+                `pretrained_model_name_or_path` is not a file.
+            cache_dir (`str` or `os.PathLike`, *optional*):
+                Path to a directory in which a downloaded pretrained model configuration should be cached if the
+                standard cache should not be used.
+            force_download (`bool`, *optional*, defaults to `False`):
+                Whether or not to force to (re-)download the configuration files and override the cached versions if
+                they exist.
+            resume_download (`bool`, *optional*, defaults to `False`):
+                Whether or not to delete incompletely received file. Attempts to resume the download if such a file
+                exists.
+            proxies (`Dict[str, str]`, *optional*):
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+            use_auth_token (`str` or `bool`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
+                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+            revision (`str`, *optional*, defaults to `"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
+                identifier allowed by git.
+
+                <Tip>
+
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+
+                </Tip>
+
+            return_unused_kwargs (`bool`, *optional*, defaults to `False`):
+                If `False`, then this function returns just the final configuration object.
+
+                If `True`, then this functions returns a `Tuple(config, unused_kwargs)` where *unused_kwargs* is a
+                dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e., the
+                part of `kwargs` which has not been used to update `config` and is otherwise ignored.
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+                specify the folder name here.
+            kwargs (`Dict[str, Any]`, *optional*):
+                The values in kwargs of any keys which are configuration attributes will be used to override the loaded
+                values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
+                by the `return_unused_kwargs` keyword parameter.
+
+        Returns:
+            [`GenerationConfig`]: The configuration object instantiated from this pretrained model.
+
+        Examples:
+
+        ```python
+        generation_config = GenerationConfig.from_pretrained(
+            "gpt2"
+        )  # Download configuration from huggingface.co and cache.
+        generation_config = GenerationConfig.from_pretrained(
+            "./test/saved_model/"
+        )  # E.g. config was saved using *save_pretrained('./test/saved_model/')*
+        generation_config = GenerationConfig.from_pretrained("./test/saved_model/my_configuration.json")
+        config = GenerationConfig.from_pretrained("gpt2", top_k=1)
+        assert config.output_attentions == True
+        config, unused_kwargs = GenerationConfig.from_pretrained(
+            "bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
+        )
+        assert config.output_attentions == True
+        assert unused_kwargs == {"foo": False}
+        ```"""
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warning(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
+
+        return cls.from_dict(config_dict, **kwargs)
