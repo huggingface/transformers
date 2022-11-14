@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Meta Platforms, Inc.s and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -836,8 +836,11 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
 
 class MaskFormerSwinBackbone(Backbone):
     """
-    This class uses [`MaskFormerSwinModel`] to reshape its `hidden_states` from (`batch_size, sequence_length,
-    hidden_size)` to (`batch_size, num_channels, height, width)`). It also adds additional layernorms to each stage.
+    This class converts [`MaskFormerSwinModel`] into a generic backbone to be consumed by frameworks like DETR and
+    MaskFormer.
+
+    This classes reshapes `hidden_states` from (`batch_size, sequence_length, hidden_size)` to (`batch_size,
+    num_channels, height, width)`). It also adds additional layernorms after each stage.
 
     Args:
         config (`SwinConfig`):
@@ -879,7 +882,7 @@ class MaskFormerSwinBackbone(Backbone):
         outputs = {}
 
         # we need to reshape the hidden state to their original spatial dimensions
-        # skipping the embeddings
+        # we skip the embeddings
         hidden_states: Tuple[Tuple[Tensor]] = output.hidden_states[1:]
         # spatial dimensions contains all the heights and widths of each stage, including after the embeddings
         spatial_dimensions: Tuple[Tuple[int, int]] = output.hidden_states_spatial_dimensions
@@ -888,9 +891,9 @@ class MaskFormerSwinBackbone(Backbone):
             # the last element corespond to the layer's last block output but before patch merging
             hidden_state_unpolled = hidden_state[-1]
             hidden_state_norm = norm(hidden_state_unpolled)
-            # our pixel decoder (FPN) expect 3D tensors (features)
+            # the pixel decoder (FPN) expects 3D tensors (features)
             batch_size, _, hidden_size = hidden_state_norm.shape
-            # reshape our tensor "b (h w) d -> b d h w"
+            # reshape "b (h w) d -> b d h w"
             hidden_state_permuted = (
                 hidden_state_norm.permute(0, 2, 1).view((batch_size, hidden_size, height, width)).contiguous()
             )

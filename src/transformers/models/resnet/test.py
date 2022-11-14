@@ -1,5 +1,7 @@
-from transformers import ResNetConfig, ResNetBackbone
 import torch
+
+from transformers import ResNetBackbone, ResNetConfig
+
 
 model = ResNetBackbone(ResNetConfig(out_features=["stem", "stage1", "stage2", "stage3", "stage4"]))
 
