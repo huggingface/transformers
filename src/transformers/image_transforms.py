@@ -171,8 +171,6 @@ def get_resize_output_image_size(
             If `size` is an int and `default_to_square` is `True`, then image will be resized to (size, size). If
             `size` is an int and `default_to_square` is `False`, then smaller edge of the image will be matched to this
             number. i.e, if height > width, then image will be rescaled to (size * height / width, size).
-        resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
-            The filter to user for resampling.
         default_to_square (`bool`, *optional*, defaults to `True`):
             How to convert `size` when it is a single int. If set to `True`, the `size` will be converted to a square
             (`size`,`size`). If set to `False`, will replicate
