@@ -318,7 +318,6 @@ class NeighborhoodAttention(nn.Module):
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
-        batch_size, dim, num_channels = hidden_states.shape
 
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -434,7 +433,7 @@ class DiNATLayer(nn.Module):
         self.window_size = self.kernel_size * self.dilation
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = NeighborhoodAttentionModule(config, dim, num_heads,
-                                                     kernel_size=self.kernel_size, dilation=self.kernel_size)
+                                                     kernel_size=self.kernel_size, dilation=self.dilation)
         self.drop_path = DiNATDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.intermediate = DiNATIntermediate(config, dim)
@@ -469,11 +468,13 @@ class DiNATLayer(nn.Module):
             hidden_states, output_attentions=output_attentions
         )
 
+        attention_output = attention_outputs[0]
+
         was_padded = pad_values[3] > 0 or pad_values[5] > 0
         if was_padded:
-            attention_outputs = attention_outputs[:, :height, :width, :].contiguous()
+            attention_output = attention_output[:, :height, :width, :].contiguous()
 
-        hidden_states = shortcut + self.drop_path(attention_outputs)
+        hidden_states = shortcut + self.drop_path(attention_output)
 
         layer_output = self.layernorm_after(hidden_states)
         layer_output = self.intermediate(layer_output)
@@ -495,7 +496,7 @@ class DiNATStage(nn.Module):
                     dim=dim,
                     num_heads=num_heads,
                     dilation=dilations[i],
-                    drop_path_rate=drop_path_rate,
+                    drop_path_rate=drop_path_rate[i],
                 )
                 for i in range(depth)
             ]
@@ -606,7 +607,6 @@ class DiNATPreTrainedModel(PreTrainedModel):
     config_class = DiNATConfig
     base_model_prefix = "dinat"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -619,6 +619,9 @@ class DiNATPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module: DiNATEncoder, value: bool = False) -> None:
+        pass
 
 
 DINAT_START_DOCSTRING = r"""
