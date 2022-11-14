@@ -937,7 +937,7 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
         )
 
     # Copied from transformers.models.bert.modeling_bert.BertModel.prepare_inputs_for_generation
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=True, **model_kwargs):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
@@ -947,7 +947,12 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
         if past is not None:
             input_ids = input_ids[:, -1:]
 
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past, "use_cache": use_cache}
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "past_key_values": past,
+            "use_cache": use_cache,
+        }
 
     # Copied from transformers.models.bert.modeling_bert.BertModel._reorder_cache
     def _reorder_cache(self, past, beam_idx):
