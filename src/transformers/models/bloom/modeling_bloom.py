@@ -506,6 +506,45 @@ class BloomPreTrainedModel(PreTrainedModel):
         if isinstance(module, BloomModel):
             module.gradient_checkpointing = value
 
+    @staticmethod
+    def _convert_to_standard_cache(
+        past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]], batch_size: int
+    ) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
+        """
+        Standardizes the format of the cache so as to match most implementations, i.e. to tuple(tuple([batch_size,
+        num_heads, ...]))
+        """
+        batch_size_times_num_heads, head_dim, seq_length = past_key_value[0][0].shape
+        num_heads = batch_size_times_num_heads // batch_size
+        # key: [batch_size * num_heads, head_dim, seq_length] -> [batch_size, num_heads, head_dim, seq_length]
+        # value: [batch_size * num_heads, seq_length, head_dim] -> [batch_size, num_heads, seq_length, head_dim]
+        return tuple(
+            (
+                layer_past[0].view(batch_size, num_heads, head_dim, seq_length),
+                layer_past[1].view(batch_size, num_heads, seq_length, head_dim),
+            )
+            for layer_past in past_key_value
+        )
+
+    @staticmethod
+    def _convert_to_bloom_cache(
+        past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]]
+    ) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
+        """
+        Converts the cache to the format expected by Bloom, i.e. to tuple(tuple([batch_size * num_heads, ...]))
+        """
+        batch_size, num_heads, head_dim, seq_length = past_key_value[0][0].shape
+        batch_size_times_num_heads = batch_size * num_heads
+        # key:  [batch_size, num_heads, head_dim, seq_length] -> [batch_size * num_heads, head_dim, seq_length]
+        # value: [batch_size, num_heads, seq_length, head_dim] -> [batch_size * num_heads, seq_length, head_dim]
+        return tuple(
+            (
+                layer_past[0].view(batch_size_times_num_heads, head_dim, seq_length),
+                layer_past[1].view(batch_size_times_num_heads, seq_length, head_dim),
+            )
+            for layer_past in past_key_value
+        )
+
 
 BLOOM_START_DOCSTRING = r"""
 
@@ -811,6 +850,10 @@ class BloomForCausalLM(BloomPreTrainedModel):
         if past:
             input_ids = input_ids[:, -1].unsqueeze(-1)
 
+            # the cache may be in the stardard format (e.g. in contrastive search), convert to bloom's format if needed
+            if past[0][0].shape[0] == input_ids.shape[0]:
+                past = self._convert_to_bloom_cache(past)
+
         return {
             "input_ids": input_ids,
             "past_key_values": past,
@@ -896,9 +939,8 @@ class BloomForCausalLM(BloomPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
-    @staticmethod
     def _reorder_cache(
-        past: Tuple[Tuple[torch.Tensor, torch.Tensor], ...], beam_idx: torch.LongTensor
+        self, past: Tuple[Tuple[torch.Tensor, torch.Tensor], ...], beam_idx: torch.LongTensor
     ) -> Tuple[Tuple[torch.Tensor, torch.Tensor], ...]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
@@ -907,28 +949,20 @@ class BloomForCausalLM(BloomPreTrainedModel):
 
         Output shares the same memory storage as `past`.
         """
-        batch_size_times_num_heads, head_dim, seq_length = past[0][0].shape
-        batch_size = len(beam_idx)
-        num_heads = batch_size_times_num_heads // batch_size
+        standardized_past = self._convert_to_standard_cache(past, batch_size=len(beam_idx))
+
         # Get a copy of `beam_idx` on all the devices where we need those indices.
         device_to_beam_idx = {
             past_state.device: beam_idx.to(past_state.device) for layer_past in past for past_state in layer_past
         }
-        # key: layer_past[0] [batch_size * num_heads, head_dim, seq_length]
-        # value: layer_past[1] [batch_size * num_heads, seq_length, head_dim]
-        return tuple(
+        reordered_past = tuple(
             (
-                layer_past[0]
-                .view(batch_size, num_heads, head_dim, seq_length)
-                .index_select(0, device_to_beam_idx[layer_past[0].device])
-                .view(batch_size_times_num_heads, head_dim, seq_length),
-                layer_past[1]
-                .view(batch_size, num_heads, seq_length, head_dim)
-                .index_select(0, device_to_beam_idx[layer_past[0].device])
-                .view(batch_size_times_num_heads, seq_length, head_dim),
+                layer_past[0].index_select(0, device_to_beam_idx[layer_past[0].device]),
+                layer_past[1].index_select(0, device_to_beam_idx[layer_past[0].device]),
             )
-            for layer_past in past
+            for layer_past in standardized_past
         )
+        return self._convert_to_bloom_cache(reordered_past)
 
 
 @add_start_docstrings(
