@@ -174,16 +174,18 @@ class MaskFormerSwinEmbeddings(nn.Module):
         return embeddings, output_dimensions
 
 
+# Copied from transformers.models.swin.modeling_swin.SwinPatchEmbeddings
 class MaskFormerSwinPatchEmbeddings(nn.Module):
     """
-    Image to Patch Embedding, including padding.
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
     """
 
     def __init__(self, config):
         super().__init__()
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.embed_dim
-
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
@@ -204,7 +206,7 @@ class MaskFormerSwinPatchEmbeddings(nn.Module):
             pixel_values = nn.functional.pad(pixel_values, pad_values)
         return pixel_values
 
-    def forward(self, pixel_values):
+    def forward(self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor, Tuple[int]]:
         _, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -215,14 +217,15 @@ class MaskFormerSwinPatchEmbeddings(nn.Module):
         embeddings = self.projection(pixel_values)
         _, _, height, width = embeddings.shape
         output_dimensions = (height, width)
-        embeddings_flat = embeddings.flatten(2).transpose(1, 2)
+        embeddings = embeddings.flatten(2).transpose(1, 2)
 
-        return embeddings_flat, output_dimensions
+        return embeddings, output_dimensions
 
 
+# Copied from transformers.models.swin.modeling_swin.SwinPatchMerging
 class MaskFormerSwinPatchMerging(nn.Module):
     """
-    Patch Merging Layer for maskformer model.
+    Patch Merging Layer.
 
     Args:
         input_resolution (`Tuple[int]`):
@@ -233,13 +236,14 @@ class MaskFormerSwinPatchMerging(nn.Module):
             Normalization layer class.
     """
 
-    def __init__(self, input_resolution, dim, norm_layer=nn.LayerNorm):
+    def __init__(self, input_resolution: Tuple[int], dim: int, norm_layer: nn.Module = nn.LayerNorm) -> None:
         super().__init__()
+        self.input_resolution = input_resolution
         self.dim = dim
         self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
         self.norm = norm_layer(4 * dim)
 
-    def maybe_pad(self, input_feature, width, height):
+    def maybe_pad(self, input_feature, height, width):
         should_pad = (height % 2 == 1) or (width % 2 == 1)
         if should_pad:
             pad_values = (0, 0, 0, width % 2, 0, height % 2)
@@ -247,7 +251,7 @@ class MaskFormerSwinPatchMerging(nn.Module):
 
         return input_feature
 
-    def forward(self, input_feature, input_dimensions):
+    def forward(self, input_feature: torch.Tensor, input_dimensions: Tuple[int, int]) -> torch.Tensor:
         height, width = input_dimensions
         # `dim` is height * width
         batch_size, dim, num_channels = input_feature.shape
