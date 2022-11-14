@@ -654,7 +654,7 @@ def _test_large_logits_librispeech(in_queue, out_queue, timeout):
             audio=input_speech, text="This part of the speech", add_special_tokens=False, return_tensors="tf"
         )
         input_features = processed_inputs.input_features
-        decoder_input_ids = processed_inputs.input_ids
+        decoder_input_ids = processed_inputs.labels
 
         logits = model(
             input_features,

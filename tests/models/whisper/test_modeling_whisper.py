@@ -857,7 +857,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             audio=input_speech, text="This part of the speech", add_special_tokens=False, return_tensors="pt"
         )
         input_features = processed_inputs.input_features.to(torch_device)
-        decoder_input_ids = processed_inputs.input_ids.to(torch_device)
+        decoder_input_ids = processed_inputs.labels.to(torch_device)
 
         logits = model(
             input_features,
