@@ -449,8 +449,7 @@ def _center_to_corners_format_tf(bboxes_center: "tf.Tensor") -> "tf.Tensor":
 # 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
 def center_to_corners_format(bboxes_center: TensorType) -> TensorType:
     """
-    Converts bounding boxes from center format (center_x, center_y, width, height) to corners format (x_0, y_1, x_1,
-    y_1).
+    Converts bounding boxes from center format (center_x, center_y, width, height) to corners format `(left, top, right, bottom)`.
     """
     # Function is used during model forward pass, so we use the input framework if possible, without
     # converting to numpy
