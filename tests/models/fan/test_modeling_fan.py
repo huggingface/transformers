@@ -52,8 +52,8 @@ class FANModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=384,
-        num_hidden_layers=5,
-        num_attention_heads=4,
+        num_hidden_layers=16,
+        num_attention_heads=8,
         intermediate_size=37,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -63,6 +63,18 @@ class FANModelTester:
         num_labels=3,
         scope=None,
         encoder_stride=2,
+        sharpen_attn=False,
+        depths=[3, 3],
+        dims=[128, 256, 512, 1024],
+        use_head=False,
+        backbone="hybrid",
+        segmentation_in_channels=[128, 256, 448, 448],
+        in_index=[0, 1, 2, 3],
+        feature_strides=[4, 8, 16, 32],
+        channels=256,
+        decoder_dropout=0.1,
+        decoder_hidden_size=768,
+        out_index=15,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -82,6 +94,20 @@ class FANModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
         self.encoder_stride = encoder_stride
+        self.num_labels = num_labels
+        # Added For Segmentation
+        self.sharpen_attn = sharpen_attn
+        self.depths = depths
+        self.dims = dims
+        self.use_head = use_head
+        self.backbone = backbone
+        self.segmentation_in_channels = segmentation_in_channels
+        self.in_index = in_index
+        self.feature_strides = feature_strides
+        self.channels = channels
+        self.decoder_dropout = decoder_dropout
+        self.decoder_hidden_size = decoder_hidden_size
+        self.out_index = out_index
 
         # in DeiT, the seq length equals the number of patches + 2 (we add 2 for the [CLS] and distilation tokens)
         num_patches = (image_size // patch_size) ** 2
