@@ -21,7 +21,14 @@ import warnings
 
 from transformers import DeiTConfig
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_accelerate, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_accelerate,
+    require_torch,
+    require_torch_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -397,6 +404,7 @@ class DeiTModelIntegrationTest(unittest.TestCase):
 
     @slow
     @require_accelerate
+    @require_torch_gpu
     def test_inference_fp16(self):
         r"""
         A small test to make sure that inference work in half precision without any problem.
