@@ -1600,9 +1600,8 @@ class FANModel(FANPreTrainedModel):
         device = pixel_values.device
 
         # Prepare head mask if needed
-        # First, sent pixel_values + pixel_mask through Backbone to obtain the features if needed
+        # First, sent pixel_values through Backbone to obtain the features if needed
         # pixel_values should be of shape (batch_size, num_channels, height, width)
-        # pixel_mask should be of shape (batch_size, height, width)
 
         hidden_states, (Hp, Wp), embeddings_encoder_states = self.embeddings(
             pixel_values=pixel_values, output_hidden_states=output_hidden_states
@@ -1719,7 +1718,6 @@ class FANForImageClassification(FANPreTrainedModel):
 
         outputs = self.fan(
             pixel_values,
-            pixel_mask=None,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=None,
