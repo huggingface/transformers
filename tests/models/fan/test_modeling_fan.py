@@ -86,6 +86,7 @@ class FANModelTester:
         # in DeiT, the seq length equals the number of patches + 2 (we add 2 for the [CLS] and distilation tokens)
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches
+        self.num_hidden_states_types = 2  # Optional Backbone Hidden States
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
