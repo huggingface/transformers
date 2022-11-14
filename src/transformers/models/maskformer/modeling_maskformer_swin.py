@@ -28,7 +28,7 @@ from ...backbone import Backbone, ShapeSpec
 from ...file_utils import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ..swin import SwinConfig
+from .configuration_maskformer_swin import MaskFormerSwinConfig
 
 
 @dataclass
@@ -730,7 +730,7 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = SwinConfig
+    config_class = MaskFormerSwinConfig
     base_model_prefix = "swin"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -843,11 +843,11 @@ class MaskFormerSwinBackbone(Backbone):
     num_channels, height, width)`). It also adds additional layernorms after each stage.
 
     Args:
-        config (`SwinConfig`):
+        config (`MaskFormerSwinConfig`):
             The configuration used by [`MaskFormerSwinModel`].
     """
 
-    def __init__(self, config: SwinConfig):
+    def __init__(self, config: MaskFormerSwinConfig):
         super().__init__(config)
 
         self.model = MaskFormerSwinModel(config)
@@ -856,14 +856,8 @@ class MaskFormerSwinBackbone(Backbone):
 
         self.out_features = config.out_features
 
-        # TODO properly compute strides and channels
-        self.out_feature_strides = {
-            "stage1": 4,
-            "stage2": 8,
-            "stage3": 16,
-            "stage4": 32,
-        }
-        num_features = [int(config.embed_dim * 2**i) for i in range(config.num_layers)]
+        self.out_feature_strides = {f"stage{i+1}": 2 ** (i + 2) for i in range(len(config.depths))}
+        num_features = [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
         self.num_features = num_features
         self.out_feature_channels = {
             "stage1": self.num_features[0],
