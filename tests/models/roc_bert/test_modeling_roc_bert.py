@@ -632,7 +632,6 @@ class RoCBertModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs[0].position_embedding_type = "relative_key"
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
