@@ -103,6 +103,7 @@ from . import (
     mluke,
     mmbt,
     mobilebert,
+    mobilenet_v2,
     mobilevit,
     mpnet,
     mt5,

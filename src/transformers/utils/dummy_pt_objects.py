@@ -3557,6 +3557,41 @@ def load_tf_weights_in_mobilebert(*args, **kwargs):
     requires_backends(load_tf_weights_in_mobilebert, ["torch"])
 
 
+MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class MobileNetV2ForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MobileNetV2ForSemanticSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MobileNetV2Model(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MobileNetV2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def load_tf_weights_in_mobilenet_v2(*args, **kwargs):
+    requires_backends(load_tf_weights_in_mobilenet_v2, ["torch"])
+
+
 MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -5093,6 +5128,48 @@ class T5PreTrainedModel(metaclass=DummyObject):
 
 def load_tf_weights_in_t5(*args, **kwargs):
     requires_backends(load_tf_weights_in_t5, ["torch"])
+
+
+TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TapasForMaskedLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TapasForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TapasForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TapasModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TapasPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def load_tf_weights_in_tapas(*args, **kwargs):
+    requires_backends(load_tf_weights_in_tapas, ["torch"])
 
 
 TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None

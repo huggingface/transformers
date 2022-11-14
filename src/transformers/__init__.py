@@ -32,7 +32,6 @@ from .utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_flax_available,
-    is_scatter_available,
     is_sentencepiece_available,
     is_speech_available,
     is_tensorflow_text_available,
@@ -304,6 +303,7 @@ _import_structure = {
     "models.mluke": [],
     "models.mmbt": ["MMBTConfig"],
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
+    "models.mobilenet_v2": ["MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV2Config"],
     "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
@@ -732,6 +732,7 @@ else:
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
     _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
+    _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
     _import_structure["models.owlvit"].append("OwlViTFeatureExtractor")
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
@@ -785,28 +786,6 @@ else:
             "ConditionalDetrForSegmentation",
             "ConditionalDetrModel",
             "ConditionalDetrPreTrainedModel",
-        ]
-    )
-
-try:
-    if not is_scatter_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import dummy_scatter_objects
-
-    _import_structure["utils.dummy_scatter_objects"] = [
-        name for name in dir(dummy_scatter_objects) if not name.startswith("_")
-    ]
-else:
-    _import_structure["models.tapas"].extend(
-        [
-            "TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TapasForMaskedLM",
-            "TapasForQuestionAnswering",
-            "TapasForSequenceClassification",
-            "TapasModel",
-            "TapasPreTrainedModel",
-            "load_tf_weights_in_tapas",
         ]
     )
 
@@ -1689,6 +1668,16 @@ else:
             "load_tf_weights_in_mobilebert",
         ]
     )
+    _import_structure["models.mobilenet_v2"].extend(
+        [
+            "MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MobileNetV2ForImageClassification",
+            "MobileNetV2ForSemanticSegmentation",
+            "MobileNetV2Model",
+            "MobileNetV2PreTrainedModel",
+            "load_tf_weights_in_mobilenet_v2",
+        ]
+    )
     _import_structure["models.mobilevit"].extend(
         [
             "MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2028,6 +2017,17 @@ else:
             "Swinv2ForMaskedImageModeling",
             "Swinv2Model",
             "Swinv2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.tapas"].extend(
+        [
+            "TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TapasForMaskedLM",
+            "TapasForQuestionAnswering",
+            "TapasForSequenceClassification",
+            "TapasModel",
+            "TapasPreTrainedModel",
+            "load_tf_weights_in_tapas",
         ]
     )
     _import_structure["models.t5"].extend(
@@ -3436,6 +3436,7 @@ if TYPE_CHECKING:
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mmbt import MMBTConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
+    from .models.mobilenet_v2 import MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV2Config
     from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
@@ -3808,6 +3809,7 @@ if TYPE_CHECKING:
         from .models.layoutlmv3 import LayoutLMv3FeatureExtractor, LayoutLMv3ImageProcessor
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
         from .models.maskformer import MaskFormerFeatureExtractor
+        from .models.mobilenet_v2 import MobileNetV2FeatureExtractor, MobileNetV2ImageProcessor
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
         from .models.owlvit import OwlViTFeatureExtractor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
@@ -3850,22 +3852,6 @@ if TYPE_CHECKING:
             TableTransformerForObjectDetection,
             TableTransformerModel,
             TableTransformerPreTrainedModel,
-        )
-
-    try:
-        if not is_scatter_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        from .utils.dummy_scatter_objects import *
-    else:
-        from .models.tapas import (
-            TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TapasForMaskedLM,
-            TapasForQuestionAnswering,
-            TapasForSequenceClassification,
-            TapasModel,
-            TapasPreTrainedModel,
-            load_tf_weights_in_tapas,
         )
 
     try:
@@ -4563,6 +4549,14 @@ if TYPE_CHECKING:
             MobileBertPreTrainedModel,
             load_tf_weights_in_mobilebert,
         )
+        from .models.mobilenet_v2 import (
+            MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MobileNetV2ForImageClassification,
+            MobileNetV2ForSemanticSegmentation,
+            MobileNetV2Model,
+            MobileNetV2PreTrainedModel,
+            load_tf_weights_in_mobilenet_v2,
+        )
         from .models.mobilevit import (
             MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             MobileViTForImageClassification,
@@ -4859,6 +4853,15 @@ if TYPE_CHECKING:
             T5Model,
             T5PreTrainedModel,
             load_tf_weights_in_t5,
+        )
+        from .models.tapas import (
+            TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TapasForMaskedLM,
+            TapasForQuestionAnswering,
+            TapasForSequenceClassification,
+            TapasModel,
+            TapasPreTrainedModel,
+            load_tf_weights_in_tapas,
         )
         from .models.time_series_transformer import (
             TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
