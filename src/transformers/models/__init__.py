@@ -69,6 +69,7 @@ from . import (
     funnel,
     glpn,
     gpt2,
+    gpt_sw3,
     gpt_neo,
     gpt_neox,
     gpt_neox_japanese,
