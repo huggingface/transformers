@@ -121,8 +121,7 @@ class ChineseCLIPConfig(PretrainedConfig):
     def from_text_vision_configs(cls, text_config: BertConfig, vision_config: CLIPVisionConfig, **kwargs):
         r"""
         Instantiate a [`ChineseCLIPConfig`] (or a derived class) from Chinese-CLIP text model configuration and
-        Chinese-CLIP vision model configuration.
-        Returns:
+        Chinese-CLIP vision model configuration. Returns:
             [`ChineseCLIPConfig`]: An instance of a configuration object
         """
 

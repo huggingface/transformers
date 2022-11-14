@@ -23,11 +23,12 @@ from .feature_extraction_chinese_clip import ChineseCLIPFeatureExtractor
 
 class ChineseCLIPProcessor(ProcessorMixin):
     r"""
-    Constructs a Chinese-CLIP processor which wraps a Chinese-CLIP feature extractor and a Chinese-CLIP tokenizer into a
-    single processor.
+    Constructs a Chinese-CLIP processor which wraps a Chinese-CLIP feature extractor and a Chinese-CLIP tokenizer into
+    a single processor.
 
-    [`ChineseCLIPProcessor`] offers all the functionalities of [`ChineseCLIPFeatureExtractor`] and [`BertTokenizerFast`]. See
-    the [`~ChineseCLIPProcessor.__call__`] and [`~ChineseCLIPProcessor.decode`] for more information.
+    [`ChineseCLIPProcessor`] offers all the functionalities of [`ChineseCLIPFeatureExtractor`] and
+    [`BertTokenizerFast`]. See the [`~ChineseCLIPProcessor.__call__`] and [`~ChineseCLIPProcessor.decode`] for more
+    information.
 
     Args:
         feature_extractor ([`ChineseCLIPFeatureExtractor`]):
