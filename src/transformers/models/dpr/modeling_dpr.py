@@ -299,6 +299,7 @@ class DPRPretrainedContextEncoder(DPRPreTrainedModel):
     load_tf_weights = None
     base_model_prefix = "ctx_encoder"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
 
 class DPRPretrainedQuestionEncoder(DPRPreTrainedModel):
@@ -311,6 +312,7 @@ class DPRPretrainedQuestionEncoder(DPRPreTrainedModel):
     load_tf_weights = None
     base_model_prefix = "question_encoder"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
 
 class DPRPretrainedReader(DPRPreTrainedModel):
