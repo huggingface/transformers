@@ -1512,7 +1512,11 @@ class FANEncoder(FANPreTrainedModel):
                 encoder_states = encoder_states + (hidden_state_reshaped,)
 
         if not return_dict:
-            return tuple(v for v in [embedding_hidden_states, encoder_states, all_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [current_hidden_state, encoder_states, all_attentions, embedding_hidden_states]
+                if v is not None
+            )
         return FANModelOutput(
             last_hidden_state=current_hidden_state,
             hidden_states=encoder_states,
@@ -1758,6 +1762,13 @@ class FANForImageClassification(FANPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
+
+        if not return_dict:
+            return tuple(
+                v
+                for v in [loss, logits, outputs.hidden_states, outputs.attentions, outputs.backbone_hidden_states]
+                if v is not None
+            )
 
         return FANImageClassifierOutput(
             loss=loss,
