@@ -299,6 +299,7 @@ _import_structure = {
     "models.mluke": [],
     "models.mmbt": ["MMBTConfig"],
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
+    "models.mobilenet_v2": ["MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV2Config"],
     "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
@@ -726,6 +727,7 @@ else:
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
     _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
+    _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
     _import_structure["models.owlvit"].append("OwlViTFeatureExtractor")
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
@@ -1672,6 +1674,16 @@ else:
             "MobileBertModel",
             "MobileBertPreTrainedModel",
             "load_tf_weights_in_mobilebert",
+        ]
+    )
+    _import_structure["models.mobilenet_v2"].extend(
+        [
+            "MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MobileNetV2ForImageClassification",
+            "MobileNetV2ForSemanticSegmentation",
+            "MobileNetV2Model",
+            "MobileNetV2PreTrainedModel",
+            "load_tf_weights_in_mobilenet_v2",
         ]
     )
     _import_structure["models.mobilevit"].extend(
@@ -3416,6 +3428,7 @@ if TYPE_CHECKING:
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mmbt import MMBTConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
+    from .models.mobilenet_v2 import MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV2Config
     from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
@@ -3787,6 +3800,7 @@ if TYPE_CHECKING:
         from .models.layoutlmv3 import LayoutLMv3FeatureExtractor, LayoutLMv3ImageProcessor
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
         from .models.maskformer import MaskFormerFeatureExtractor
+        from .models.mobilenet_v2 import MobileNetV2FeatureExtractor, MobileNetV2ImageProcessor
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
         from .models.owlvit import OwlViTFeatureExtractor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
@@ -4534,6 +4548,14 @@ if TYPE_CHECKING:
             MobileBertModel,
             MobileBertPreTrainedModel,
             load_tf_weights_in_mobilebert,
+        )
+        from .models.mobilenet_v2 import (
+            MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MobileNetV2ForImageClassification,
+            MobileNetV2ForSemanticSegmentation,
+            MobileNetV2Model,
+            MobileNetV2PreTrainedModel,
+            load_tf_weights_in_mobilenet_v2,
         )
         from .models.mobilevit import (
             MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
