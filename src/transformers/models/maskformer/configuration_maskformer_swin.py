@@ -26,7 +26,8 @@ class MaskFormerSwinConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`MaskFormerSwinModel`]. It is used to instantiate
     a Donut model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Swin
-    [naver-clova-ix/donut-base](https://huggingface.co/naver-clova-ix/donut-base) architecture.
+    [microsoft/swin-tiny-patch4-window7-224(https://huggingface.co/microsoft/swin-tiny-patch4-window7-224)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -67,7 +68,7 @@ class MaskFormerSwinConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        out_features (`List[str]`, *optional*, defaults to `None`):
+        out_features (`List[str]`, *optional*):
             If used as a backbone, list of feature names to output, e.g. ["stem", "stage1"].
 
     Example:
