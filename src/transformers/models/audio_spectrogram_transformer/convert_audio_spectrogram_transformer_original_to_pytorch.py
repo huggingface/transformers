@@ -259,8 +259,8 @@ def convert_audio_spectrogram_transformer_checkpoint(model_name, pytorch_dump_fo
 
     if push_to_hub:
         print("Pushing model and feature extractor to the hub...")
-        model.push_to_hub(model_name, organization="nielsr")
-        feature_extractor.push_to_hub(model_name, organization="nielsr")
+        model.push_to_hub(f"MIT/{model_name}")
+        feature_extractor.push_to_hub(f"MIT/{model_name}")
 
 
 if __name__ == "__main__":

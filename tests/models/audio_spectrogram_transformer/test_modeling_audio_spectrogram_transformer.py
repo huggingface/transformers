@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch AudioSpectrogramTransformer model. """
+""" Testing suite for the PyTorch Audio Spectrogram Transformer (AST) model. """
 
 import inspect
 import unittest
@@ -219,11 +219,8 @@ def prepare_audio():
 class AudioSpectrogramTransformerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        # TODO rename nielsr to appropriate organization
         return (
-            AudioSpectrogramTransformerFeatureExtractor.from_pretrained(
-                "nielsr/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593"
-            )
+            AudioSpectrogramTransformerFeatureExtractor.from_pretrained("MIT/ast-finetuned-audioset-10-10-0.4593")
             if is_torchaudio_available()
             else None
         )
@@ -232,9 +229,8 @@ class AudioSpectrogramTransformerModelIntegrationTest(unittest.TestCase):
     def test_inference_audio_classification(self):
 
         feature_extractor = self.default_feature_extractor
-        # TODO rename nielsr to appropriate organization
         model = AudioSpectrogramTransformerForSequenceClassification.from_pretrained(
-            "nielsr/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593"
+            "MIT/ast-finetuned-audioset-10-10-0.4593"
         ).to(torch_device)
 
         feature_extractor = self.default_feature_extractor

@@ -37,18 +37,18 @@ _CONFIG_FOR_DOC = "AudioSpectrogramTransformerConfig"
 _FEAT_EXTRACTOR_FOR_DOC = "AudioSpectrogramTransformerFeatureExtractor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "MIT/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593"
+_CHECKPOINT_FOR_DOC = "MIT/ast-finetuned-audioset-10-10-0.4593"
 _EXPECTED_OUTPUT_SHAPE = [1, 1214, 768]
 
 # Audio classification docstring
-_SEQ_CLASS_CHECKPOINT = "MIT/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593"
+_SEQ_CLASS_CHECKPOINT = "MIT/ast-finetuned-audioset-10-10-0.4593"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'Speech'"
 _SEQ_CLASS_EXPECTED_LOSS = 0.17
 
 
 AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "MIT/audio-spectrogram-transformer-finetuned-audioset-10-10-0.4593",
-    # See all Audio Spectrogram Transformer models at https://huggingface.co/models?filter=audio-spectrogram-transformer
+    "MIT/ast-finetuned-audioset-10-10-0.4593",
+    # See all Audio Spectrogram Transformer models at https://huggingface.co/models?filter=ast
 ]
 
 
