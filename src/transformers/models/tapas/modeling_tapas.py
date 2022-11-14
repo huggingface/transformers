@@ -1144,22 +1144,22 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
     @replace_return_docstrings(output_type=TableQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        table_mask=None,
-        labels=None,
-        aggregation_labels=None,
-        float_answer=None,
-        numeric_values=None,
-        numeric_values_scale=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        table_mask: Optional[torch.LongTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        aggregation_labels: Optional[torch.LongTensor] = None,
+        float_answer: Optional[torch.FloatTensor] = None,
+        numeric_values: Optional[torch.FloatTensor] = None,
+        numeric_values_scale: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, TableQuestionAnsweringOutput]:
         r"""
         table_mask (`torch.LongTensor` of shape `(batch_size, seq_length)`, *optional*):
             Mask for the table. Indicates which tokens belong to the table (1). Question tokens, table headers and
