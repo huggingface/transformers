@@ -36,12 +36,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel, SequenceSummary
-from ...pytorch_utils import (
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    is_torch_greater_than_1_6,
-    prune_linear_layer,
-)
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -169,12 +164,9 @@ class ElectraEmbeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        if is_torch_greater_than_1_6:
-            self.register_buffer(
-                "token_type_ids",
-                torch.zeros(self.position_ids.size(), dtype=torch.long),
-                persistent=False,
-            )
+        self.register_buffer(
+            "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
+        )
 
     # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.forward
     def forward(
@@ -1169,6 +1161,8 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
     ELECTRA_START_DOCSTRING,
 )
 class ElectraForMaskedLM(ElectraPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["generator_lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1538,6 +1532,8 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
     """ELECTRA Model with a `language modeling` head on top for CLM fine-tuning.""", ELECTRA_START_DOCSTRING
 )
 class ElectraForCausalLM(ElectraPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["generator_lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 

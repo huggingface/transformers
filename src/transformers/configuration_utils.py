@@ -32,7 +32,9 @@ from .utils import (
     PushToHubMixin,
     cached_file,
     copy_func,
+    download_url,
     extract_commit_hash,
+    is_remote_url,
     is_torch_available,
     logging,
 )
@@ -146,7 +148,10 @@ class PretrainedConfig(PushToHubMixin):
             Parameter for repetition penalty that will be used by default in the `generate` method of the model. 1.0
             means no penalty.
         length_penalty (`float`, *optional*, defaults to 1):
-            Exponential penalty to the length that will be used by default in the `generate` method of the model.
+            Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent to
+            the sequence length, which in turn is used to divide the score of the sequence. Since the score is the log
+            likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences, while
+            `length_penalty` < 0.0 encourages shorter sequences.
         no_repeat_ngram_size (`int`, *optional*, defaults to 0) -- Value that will be used by default in the
             `generate` method of the model for `no_repeat_ngram_size`. If set to int > 0, all ngrams of that size can
             only occur once.
@@ -294,6 +299,8 @@ class PretrainedConfig(PushToHubMixin):
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
         self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
         self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
+        self.suppress_tokens = kwargs.pop("suppress_tokens", None)
+        self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
@@ -471,13 +478,20 @@ class PretrainedConfig(PushToHubMixin):
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-            use_auth_token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `~/.huggingface`).
+            use_auth_token (`str` or `bool`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
+                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
+
+                <Tip>
+
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+
+                </Tip>
+
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
                 If `False`, then this function returns just the final configuration object.
 
@@ -491,12 +505,6 @@ class PretrainedConfig(PushToHubMixin):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
                 by the `return_unused_kwargs` keyword parameter.
-
-        <Tip>
-
-        Passing `use_auth_token=True` is required when you want to use a private model.
-
-        </Tip>
 
         Returns:
             [`PretrainedConfig`]: The configuration object instantiated from this pretrained model.
@@ -592,9 +600,12 @@ class PretrainedConfig(PushToHubMixin):
 
         is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)):
-            # Soecial case when pretrained_model_name_or_path is a local file
+            # Special case when pretrained_model_name_or_path is a local file
             resolved_config_file = pretrained_model_name_or_path
             is_local = True
+        elif is_remote_url(pretrained_model_name_or_path):
+            configuration_file = pretrained_model_name_or_path
+            resolved_config_file = download_url(pretrained_model_name_or_path)
         else:
             configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME)
 

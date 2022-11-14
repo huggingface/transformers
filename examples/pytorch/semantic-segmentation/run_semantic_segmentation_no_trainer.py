@@ -50,7 +50,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.22.0.dev0")
+check_min_version("4.25.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -387,12 +387,12 @@ def main():
     # Prepare label mappings.
     # We'll include these in the model's config to get human readable labels in the Inference API.
     if args.dataset_name == "scene_parse_150":
-        repo_id = "datasets/huggingface/label-files"
+        repo_id = "huggingface/label-files"
         filename = "ade20k-id2label.json"
     else:
-        repo_id = f"datasets/{args.dataset_name}"
+        repo_id = args.dataset_name
         filename = "id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
     label2id = {v: k for k, v in id2label.items()}
 
@@ -405,10 +405,15 @@ def main():
     # Define torchvision transforms to be applied to each image + target.
     # Not that straightforward in torchvision: https://github.com/pytorch/vision/issues/9
     # Currently based on official torchvision references: https://github.com/pytorch/vision/blob/main/references/segmentation/transforms.py
+    if "shortest_edge" in feature_extractor.size:
+        # We instead set the target size as (shortest_edge, shortest_edge) to here to ensure all images are batchable.
+        size = (feature_extractor.size["shortest_edge"], feature_extractor.size["shortest_edge"])
+    else:
+        size = (feature_extractor.size["height"], feature_extractor.size["width"])
     train_transforms = Compose(
         [
             ReduceLabels() if args.reduce_labels else Identity(),
-            RandomCrop(size=feature_extractor.size),
+            RandomCrop(size=size),
             RandomHorizontalFlip(flip_prob=0.5),
             PILToTensor(),
             ConvertImageDtype(torch.float),
@@ -420,7 +425,7 @@ def main():
     val_transforms = Compose(
         [
             ReduceLabels() if args.reduce_labels else Identity(),
-            Resize(size=(feature_extractor.size, feature_extractor.size)),
+            Resize(size=size),
             PILToTensor(),
             ConvertImageDtype(torch.float),
             Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std),
@@ -661,6 +666,9 @@ def main():
             if args.output_dir is not None:
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
+
+    if args.with_tracking:
+        accelerator.end_training()
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()

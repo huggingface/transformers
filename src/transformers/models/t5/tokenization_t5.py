@@ -311,14 +311,19 @@ class T5Tokenizer(PreTrainedTokenizer):
         """Converts a sequence of tokens (string) in a single string."""
         current_sub_tokens = []
         out_string = ""
+        prev_is_special = False
         for token in tokens:
             # make sure that special tokens are not decoded using sentencepiece model
             if token in self.all_special_tokens:
-                out_string += self.sp_model.decode_pieces(current_sub_tokens) + token + " "
+                if not prev_is_special:
+                    out_string += " "
+                out_string += self.sp_model.decode(current_sub_tokens) + token
+                prev_is_special = True
                 current_sub_tokens = []
             else:
                 current_sub_tokens.append(token)
-        out_string += self.sp_model.decode_pieces(current_sub_tokens)
+                prev_is_special = False
+        out_string += self.sp_model.decode(current_sub_tokens)
         return out_string.strip()
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:

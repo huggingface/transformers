@@ -21,21 +21,30 @@ import os
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from numpy import isin
 
-from huggingface_hub.file_download import http_get
+from huggingface_hub import model_info
 
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
+from ..models.auto.modeling_auto import AutoModelForDepthEstimation
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..tokenization_utils_fast import PreTrainedTokenizerFast
-from ..utils import HUGGINGFACE_CO_RESOLVE_ENDPOINT, is_tf_available, is_torch_available, logging
+from ..utils import (
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
+    is_kenlm_available,
+    is_pyctcdecode_available,
+    is_tf_available,
+    is_torch_available,
+    logging,
+)
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
@@ -51,10 +60,13 @@ from .base import (
     infer_framework_load_model,
 )
 from .conversational import Conversation, ConversationalPipeline
+from .depth_estimation import DepthEstimationPipeline
+from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
 from .image_segmentation import ImageSegmentationPipeline
+from .image_to_text import ImageToTextPipeline
 from .object_detection import ObjectDetectionPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
@@ -70,6 +82,7 @@ from .token_classification import (
 from .visual_question_answering import VisualQuestionAnsweringPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
+from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
 
 
 if is_tf_available():
@@ -90,6 +103,7 @@ if is_tf_available():
         TFAutoModelForSequenceClassification,
         TFAutoModelForTableQuestionAnswering,
         TFAutoModelForTokenClassification,
+        TFAutoModelForVision2Seq,
     )
 
 if is_torch_available():
@@ -107,6 +121,7 @@ if is_torch_available():
         AutoModelForAudioClassification,
         AutoModelForCausalLM,
         AutoModelForCTC,
+        AutoModelForDocumentQuestionAnswering,
         AutoModelForImageClassification,
         AutoModelForImageSegmentation,
         AutoModelForMaskedLM,
@@ -118,7 +133,9 @@ if is_torch_available():
         AutoModelForSpeechSeq2Seq,
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
+        AutoModelForVision2Seq,
         AutoModelForVisualQuestionAnswering,
+        AutoModelForZeroShotObjectDetection,
     )
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -212,6 +229,15 @@ SUPPORTED_TASKS = {
         },
         "type": "multimodal",
     },
+    "document-question-answering": {
+        "impl": DocumentQuestionAnsweringPipeline,
+        "pt": (AutoModelForDocumentQuestionAnswering,) if is_torch_available() else (),
+        "tf": (),
+        "default": {
+            "model": {"pt": ("impira/layoutlm-document-qa", "52e01b3")},
+        },
+        "type": "multimodal",
+    },
     "fill-mask": {
         "impl": FillMaskPipeline,
         "tf": (TFAutoModelForMaskedLM,) if is_tf_available() else (),
@@ -302,11 +328,37 @@ SUPPORTED_TASKS = {
         "default": {"model": {"pt": ("facebook/detr-resnet-50-panoptic", "fc15262")}},
         "type": "image",
     },
+    "image-to-text": {
+        "impl": ImageToTextPipeline,
+        "tf": (TFAutoModelForVision2Seq,) if is_tf_available() else (),
+        "pt": (AutoModelForVision2Seq,) if is_torch_available() else (),
+        "default": {
+            "model": {
+                "pt": ("ydshieh/vit-gpt2-coco-en", "65636df"),
+                "tf": ("ydshieh/vit-gpt2-coco-en", "65636df"),
+            }
+        },
+        "type": "multimodal",
+    },
     "object-detection": {
         "impl": ObjectDetectionPipeline,
         "tf": (),
         "pt": (AutoModelForObjectDetection,) if is_torch_available() else (),
         "default": {"model": {"pt": ("facebook/detr-resnet-50", "2729413")}},
+        "type": "multimodal",
+    },
+    "zero-shot-object-detection": {
+        "impl": ZeroShotObjectDetectionPipeline,
+        "tf": (),
+        "pt": (AutoModelForZeroShotObjectDetection,) if is_torch_available() else (),
+        "default": {"model": {"pt": ("google/owlvit-base-patch32", "17740e1")}},
+        "type": "multimodal",
+    },
+    "depth-estimation": {
+        "impl": DepthEstimationPipeline,
+        "tf": (),
+        "pt": (AutoModelForDepthEstimation,) if is_torch_available() else (),
+        "default": {"model": {"pt": ("Intel/dpt-large", "e93beec")}},
         "type": "image",
     },
 }
@@ -317,7 +369,7 @@ NO_TOKENIZER_TASKS = set()
 # any tokenizer/feature_extractor might be use for a given model so we cannot
 # use the statically defined TOKENIZER_MAPPING and FEATURE_EXTRACTOR_MAPPING to
 # see if the model defines such objects or not.
-MULTI_MODEL_CONFIGS = {"VisionTextDualEncoderConfig", "SpeechEncoderDecoderConfig"}
+MULTI_MODEL_CONFIGS = {"SpeechEncoderDecoderConfig", "VisionEncoderDecoderConfig", "VisionTextDualEncoderConfig"}
 for task, values in SUPPORTED_TASKS.items():
     if values["type"] == "text":
         NO_FEATURE_EXTRACTOR_TASKS.add(task)
@@ -337,29 +389,21 @@ def get_supported_tasks() -> List[str]:
 
 
 def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
-    tmp = io.BytesIO()
-    headers = {}
-    if use_auth_token:
-        headers["Authorization"] = f"Bearer {use_auth_token}"
-
     try:
-        http_get(f"https://huggingface.co/api/models/{model}", tmp, headers=headers)
-        tmp.seek(0)
-        body = tmp.read()
-        data = json.loads(body)
+        info = model_info(model, token=use_auth_token)
     except Exception as e:
         raise RuntimeError(f"Instantiating a pipeline without a task set raised an error: {e}")
-    if "pipeline_tag" not in data:
+    if not info.pipeline_tag:
         raise RuntimeError(
             f"The model {model} does not seem to have a correct `pipeline_tag` set to infer the task automatically"
         )
-    if data.get("library_name", "transformers") != "transformers":
-        raise RuntimeError(f"This model is meant to be used with {data['library_name']} not with transformers")
-    task = data["pipeline_tag"]
+    if getattr(info, "library_name", "transformers") != "transformers":
+        raise RuntimeError(f"This model is meant to be used with {info.library_name} not with transformers")
+    task = info.pipeline_tag
     return task
 
 
-def check_task(task: str) -> Tuple[Dict, Any]:
+def check_task(task: str) -> Tuple[str, Dict, Any]:
     """
     Checks an incoming task string, to validate it's correct and return the default Pipeline and Model classes, and
     default models if they exist.
@@ -428,7 +472,7 @@ def pipeline(
     trust_remote_code: Optional[bool] = None,
     model_kwargs: Dict[str, Any] = None,
     pipeline_class: Optional[Any] = None,
-    **kwargs
+    **kwargs,
 ) -> Pipeline:
     """
     Utility factory method to build a [`Pipeline`].
@@ -587,6 +631,8 @@ def pipeline(
             " feature_extractor may not be compatible with the default model. Please provide a PreTrainedModel class"
             " or a path/identifier to a pretrained model when providing feature_extractor."
         )
+    if isinstance(model, Path):
+        model = str(model)
 
     # Config is the primordial information item.
     # Instantiate config if needed
@@ -793,11 +839,12 @@ def pipeline(
 
                     kwargs["decoder"] = decoder
                 except ImportError as e:
-                    logger.warning(
-                        f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Try to install"
-                        " `pyctcdecode` and `kenlm`: (`pip install pyctcdecode`, `pip install"
-                        f" https://github.com/kpu/kenlm/archive/master.zip`): Error: {e}"
-                    )
+                    logger.warning(f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Error: {e}")
+                    if not is_kenlm_available():
+                        logger.warning("Try to install `kenlm`: `pip install kenlm")
+
+                    if not is_pyctcdecode_available():
+                        logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
 
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:

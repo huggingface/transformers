@@ -171,7 +171,7 @@ class MobileViTOnnxConfig(OnnxConfig):
 
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict([("pixel_values", {0: "batch", 1: "num_channels"})])
+        return OrderedDict([("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"})])
 
     @property
     def outputs(self) -> Mapping[str, Mapping[int, str]]:

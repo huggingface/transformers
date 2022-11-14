@@ -36,6 +36,7 @@ _import_structure = {
         "CLIPTextConfig",
         "CLIPVisionConfig",
     ],
+    "processing_clip": ["CLIPProcessor"],
     "tokenization_clip": ["CLIPTokenizer"],
 }
 
@@ -54,7 +55,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_clip"] = ["CLIPFeatureExtractor"]
-    _import_structure["processing_clip"] = ["CLIPProcessor"]
+    _import_structure["image_processing_clip"] = ["CLIPImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -108,6 +109,7 @@ if TYPE_CHECKING:
         CLIPTextConfig,
         CLIPVisionConfig,
     )
+    from .processing_clip import CLIPProcessor
     from .tokenization_clip import CLIPTokenizer
 
     try:
@@ -125,7 +127,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_clip import CLIPFeatureExtractor
-        from .processing_clip import CLIPProcessor
+        from .image_processing_clip import CLIPImageProcessor
 
     try:
         if not is_torch_available():

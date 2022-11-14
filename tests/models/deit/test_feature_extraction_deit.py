@@ -43,13 +43,16 @@ class DeiTFeatureExtractionTester(unittest.TestCase):
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        size=20,
+        size=None,
         do_center_crop=True,
-        crop_size=18,
+        crop_size=None,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
+        size = size if size is not None else {"height": 20, "width": 20}
+        crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
+
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -117,8 +120,8 @@ class DeiTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -129,8 +132,8 @@ class DeiTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -149,8 +152,8 @@ class DeiTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -161,8 +164,8 @@ class DeiTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -181,8 +184,8 @@ class DeiTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )
 
@@ -193,7 +196,7 @@ class DeiTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size["height"],
+                self.feature_extract_tester.crop_size["width"],
             ),
         )

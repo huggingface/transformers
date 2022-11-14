@@ -40,12 +40,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import (
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    is_torch_greater_than_1_6,
-    prune_linear_layer,
-)
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -199,12 +194,9 @@ class BertEmbeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        if is_torch_greater_than_1_6:
-            self.register_buffer(
-                "token_type_ids",
-                torch.zeros(self.position_ids.size(), dtype=torch.long),
-                persistent=False,
-            )
+        self.register_buffer(
+            "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
+        )
 
     def forward(
         self,
@@ -1055,6 +1047,8 @@ class BertModel(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForPreTraining(BertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", r"cls.predictions.decoder.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1161,7 +1155,7 @@ class BertForPreTraining(BertPreTrainedModel):
 class BertLMHeadModel(BertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
+    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", r"cls.predictions.decoder.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1296,7 +1290,7 @@ class BertLMHeadModel(BertPreTrainedModel):
 class BertForMaskedLM(BertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
+    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", r"cls.predictions.decoder.weight"]
 
     def __init__(self, config):
         super().__init__(config)

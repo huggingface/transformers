@@ -18,19 +18,21 @@ from argparse import ArgumentParser, Namespace
 from importlib import import_module
 
 import numpy as np
-from datasets import load_dataset
 from packaging import version
 
 import huggingface_hub
 
 from .. import (
     FEATURE_EXTRACTOR_MAPPING,
+    IMAGE_PROCESSOR_MAPPING,
     PROCESSOR_MAPPING,
     TOKENIZER_MAPPING,
     AutoConfig,
     AutoFeatureExtractor,
+    AutoImageProcessor,
     AutoProcessor,
     AutoTokenizer,
+    is_datasets_available,
     is_tf_available,
     is_torch_available,
 )
@@ -45,6 +47,9 @@ if is_tf_available():
 
 if is_torch_available():
     import torch
+
+if is_datasets_available():
+    from datasets import load_dataset
 
 
 MAX_ERROR = 5e-5  # larger error tolerance than in our internal tests, to avoid flaky user-facing errors
@@ -194,6 +199,22 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             raw_samples = [x["array"] for x in speech_samples]
             return raw_samples
 
+        model_config_class = type(pt_model.config)
+        if model_config_class in PROCESSOR_MAPPING:
+            processor = AutoProcessor.from_pretrained(self._local_dir)
+            if model_config_class in TOKENIZER_MAPPING and processor.tokenizer.pad_token is None:
+                processor.tokenizer.pad_token = processor.tokenizer.eos_token
+        elif model_config_class in IMAGE_PROCESSOR_MAPPING:
+            processor = AutoImageProcessor.from_pretrained(self._local_dir)
+        elif model_config_class in FEATURE_EXTRACTOR_MAPPING:
+            processor = AutoFeatureExtractor.from_pretrained(self._local_dir)
+        elif model_config_class in TOKENIZER_MAPPING:
+            processor = AutoTokenizer.from_pretrained(self._local_dir)
+            if processor.pad_token is None:
+                processor.pad_token = processor.eos_token
+        else:
+            raise ValueError(f"Unknown data processing type (model config type: {model_config_class})")
+
         model_forward_signature = set(inspect.signature(pt_model.forward).parameters.keys())
         processor_inputs = {}
         if "input_ids" in model_forward_signature:
@@ -208,24 +229,20 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             sample_images = load_dataset("cifar10", "plain_text", split="test")[:2]["img"]
             processor_inputs.update({"images": sample_images})
         if "input_features" in model_forward_signature:
-            processor_inputs.update({"raw_speech": _get_audio_input(), "padding": True})
+            feature_extractor_signature = inspect.signature(processor.feature_extractor).parameters
+            # Pad to the largest input length by default but take feature extractor default
+            # padding value if it exists e.g. "max_length" and is not False or None
+            if "padding" in feature_extractor_signature:
+                default_strategy = feature_extractor_signature["padding"].default
+                if default_strategy is not False and default_strategy is not None:
+                    padding_strategy = default_strategy
+                else:
+                    padding_strategy = True
+            else:
+                padding_strategy = True
+            processor_inputs.update({"audio": _get_audio_input(), "padding": padding_strategy})
         if "input_values" in model_forward_signature:  # Wav2Vec2 audio input
-            processor_inputs.update({"raw_speech": _get_audio_input(), "padding": True})
-
-        model_config_class = type(pt_model.config)
-        if model_config_class in PROCESSOR_MAPPING:
-            processor = AutoProcessor.from_pretrained(self._local_dir)
-            if model_config_class in TOKENIZER_MAPPING and processor.tokenizer.pad_token is None:
-                processor.tokenizer.pad_token = processor.tokenizer.eos_token
-        elif model_config_class in FEATURE_EXTRACTOR_MAPPING:
-            processor = AutoFeatureExtractor.from_pretrained(self._local_dir)
-        elif model_config_class in TOKENIZER_MAPPING:
-            processor = AutoTokenizer.from_pretrained(self._local_dir)
-            if processor.pad_token is None:
-                processor.pad_token = processor.eos_token
-        else:
-            raise ValueError(f"Unknown data processing type (model config type: {model_config_class})")
-
+            processor_inputs.update({"audio": _get_audio_input(), "padding": True})
         pt_input = processor(**processor_inputs, return_tensors="pt")
         tf_input = processor(**processor_inputs, return_tensors="tf")
 
@@ -257,11 +274,11 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         if architectures is None:  # No architecture defined -- use auto classes
             pt_class = getattr(import_module("transformers"), "AutoModel")
             tf_class = getattr(import_module("transformers"), "TFAutoModel")
-            self._logger.warn("No detected architecture, using AutoModel/TFAutoModel")
+            self._logger.warning("No detected architecture, using AutoModel/TFAutoModel")
         else:  # Architecture defined -- use it
             if len(architectures) > 1:
                 raise ValueError(f"More than one architecture was found, aborting. (architectures = {architectures})")
-            self._logger.warn(f"Detected architecture: {architectures[0]}")
+            self._logger.warning(f"Detected architecture: {architectures[0]}")
             pt_class = getattr(import_module("transformers"), architectures[0])
             try:
                 tf_class = getattr(import_module("transformers"), "TF" + architectures[0])
@@ -336,9 +353,9 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             repo.git_add(auto_lfs_track=True)
             repo.git_commit(commit_message)
             repo.git_push(blocking=True)  # this prints a progress bar with the upload
-            self._logger.warn(f"TF weights pushed into {self._model_name}")
+            self._logger.warning(f"TF weights pushed into {self._model_name}")
         elif not self._no_pr:
-            self._logger.warn("Uploading the weights into a new PR...")
+            self._logger.warning("Uploading the weights into a new PR...")
             commit_descrition = (
                 "Model converted by the [`transformers`' `pt_to_tf`"
                 " CLI](https://github.com/huggingface/transformers/blob/main/src/transformers/commands/pt_to_tf.py). "
@@ -375,4 +392,4 @@ class PTtoTFCommand(BaseTransformersCLICommand):
                 repo_type="model",
                 create_pr=True,
             )
-            self._logger.warn(f"PR open in {hub_pr_url}")
+            self._logger.warning(f"PR open in {hub_pr_url}")

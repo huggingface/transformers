@@ -33,6 +33,7 @@ import numpy as np
 
 import transformers
 from huggingface_hub import HfFolder, delete_repo, set_access_token
+from huggingface_hub.file_download import http_get
 from requests.exceptions import HTTPError
 from transformers import (
     AutoConfig,
@@ -48,10 +49,12 @@ from transformers.testing_utils import (
     USER,
     CaptureLogger,
     TestCasePlus,
+    is_flaky,
     is_pt_flax_cross_test,
     is_pt_tf_cross_test,
     is_staging_test,
     require_accelerate,
+    require_safetensors,
     require_torch,
     require_torch_gpu,
     require_torch_multi_gpu,
@@ -60,6 +63,8 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
+    SAFE_WEIGHTS_INDEX_NAME,
+    SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     is_accelerate_available,
@@ -89,6 +94,7 @@ if is_torch_available():
         MODEL_FOR_AUDIO_XVECTOR_MAPPING,
         MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
         MODEL_FOR_CAUSAL_LM_MAPPING,
+        MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
         MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
         MODEL_FOR_MASKED_LM_MAPPING,
@@ -111,6 +117,36 @@ if is_torch_available():
         T5ForConditionalGeneration,
     )
     from transformers.modeling_utils import shard_checkpoint
+
+    # Fake pretrained models for tests
+    class BaseModel(PreTrainedModel):
+        config_class = PretrainedConfig
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.linear = nn.Linear(4, 5)
+            self.linear_2 = nn.Linear(5, 6)
+
+        def forward(self, x):
+            return self.linear_2(self.linear(x))
+
+    class ModelWithHead(PreTrainedModel):
+        base_model_prefix = "base"
+        config_class = PretrainedConfig
+
+        def _init_weights(self, module):
+            pass
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.base = BaseModel(config)
+            # linear is a common name between Base and Head on purpose.
+            self.linear = nn.Linear(6, 3)
+            self.linear2 = nn.Linear(3, 5)
+
+        def forward(self, x):
+            return self.linear2(self.linear(self.base(x)))
+
 
 if is_tf_available():
     import tensorflow as tf
@@ -172,7 +208,10 @@ class ModelTesterMixin:
         if return_labels:
             if model_class in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
                 inputs_dict["labels"] = torch.ones(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
-            elif model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
+            elif model_class in [
+                *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING),
+                *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING),
+            ]:
                 inputs_dict["start_positions"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
@@ -302,6 +341,7 @@ class ModelTesterMixin:
         if hasattr(module, "bias") and module.bias is not None:
             module.bias.data.fill_(3)
 
+    @is_flaky()
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         base_class = MODEL_MAPPING[config.__class__]
@@ -390,7 +430,9 @@ class ModelTesterMixin:
                 model_slow_init = base_class_copy.from_pretrained(tmpdirname, _fast_init=False)
 
                 for key in model_fast_init.state_dict().keys():
-                    max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
+                    max_diff = torch.max(
+                        torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key])
+                    ).item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_initialization(self):
@@ -542,7 +584,10 @@ class ModelTesterMixin:
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
                 # Question Answering model returns start_logits and end_logits
-                if model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
+                if model_class in [
+                    *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING),
+                    *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING),
+                ]:
                     correct_outlen += 1  # start_logits and end_logits instead of only 1 output
                 if "past_key_values" in outputs:
                     correct_outlen += 1  # past_key_values have been returned
@@ -647,6 +692,7 @@ class ModelTesterMixin:
                     attention_mask = inputs["attention_mask"]
                     decoder_input_ids = inputs["decoder_input_ids"]
                     decoder_attention_mask = inputs["decoder_attention_mask"]
+                    model(main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
                     traced_model = torch.jit.trace(
                         model, (main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
                     )
@@ -654,11 +700,13 @@ class ModelTesterMixin:
                     input_ids = inputs["input_ids"]
                     bbox = inputs["bbox"]
                     image = inputs["image"].tensor
+                    model(input_ids, bbox, image)
                     traced_model = torch.jit.trace(
                         model, (input_ids, bbox, image), check_trace=False
                     )  # when traced model is checked, an error is produced due to name mangling
                 else:
                     main_input = inputs[main_input_name]
+                    model(main_input)
                     traced_model = torch.jit.trace(model, main_input)
             except RuntimeError:
                 self.fail("Couldn't trace module.")
@@ -789,17 +837,14 @@ class ModelTesterMixin:
                     filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
                     input_names = list(filtered_inputs.keys())
 
-                    model_output = model(**filtered_inputs)
-
-                    if (
-                        isinstance(model, tuple(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values()))
-                        and not hasattr(model.config, "problem_type")
-                        or model.config.problem_type is None
+                    if isinstance(model, tuple(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values())) and (
+                        not hasattr(model.config, "problem_type") or model.config.problem_type is None
                     ):
                         model.config.problem_type = "single_label_classification"
 
                     traced_model = symbolic_trace(model, input_names)
                     traced_output = traced_model(**filtered_inputs)
+                    model_output = model(**filtered_inputs)
 
             except Exception as e:
                 self.fail(f"Couldn't trace module: {e}")
@@ -825,20 +870,6 @@ class ModelTesterMixin:
                     f"traced {i}th output doesn't match model {i}th output for {model_class}",
                 )
 
-            # Test that the model can be TorchScripted
-            try:
-                scripted = torch.jit.script(traced_model)
-            except Exception as e:
-                self.fail(f"Could not TorchScript the traced model: {e}")
-            scripted_output = scripted(**filtered_inputs)
-            scripted_output = flatten_output(scripted_output)
-
-            for i in range(num_outputs):
-                self.assertTrue(
-                    torch.allclose(model_output[i], scripted_output[i]),
-                    f"scripted {i}th output doesn't match model {i}th output for {model_class}",
-                )
-
             # Test that the model can be serialized and restored properly
             with tempfile.TemporaryDirectory() as tmp_dir_name:
                 pkl_file_name = os.path.join(tmp_dir_name, "model.pkl")
@@ -858,6 +889,10 @@ class ModelTesterMixin:
                         torch.allclose(model_output[i], loaded_output[i]),
                         f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
                     )
+
+            # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
+            # (Even with this call, there are still memory leak by ~0.04MB)
+            self.clear_torch_jit_class_registry()
 
     def test_headmasking(self):
         if not self.test_head_masking:
@@ -1435,11 +1470,24 @@ class ModelTesterMixin:
             base_model_prefix = model.base_model_prefix
 
             if hasattr(model, base_model_prefix):
+
+                extra_params = {k: v for k, v in model.named_parameters() if not k.startswith(base_model_prefix)}
+                extra_params.update({k: v for k, v in model.named_buffers() if not k.startswith(base_model_prefix)})
+                # Some models define this as None
+                if model._keys_to_ignore_on_load_missing:
+                    for key in model._keys_to_ignore_on_load_missing:
+                        extra_params.pop(key, None)
+
+                if not extra_params:
+                    # In that case, we *are* on a head model, but every
+                    # single key is not actual parameters and this is
+                    # tested in `test_tied_model_weights_key_ignore` test.
+                    continue
+
                 with tempfile.TemporaryDirectory() as temp_dir_name:
                     model.base_model.save_pretrained(temp_dir_name)
                     model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
-                    with self.subTest(msg=f"Missing keys for {model.__class__.__name__}"):
-                        self.assertGreater(len(loading_info["missing_keys"]), 0)
+                    self.assertGreater(len(loading_info["missing_keys"]), 0, model.__class__.__name__)
 
     def test_tie_model_weights(self):
         if not self.test_torchscript:
@@ -1488,6 +1536,54 @@ class ModelTesterMixin:
             # # Check that the embedding layer and decoding layer are the same in size and in value
             # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
+
+    def test_tied_model_weights_key_ignore(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model_tied = model_class(config)
+            with tempfile.TemporaryDirectory() as d:
+                model_tied.save_pretrained(d)
+
+                # We are nuking ALL weights on file, so every parameter should
+                # yell on load. We're going to detect if we yell too much, or too little.
+                with open(os.path.join(d, "pytorch_model.bin"), "wb") as f:
+                    torch.save({}, f)
+                model_reloaded, infos = model_class.from_pretrained(d, output_loading_info=True)
+
+                # ! Actually we could use `state_dict()` and check iteratively the tensors which are the same (for instance using `tensor.data_ptr()`). to detect the duplicates.
+                # ```python
+                # model = GPT2LMHeadModel.from_pretrained("gpt2")
+                # "lm_head.weight" in model.state_dict().keys()  # True
+                # "lm_head.weight" in model.named_parameters() # False
+                # In [6]: model.lm_head.weight.data_ptr()
+                # Out[6]: 139901378371648
+                # In [9]: model.transformer.wte.weight.data_ptr()
+                # Out[9]: 139901378371648  # Same PTR, it's the same DATA ! we would need to check for stride too to be 100% accurate.
+                # ```
+
+                prefix = f"{model_reloaded.base_model_prefix}."
+                params = dict(model_reloaded.named_parameters())
+                params.update(dict(model_reloaded.named_buffers()))
+                # param_names = set(k[len(prefix) :] if k.startswith(prefix) else k for k in params.keys())
+                param_names = set(k[len(prefix) :] if k.startswith(prefix) else k for k in params.keys())
+
+                missing_keys = set(infos["missing_keys"])
+
+                extra_missing = missing_keys - param_names
+                # missed_missing = param_names - missing_keys
+
+                self.assertEqual(
+                    extra_missing,
+                    set(),
+                    f"This model {model_class.__name__} might be missing some `keys_to_ignore`: {extra_missing}",
+                )
+
+                # self.assertEqual(
+                #     missed_missing,
+                #     set(),
+                #     f"This model {model_class.__name__} ignores keys {missed_missing} but they look like real"
+                #     " parameters",
+                # )
 
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -2292,10 +2388,11 @@ class ModelTesterMixin:
             if model_class._no_split_modules is None:
                 continue
 
-            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
-            base_output = model(**inputs_dict)
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_class)
 
             model_size = compute_module_sizes(model)[""]
             max_size = int(self.model_split_percents[0] * model_size)
@@ -2312,7 +2409,8 @@ class ModelTesterMixin:
                 )
 
                 self.check_device_map_is_respected(new_model, new_model.hf_device_map)
-                new_output = new_model(**inputs_dict)
+                torch.manual_seed(0)
+                new_output = new_model(**inputs_dict_class)
 
                 self.assertTrue(torch.allclose(base_output[0], new_output[0]))
 
@@ -2325,10 +2423,12 @@ class ModelTesterMixin:
             if model_class._no_split_modules is None:
                 continue
 
-            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
-            base_output = model(**inputs_dict)
+
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_class)
 
             model_size = compute_module_sizes(model)[""]
             # We test several splits of sizes to make sure it works.
@@ -2343,7 +2443,9 @@ class ModelTesterMixin:
                     self.assertSetEqual(set(new_model.hf_device_map.values()), {0, "cpu"})
 
                     self.check_device_map_is_respected(new_model, new_model.hf_device_map)
-                    new_output = new_model(**inputs_dict)
+
+                    torch.manual_seed(0)
+                    new_output = new_model(**inputs_dict_class)
 
                     self.assertTrue(torch.allclose(base_output[0], new_output[0]))
 
@@ -2356,10 +2458,12 @@ class ModelTesterMixin:
             if model_class._no_split_modules is None:
                 continue
 
-            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
-            base_output = model(**inputs_dict)
+
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_class)
 
             model_size = compute_module_sizes(model)[""]
             # We test several splits of sizes to make sure it works.
@@ -2374,7 +2478,9 @@ class ModelTesterMixin:
                     self.assertSetEqual(set(new_model.hf_device_map.values()), {0, 1})
 
                     self.check_device_map_is_respected(new_model, new_model.hf_device_map)
-                    new_output = new_model(**inputs_dict)
+
+                    torch.manual_seed(0)
+                    new_output = new_model(**inputs_dict_class)
 
                     self.assertTrue(torch.allclose(base_output[0], new_output[0]))
 
@@ -2927,6 +3033,7 @@ class ModelUtilsTest(TestCasePlus):
         response_mock.status_code = 500
         response_mock.headers = {}
         response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.json.return_value = {}
 
         # Download this model to make sure it's in the cache.
         _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -2936,6 +3043,99 @@ class ModelUtilsTest(TestCasePlus):
             _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
+
+    def test_load_from_one_file(self):
+        try:
+            tmp_file = tempfile.mktemp()
+            with open(tmp_file, "wb") as f:
+                http_get(
+                    "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/pytorch_model.bin", f
+                )
+
+            config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+            _ = BertModel.from_pretrained(tmp_file, config=config)
+        finally:
+            os.remove(tmp_file)
+
+    def test_legacy_load_from_url(self):
+        # This test is for deprecated behavior and can be removed in v5
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+        _ = BertModel.from_pretrained(
+            "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/pytorch_model.bin", config=config
+        )
+
+    @require_safetensors
+    def test_safetensors_save_and_load(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True)
+            # No pytorch_model.bin file, only a model.safetensors
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_NAME)))
+
+            new_model = BertModel.from_pretrained(tmp_dir)
+
+            # Check models are equal
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.allclose(p1, p2))
+
+    @require_safetensors
+    def test_safetensors_load_from_hub(self):
+        safetensors_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-safetensors")
+        pytorch_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # Check models are equal
+        for p1, p2 in zip(safetensors_model.parameters(), pytorch_model.parameters()):
+            self.assertTrue(torch.allclose(p1, p2))
+
+    @require_safetensors
+    def test_safetensors_save_and_load_sharded(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True, max_shard_size="100kB")
+            # No pytorch_model.bin index file, only a model.safetensors index
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_INDEX_NAME)))
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)))
+            # No regular weights file
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_NAME)))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+
+            new_model = BertModel.from_pretrained(tmp_dir)
+
+            # Check models are equal
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.allclose(p1, p2))
+
+    @require_safetensors
+    def test_safetensors_load_from_hub_sharded(self):
+        safetensors_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded-safetensors")
+        pytorch_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
+
+        # Check models are equal
+        for p1, p2 in zip(safetensors_model.parameters(), pytorch_model.parameters()):
+            self.assertTrue(torch.allclose(p1, p2))
+
+    def test_base_model_to_head_model_load(self):
+        base_model = BaseModel(PretrainedConfig())
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_model.save_pretrained(tmp_dir)
+
+            # Can load a base model in a model with head
+            model = ModelWithHead.from_pretrained(tmp_dir)
+            for p1, p2 in zip(model.base.parameters(), base_model.parameters()):
+                self.assertTrue(torch.allclose(p1, p2))
+
+            # It doesn't work if the state dict has a mix of keys of the head and base without prefix though.
+            base_state_dict = base_model.state_dict()
+            head_state_dict = model.state_dict()
+            base_state_dict["linear2.weight"] = head_state_dict["linear2.weight"]
+            base_state_dict["linear2.bias"] = head_state_dict["linear2.bias"]
+            torch.save(base_state_dict, os.path.join(tmp_dir, WEIGHTS_NAME))
+
+            with self.assertRaisesRegex(
+                ValueError, "The state dictionary of the model you are trying to load is corrupted."
+            ):
+                _ = ModelWithHead.from_pretrained(tmp_dir)
 
 
 @require_torch

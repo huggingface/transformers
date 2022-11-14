@@ -29,7 +29,9 @@ if is_torch_available():
         AutoModelForSemanticSegmentation,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
+        AutoModelForSpeechSeq2Seq,
         AutoModelForTokenClassification,
+        AutoModelForVision2Seq,
     )
 if is_tf_available():
     from transformers.models.auto import (
@@ -98,6 +100,8 @@ class FeaturesManager:
             "image-segmentation": AutoModelForImageSegmentation,
             "masked-im": AutoModelForMaskedImageModeling,
             "semantic-segmentation": AutoModelForSemanticSegmentation,
+            "vision2seq-lm": AutoModelForVision2Seq,
+            "speech2seq-lm": AutoModelForSpeechSeq2Seq,
         }
     if is_tf_available():
         _TASKS_TO_TF_AUTOMODELS = {
@@ -326,6 +330,10 @@ class FeaturesManager:
             "sequence-classification",
             onnx_config_cls="models.gpt_neo.GPTNeoOnnxConfig",
         ),
+        "groupvit": supported_features_mapping(
+            "default",
+            onnx_config_cls="models.groupvit.GroupViTOnnxConfig",
+        ),
         "ibert": supported_features_mapping(
             "default",
             "masked-lm",
@@ -334,6 +342,9 @@ class FeaturesManager:
             "token-classification",
             "question-answering",
             onnx_config_cls="models.ibert.IBertOnnxConfig",
+        ),
+        "imagegpt": supported_features_mapping(
+            "default", "image-classification", onnx_config_cls="models.imagegpt.ImageGPTOnnxConfig"
         ),
         "layoutlm": supported_features_mapping(
             "default",
@@ -397,6 +408,11 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.mobilebert.MobileBertOnnxConfig",
         ),
+        "mobilenet_v2": supported_features_mapping(
+            "default",
+            "image-classification",
+            onnx_config_cls="models.mobilenet_v2.MobileNetV2OnnxConfig",
+        ),
         "mobilevit": supported_features_mapping(
             "default",
             "image-classification",
@@ -415,6 +431,10 @@ class FeaturesManager:
             "seq2seq-lm",
             "seq2seq-lm-with-past",
             onnx_config_cls="models.m2m_100.M2M100OnnxConfig",
+        ),
+        "owlvit": supported_features_mapping(
+            "default",
+            onnx_config_cls="models.owlvit.OwlViTOnnxConfig",
         ),
         "perceiver": supported_features_mapping(
             "image-classification",
@@ -448,6 +468,12 @@ class FeaturesManager:
             "token-classification",
             onnx_config_cls="models.roformer.RoFormerOnnxConfig",
         ),
+        "segformer": supported_features_mapping(
+            "default",
+            "image-classification",
+            "semantic-segmentation",
+            onnx_config_cls="models.segformer.SegformerOnnxConfig",
+        ),
         "squeezebert": supported_features_mapping(
             "default",
             "masked-lm",
@@ -457,6 +483,9 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.squeezebert.SqueezeBertOnnxConfig",
         ),
+        "swin": supported_features_mapping(
+            "default", "image-classification", "masked-im", onnx_config_cls="models.swin.SwinOnnxConfig"
+        ),
         "t5": supported_features_mapping(
             "default",
             "default-with-past",
@@ -464,8 +493,18 @@ class FeaturesManager:
             "seq2seq-lm-with-past",
             onnx_config_cls="models.t5.T5OnnxConfig",
         ),
+        "vision-encoder-decoder": supported_features_mapping(
+            "vision2seq-lm", onnx_config_cls="models.vision_encoder_decoder.VisionEncoderDecoderOnnxConfig"
+        ),
         "vit": supported_features_mapping(
             "default", "image-classification", "masked-im", onnx_config_cls="models.vit.ViTOnnxConfig"
+        ),
+        "whisper": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "speech2seq-lm",
+            "speech2seq-lm-with-past",
+            onnx_config_cls="models.whisper.WhisperOnnxConfig",
         ),
         "xlm": supported_features_mapping(
             "default",
@@ -565,6 +604,7 @@ class FeaturesManager:
             raise KeyError(
                 f"Unknown task: {feature}. Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.values())}"
             )
+
         return task_to_automodel[task]
 
     @staticmethod

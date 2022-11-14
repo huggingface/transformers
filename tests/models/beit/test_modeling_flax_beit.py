@@ -233,7 +233,7 @@ class FlaxBeitModelIntegrationTest(unittest.TestCase):
         pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
 
         # prepare bool_masked_pos
-        bool_masked_pos = np.ones((1, 196), dtype=np.bool)
+        bool_masked_pos = np.ones((1, 196), dtype=bool)
 
         # forward pass
         outputs = model(pixel_values=pixel_values, bool_masked_pos=bool_masked_pos)
