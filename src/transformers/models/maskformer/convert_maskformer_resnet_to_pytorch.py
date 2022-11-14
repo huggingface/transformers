@@ -55,11 +55,11 @@ def create_rename_keys(config):
     rename_keys = []
     # stem
     # fmt: off
-    rename_keys.append(("backbone.stem.conv1.weight", "model.pixel_level_module.encoder.model.embedder.embedder.convolution.weight"))
-    rename_keys.append(("backbone.stem.conv1.norm.weight", "model.pixel_level_module.encoder.model.embedder.embedder.normalization.weight"))
-    rename_keys.append(("backbone.stem.conv1.norm.bias", "model.pixel_level_module.encoder.model.embedder.embedder.normalization.bias"))
-    rename_keys.append(("backbone.stem.conv1.norm.running_mean", "model.pixel_level_module.encoder.model.embedder.embedder.normalization.running_mean"))
-    rename_keys.append(("backbone.stem.conv1.norm.running_var", "model.pixel_level_module.encoder.model.embedder.embedder.normalization.running_var"))
+    rename_keys.append(("backbone.stem.conv1.weight", "model.pixel_level_module.encoder.resnet.embedder.embedder.convolution.weight"))
+    rename_keys.append(("backbone.stem.conv1.norm.weight", "model.pixel_level_module.encoder.resnet.embedder.embedder.normalization.weight"))
+    rename_keys.append(("backbone.stem.conv1.norm.bias", "model.pixel_level_module.encoder.resnet.embedder.embedder.normalization.bias"))
+    rename_keys.append(("backbone.stem.conv1.norm.running_mean", "model.pixel_level_module.encoder.resnet.embedder.embedder.normalization.running_mean"))
+    rename_keys.append(("backbone.stem.conv1.norm.running_var", "model.pixel_level_module.encoder.resnet.embedder.embedder.normalization.running_var"))
     # fmt: on
     # stages
     for stage_idx in range(len(config.backbone_config.depths)):
@@ -69,31 +69,31 @@ def create_rename_keys(config):
                 rename_keys.append(
                     (
                         f"backbone.res{stage_idx + 2}.{layer_idx}.shortcut.weight",
-                        f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.convolution.weight",
+                        f"model.pixel_level_module.encoder.resnet.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.convolution.weight",
                     )
                 )
                 rename_keys.append(
                     (
                         f"backbone.res{stage_idx + 2}.{layer_idx}.shortcut.norm.weight",
-                        f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.weight",
+                        f"model.pixel_level_module.encoder.resnet.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.weight",
                     )
                 )
                 rename_keys.append(
                     (
                         f"backbone.res{stage_idx + 2}.{layer_idx}.shortcut.norm.bias",
-                        f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.bias",
+                        f"model.pixel_level_module.encoder.resnet.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.bias",
                     )
                 )
                 rename_keys.append(
                     (
                         f"backbone.res{stage_idx + 2}.{layer_idx}.shortcut.norm.running_mean",
-                        f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.running_mean",
+                        f"model.pixel_level_module.encoder.resnet.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.running_mean",
                     )
                 )
                 rename_keys.append(
                     (
                         f"backbone.res{stage_idx + 2}.{layer_idx}.shortcut.norm.running_var",
-                        f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.running_var",
+                        f"model.pixel_level_module.encoder.resnet.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.running_var",
                     )
                 )
             # 3 convs
@@ -101,31 +101,31 @@ def create_rename_keys(config):
                 rename_keys.append(
                     (
                         f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i+1}.weight",
-                        f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.convolution.weight",
+                        f"model.pixel_level_module.encoder.resnet.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.convolution.weight",
                     )
                 )
                 rename_keys.append(
                     (
                         f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i+1}.norm.weight",
-                        f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.weight",
+                        f"model.pixel_level_module.encoder.resnet.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.weight",
                     )
                 )
                 rename_keys.append(
                     (
                         f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i+1}.norm.bias",
-                        f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.bias",
+                        f"model.pixel_level_module.encoder.resnet.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.bias",
                     )
                 )
                 rename_keys.append(
                     (
                         f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i+1}.norm.running_mean",
-                        f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_mean",
+                        f"model.pixel_level_module.encoder.resnet.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_mean",
                     )
                 )
                 rename_keys.append(
                     (
                         f"backbone.res{stage_idx + 2}.{layer_idx}.conv{i+1}.norm.running_var",
-                        f"model.pixel_level_module.encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_var",
+                        f"model.pixel_level_module.encoder.resnet.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_var",
                     )
                 )
 

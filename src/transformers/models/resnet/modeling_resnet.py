@@ -419,7 +419,7 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
 
 
-class ResNetBackbone(Backbone):
+class ResNetBackbone(ResNetPreTrainedModel, Backbone):
     """
     This class converts [`ResNetModel`] into a generic backbone to be consumed by frameworks like DETR and MaskFormer.
 
@@ -431,14 +431,14 @@ class ResNetBackbone(Backbone):
     def __init__(self, config: ResNetConfig):
         super().__init__(config)
 
-        self.model = ResNetModel(config)
+        self.resnet = ResNetModel(config)
 
         # note that this assumes there are always 4 stages
         self.stage_names = ["stage1", "stage2", "stage3", "stage4"]
         self.out_features = config.out_features
 
         # TODO calculate strides appropriately
-        current_stride = self.model.embedder.embedder.convolution.stride[0]
+        current_stride = self.resnet.embedder.embedder.convolution.stride[0]
         self.out_feature_strides = {
             "stem": current_stride,
             "stage1": current_stride * 2,
@@ -464,7 +464,7 @@ class ResNetBackbone(Backbone):
         }
 
     def forward(self, *args, **kwargs) -> List[Tensor]:
-        output = self.model(*args, **kwargs, output_hidden_states=True)
+        output = self.resnet(*args, **kwargs, output_hidden_states=True)
 
         hidden_states = output.hidden_states
 
@@ -475,7 +475,6 @@ class ResNetBackbone(Backbone):
         for idx, stage in enumerate(self.stage_names):
             if stage in self.out_features:
                 outputs[stage] = hidden_states[idx + 1]
-        # hidden_states = [hidden_states[i + 1] for i in [0, 1, 2, 3]]
 
         return outputs
 

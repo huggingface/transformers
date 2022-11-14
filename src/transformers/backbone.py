@@ -3,7 +3,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Dict, Optional
 
-from .modeling_utils import PreTrainedModel
+from torch import nn
 
 
 @dataclass
@@ -19,7 +19,7 @@ class ShapeSpec:
     stride: Optional[int] = None
 
 
-class Backbone(PreTrainedModel):
+class Backbone(nn.Module):
     """
     Abstract base class for network backbones.
     """

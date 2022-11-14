@@ -728,7 +728,7 @@ class MaskFormerSwinEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->MaskFormerSwin
+# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->MaskFormerSwin, swin->model
 class MaskFormerSwinPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -736,7 +736,7 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
     """
 
     config_class = MaskFormerSwinConfig
-    base_model_prefix = "swin"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
@@ -838,7 +838,7 @@ class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
         )
 
 
-class MaskFormerSwinBackbone(Backbone):
+class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, Backbone):
     """
     This class converts [`MaskFormerSwinModel`] into a generic backbone to be consumed by frameworks like DETR and
     MaskFormer.
