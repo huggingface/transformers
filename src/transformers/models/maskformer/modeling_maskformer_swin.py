@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""MaskFormer Swin backbone."""
+"""MaskFormer Swin backbone. The reason Swin is implemented here is because MaskFormer uses the hidden states before
+downsampling."""
 
 import collections.abc
 import math
