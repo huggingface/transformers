@@ -289,9 +289,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if chunk_length_s:
             if self.type == "seq2seq" and not ignore_warning:
                 logger.warning(
-                    "Using `chunk_length_s` is very experimental with seq2seq models. The results will not necessarily be entirely"
-                    " accurate and will have caveats. More information:"
-                    " https://github.com/huggingface/transformers/pull/20104. Ignore this warning with pipeline(..., ignore_warning=True)"
+                    "Using `chunk_length_s` is very experimental with seq2seq models. The results will not necessarily"
+                    " be entirely accurate and will have caveats. More information:"
+                    " https://github.com/huggingface/transformers/pull/20104. Ignore this warning with pipeline(...,"
+                    " ignore_warning=True)"
                 )
                 self._preprocess_params["ignore_warning"] = True
             if stride_length_s is None:
