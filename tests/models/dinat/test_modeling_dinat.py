@@ -320,3 +320,32 @@ class DiNATModelTest(ModelTesterMixin, unittest.TestCase):
                     )
 
 
+@require_natten
+@require_vision
+@require_torch
+class DiNATModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_feature_extractor(self):
+        return (
+            AutoFeatureExtractor.from_pretrained("shi-labs/dinat-mini-in1k-224")
+            if is_vision_available()
+            else None
+        )
+
+    @slow
+    def test_inference_image_classification_head(self):
+        model = DiNATForImageClassification.from_pretrained("shi-labs/dinat-mini-in1k-224").to(torch_device)
+        feature_extractor = self.default_feature_extractor
+
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the logits
+        expected_shape = torch.Size((1, 1000))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+        expected_slice = torch.tensor([-0.1545, -0.7667,  0.4642]).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

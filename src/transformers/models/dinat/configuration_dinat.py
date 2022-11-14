@@ -26,6 +26,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "shi-labs/dinat-mini-in1k-224": (
+        "https://huggingface.co/shi-labs/dinat-mini-in1k-224/resolve/main/config.json"
+    ),
     # See all DiNAT models at https://huggingface.co/models?filter=dinat
 }
 
