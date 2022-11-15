@@ -69,12 +69,12 @@ class ChineseCLIPModelTester:
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        text_config, input_ids, token_type_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
+        config, input_ids, token_type_ids, attention_mask, _, __, ___ = self.text_model_tester.prepare_config_and_inputs()
         vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
 
         config = self.get_config()
 
-        return config, input_ids, attention_mask, pixel_values
+        return config, input_ids, token_type_ids, attention_mask, pixel_values
 
     def get_config(self):
         return ChineseCLIPConfig.from_text_vision_configs(
@@ -115,7 +115,8 @@ class ChineseCLIPModelTest(ModelTesterMixin, unittest.TestCase):
     test_attention_outputs = False
 
     def setUp(self):
-        self.model_tester = ChineseCLIPModelTester(self)
+        text_kwargs = {"use_labels": False}
+        self.model_tester = ChineseCLIPModelTester(self, text_kwargs)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
