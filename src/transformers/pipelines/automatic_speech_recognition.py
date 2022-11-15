@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Dict, Optional, Union
 
 import numpy as np
 
+import requests
+
 from ..utils import is_torch_available, logging
 from .audio_utils import ffmpeg_read
 from .base import ChunkPipeline
@@ -153,11 +155,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         Examples:
 
-        ```python
-        pipe = pipeline(model="openai/whisper-large")
-        text = pipe("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
-        assert text == ""
-        ```
+    ```python
+    >>> from transformers import pipeline
+    >>> pipe = pipeline(model="openai/whisper-base")
+    >>> pipe("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+    {'text': ' He hoped there would be stew for dinner, turnips and carrots and bruised potatoes and fat mutton pieces to be ladled out in thick, peppered flour fat and sauce.'}
+    ```
+
+    [More complex examples](pipeline_tutorial)
     """
 
     def __init__(self, feature_extractor: Union["SequenceFeatureExtractor", str], *args, **kwargs):
@@ -187,7 +192,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         **kwargs,
     ):
         """
-        Classify the sequence(s) given as inputs. See the [`AutomaticSpeechRecognitionPipeline`] documentation for more
+        Transcribe the audio sequence(s) given as inputs to text. See the [`AutomaticSpeechRecognitionPipeline`] documentation for more
         information.
 
         Args:
@@ -244,8 +249,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
     def preprocess(self, inputs, chunk_length_s=0, stride_length_s=None, ignore_warning=False):
         if isinstance(inputs, str):
-            with open(inputs, "rb") as f:
-                inputs = f.read()
+            if inputs.startswith("http://") or inputs.startswith("https://"):
+                # We need to actually check for a real protocol, otherwise it's impossible to use a local file
+                # like http_huggingface_co.png
+                inputs = requests.get(inputs).content
+            else:
+                with open(inputs, "rb") as f:
+                    inputs = f.read()
 
         if isinstance(inputs, bytes):
             inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
