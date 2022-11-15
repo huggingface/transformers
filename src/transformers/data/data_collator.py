@@ -324,9 +324,9 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
             return batch
 
         sequence_length = (
-            torch.tensor(inp_ids).shape[1]
-            if not isinstance(inp_ids := batch["input_ids"], torch.Tensor)
-            else inp_ids.shape[1]
+            torch.tensor(batch["input_ids"]).shape[1]
+            if not isinstance(batch["input_ids"], torch.Tensor)
+            else  batch["input_ids"].shape[1]
         )
         padding_side = self.tokenizer.padding_side
 
