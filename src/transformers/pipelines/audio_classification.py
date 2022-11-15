@@ -16,6 +16,8 @@ from typing import Union
 
 import numpy as np
 
+import requests
+
 from ..utils import add_end_docstrings, is_torch_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
@@ -68,6 +70,21 @@ class AudioClassificationPipeline(Pipeline):
     Audio classification pipeline using any `AutoModelForAudioClassification`. This pipeline predicts the class of a
     raw waveform or an audio file. In case of an audio file, ffmpeg should be installed to support multiple audio
     formats.
+
+    Example:
+
+    ```python
+    from transformers import pipeline
+
+    classifier = pipeline(model="openai/whisper-base")
+    result = classifier("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+    assert result == {
+        "text": " He hoped there would be stew for dinner, turnips and carrots and bruised potatoes and fat mutton pieces to be ladled out in thick, peppered flour fat and sauce."
+    }
+    ```
+
+    [Using pipelines in a webserver or with a dataset](../pipeline_tutorial)
+
 
     This pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"audio-classification"`.
@@ -126,8 +143,13 @@ class AudioClassificationPipeline(Pipeline):
 
     def preprocess(self, inputs):
         if isinstance(inputs, str):
-            with open(inputs, "rb") as f:
-                inputs = f.read()
+            if inputs.startswith("http://") or inputs.startswith("https://"):
+                # We need to actually check for a real protocol, otherwise it's impossible to use a local file
+                # like http_huggingface_co.png
+                inputs = requests.get(inputs).content
+            else:
+                with open(inputs, "rb") as f:
+                    inputs = f.read()
 
         if isinstance(inputs, bytes):
             inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
