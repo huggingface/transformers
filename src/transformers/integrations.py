@@ -1358,7 +1358,7 @@ class ClearMLCallback(TrainerCallback):
         if self._clearml is None:
             return
         if self._clearml_task and state.is_world_process_zero:
-            # Close ClearML Task at the end end of training (It's stop reporting and tracking at this point)
+            # Close ClearML Task at the end end of training
             self._clearml_task.close()
 
     def on_log(self, args, state, control, model=None, tokenizer=None, logs=None, **kwargs):
