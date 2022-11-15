@@ -52,7 +52,7 @@ from .openfold_utils import (
 
 
 logger = logging.get_logger(__name__)
-_CHECKPOINT_FOR_DOC = "Rocketknight1/esmfold_v1"
+_CHECKPOINT_FOR_DOC = "facebook/esmfold_v1"
 _CONFIG_FOR_DOC = "EsmConfig"
 _TOKENIZER_FOR_DOC = "EsmTokenizer"
 
