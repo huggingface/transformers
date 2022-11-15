@@ -467,9 +467,13 @@ class CLIPPreTrainedModel(PreTrainedModel):
 
 
 CLIP_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
 
     Parameters:
         config ([`CLIPConfig`]): Model configuration class with all the parameters of the model.
@@ -753,6 +757,10 @@ class CLIPTextTransformer(nn.Module):
         return mask
 
 
+@add_start_docstrings(
+    """The text model from CLIP without any head or projection on top.""",
+    CLIP_START_DOCSTRING,
+)
 class CLIPTextModel(CLIPPreTrainedModel):
     config_class = CLIPTextConfig
 
@@ -868,6 +876,10 @@ class CLIPVisionTransformer(nn.Module):
         )
 
 
+@add_start_docstrings(
+    """The vision model from CLIP without any head or projection on top.""",
+    CLIP_START_DOCSTRING,
+)
 class CLIPVisionModel(CLIPPreTrainedModel):
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
@@ -1148,6 +1160,12 @@ class CLIPModel(CLIPPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """
+    CLIP Text Model with a projection layer on top (a linear layer on top of the pooled output).
+    """,
+    CLIP_START_DOCSTRING,
+)
 class CLIPTextModelWithProjection(CLIPPreTrainedModel):
     config_class = CLIPTextConfig
 
@@ -1223,6 +1241,12 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """
+    CLIP Vision Model with a projection layer on top (a linear layer on top of the pooled output).
+    """,
+    CLIP_START_DOCSTRING,
+)
 class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
