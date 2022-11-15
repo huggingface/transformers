@@ -1275,13 +1275,7 @@ class BackboneOutput(ModelOutput):
             Names of the stages.
         hidden_states (`tuple(torch.FloatTensor)` of shape `(batch_size, num_channels, height, width)`):
             Hidden states (also called feature maps) of the stages.
-        channels (`Tuple(int)`):
-            Number of channels of the stages.
-        strides (`Tuple(int)`):
-            Strides of the stages.
     """
 
     stage_names: Tuple[str] = None
     hidden_states: Tuple[torch.FloatTensor] = None
-    channels: Tuple[int] = None
-    strides: Tuple[int] = None

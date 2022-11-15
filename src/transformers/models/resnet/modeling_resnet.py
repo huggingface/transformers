@@ -462,6 +462,14 @@ class ResNetBackbone(ResNetPreTrainedModel):
         # initialize weights and apply final processing
         self.post_init()
 
+    @property
+    def channels(self):
+        return [self.out_feature_channels[name] for name in self.out_features]
+
+    @property
+    def strides(self):
+        return [self.out_feature_strides[name] for name in self.out_features]
+
     @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
     def forward(self, pixel_values: Optional[torch.FloatTensor] = None) -> BackboneOutput:
@@ -491,14 +499,8 @@ class ResNetBackbone(ResNetPreTrainedModel):
         hidden_states = outputs.hidden_states
 
         feature_maps = []
-        channels = []
-        strides = []
         for idx, stage in enumerate(self.stage_names):
             if stage in self.out_features:
                 feature_maps.append(hidden_states[idx])
-                channels.append(self.out_feature_channels[stage])
-                strides.append(self.out_feature_strides[stage])
 
-        return BackboneOutput(
-            stage_names=self.out_features, hidden_states=feature_maps, channels=channels, strides=strides
-        )
+        return BackboneOutput(stage_names=self.out_features, hidden_states=feature_maps)
