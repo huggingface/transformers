@@ -270,6 +270,8 @@ class OwlViTImageGuidedObjectDetectionOutput(ModelOutput):
         class_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
             Class embeddings of all image patches. OWL-ViT represents images as a set of image patches where the total
             number of patches is (image_size / patch_size)**2.
+        text_model_output (Tuple[`BaseModelOutputWithPooling`]):
+            The output of the [`OwlViTTextModel`].
         vision_model_output (`BaseModelOutputWithPooling`):
             The output of the [`OwlViTVisionModel`].
     """
@@ -280,6 +282,7 @@ class OwlViTImageGuidedObjectDetectionOutput(ModelOutput):
     target_pred_boxes: torch.FloatTensor = None
     query_pred_boxes: torch.FloatTensor = None
     class_embeds: torch.FloatTensor = None
+    text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> Tuple[Any]:
@@ -1597,6 +1600,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             query_pred_boxes=query_pred_boxes,
             logits=pred_logits,
             class_embeds=class_embeds,
+            text_model_output=None,
             vision_model_output=vision_outputs,
         )
 
