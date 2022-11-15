@@ -108,6 +108,18 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     The input can be either a raw waveform or a audio file. In case of the audio file, ffmpeg should be installed for
     to support multiple audio formats
 
+    Example:
+
+    ```python
+    from transformers import pipeline
+    pipe = pipeline(model="openai/whisper-base")
+    result = pipe("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+
+    assert result == {'text': ' He hoped there would be stew for dinner, turnips and carrots and bruised potatoes and fat mutton pieces to be ladled out in thick, peppered flour fat and sauce.'}
+    ```
+
+    [More complex examples](pipeline_tutorial)
+
     Arguments:
         model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
@@ -153,17 +165,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             BeamSearchDecoderCTC](https://github.com/kensho-technologies/pyctcdecode/blob/2fd33dc37c4111417e08d89ccd23d28e9b308d19/pyctcdecode/decoder.py#L180)
             can be passed for language model boosted decoding. See [`Wav2Vec2ProcessorWithLM`] for more information.
 
-    Examples:
-
-    ```python
-    from transformers import pipeline
-    pipe = pipeline(model="openai/whisper-base")
-    result = pipe("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
-
-    assert result == {'text': ' He hoped there would be stew for dinner, turnips and carrots and bruised potatoes and fat mutton pieces to be ladled out in thick, peppered flour fat and sauce.'}
-    ```
-
-    [More complex examples](pipeline_tutorial)
     """
 
     def __init__(self, feature_extractor: Union["SequenceFeatureExtractor", str], *args, **kwargs):
