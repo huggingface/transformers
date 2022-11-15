@@ -14,8 +14,8 @@ class FeatureExtractionPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> classifier = pipeline(model="bert-base-uncased", task="feature-extraction")
-    >>> result = classifier("This is a simple test.", return_tensors=True)
+    >>> extractor = pipeline(model="bert-base-uncased", task="feature-extraction")
+    >>> result = extractor("This is a simple test.", return_tensors=True)
     >>> result.shape  # This is a tensor of shape [1, sequence_lenth, hidden_dimension] representing the input string.
     torch.Size([1, 8, 768])
     ```
