@@ -677,6 +677,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_speech_objects) if not name.startswith("_")
     ]
 else:
+    _import_structure["models.audio_spectrogram_transformer"].append("ASTFeatureExtractor")
     _import_structure["models.mctct"].append("MCTCTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
 
@@ -863,7 +864,6 @@ else:
             "ASTForSequenceClassification",
             "ASTModel",
             "ASTPreTrainedModel",
-            "ASTFeatureExtractor",
         ]
     )
     _import_structure["models.albert"].extend(
@@ -3814,6 +3814,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_speech_objects import *
     else:
+        from .models.audio_spectrogram_transformer import ASTFeatureExtractor
         from .models.mctct import MCTCTFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
 
@@ -3972,7 +3973,6 @@ if TYPE_CHECKING:
         # PyTorch model imports
         from .models.audio_spectrogram_transformer import (
             AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ASTFeatureExtractor,
             ASTForSequenceClassification,
             ASTModel,
             ASTPreTrainedModel,

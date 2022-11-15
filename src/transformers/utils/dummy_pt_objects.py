@@ -353,13 +353,6 @@ def load_tf_weights_in_albert(*args, **kwargs):
 AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class ASTFeatureExtractor(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class ASTForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
