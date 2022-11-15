@@ -99,6 +99,7 @@ _import_structure = {
     "generation": [],
     "hf_argparser": ["HfArgumentParser"],
     "integrations": [
+        "is_clearml_available",
         "is_comet_available",
         "is_neptune_available",
         "is_optuna_available",
@@ -3239,6 +3240,7 @@ if TYPE_CHECKING:
 
     # Integrations
     from .integrations import (
+        is_clearml_available,
         is_comet_available,
         is_neptune_available,
         is_optuna_available,
