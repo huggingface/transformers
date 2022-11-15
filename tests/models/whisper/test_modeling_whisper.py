@@ -853,13 +853,15 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_speech = self._load_datasamples(1)
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        processed_inputs = processor(audio=input_speech, text="This part of the speech", return_tensors="pt")
+        processed_inputs = processor(
+            audio=input_speech, text="This part of the speech", add_special_tokens=False, return_tensors="pt"
+        )
         input_features = processed_inputs.input_features.to(torch_device)
-        labels = processed_inputs.labels.to(torch_device)
+        decoder_input_ids = processed_inputs.labels.to(torch_device)
 
         logits = model(
             input_features,
-            decoder_input_ids=labels,
+            decoder_input_ids=decoder_input_ids,
             output_hidden_states=False,
             output_attentions=False,
             use_cache=False,
