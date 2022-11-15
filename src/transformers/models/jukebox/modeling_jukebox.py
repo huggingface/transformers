@@ -748,7 +748,7 @@ class JukeboxVQVAE(PreTrainedModel):
                 Audio input which will be encoded and decoded.
 
         Returns:
-            `Tuple[torch.Tensor, torch.Tensor`
+            `Tuple[torch.Tensor, torch.Tensor]`
 
 
         Example:
