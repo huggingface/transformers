@@ -1544,6 +1544,8 @@ class TFModelTesterMixin:
             else:
                 metrics = []
 
+            sample_weight = tf.convert_to_tensor([0.5] * self.model_tester.batch_size, dtype=tf.float32)
+
             model(model.dummy_inputs)  # Build the model so we can get some constant weights
             model_weights = model.get_weights()
 
@@ -1553,6 +1555,7 @@ class TFModelTesterMixin:
             history1 = model.fit(
                 prepared_for_class,
                 validation_data=prepared_for_class,
+                sample_weight=sample_weight,
                 steps_per_epoch=1,
                 validation_steps=1,
                 shuffle=False,
@@ -1588,6 +1591,7 @@ class TFModelTesterMixin:
                 inputs_minus_labels,
                 labels,
                 validation_data=(inputs_minus_labels, labels),
+                sample_weight=sample_weight,
                 steps_per_epoch=1,
                 validation_steps=1,
                 shuffle=False,
@@ -1614,6 +1618,7 @@ class TFModelTesterMixin:
             history3 = model.fit(
                 dataset,
                 validation_data=dataset,
+                sample_weight=sample_weight,
                 steps_per_epoch=1,
                 validation_steps=1,
                 shuffle=False,
