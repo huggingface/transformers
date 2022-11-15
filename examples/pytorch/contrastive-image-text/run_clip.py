@@ -198,7 +198,8 @@ class Transform(torch.nn.Module):
             Normalize(mean, std),
         )
 
-    def forward(self, x: Image) -> torch.Tensor:
+    def forward(self, x) -> torch.Tensor:
+        """`x` should be an instance of `PIL.Image.Image`"""
         with torch.no_grad():
             x = self.transforms(x)
         return x
