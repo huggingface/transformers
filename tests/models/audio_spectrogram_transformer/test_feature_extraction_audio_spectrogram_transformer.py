@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 
 from transformers import ASTFeatureExtractor
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_torch, require_torchaudio
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
@@ -99,6 +99,8 @@ class ASTFeatureExtractionTester(unittest.TestCase):
         return speech_inputs
 
 
+@require_torch
+@require_torchaudio
 class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
 
     feature_extraction_class = ASTFeatureExtractor
