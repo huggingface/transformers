@@ -95,9 +95,9 @@ class FSMTConfig(PretrainedConfig):
             End of stream token id.
         decoder_start_token_id (`int`, *optional*):
             This model starts decoding with `eos_token_id`
-        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             Google "layerdrop arxiv", as its not explainable in one line.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             Google "layerdrop arxiv", as its not explainable in one line.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether this is an encoder/decoder model.
@@ -107,7 +107,10 @@ class FSMTConfig(PretrainedConfig):
             Number of beams for beam search that will be used by default in the `generate` method of the model. 1 means
             no beam search.
         length_penalty (`float`, *optional*, defaults to 1)
-            Exponential penalty to the length that will be used by default in the `generate` method of the model.
+            Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent to
+            the sequence length, which in turn is used to divide the score of the sequence. Since the score is the log
+            likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences, while
+            `length_penalty` < 0.0 encourages shorter sequences.
         early_stopping (`bool`, *optional*, defaults to `False`)
             Flag that will be used by default in the `generate` method of the model. Whether to stop the beam search
             when at least `num_beams` sentences are finished per batch or not.

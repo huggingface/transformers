@@ -7,7 +7,10 @@ on:
 
 jobs:
   delete:
-    uses: huggingface/doc-builder/.github/workflows/delete_doc_comment.yml@main
+    uses: huggingface/doc-builder/.github/workflows/delete_doc_comment.yml@use_hf_hub
     with:
       pr_number: ${{ github.event.number }}
       package: transformers
+    secrets:
+      token: ${{ secrets.HF_DOC_PUSH }}
+      comment_bot_token: ${{ secrets.HUGGINGFACE_PUSH }}

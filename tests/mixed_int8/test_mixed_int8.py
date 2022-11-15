@@ -15,7 +15,14 @@
 import gc
 import unittest
 
-from transformers import AutoModel, AutoModelForCausalLM, AutoModelForSequenceClassification, AutoTokenizer, pipeline
+from transformers import (
+    AutoModel,
+    AutoModelForCausalLM,
+    AutoModelForSeq2SeqLM,
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    pipeline,
+)
 from transformers.testing_utils import (
     is_torch_available,
     require_accelerate,
@@ -106,12 +113,21 @@ class MixedInt8ModelClassesTest(BaseMixedInt8Test):
         super().setUp()
         # model_name
         self.model_name = "bigscience/bloom-560m"
-        # Models and tokenizer
+        self.seq_to_seq_name = "t5-small"
+
+        # Different types of model
+
         self.base_model = AutoModel.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        # Sequence classification model
         self.sequence_model = AutoModelForSequenceClassification.from_pretrained(
             self.model_name, load_in_8bit=True, device_map="auto"
         )
+        # CausalLM model
         self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        # Seq2seq model
+        self.seq_to_seq_model = AutoModelForSeq2SeqLM.from_pretrained(
+            self.seq_to_seq_name, load_in_8bit=True, device_map="auto"
+        )
 
     def tearDown(self):
         r"""
@@ -121,6 +137,7 @@ class MixedInt8ModelClassesTest(BaseMixedInt8Test):
         del self.base_model
         del self.sequence_model
         del self.model_8bit
+        del self.seq_to_seq_model
 
         gc.collect()
         torch.cuda.empty_cache()
@@ -138,6 +155,7 @@ class MixedInt8ModelClassesTest(BaseMixedInt8Test):
         # Other heads should be nn.Parameter
         self.assertTrue(self.model_8bit.lm_head.weight.__class__ == torch.nn.Parameter)
         self.assertTrue(self.sequence_model.score.weight.__class__ == torch.nn.Parameter)
+        self.assertTrue(self.seq_to_seq_model.lm_head.weight.__class__ == torch.nn.Parameter)
 
 
 class MixedInt8TestPipeline(BaseMixedInt8Test):

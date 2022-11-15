@@ -80,34 +80,6 @@ class TextDatasetForNextSentencePrediction(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class Constraint(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class ConstraintListState(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class DisjunctiveConstraint(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class PhrasalConstraint(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class BeamScorer(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -129,6 +101,27 @@ class ConstrainedBeamSearchScorer(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class Constraint(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ConstraintListState(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DisjunctiveConstraint(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class ForcedBOSTokenLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -137,6 +130,13 @@ class ForcedBOSTokenLogitsProcessor(metaclass=DummyObject):
 
 
 class ForcedEOSTokenLogitsProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GenerationMixin(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -178,6 +178,20 @@ class LogitsWarper(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MaxLengthCriteria(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MaxTimeCriteria(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MinLengthLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -199,6 +213,13 @@ class NoRepeatNGramLogitsProcessor(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class PhrasalConstraint(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class PrefixConstrainedLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -207,6 +228,20 @@ class PrefixConstrainedLogitsProcessor(metaclass=DummyObject):
 
 
 class RepetitionPenaltyLogitsProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class StoppingCriteria(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class StoppingCriteriaList(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -235,34 +270,6 @@ class TopPLogitsWarper(metaclass=DummyObject):
 
 
 class TypicalLogitsWarper(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class MaxLengthCriteria(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class MaxTimeCriteria(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class StoppingCriteria(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class StoppingCriteriaList(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -358,6 +365,12 @@ MODEL_FOR_CAUSAL_LM_MAPPING = None
 MODEL_FOR_CTC_MAPPING = None
 
 
+MODEL_FOR_DEPTH_ESTIMATION_MAPPING = None
+
+
+MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING = None
+
+
 MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = None
 
 
@@ -415,6 +428,9 @@ MODEL_FOR_VISION_2_SEQ_MAPPING = None
 MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING = None
 
 
+MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING = None
+
+
 MODEL_MAPPING = None
 
 
@@ -457,6 +473,20 @@ class AutoModelForCausalLM(metaclass=DummyObject):
 
 
 class AutoModelForCTC(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForDepthEstimation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForDocumentQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -590,6 +620,13 @@ class AutoModelForVision2Seq(metaclass=DummyObject):
 
 
 class AutoModelForVisualQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForZeroShotObjectDetection(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -996,6 +1033,13 @@ class BloomForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class BloomForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class BloomForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -1070,6 +1114,13 @@ class CamembertForTokenClassification(metaclass=DummyObject):
 
 
 class CamembertModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CamembertPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -1156,7 +1207,59 @@ class CLIPTextModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class CLIPTextModelWithProjection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class CLIPVisionModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CLIPVisionModelWithProjection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class CLIPSegForImageSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CLIPSegModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CLIPSegPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CLIPSegTextModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CLIPSegVisionModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -1682,6 +1785,23 @@ class DistilBertPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class DonutSwinModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DonutSwinPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -1848,6 +1968,131 @@ class EncoderDecoderModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class ErnieForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ErnieForMaskedLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ErnieForMultipleChoice(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ErnieForNextSentencePrediction(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ErnieForPreTraining(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ErnieForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ErnieForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ErnieForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ErnieModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ErniePreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+ESM_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class EsmFoldPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class EsmForMaskedLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class EsmForProteinFolding(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class EsmForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class EsmForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class EsmModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class EsmPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -1887,6 +2132,13 @@ class FlaubertForTokenClassification(metaclass=DummyObject):
 
 
 class FlaubertModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class FlaubertPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -2255,6 +2507,37 @@ class GPTNeoXPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+GPT_NEOX_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class GPTNeoXJapaneseForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GPTNeoXJapaneseLayer(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GPTNeoXJapaneseModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class GPTNeoXJapanesePreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -2442,10 +2725,48 @@ def load_tf_weights_in_imagegpt(*args, **kwargs):
     requires_backends(load_tf_weights_in_imagegpt, ["torch"])
 
 
+JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class JukeboxModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class JukeboxPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class JukeboxPrior(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class JukeboxVQVAE(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class LayoutLMForMaskedLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LayoutLMForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -2619,6 +2940,44 @@ class LevitModel(metaclass=DummyObject):
 
 
 class LevitPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+LILT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class LiltForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LiltForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LiltForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LiltModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LiltPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -2876,6 +3235,44 @@ class MarianModel(metaclass=DummyObject):
 
 
 class MarianMTModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class MarkupLMForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MarkupLMForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MarkupLMForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MarkupLMModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MarkupLMPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -3141,6 +3538,41 @@ class MobileBertPreTrainedModel(metaclass=DummyObject):
 
 def load_tf_weights_in_mobilebert(*args, **kwargs):
     requires_backends(load_tf_weights_in_mobilebert, ["torch"])
+
+
+MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class MobileNetV2ForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MobileNetV2ForSemanticSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MobileNetV2Model(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MobileNetV2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def load_tf_weights_in_mobilenet_v2(*args, **kwargs):
+    requires_backends(load_tf_weights_in_mobilenet_v2, ["torch"])
 
 
 MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -3476,6 +3908,13 @@ class OPTForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class OPTForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class OPTForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -3557,6 +3996,30 @@ class PegasusModel(metaclass=DummyObject):
 
 
 class PegasusPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class PegasusXForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PegasusXModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PegasusXPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -4157,6 +4620,83 @@ class RobertaPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class RoCBertForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RoCBertForMaskedLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RoCBertForMultipleChoice(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RoCBertForPreTraining(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RoCBertForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RoCBertForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RoCBertForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RoCBertLayer(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RoCBertModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class RoCBertPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def load_tf_weights_in_roc_bert(*args, **kwargs):
+    requires_backends(load_tf_weights_in_roc_bert, ["torch"])
+
+
 ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -4538,6 +5078,51 @@ class Swinv2PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SwitchTransformersEncoderModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SwitchTransformersForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SwitchTransformersModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SwitchTransformersPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SwitchTransformersSparseMLP(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SwitchTransformersTop1Router(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 T5_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -4571,6 +5156,72 @@ class T5PreTrainedModel(metaclass=DummyObject):
 
 def load_tf_weights_in_t5(*args, **kwargs):
     requires_backends(load_tf_weights_in_t5, ["torch"])
+
+
+TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TapasForMaskedLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TapasForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TapasForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TapasModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TapasPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def load_tf_weights_in_tapas(*args, **kwargs):
+    requires_backends(load_tf_weights_in_tapas, ["torch"])
+
+
+TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TimeSeriesTransformerForPrediction(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TimeSeriesTransformerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TimeSeriesTransformerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -4988,6 +5639,30 @@ class ViTMAEPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class ViTMSNForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ViTMSNModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ViTMSNPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -5144,6 +5819,61 @@ class WavLMPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class WhisperForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class WhisperModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class WhisperPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class XCLIPModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class XCLIPPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class XCLIPTextModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class XCLIPVisionModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 XGLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -5265,6 +5995,13 @@ class XLMProphetNetModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class XLMProphetNetPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -5311,6 +6048,13 @@ class XLMRobertaForTokenClassification(metaclass=DummyObject):
 
 
 class XLMRobertaModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class XLMRobertaPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

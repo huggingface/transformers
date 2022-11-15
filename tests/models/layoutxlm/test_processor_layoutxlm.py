@@ -19,6 +19,8 @@ import tempfile
 import unittest
 from typing import List
 
+import numpy as np
+
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.layoutxlm import LayoutXLMTokenizer, LayoutXLMTokenizerFast
 from transformers.testing_utils import (
@@ -74,6 +76,17 @@ class LayoutXLMProcessorTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+    def prepare_image_inputs(self):
+        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
+        or a list of PyTorch tensors if one specifies torchify=True.
+        """
+
+        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
+
+        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+
+        return image_inputs
+
     def test_save_load_pretrained_default(self):
         feature_extractor = self.get_feature_extractor()
         tokenizers = self.get_tokenizers()
@@ -125,6 +138,54 @@ class LayoutXLMProcessorTest(unittest.TestCase):
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
+
+    def test_model_input_names(self):
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+
+        processor = LayoutXLMProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        # add extra args
+        inputs = processor(text=input_str, images=image_input, return_codebook_pixels=False, return_image_mask=False)
+
+        self.assertListEqual(list(inputs.keys()), processor.model_input_names)
+
+    @slow
+    def test_overflowing_tokens(self):
+        # In the case of overflowing tokens, test that we still have 1-to-1 mapping between the images and input_ids (sequences that are too long are broken down into multiple sequences).
+
+        from datasets import load_dataset
+
+        # set up
+        datasets = load_dataset("nielsr/funsd")
+        processor = LayoutXLMProcessor.from_pretrained("microsoft/layoutxlm-base", apply_ocr=False)
+
+        def preprocess_data(examples):
+            images = [Image.open(path).convert("RGB") for path in examples["image_path"]]
+            words = examples["words"]
+            boxes = examples["bboxes"]
+            word_labels = examples["ner_tags"]
+            encoded_inputs = processor(
+                images,
+                words,
+                boxes=boxes,
+                word_labels=word_labels,
+                max_length=512,
+                padding="max_length",
+                truncation=True,
+                return_overflowing_tokens=True,
+                stride=50,
+                return_offsets_mapping=True,
+                return_tensors="pt",
+            )
+            return encoded_inputs
+
+        train_data = preprocess_data(datasets["train"])
+
+        self.assertEqual(len(train_data["image"]), len(train_data["input_ids"]))
 
 
 # different use cases tests

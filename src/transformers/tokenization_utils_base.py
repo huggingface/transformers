@@ -42,17 +42,23 @@ from .utils import (
     add_end_docstrings,
     cached_file,
     copy_func,
+    download_url,
     extract_commit_hash,
     is_flax_available,
+    is_jax_tensor,
+    is_numpy_array,
     is_offline_mode,
+    is_remote_url,
     is_tf_available,
+    is_tf_tensor,
     is_tokenizers_available,
     is_torch_available,
+    is_torch_device,
+    is_torch_tensor,
     logging,
     to_py_obj,
     torch_required,
 )
-from .utils.generic import _is_jax, _is_numpy, _is_tensorflow, _is_torch, _is_torch_device
 
 
 if TYPE_CHECKING:
@@ -694,15 +700,10 @@ class BatchEncoding(UserDict):
             import jax.numpy as jnp  # noqa: F811
 
             as_tensor = jnp.array
-            is_tensor = _is_jax
+            is_tensor = is_jax_tensor
         else:
             as_tensor = np.asarray
-            is_tensor = _is_numpy
-        # (mfuntowicz: This code is unreachable)
-        # else:
-        #     raise ImportError(
-        #         f"Unable to convert output to tensors format {tensor_type}"
-        #     )
+            is_tensor = is_numpy_array
 
         # Do the tensor conversion in batch
         for key, value in self.items():
@@ -751,7 +752,7 @@ class BatchEncoding(UserDict):
         # This check catches things like APEX blindly calling "to" on all inputs to a module
         # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
         # into a HalfTensor
-        if isinstance(device, str) or _is_torch_device(device) or isinstance(device, int):
+        if isinstance(device, str) or is_torch_device(device) or isinstance(device, int):
             self.data = {k: v.to(device=device) for k, v in self.data.items()}
         else:
             logger.warning(f"Attempting to cast a BatchEncoding to type {str(device)}. This is not supported.")
@@ -915,10 +916,12 @@ class SpecialTokensMixin:
     ) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
-        it with indices starting from length of the current vocabulary.
+        it with indices starting from length of the current vocabulary and and will be isolated before the tokenization
+        algorithm is applied. Added tokens and tokens from the vocabulary of the tokenization algorithm are therefore
+        not treated in the same way.
 
-        Note,None When adding new tokens to the vocabulary, you should make sure to also resize the token embedding
-        matrix of the model so that its embedding matrix matches the tokenizer.
+        Note, when adding new tokens to the vocabulary, you should make sure to also resize the token embedding matrix
+        of the model so that its embedding matrix matches the tokenizer.
 
         In order to do that, please use the [`~PreTrainedModel.resize_token_embeddings`] method.
 
@@ -1666,7 +1669,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         init_configuration = {}
 
         is_local = os.path.isdir(pretrained_model_name_or_path)
-        if os.path.isfile(pretrained_model_name_or_path):
+        single_file_id = None
+        if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             if len(cls.vocab_files_names) > 1:
                 raise ValueError(
                     f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is not "
@@ -1678,7 +1682,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 FutureWarning,
             )
             file_id = list(cls.vocab_files_names.keys())[0]
+
             vocab_files[file_id] = pretrained_model_name_or_path
+            single_file_id = file_id
         else:
             # At this point pretrained_model_name_or_path is either a directory or a model identifier name
             additional_files_names = {
@@ -1721,6 +1727,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         for file_id, file_path in vocab_files.items():
             if file_path is None:
                 resolved_vocab_files[file_id] = None
+            elif single_file_id == file_id:
+                if os.path.isfile(file_path):
+                    resolved_vocab_files[file_id] = file_path
+                elif is_remote_url(file_path):
+                    resolved_vocab_files[file_id] = download_url(file_path, proxies=proxies)
             else:
                 resolved_vocab_files[file_id] = cached_file(
                     pretrained_model_name_or_path,
@@ -2224,7 +2235,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         text_pair: Optional[Union[TextInput, PreTokenizedInput, EncodedInput]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -2263,7 +2274,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         raise NotImplementedError
 
     def _get_padding_truncation_strategies(
-        self, padding=False, truncation=False, max_length=None, pad_to_multiple_of=None, verbose=True, **kwargs
+        self, padding=False, truncation=None, max_length=None, pad_to_multiple_of=None, verbose=True, **kwargs
     ):
         """
         Find the correct padding/truncation strategy with backward compatibility for old arguments (truncation_strategy
@@ -2274,7 +2285,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Backward compatibility for previous behavior, maybe we should deprecate it:
         # If you only set max_length, it activates truncation for max_length
-        if max_length is not None and padding is False and truncation is False:
+        if max_length is not None and padding is False and truncation is None:
             if verbose:
                 if not self.deprecation_warnings.get("Truncation-not-explicitly-activated", False):
                     logger.warning(
@@ -2305,7 +2316,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         elif padding is not False:
             if padding is True:
                 if verbose:
-                    if max_length is not None and (truncation is False or truncation == "do_not_truncate"):
+                    if max_length is not None and (
+                        truncation is None or truncation is False or truncation == "do_not_truncate"
+                    ):
                         warnings.warn(
                             "`max_length` is ignored when `padding`=`True` and there is no truncation strategy. "
                             "To pad to max length, use `padding='max_length'`."
@@ -2321,7 +2334,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             padding_strategy = PaddingStrategy.DO_NOT_PAD
 
         # Get truncation strategy
-        if truncation is False and old_truncation_strategy != "do_not_truncate":
+        if truncation is None and old_truncation_strategy != "do_not_truncate":
             if verbose:
                 warnings.warn(
                     "The `truncation_strategy` argument is deprecated and will be removed in a future version, use"
@@ -2335,7 +2348,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     FutureWarning,
                 )
             truncation_strategy = TruncationStrategy(old_truncation_strategy)
-        elif truncation is not False:
+        elif truncation is not False and truncation is not None:
             if truncation is True:
                 truncation_strategy = (
                     TruncationStrategy.LONGEST_FIRST
@@ -2409,7 +2422,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         ] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         is_split_into_words: bool = False,
@@ -2493,7 +2506,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         is_split_into_words: bool = False,
@@ -2606,7 +2619,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         text_pair: Optional[Union[TextInput, PreTokenizedInput, EncodedInput]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         is_split_into_words: bool = False,
@@ -2708,7 +2721,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         ],
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         is_split_into_words: bool = False,
@@ -2819,7 +2832,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         in the batch.
 
         Padding side (left/right) padding token ids are defined at the tokenizer level (with `self.padding_side`,
-        `self.pad_token_id` and `self.pad_token_type_id`)
+        `self.pad_token_id` and `self.pad_token_type_id`).
+
+        Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to encode the
+        text followed by a call to the `pad` method to get a padded encoding.
 
         <Tip>
 
@@ -2869,6 +2885,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             verbose (`bool`, *optional*, defaults to `True`):
                 Whether or not to print more information and warnings.
         """
+        if self.__class__.__name__.endswith("Fast"):
+            if not self.deprecation_warnings.get("Asking-to-pad-a-fast-tokenizer", False):
+                logger.warning_advice(
+                    f"You're using a {self.__class__.__name__} tokenizer. Please note that with a fast tokenizer,"
+                    " using the `__call__` method is faster than using a method to encode the text followed by a call"
+                    " to the `pad` method to get a padded encoding."
+                )
+                self.deprecation_warnings["Asking-to-pad-a-fast-tokenizer"] = True
+
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
@@ -2901,9 +2926,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     break
         # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
         if not isinstance(first_element, (int, list, tuple)):
-            if is_tf_available() and _is_tensorflow(first_element):
+            if is_tf_tensor(first_element):
                 return_tensors = "tf" if return_tensors is None else return_tensors
-            elif is_torch_available() and _is_torch(first_element):
+            elif is_torch_tensor(first_element):
                 return_tensors = "pt" if return_tensors is None else return_tensors
             elif isinstance(first_element, np.ndarray):
                 return_tensors = "np" if return_tensors is None else return_tensors
@@ -3006,7 +3031,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         pair_ids: Optional[List[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,

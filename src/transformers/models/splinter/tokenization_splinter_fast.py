@@ -87,10 +87,10 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see [this
             issue](https://github.com/huggingface/transformers/issues/328)).
-        strip_accents: (`bool`, *optional*):
+        strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
-        wordpieces_prefix: (`str`, *optional*, defaults to `"##"`):
+        wordpieces_prefix (`str`, *optional*, defaults to `"##"`):
             The prefix for subwords.
     """
 

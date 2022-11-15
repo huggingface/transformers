@@ -120,7 +120,7 @@ class OwlViTVisionModelTester:
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         num_patches = (self.image_size // self.patch_size) ** 2
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -339,10 +339,16 @@ class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class OwlViTModelTester:
-    def __init__(self, parent, is_training=True):
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+
+        if text_kwargs is None:
+            text_kwargs = {}
+        if vision_kwargs is None:
+            vision_kwargs = {}
+
         self.parent = parent
-        self.text_model_tester = OwlViTTextModelTester(parent)
-        self.vision_model_tester = OwlViTVisionModelTester(parent)
+        self.text_model_tester = OwlViTTextModelTester(parent, **text_kwargs)
+        self.vision_model_tester = OwlViTVisionModelTester(parent, **vision_kwargs)
         self.is_training = is_training
         self.text_config = self.text_model_tester.get_config().to_dict()
         self.vision_config = self.vision_model_tester.get_config().to_dict()
@@ -734,7 +740,7 @@ def prepare_img():
 @require_vision
 @require_torch
 class OwlViTModelIntegrationTest(unittest.TestCase):
-    # @slow
+    @slow
     def test_inference(self):
         model_name = "google/owlvit-base-patch32"
         model = OwlViTModel.from_pretrained(model_name).to(torch_device)
@@ -762,8 +768,7 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
             outputs.logits_per_text.shape,
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
-        expected_logits = torch.tensor([[4.4420, 0.6181]], device=torch_device)
-
+        expected_logits = torch.tensor([[3.4613, 0.9403]], device=torch_device)
         self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
 
     @slow
@@ -787,7 +792,8 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
 
         num_queries = int((model.config.vision_config.image_size / model.config.vision_config.patch_size) ** 2)
         self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
+
         expected_slice_boxes = torch.tensor(
-            [[0.0948, 0.0471, 0.1915], [0.3194, 0.0583, 0.6498], [0.1441, 0.0452, 0.2197]]
+            [[0.0691, 0.0445, 0.1373], [0.1592, 0.0456, 0.3192], [0.1632, 0.0423, 0.2478]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))

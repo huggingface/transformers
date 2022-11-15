@@ -23,7 +23,7 @@ from transformers.models.auto import get_values
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.utils import cached_property
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
@@ -39,6 +39,7 @@ if is_torch_available():
         LongT5Model,
     )
     from transformers.models.longt5.modeling_longt5 import LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.pytorch_utils import is_torch_less_than_1_11
 
 
 class LongT5ModelTester:
@@ -584,6 +585,10 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             model = LongT5Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @unittest.skipIf(
+        not is_torch_available() or is_torch_less_than_1_11,
+        "Test failed with torch < 1.11 with an exception in a C++ file.",
+    )
     @slow
     def test_export_to_onnx(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

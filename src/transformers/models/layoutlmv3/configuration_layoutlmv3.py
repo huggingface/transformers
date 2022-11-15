@@ -108,12 +108,12 @@ class LayoutLMv3Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import LayoutLMv3Model, LayoutLMv3Config
+    >>> from transformers import LayoutLMv3Config, LayoutLMv3Model
 
     >>> # Initializing a LayoutLMv3 microsoft/layoutlmv3-base style configuration
     >>> configuration = LayoutLMv3Config()
 
-    >>> # Initializing a model from the microsoft/layoutlmv3-base style configuration
+    >>> # Initializing a model (with random weights) from the microsoft/layoutlmv3-base style configuration
     >>> model = LayoutLMv3Model(configuration)
 
     >>> # Accessing the model configuration
@@ -203,7 +203,7 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
                     ("input_ids", {0: "batch", 1: "sequence"}),
                     ("attention_mask", {0: "batch", 1: "sequence"}),
                     ("bbox", {0: "batch", 1: "sequence"}),
-                    ("pixel_values", {0: "batch", 1: "sequence"}),
+                    ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
                 ]
             )
         else:
@@ -212,7 +212,7 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
                     ("input_ids", {0: "batch", 1: "sequence"}),
                     ("bbox", {0: "batch", 1: "sequence"}),
                     ("attention_mask", {0: "batch", 1: "sequence"}),
-                    ("pixel_values", {0: "batch", 1: "sequence"}),
+                    ("pixel_values", {0: "batch", 1: "num_channels"}),
                 ]
             )
 

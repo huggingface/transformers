@@ -198,6 +198,8 @@ You can easily log and monitor your runs code. The following are currently suppo
 * [TensorBoard](https://www.tensorflow.org/tensorboard)
 * [Weights & Biases](https://docs.wandb.ai/integrations/huggingface)
 * [Comet ML](https://www.comet.ml/docs/python-sdk/huggingface/)
+* [Neptune](https://docs.neptune.ai/integrations-and-supported-tools/model-training/hugging-face)
+* [ClearML](https://clear.ml/docs/latest/docs/getting_started/ds/ds_first_steps)
 
 ### Weights & Biases
 
@@ -251,3 +253,123 @@ or if in a Conda environment:
 ```bash
 conda install -c comet_ml -c anaconda -c conda-forge comet_ml
 ```
+
+### Neptune
+
+First, install the Neptune client library. You can do it with either `pip` or `conda`:
+
+`pip`:
+
+```bash
+pip install neptune-client
+```
+
+`conda`:
+
+```bash
+conda install -c conda-forge neptune-client
+```
+
+Next, in your model training script, import `NeptuneCallback`:
+
+```python
+from transformers.integrations import NeptuneCallback
+```
+
+To enable Neptune logging, in your `TrainingArguments`, set the `report_to` argument to `"neptune"`:
+
+```python
+training_args = TrainingArguments(
+    "quick-training-distilbert-mrpc", 
+    evaluation_strategy="steps",
+    eval_steps = 20,
+    report_to = "neptune",
+)
+
+trainer = Trainer(
+    model,
+    training_args,
+    ...
+)
+```
+
+Alternatively, for more logging options, create a Neptune callback:
+
+```python
+neptune_callback = NeptuneCallback()
+```
+
+To add more detail to the tracked run, you can supply optional arguments to `NeptuneCallback`.
+
+Some examples:
+
+```python
+neptune_callback = NeptuneCallback(
+    name = "DistilBERT",
+    description = "DistilBERT fine-tuned on GLUE/MRPC",
+    tags = ["args-callback", "fine-tune", "MRPC"],  # tags help you manage runs in Neptune
+    base_namespace="callback",  # the default is "finetuning"
+    log_checkpoints = "best",  # other options are "last", "same", and None
+    capture_hardware_metrics = False,  # additional keyword arguments for a Neptune run
+)
+```
+
+Pass the callback to the Trainer:
+
+```python
+training_args = TrainingArguments(..., report_to = None)
+trainer = Trainer(
+    model,
+    training_args,
+    ...
+    callbacks=[neptune_callback],
+)
+```
+
+Now, when you start the training with `trainer.train()`, your metadata will be logged in Neptune.
+
+**Note:** Although you can pass your **Neptune API token** and **project name** as arguments when creating the callback, the recommended way is to save them as environment variables:
+
+| Environment variable | Value                                                |
+| :------------------- | :--------------------------------------------------- |
+| `NEPTUNE_API_TOKEN`  | Your Neptune API token. To find and copy it, click your Neptune avatar and select **Get your API token**. |
+| `NEPTUNE_PROJECT` | The full name of your Neptune project (`workspace-name/project-name`). To find and copy it, head to **project settings** &rarr; **Properties**. |
+
+For detailed instructions and examples, see the [Neptune docs](https://docs.neptune.ai/integrations-and-supported-tools/model-training/hugging-face).
+
+### ClearML
+
+To use ClearML, install the clearml package with:
+
+```bash
+pip install clearml
+```
+
+Then [create new credentials]() from the ClearML Server. You can get a free hosted server [here]() or [self-host your own]()!
+After creating your new credentials, you can either copy the local snippet which you can paste after running:
+
+```bash
+clearml-init
+```
+
+Or you can copy the jupyter snippet if you are in Jupyter or Colab:
+
+```python
+%env CLEARML_WEB_HOST=https://app.clear.ml
+%env CLEARML_API_HOST=https://api.clear.ml
+%env CLEARML_FILES_HOST=https://files.clear.ml
+%env CLEARML_API_ACCESS_KEY=***
+%env CLEARML_API_SECRET_KEY=***
+```
+
+
+To enable logging to ClearML, include `"clearml"` in the `report_to` of your `TrainingArguments` or script. Or just pass along `--report_to all` if you have `clearml` already installed.
+
+Advanced configuration is possible by setting environment variables:
+
+| Environment Variable | Value |
+|---|---|
+| CLEARML_PROJECT    | Name of the project in ClearML. (default: `"HuggingFace Transformers"`) |
+| CLEARML_TASK       | Name of the task in ClearML. (default: `"Trainer"`) |
+
+Additional configuration options are available through generic [clearml environment variables](https://clear.ml/docs/latest/docs/configs/env_vars).
