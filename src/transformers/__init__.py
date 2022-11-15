@@ -96,7 +96,7 @@ _import_structure = {
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],
-    "generation": ["GenerationConfig"],
+    "generation": [],
     "hf_argparser": ["HfArgumentParser"],
     "integrations": [
         "is_clearml_available",
@@ -3241,9 +3241,6 @@ if TYPE_CHECKING:
     # Feature Extractor
     from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
     from .hf_argparser import HfArgumentParser
-
-    # Generation
-    from .generation import GenerationConfig
 
     # Integrations
     from .integrations import (
