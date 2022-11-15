@@ -3193,7 +3193,7 @@ class Trainer:
         """
         has_labels = False if len(self.label_names) == 0 else all(inputs.get(k) is not None for k in self.label_names)
         # For CLIP-like models capable of returning loss values.
-        loss_without_labels = True if len(self.label_names) == 0 and self.can_return_loss else False
+        loss_without_labels = True if len(self.label_names) == 0 and self.can_return_loss and inputs.get("return_loss", None) is True else False
 
         inputs = self._prepare_inputs(inputs)
         if ignore_keys is None:
