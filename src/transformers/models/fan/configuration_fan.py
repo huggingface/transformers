@@ -154,9 +154,7 @@ class FANConfig(PretrainedConfig):
         initializer_range=1.0,  # HASCOMMENTS
         img_size=[224, 224],  # HASCOMMENTS
         num_channels=3,  # HASCOMMENTS
-        # num_labels=1000,  # HASCOMMENTS
         backbone=None,  # HASCOMMENTS
-        use_checkpoint=False,  # TODO: Rename for HF Consistency
         use_pos_embed=True,  # HASCOMMENTS
         mlp_ratio=4.0,  # HASCOMMENTS
         qkv_bias=True,  # HASCOMMENTS
@@ -192,9 +190,7 @@ class FANConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.img_size = img_size
         self.num_channels = num_channels
-        # self.num_labels = num_labels
         self.backbone = backbone
-        self.use_checkpoint = use_checkpoint
         self.use_pos_embed = use_pos_embed
         self.mlp_ratio = mlp_ratio
         self.qkv_bias = qkv_bias
