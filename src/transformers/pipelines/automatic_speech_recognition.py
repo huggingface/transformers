@@ -153,7 +153,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             BeamSearchDecoderCTC](https://github.com/kensho-technologies/pyctcdecode/blob/2fd33dc37c4111417e08d89ccd23d28e9b308d19/pyctcdecode/decoder.py#L180)
             can be passed for language model boosted decoding. See [`Wav2Vec2ProcessorWithLM`] for more information.
 
-        Examples:
+    Examples:
 
     ```python
     >>> from transformers import pipeline
