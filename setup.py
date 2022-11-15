@@ -330,7 +330,6 @@ extras["all"] = (
     + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
-    + extras["natten"]
     + extras["codecarbon"]
     + extras["accelerate"]
 )
@@ -350,7 +349,6 @@ extras["dev-torch"] = (
     + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
-    + extras["natten"]
     + extras["codecarbon"]
     + extras["quality"]
     + extras["ja"]
