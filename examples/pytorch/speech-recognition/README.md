@@ -288,7 +288,9 @@ python run_speech_recognition_seq2seq.py \
 	--predict_with_generate \
 	--use_auth_token
 ```
-On a single V100, training should take approximately 10 hours, with a final cross-entropy loss of 
+On a single V100, training should take approximately 10 hours, with a final cross-entropy loss of
+
+If training on a different language, you should be sure to change the `language` argument. The `language` argument should be omitted for English speech recognition.
 
 #### Multi GPU Whisper Training
 The following example shows how to fine-tune the [Whisper small](https://huggingface.co/openai/whisper-small) checkpoint on the Hindi subset of [Common Voice 11](https://huggingface.co/datasets/mozilla-foundation/common_voice_11_0) using 8 GPU devices in half-precision:
