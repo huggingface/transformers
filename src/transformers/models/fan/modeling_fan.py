@@ -50,15 +50,10 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_timm_available,
     logging,
     replace_return_docstrings,
 )
 from .configuration_fan import FANConfig
-
-if is_timm_available():
-    from timm.models.layers import trunc_normal_
-
 
 logger = logging.get_logger(__name__)
 
@@ -108,6 +103,8 @@ class FANModelOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+        backbone_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` only available when backbone is hybrid (ConvNeXt).
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -146,6 +143,8 @@ class FANSemanticSegmenterOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+        backbone_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` only available when backbone is hybrid (ConvNeXt).
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -175,6 +174,8 @@ class FANImageClassifierOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+        backbone_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` only available when backbone is hybrid (ConvNeXt).
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -1608,7 +1609,7 @@ class FANModel(FANPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
+        output_type=FANModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -1670,9 +1671,9 @@ class FANModel(FANPreTrainedModel):
 
         return FANModelOutput(
             last_hidden_state=sequence_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-            backbone_hidden_states=embeddings_encoder_states,
+            hidden_states=encoder_outputs.hidden_states if output_hidden_states else None,
+            attentions=encoder_outputs.attentions if output_attentions else None,
+            backbone_hidden_states=embeddings_encoder_states if output_hidden_states else None,
         )
 
 
@@ -1720,7 +1721,7 @@ class FANForImageClassification(FANPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(FAN_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=FANImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values,
@@ -1764,6 +1765,11 @@ class FANForImageClassification(FANPreTrainedModel):
         Predicted class: maillot
         ```"""
 
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
         outputs = self.fan(
             pixel_values,
             output_attentions=output_attentions,
@@ -1805,9 +1811,9 @@ class FANForImageClassification(FANPreTrainedModel):
         return FANImageClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            backbone_hidden_states=outputs.backbone_hidden_states,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            attentions=outputs.attentions if output_attentions else None,
+            backbone_hidden_states=outputs.backbone_hidden_states if output_hidden_states else None,
         )
 
 
@@ -1919,7 +1925,7 @@ class FANForSemanticSegmentation(FANPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(FAN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=SemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=FANSemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
