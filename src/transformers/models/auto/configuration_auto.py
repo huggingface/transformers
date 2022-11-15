@@ -30,7 +30,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
         ("albert", "AlbertConfig"),
-        ("audio-spectrogram-transformer", "AudioSpectrogramTransformerConfig"),
+        ("audio-spectrogram-transformer", "ASTConfig"),
         ("bart", "BartConfig"),
         ("beit", "BeitConfig"),
         ("bert", "BertConfig"),

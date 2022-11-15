@@ -30,7 +30,7 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-class AudioSpectrogramTransformerFeatureExtractor(SequenceFeatureExtractor):
+class ASTFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Audio Spectrogram Transformer feature extractor.
 
@@ -55,7 +55,7 @@ class AudioSpectrogramTransformerFeatureExtractor(SequenceFeatureExtractor):
             The standard deviation value used to normalize the log-Mel features. Uses the AudioSet standard deviation
             by default.
         return_attention_mask (`bool`, *optional*, defaults to `False`):
-            Whether or not [`~AudioSpectrogramTransformerFeatureExtractor.__call__`] should return `attention_mask`.
+            Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
     """
 
     model_input_names = ["input_values", "attention_mask"]

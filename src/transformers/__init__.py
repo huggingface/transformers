@@ -124,7 +124,7 @@ _import_structure = {
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.audio_spectrogram_transformer": [
         "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "AudioSpectrogramTransformerConfig",
+        "ASTConfig",
     ],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -860,10 +860,10 @@ else:
     _import_structure["models.audio_spectrogram_transformer"].extend(
         [
             "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "AudioSpectrogramTransformerForSequenceClassification",
-            "AudioSpectrogramTransformerModel",
-            "AudioSpectrogramTransformerPreTrainedModel",
-            "AudioSpectrogramTransformerFeatureExtractor",
+            "ASTForSequenceClassification",
+            "ASTModel",
+            "ASTPreTrainedModel",
+            "ASTFeatureExtractor",
         ]
     )
     _import_structure["models.albert"].extend(
@@ -3315,7 +3315,7 @@ if TYPE_CHECKING:
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
     from .models.audio_spectrogram_transformer import (
         AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        AudioSpectrogramTransformerConfig,
+        ASTConfig,
     )
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -3972,10 +3972,10 @@ if TYPE_CHECKING:
         # PyTorch model imports
         from .models.audio_spectrogram_transformer import (
             AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            AudioSpectrogramTransformerFeatureExtractor,
-            AudioSpectrogramTransformerForSequenceClassification,
-            AudioSpectrogramTransformerModel,
-            AudioSpectrogramTransformerPreTrainedModel,
+            ASTFeatureExtractor,
+            ASTForSequenceClassification,
+            ASTModel,
+            ASTPreTrainedModel,
         )
         from .models.auto import (
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,

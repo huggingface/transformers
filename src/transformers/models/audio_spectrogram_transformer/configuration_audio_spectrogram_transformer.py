@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" AudioSpectrogramTransformer model configuration"""
+""" Audio Spectogram Transformer (AST) model configuration"""
 
 
 from ...configuration_utils import PretrainedConfig
@@ -28,12 +28,11 @@ AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class AudioSpectrogramTransformerConfig(PretrainedConfig):
+class ASTConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AudioSpectrogramTransformerModel`]. It is used to
-    instantiate an AudioSpectrogramTransformer model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    AudioSpectrogramTransformer
+    This is the configuration class to store the configuration of a [`ASTModel`]. It is used to instantiate an AST
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the AST
     [MIT/ast-finetuned-audioset-10-10-0.4593](https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593)
     architecture.
 
@@ -76,13 +75,13 @@ class AudioSpectrogramTransformerConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import AudioSpectrogramTransformerConfig, AudioSpectrogramTransformerModel
+    >>> from transformers import ASTConfig, ASTModel
 
-    >>> # Initializing a AudioSpectrogramTransformer MIT/ast-finetuned-audioset-10-10-0.4593 style configuration
-    >>> configuration = AudioSpectrogramTransformerConfig()
+    >>> # Initializing a AST MIT/ast-finetuned-audioset-10-10-0.4593 style configuration
+    >>> configuration = ASTConfig()
 
     >>> # Initializing a model (with random weights) from the MIT/ast-finetuned-audioset-10-10-0.4593 style configuration
-    >>> model = AudioSpectrogramTransformerModel(configuration)
+    >>> model = ASTModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

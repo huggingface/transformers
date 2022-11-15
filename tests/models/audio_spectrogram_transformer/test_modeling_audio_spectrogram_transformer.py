@@ -18,7 +18,7 @@ import inspect
 import unittest
 
 from huggingface_hub import hf_hub_download
-from transformers import AudioSpectrogramTransformerConfig
+from transformers import ASTConfig
 from transformers.testing_utils import require_torch, require_torchaudio, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_torchaudio_available
 
@@ -30,7 +30,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import AudioSpectrogramTransformerForSequenceClassification, AudioSpectrogramTransformerModel
+    from transformers import ASTForSequenceClassification, ASTModel
     from transformers.models.audio_spectrogram_transformer.modeling_audio_spectrogram_transformer import (
         AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
@@ -39,10 +39,10 @@ if is_torch_available():
 if is_torchaudio_available():
     import torchaudio
 
-    from transformers import AudioSpectrogramTransformerFeatureExtractor
+    from transformers import ASTFeatureExtractor
 
 
-class AudioSpectrogramTransformerModelTester:
+class ASTModelTester:
     def __init__(
         self,
         parent,
@@ -85,7 +85,7 @@ class AudioSpectrogramTransformerModelTester:
         self.frequency_stride = frequency_stride
         self.time_stride = time_stride
 
-        # in AudioSpectrogramTransformer, the seq length equals the number of patches + 2 (we add 2 for the [CLS] and distillation tokens)
+        # in AST, the seq length equals the number of patches + 2 (we add 2 for the [CLS] and distillation tokens)
         frequency_out_dimension = (self.frequency_dimension - self.patch_size) // self.frequency_stride + 1
         time_out_dimension = (self.time_dimension - self.patch_size) // self.time_stride + 1
         num_patches = frequency_out_dimension * time_out_dimension
@@ -103,7 +103,7 @@ class AudioSpectrogramTransformerModelTester:
         return config, input_values, labels
 
     def get_config(self):
-        return AudioSpectrogramTransformerConfig(
+        return ASTConfig(
             patch_size=self.patch_size,
             time_dimension=self.time_dimension,
             frequency_dimension=self.frequency_dimension,
@@ -121,7 +121,7 @@ class AudioSpectrogramTransformerModelTester:
         )
 
     def create_and_check_model(self, config, input_values, labels):
-        model = AudioSpectrogramTransformerModel(config=config)
+        model = ASTModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_values)
@@ -139,16 +139,16 @@ class AudioSpectrogramTransformerModelTester:
 
 
 @require_torch
-class AudioSpectrogramTransformerModelTest(ModelTesterMixin, unittest.TestCase):
+class ASTModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as AudioSpectrogramTransformer does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as AST does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (
         (
-            AudioSpectrogramTransformerModel,
-            AudioSpectrogramTransformerForSequenceClassification,
+            ASTModel,
+            ASTForSequenceClassification,
         )
         if is_torch_available()
         else ()
@@ -159,15 +159,13 @@ class AudioSpectrogramTransformerModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = AudioSpectrogramTransformerModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=AudioSpectrogramTransformerConfig, has_text_modality=False, hidden_size=37
-        )
+        self.model_tester = ASTModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ASTConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="AudioSpectrogramTransformer does not use inputs_embeds")
+    @unittest.skip(reason="AST does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -199,7 +197,7 @@ class AudioSpectrogramTransformerModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = AudioSpectrogramTransformerModel.from_pretrained(model_name)
+            model = ASTModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -216,11 +214,11 @@ def prepare_audio():
 
 @require_torch
 @require_torchaudio
-class AudioSpectrogramTransformerModelIntegrationTest(unittest.TestCase):
+class ASTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            AudioSpectrogramTransformerFeatureExtractor.from_pretrained("MIT/ast-finetuned-audioset-10-10-0.4593")
+            ASTFeatureExtractor.from_pretrained("MIT/ast-finetuned-audioset-10-10-0.4593")
             if is_torchaudio_available()
             else None
         )
@@ -229,9 +227,9 @@ class AudioSpectrogramTransformerModelIntegrationTest(unittest.TestCase):
     def test_inference_audio_classification(self):
 
         feature_extractor = self.default_feature_extractor
-        model = AudioSpectrogramTransformerForSequenceClassification.from_pretrained(
-            "MIT/ast-finetuned-audioset-10-10-0.4593"
-        ).to(torch_device)
+        model = ASTForSequenceClassification.from_pretrained("MIT/ast-finetuned-audioset-10-10-0.4593").to(
+            torch_device
+        )
 
         feature_extractor = self.default_feature_extractor
         audio, sampling_rate = prepare_audio()

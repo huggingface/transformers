@@ -20,7 +20,7 @@ import unittest
 
 import numpy as np
 
-from transformers import AudioSpectrogramTransformerFeatureExtractor
+from transformers import ASTFeatureExtractor
 from transformers.testing_utils import require_torch
 from transformers.utils.import_utils import is_torch_available
 
@@ -47,7 +47,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     return values
 
 
-class AudioSpectrogramTransformerFeatureExtractionTester(unittest.TestCase):
+class ASTFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -99,12 +99,12 @@ class AudioSpectrogramTransformerFeatureExtractionTester(unittest.TestCase):
         return speech_inputs
 
 
-class AudioSpectrogramTransformerFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
 
-    feature_extraction_class = AudioSpectrogramTransformerFeatureExtractor
+    feature_extraction_class = ASTFeatureExtractor
 
     def setUp(self):
-        self.feat_extract_tester = AudioSpectrogramTransformerFeatureExtractionTester(self)
+        self.feat_extract_tester = ASTFeatureExtractionTester(self)
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
@@ -159,6 +159,6 @@ class AudioSpectrogramTransformerFeatureExtractionTest(SequenceFeatureExtraction
         # fmt: on
 
         input_speech = self._load_datasamples(1)
-        feaure_extractor = AudioSpectrogramTransformerFeatureExtractor()
+        feaure_extractor = ASTFeatureExtractor()
         input_values = feaure_extractor(input_speech, return_tensors="pt").input_values
         self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-4))

@@ -29,7 +29,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
         ("albert", "AlbertModel"),
-        ("audio-spectrogram-transformer", "AudioSpectrogramTransformerModel"),
+        ("audio-spectrogram-transformer", "ASTModel"),
         ("bart", "BartModel"),
         ("beit", "BeitModel"),
         ("bert", "BertModel"),
@@ -785,7 +785,7 @@ MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Audio Classification mapping
-        ("audio-spectrogram-transformer", "AudioSpectrogramTransformerForSequenceClassification"),
+        ("audio-spectrogram-transformer", "ASTForSequenceClassification"),
         ("data2vec-audio", "Data2VecAudioForSequenceClassification"),
         ("hubert", "HubertForSequenceClassification"),
         ("sew", "SEWForSequenceClassification"),

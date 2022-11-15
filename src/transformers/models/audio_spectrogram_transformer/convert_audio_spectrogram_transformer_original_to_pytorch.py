@@ -24,11 +24,7 @@ import torchaudio
 from datasets import load_dataset
 
 from huggingface_hub import hf_hub_download
-from transformers import (
-    AudioSpectrogramTransformerConfig,
-    AudioSpectrogramTransformerFeatureExtractor,
-    AudioSpectrogramTransformerForSequenceClassification,
-)
+from transformers import ASTConfig, ASTFeatureExtractor, ASTForSequenceClassification
 from transformers.utils import logging
 
 
@@ -37,7 +33,7 @@ logger = logging.get_logger(__name__)
 
 
 def get_audio_spectrogram_transformer_config(model_name):
-    config = AudioSpectrogramTransformerConfig()
+    config = ASTConfig()
 
     if "10-10" in model_name:
         pass
@@ -197,7 +193,7 @@ def convert_audio_spectrogram_transformer_checkpoint(model_name, pytorch_dump_fo
     new_state_dict = convert_state_dict(state_dict, config)
 
     # load 🤗 model
-    model = AudioSpectrogramTransformerForSequenceClassification(config)
+    model = ASTForSequenceClassification(config)
     model.eval()
 
     model.load_state_dict(new_state_dict)
@@ -206,7 +202,7 @@ def convert_audio_spectrogram_transformer_checkpoint(model_name, pytorch_dump_fo
     # source: https://github.com/YuanGongND/ast/blob/79e873b8a54d0a3b330dd522584ff2b9926cd581/src/run.py#L62
     mean = -4.2677393 if "speech-commands" not in model_name else -6.845978
     std = 4.5689974 if "speech-commands" not in model_name else 5.5654526
-    feature_extractor = AudioSpectrogramTransformerFeatureExtractor(mean=mean, std=std)
+    feature_extractor = ASTFeatureExtractor(mean=mean, std=std)
 
     if "speech-commands" in model_name:
         dataset = load_dataset("speech_commands", "v0.02", split="validation")

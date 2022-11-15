@@ -25,7 +25,7 @@ The abstract from the paper is the following:
 Tips:
 
 - When fine-tuning the Audio Spectrogram Transformer (AST) on your own dataset, it's recommended to take care of the input normalization (to make
-sure the input has mean of 0 and std of 0.5). [`AudioSpectrogramTransformerFeatureExtractor`] takes care of this. Note that it uses the AudioSet
+sure the input has mean of 0 and std of 0.5). [`ASTFeatureExtractor`] takes care of this. Note that it uses the AudioSet
 mean and std by default. You can check [`ast/src/get_norm_stats.py`](https://github.com/YuanGongND/ast/blob/master/src/get_norm_stats.py) to see how
 the authors compute the stats for a downstream dataset.
 - Note that the AST needs a low learning rate (the authors use a 10 times smaller learning rate compared to their CNN model proposed in the
@@ -40,21 +40,21 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/YuanGongND/ast).
 
 
-## AudioSpectrogramTransformerConfig
+## ASTConfig
 
-[[autodoc]] AudioSpectrogramTransformerConfig
+[[autodoc]] ASTConfig
 
-## AudioSpectrogramTransformerFeatureExtractor
+## ASTFeatureExtractor
 
-[[autodoc]] AudioSpectrogramTransformerFeatureExtractor
+[[autodoc]] ASTFeatureExtractor
     - __call__
 
-## AudioSpectrogramTransformerModel
+## ASTModel
 
-[[autodoc]] AudioSpectrogramTransformerModel
+[[autodoc]] ASTModel
     - forward
 
-## AudioSpectrogramTransformerForSequenceClassification
+## ASTForSequenceClassification
 
-[[autodoc]] AudioSpectrogramTransformerForSequenceClassification
+[[autodoc]] ASTForSequenceClassification
     - forward
