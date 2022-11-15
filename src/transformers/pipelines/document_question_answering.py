@@ -117,6 +117,8 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
 
     ```
 
+    [Using pipelines in a webserver or with a dataset](../pipeline_tutorial)
+
     This document question answering pipeline can currently be loaded from [`pipeline`] using the following task
     identifier: `"document-question-answering"`.
 
