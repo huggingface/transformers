@@ -32,7 +32,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
-from ...activations import ACT2FN
+from ...activations import ACT2CLS, ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1277,35 +1277,6 @@ FAN_INPUTS_DOCSTRING = r"""
             details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range `[0, config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_attention_heads,)` or `(num_layers, num_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert *input_ids* indices into associated vectors
-            than the model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -1326,7 +1297,7 @@ class FANEmbeddings(FANPreTrainedModel):
             img_size[0] % config.patch_size == 0
         ), "`patch_size` should divide image dimensions evenly"
 
-        act_layer = config.act_layer or nn.GELU
+        act_layer = ACT2CLS[config.act_layer] if config.act_layer else nn.GELU
 
         if config.backbone == None:
             self.patch_embed = ConvPatchEmbed(
@@ -1408,7 +1379,9 @@ class FANEncoderLayer(FANPreTrainedModel):
             [config.hidden_size] * config.num_hidden_layers if config.channel_dims is None else config.channel_dims
         )
         norm_layer = config.norm_layer or partial(nn.LayerNorm, eps=1e-6)
-        act_layer = config.act_layer or nn.GELU
+        # act_layer = config.act_layer or nn.GELU
+        act_layer = ACT2CLS[config.act_layer] if config.act_layer else nn.GELU
+
         downsample = None
 
         if config.se_mlp:
@@ -1464,7 +1437,9 @@ class FANEncoder(FANPreTrainedModel):
             [config.hidden_size] * config.num_hidden_layers if config.channel_dims is None else config.channel_dims
         )
         norm_layer = config.norm_layer or partial(nn.LayerNorm, eps=1e-6)
-        act_layer = config.act_layer or nn.GELU
+        # act_layer = config.act_layer or nn.GELU
+        act_layer = ACT2CLS[config.act_layer] if config.act_layer else nn.GELU
+
         self.blocks = nn.ModuleList([FANEncoderLayer(config, i) for i in range(config.num_hidden_layers)])
         self.num_features = self.hidden_size = channel_dims[-1]
         self.cls_token = nn.Parameter(torch.zeros(1, 1, channel_dims[-1]))
@@ -1577,11 +1552,6 @@ class FANModel(FANPreTrainedModel):
     all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani,
     Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
-    To behave as an decoder the model needs to be initialized with the
-    `is_decoder` argument of the configuration set to `True`.
-    To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder`
-    argument and `add_cross_attention` set to `True`; an
-    `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
     def __init__(self, config):
@@ -1619,26 +1589,6 @@ class FANModel(FANPreTrainedModel):
         output_hidden_states=None,
         return_dict=True,
     ):
-        r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-            if the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
-            is used in the cross-attention if the model is configured as a decoder.
-            Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_attention_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-            decoding (see `past_key_values`).
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1679,10 +1629,7 @@ class FANModel(FANPreTrainedModel):
 
 class FANClassificationHead(nn.Module):
     """
-    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
-    height and width of a bounding box w.r.t. an image.
-
-    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the image classes logits
 
     """
 
@@ -1701,7 +1648,7 @@ class FANClassificationHead(nn.Module):
 # TODO: Update Image Classification Docstring
 @add_start_docstrings(
     """
-    DeiT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
+    FAN Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
     the [CLS] token) e.g. for ImageNet.
     """,
     FAN_START_DOCSTRING,
@@ -1710,11 +1657,11 @@ class FANForImageClassification(FANPreTrainedModel):
     def __init__(self, config: FANConfig):
         super().__init__(config)
 
-        # DETR encoder-decoder model
+        # FAN encoder model
         self.fan = FANModel(config)
 
         num_features = config.hidden_size if config.channel_dims is None else config.channel_dims[-1]
-        # Object detection heads
+        # Image clasification head
         self.head = FANClassificationHead(config.num_labels, num_features, config.norm_layer)
 
         # Initialize weights and apply final processing
@@ -1730,7 +1677,9 @@ class FANForImageClassification(FANPreTrainedModel):
         output_hidden_states=None,
         return_dict=True,
     ):
+        #
         # TODO: Update Docstring appropiately
+        # TODO: Replace Deit with FAN
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
