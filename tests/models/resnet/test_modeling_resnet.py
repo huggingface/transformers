@@ -120,9 +120,8 @@ class ResNetModelTester:
         result = model(pixel_values)
 
         # verify hidden states
-        self.parent.assertEqual(len(result.hidden_states), 4)
-        self.parent.assertListEqual(result.stage_names, config.out_features)
-        self.parent.assertListEqual(list(result.hidden_states[0].shape), [3, 10, 8, 8])
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [3, 10, 8, 8])
 
         # verify channels
         self.parent.assertListEqual(model.channels, config.hidden_sizes)

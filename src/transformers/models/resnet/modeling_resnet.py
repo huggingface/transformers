@@ -503,4 +503,4 @@ class ResNetBackbone(ResNetPreTrainedModel):
             if stage in self.out_features:
                 feature_maps.append(hidden_states[idx])
 
-        return BackboneOutput(stage_names=self.out_features, hidden_states=feature_maps)
+        return BackboneOutput(feature_maps=feature_maps)
