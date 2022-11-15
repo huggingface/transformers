@@ -36,7 +36,7 @@ original_feature_mapping = {
     "num_classes": "num_labels",
     "embed_dim": "hidden_size",
 }
-# TODO: Rename embed_dim to hidden_size
+# DONE: Rename embed_dim to hidden_size
 # DONE: Rename num_classes to num_labels
 # TODO: FANConfig Attributes rewrite
 # TODO: FANConfig features rename

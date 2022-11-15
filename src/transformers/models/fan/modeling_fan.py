@@ -1814,7 +1814,7 @@ class FANDecodeHead(FANPreTrainedModel):
             )
         else:
             encoder_states = (reshape_hidden_state(encoder_hidden_states[idx]) for idx in out_index) + (
-                encoder_hidden_state[-1],
+                encoder_hidden_states[-1],
             )
 
         all_hidden_states = ()
