@@ -141,6 +141,7 @@ from . import (
     squeezebert,
     swin,
     swinv2,
+    switch_transformers,
     t5,
     table_transformer,
     tapas,
