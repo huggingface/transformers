@@ -737,7 +737,7 @@ class JukeboxVQVAE(PreTrainedModel):
         ]
         return self.decode(music_tokens)
 
-    def forward(self, raw_audio):
+    def forward(self, raw_audio: torch.FloatTensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass of the VQ-VAE, encodes the `raw_audio` to latent states, which are then decoded for each level.
         The commit loss, which ensure that the encoder's computed embeddings are close to the codebook vectors, is
