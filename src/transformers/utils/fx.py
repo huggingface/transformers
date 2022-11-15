@@ -59,6 +59,9 @@ logger = logging.get_logger(__name__)
 _IS_IN_DEBUG_MODE = os.environ.get("FX_DEBUG_MODE", "").upper() in ENV_VARS_TRUE_VALUES
 
 
+DEVICE = "cpu"
+
+
 def _generate_supported_model_class_names(
     model_name: Type[PretrainedConfig],
     supported_tasks: Optional[Union[str, List[str]]] = None,
@@ -162,13 +165,13 @@ _SUPPORTED_MODELS = tuple(sorted(set(_REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPOR
 
 
 def torch_nn_embedding(self, input):
-    return torch.empty(*input.shape, self.weight.shape[-1], device="meta")
+    return torch.empty(*input.shape, self.weight.shape[-1], device=DEVICE)
 
 
 def torch_nn_functional_embedding(
     input, weight, padding_idx=None, max_norm=None, norm_type=2.0, scale_grad_by_freq=False, sparse=False
 ):
-    return torch.empty(*input.shape, weight.shape[-1], device="meta")
+    return torch.empty(*input.shape, weight.shape[-1], device=DEVICE)
 
 
 def torch_nn_layernorm(self, input):
@@ -180,7 +183,7 @@ def torch_nn_groupnorm(self, input):
 
 
 def torch_nn_linear(self, input):
-    return torch.empty(input.shape[:-1] + (self.out_features,), device="meta")
+    return torch.empty(input.shape[:-1] + (self.out_features,), device=DEVICE)
 
 
 def torch_relu(x):
@@ -200,7 +203,7 @@ def torch_nn_functional_relu(x, inplace=False):
 def torch_where(condition, x, y):
     # torch.where returns the broadcasted tensor of condition, x, and y,
     # so hack it by using addition
-    return condition.to(device="meta") + x.to(device="meta") + y.to(device="meta")
+    return condition.to(device=DEVICE) + x.to(device=DEVICE) + y.to(device=DEVICE)
 
 
 def torch_abs(input, *, out=None):
@@ -227,12 +230,12 @@ def torch_arange(*args, **kwargs):
         step = int(step)
     step = kwargs.get("step", step)
     dtype = kwargs.get("dtype")
-    return torch.empty((end - start) // step, dtype=dtype, device="meta")
+    return torch.empty((end - start) // step, dtype=dtype, device=DEVICE)
 
 
 def torch_full(*args, **kwargs):
     args = list(args)
-    if isinstance(args[1], torch.Tensor) and args[1].device == torch.device("meta"):
+    if isinstance(args[1], torch.Tensor) and args[1].device == torch.device(DEVICE):
         args[1] = 1  # Any value.
     kwargs_without_device = dict(kwargs)
     kwargs_without_device.pop("device", None)
@@ -250,7 +253,7 @@ def torch_cat(tensors, dim=None, axis=None, *, out=None):
     shape = list(shapes[0])
     concatenated_dim = sum(shape[dim] for shape in shapes)
     final_shape = shape[:dim] + [concatenated_dim] + shape[dim + 1 :]
-    return torch.empty(final_shape, device="meta")
+    return torch.empty(final_shape, device=DEVICE)
 
 
 def torch_stack(tensors, dim=None, axis=None, *, out=None):
@@ -262,21 +265,21 @@ def torch_stack(tensors, dim=None, axis=None, *, out=None):
         dim = tensors[0].dim() + 1 + dim
     shape = list(tensors[0].shape)
     shape.insert(dim, len(tensors))
-    return torch.empty(shape, device="meta")
+    return torch.empty(shape, device=DEVICE)
 
 
 def torch_add(input, other, *, alpha=1, out=None):
     if not isinstance(input, torch.Tensor):
-        return torch.empty_like(other, device="meta")
+        return torch.empty_like(other, device=DEVICE)
     if not isinstance(other, torch.Tensor):
-        return torch.empty_like(input, device="meta")
+        return torch.empty_like(input, device=DEVICE)
     max_length = max(input.dim(), other.dim())
     input_shape = list(input.shape) + [1] * (max_length - input.dim())
     other_shape = list(other.shape) + [1] * (max_length - other.dim())
     shape = []
     for i in range(max_length):
         shape.append(max(input_shape[i], other_shape[i]))
-    return torch.empty(shape, device="meta")
+    return torch.empty(shape, device=DEVICE)
 
 
 def torch_mul(input, other, *, out=None):
@@ -319,8 +322,8 @@ def torch_matmul(input, other, *, out=None):
         if d2 == 1:
             shape.pop(-1)
     if shape is None:
-        return torch.tensor(0.0, device="meta")
-    return torch.empty(*shape, device="meta")
+        return torch.tensor(0.0, device=DEVICE)
+    return torch.empty(*shape, device=DEVICE)
 
 
 def torch_bmm(input, mat2, *, out=None):
@@ -328,7 +331,7 @@ def torch_bmm(input, mat2, *, out=None):
         raise ValueError("Don't support in-place bmm for MetaTensor analysis")
     batch_size, n, m = input.shape
     _, _, p = mat2.shape
-    return torch.empty(batch_size, n, p, device="meta")
+    return torch.empty(batch_size, n, p, device=DEVICE)
 
 
 def torch_baddbmm(input, batch1, batch2, *, beta=1, alpha=1, out=None):
@@ -344,20 +347,20 @@ def torch_tensor_baddbmm(self, batch1, batch2, *, beta=1, alpha=1, out=None):
 def torch_einsum(equation, *operands):
     # TODO: infer shape without performing the computation, this might be quite hard.
     concrete_operands = (torch.empty_like(operand, device="cpu") for operand in operands)
-    return torch.einsum(equation, *concrete_operands).to("meta")
+    return torch.einsum(equation, *concrete_operands).to(DEVICE)
 
 
 def torch_tensor_repeat(self, *sizes):
     shape = list(self.shape)
     for i, x in enumerate(sizes):
         shape[i] *= x
-    return torch.empty(shape, device="meta")
+    return torch.empty(shape, device=DEVICE)
 
 
 def torch_index_select(input, dim, index, *, out=None):
     shape = list(input.shape)
     shape[dim] = len(index)
-    return torch.empty(*shape, device="meta")
+    return torch.empty(*shape, device=DEVICE)
 
 
 def torch_tensor_index_select(self, dim, index):
@@ -391,7 +394,7 @@ def torch_nn_conv1d(self, input):
         )
         shape[-1] = l_out
     shape[-2] = self.out_channels
-    return torch.empty(shape, device="meta")
+    return torch.empty(shape, device=DEVICE)
 
 
 def torch_nn_conv2d(self, input):
@@ -412,7 +415,7 @@ def torch_nn_conv2d(self, input):
         )
         shape[-2:] = [h_out, w_out]
     shape[-3] = self.out_channels
-    return torch.empty(shape, device="meta")
+    return torch.empty(shape, device=DEVICE)
 
 
 def torch_squeeze(input, dim=None):
@@ -429,7 +432,7 @@ def torch_squeeze(input, dim=None):
                 continue
             new_shape.append(dim_value)
         shape = new_shape
-    return torch.empty(shape, device="meta")
+    return torch.empty(shape, device=DEVICE)
 
 
 def torch_tensor_squeeze(self, dim=None):
@@ -441,7 +444,7 @@ def torch_unsqueeze(input, dim):
     if dim < 0:
         dim = input.dim() + 1 + dim
     shape.insert(dim, 1)
-    return torch.empty(shape, device="meta")
+    return torch.empty(shape, device=DEVICE)
 
 
 def torch_tensor_unsqueeze(self, dim):
@@ -451,16 +454,16 @@ def torch_tensor_unsqueeze(self, dim):
 def torch_unique_consecutive(input, **kwargs):
     output = torch.unique_consecutive(torch.zeros_like(input, device="cpu"), **kwargs)
     if isinstance(output, torch.Tensor):
-        return output.to("meta")
+        return output.to(DEVICE)
     else:
-        return tuple(map(output, lambda x: x.to("meta")))
+        return tuple(map(output, lambda x: x.to(DEVICE)))
 
 
 def torch_nn_functional_one_hot(tensor, num_classes=-1):
     if num_classes < 0:
         raise ValueError("Don't support automatic num_classes inference for MetaTensor analysis")
     shape = list(tensor.shape) + [num_classes]
-    return torch.empty(shape, device="meta")
+    return torch.empty(shape, device=DEVICE)
 
 
 def torch_nn_mseloss(self, input, target):
@@ -468,7 +471,7 @@ def torch_nn_mseloss(self, input, target):
         shape = target.shape
     else:
         shape = (1,)
-    return torch.empty(shape, device="meta")
+    return torch.empty(shape, device=DEVICE)
 
 
 def torch_nn_crossentropyloss(self, input, target):
@@ -476,7 +479,7 @@ def torch_nn_crossentropyloss(self, input, target):
         shape = target.shape
     else:
         shape = (1,)
-    return torch.empty(shape, device="meta")
+    return torch.empty(shape, device=DEVICE)
 
 
 def torch_nn_bcewithlogitsloss(self, input, target):
@@ -484,7 +487,7 @@ def torch_nn_bcewithlogitsloss(self, input, target):
         shape = target.shape
     else:
         shape = (1,)
-    return torch.empty(shape, device="meta")
+    return torch.empty(shape, device=DEVICE)
 
 
 def operator_getitem(a, b):
@@ -502,7 +505,7 @@ def operator_getitem(a, b):
             b = tuple(map(to_concrete, b))
         else:
             b = to_concrete(b)
-        return operator.getitem(torch.empty_like(a, device="cpu"), b).to("meta")
+        return operator.getitem(torch.empty_like(a, device="cpu"), b).to(DEVICE)
     return operator.getitem(a, b)
 
 
@@ -623,7 +626,7 @@ class MetaDeviceAttribute(HFAttribute):
 def _proxies_to_metas(v):
     """Returns the underlying metadata for HFProxies, and behaves like the identity for the others."""
     if isinstance(v, MetaDeviceAttribute):
-        return "meta"
+        return DEVICE
     if isinstance(v, torch.fx.Proxy):
         if not (isinstance(v, HFProxy) and hasattr(v, "_metadata")):
             raise RuntimeError(f"No metadata was found for {v}")
@@ -833,7 +836,7 @@ class HFTracer(Tracer):
             # this will break and you will likely see issues where we cannot infer
             # the size of the output.
             if "device" in kwargs:
-                kwargs["device"] = "meta"
+                kwargs["device"] = DEVICE
 
         try:
             args_metas = torch.fx.node.map_aggregate(args, _proxies_to_metas)
@@ -843,7 +846,7 @@ class HFTracer(Tracer):
                 meta_target = _MANUAL_META_OVERRIDES.get(target, target)
                 meta_out = meta_target(*args_metas, **kwargs_metas)
                 if isinstance(meta_out, torch.Tensor):
-                    meta_out = meta_out.to(device="meta")
+                    meta_out = meta_out.to(device=DEVICE)
             elif kind == "call_method":
                 method = getattr(args_metas[0].__class__, target)
                 meta_target = _MANUAL_META_OVERRIDES.get(method, method)
@@ -869,7 +872,7 @@ class HFTracer(Tracer):
                     for atom in atoms:
                         attr_itr = getattr(attr_itr, atom)
                     if isinstance(attr_itr, torch.Tensor):
-                        meta_out = attr_itr.to(device="meta")
+                        meta_out = attr_itr.to(device=DEVICE)
                     else:
                         meta_out = attr_itr
                 finally:
@@ -1006,7 +1009,7 @@ class HFTracer(Tracer):
                 )
 
         concrete_metas = {
-            input_name: input_.to("meta") if isinstance(input_, torch.Tensor) else input_
+            input_name: input_.to(DEVICE) if isinstance(input_, torch.Tensor) else input_
             for input_name, input_ in inputs.items()
         }
         for param in sig.parameters.values():
