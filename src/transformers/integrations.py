@@ -1317,9 +1317,7 @@ class ClearMLCallback(TrainerCallback):
     """
 
     def __init__(self):
-        has_clearml = is_clearml_available()
-
-        if has_clearml:
+        if is_clearml_available():
             import clearml
 
             self._clearml = clearml
