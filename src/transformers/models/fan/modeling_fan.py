@@ -1276,7 +1276,6 @@ FAN_INPUTS_DOCSTRING = r"""
             Pixel values can be obtained using [`FANFeatureExtractor`]. See [`FANFeatureExtractor.__call__`] for
             details.
 
-            [What are input IDs?](../glossary#input-ids)
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -1677,9 +1676,6 @@ class FANForImageClassification(FANPreTrainedModel):
         output_hidden_states=None,
         return_dict=True,
     ):
-        #
-        # TODO: Update Docstring appropiately
-        # TODO: Replace Deit with FAN
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -1691,27 +1687,18 @@ class FANForImageClassification(FANPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import DeiTFeatureExtractor, DeiTForImageClassification
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-
         >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> # note: we are loading a DeiTForImageClassificationWithTeacher from the hub here,
-        >>> # so the head will be randomly initialized, hence the predictions will be random
-        >>> feature_extractor = DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
-        >>> model = DeiTForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224")
-
+        >>> feature_extractor = FANFeatureExtractor.from_pretrained("ksmcg/fan_base_18_p16_224")
+        >>> model = FANForImageClassification.from_pretrained("ksmcg/fan_base_18_p16_224")
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        Predicted class: maillot
+        Predicted class: tabby, tabby cat
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
