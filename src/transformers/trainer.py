@@ -3193,7 +3193,7 @@ class Trainer:
         """
         has_labels = False if len(self.label_names) == 0 else all(inputs.get(k) is not None for k in self.label_names)
         # For CLIP-like models capable of returning loss values.
-        can_compute_loss = True if len(self.label_names) == 0 and self.can_return_loss else False
+        loss_without_labels = True if len(self.label_names) == 0 and self.can_return_loss else False
 
         inputs = self._prepare_inputs(inputs)
         if ignore_keys is None:
@@ -3203,7 +3203,7 @@ class Trainer:
                 ignore_keys = []
 
         # labels may be popped when computing the loss (label smoothing for instance) so we grab them first.
-        if has_labels or can_compute_loss:
+        if has_labels or loss_without_labels:
             labels = nested_detach(tuple(inputs.get(name) for name in self.label_names))
             if len(labels) == 1:
                 labels = labels[0]
@@ -3213,7 +3213,7 @@ class Trainer:
         with torch.no_grad():
             if is_sagemaker_mp_enabled():
                 raw_outputs = smp_forward_only(model, inputs)
-                if has_labels or can_compute_loss:
+                if has_labels or loss_without_labels:
                     if isinstance(raw_outputs, dict):
                         loss_mb = raw_outputs["loss"]
                         logits_mb = tuple(v for k, v in raw_outputs.items() if k not in ignore_keys + ["loss"])
@@ -3231,7 +3231,7 @@ class Trainer:
                         logits_mb = raw_outputs
                     logits = smp_nested_concat(logits_mb)
             else:
-                if has_labels or can_compute_loss:
+                if has_labels or loss_without_labels:
                     with self.compute_loss_context_manager():
                         loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                     loss = loss.mean().detach()
