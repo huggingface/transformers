@@ -20,7 +20,7 @@ import numpy as np
 from datasets import load_dataset
 
 from huggingface_hub import hf_hub_download
-from transformers.testing_utils import require_torch, require_vision, slow
+from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin, prepare_image_inputs
@@ -347,7 +347,6 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         common(is_instance_map=False, segmentation_type="pil")
         common(is_instance_map=True, segmentation_type="pil")
 
-    @slow
     def test_integration_instance_segmentation(self):
         # load 2 images and corresponding annotations from the hub
         repo_id = "nielsr/image-segmentation-toy-data"

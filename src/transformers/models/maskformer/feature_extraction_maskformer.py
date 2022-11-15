@@ -226,7 +226,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             ImageNet std.
         ignore_index (`int`, *optional*):
             Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
-            denoted with 0 (background) will be replaced with `ignore_index`.
+            denoted with 0 (background) will be replaced with `ignore_index`. The ignore index of the loss function of
+            the model should then correspond to this ignore index.
         reduce_labels (`bool`, *optional*, defaults to `False`):
             Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
             is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
@@ -376,7 +377,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 A mapping between instance/segment ids and semantic category ids. If passed, `segmentation_maps` is
                 treated as an instance or panoptic segmentation map where each pixel represents an instance or segment
                 id. Can be provided as a single dictionary with a global / dataset-level mapping or as a list of
-                dictionaries (one per image), to map instance ids in each image separately.
+                dictionaries (one per image), to map instance ids in each image separately. Note that this assumes a
+                mapping before reduction of labels.
 
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
@@ -579,7 +581,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 A mapping between instance/segment ids and semantic category ids. If passed, `segmentation_maps` is
                 treated as an instance or panoptic segmentation map where each pixel represents an instance or segment
                 id. Can be provided as a single dictionary with a global / dataset-level mapping or as a list of
-                dictionaries (one per image), to map instance ids in each image separately.
+                dictionaries (one per image), to map instance ids in each image separately. Note that this assumes a
+                mapping before reduction of labels.
 
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
