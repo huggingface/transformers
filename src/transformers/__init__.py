@@ -305,6 +305,7 @@ _import_structure = {
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mt5": ["MT5Config"],
     "models.mvp": ["MvpConfig", "MvpTokenizer"],
+    "models.nat": ["NAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "NATConfig"],
     "models.nezha": ["NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP", "NezhaConfig"],
     "models.nllb": [],
     "models.nystromformer": [
@@ -1700,6 +1701,14 @@ else:
         ]
     )
     _import_structure["models.mt5"].extend(["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model"])
+    _import_structure["models.nat"].extend(
+        [
+            "NAT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "NATForImageClassification",
+            "NATModel",
+            "NATPreTrainedModel",
+        ]
+    )
     _import_structure["models.nezha"].extend(
         [
             "NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3449,6 +3458,7 @@ if TYPE_CHECKING:
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
     from .models.mvp import MvpConfig, MvpTokenizer
+    from .models.nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NATConfig
     from .models.nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
@@ -4594,6 +4604,12 @@ if TYPE_CHECKING:
             MvpForSequenceClassification,
             MvpModel,
             MvpPreTrainedModel,
+        )
+        from .models.nat import (
+            NAT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            NATForImageClassification,
+            NATModel,
+            NATPreTrainedModel,
         )
         from .models.nezha import (
             NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST,

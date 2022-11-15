@@ -108,6 +108,7 @@ from . import (
     mpnet,
     mt5,
     mvp,
+    nat,
     nezha,
     nllb,
     nystromformer,

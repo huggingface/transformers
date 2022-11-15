@@ -3762,6 +3762,30 @@ class MvpPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+NAT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class NATForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class NATModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class NATPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

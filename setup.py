@@ -284,6 +284,7 @@ extras["tf-speech"] = extras["audio"]
 extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
+extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
 
 
@@ -329,6 +330,7 @@ extras["all"] = (
     + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
+    + extras["natten"]
     + extras["codecarbon"]
     + extras["accelerate"]
 )
@@ -348,6 +350,7 @@ extras["dev-torch"] = (
     + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
+    + extras["natten"]
     + extras["codecarbon"]
     + extras["quality"]
     + extras["ja"]

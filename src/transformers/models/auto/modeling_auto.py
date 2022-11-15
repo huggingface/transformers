@@ -105,6 +105,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mpnet", "MPNetModel"),
         ("mt5", "MT5Model"),
         ("mvp", "MvpModel"),
+        ("nat", "NATModel"),
         ("nezha", "NezhaModel"),
         ("nllb", "M2M100Model"),
         ("nystromformer", "NystromformerModel"),
@@ -373,6 +374,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("levit", ("LevitForImageClassification", "LevitForImageClassificationWithTeacher")),
         ("mobilenet_v2", "MobileNetV2ForImageClassification"),
         ("mobilevit", "MobileViTForImageClassification"),
+        ("nat", "NATForImageClassification"),
         (
             "perceiver",
             (
