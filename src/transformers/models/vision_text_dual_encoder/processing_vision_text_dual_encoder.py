@@ -127,6 +127,11 @@ class VisionTextDualEncoderProcessor(ProcessorMixin):
         return self.tokenizer.decode(*args, **kwargs)
 
     @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
     def feature_extractor_class(self):
         warnings.warn(
             "`feature_extractor_class` is deprecated and will be removed in v4.27. Use `image_processor_class`"

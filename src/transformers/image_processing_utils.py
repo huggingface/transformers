@@ -497,7 +497,7 @@ def get_size_dict(
     elif isinstance(size, (tuple, list)) and not height_width_order:
         size_dict = {"height": size[1], "width": size[0]}
 
-    logger.warning(
+    logger.info(
         "The size parameter should be a dictionary with keys ('height', 'width'), ('shortest_edge', 'longest_edge')"
         f" or ('shortest_edge',) got {size}. Setting as {size_dict}.",
     )

@@ -1584,7 +1584,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[Seq2SeqTimeSeriesModelOutput, Tuple]:
         r"""
         Returns:
 
@@ -1747,7 +1747,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[Seq2SeqTimeSeriesModelOutput, Tuple]:
         r"""
         Returns:
 
