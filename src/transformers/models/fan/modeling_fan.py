@@ -1687,6 +1687,7 @@ class FANForImageClassification(FANPreTrainedModel):
         Examples:
 
         ```python
+        >>> from transformers import  FANForImageClassification, FANFeatureExtractor
         >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1881,21 +1882,20 @@ class FANForSemanticSegmentation(FANPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
+        >>> from transformers import FANForSemanticSegmentation, FANFeatureExtractor
         >>> from PIL import Image
         >>> import requests
-
-        >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
-        >>> model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
-
+        >>> feature_extractor = FANFeatureExtractor.from_pretrained("ksmcg/fan_base_16_p4_hybrid")
+        >>> # note: we are loading a FANForSemanticSegmentation from the hub here,
+        >>> # so the head will be randomly initialized, hence the predictions will be random
+        >>> model = FANForSemanticSegmentation.from_pretrained("ksmcg/fan_base_16_p4_hybrid")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits  # shape (batch_size, num_labels, height/4, width/4)
         >>> list(logits.shape)
-        [1, 150, 128, 128]
+        [1, 1000, 56, 56]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
