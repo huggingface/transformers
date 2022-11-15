@@ -25,7 +25,7 @@ from transformers import BartConfig, is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.utils import cached_property
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -424,7 +424,6 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     fx_compatible = True
     test_pruning = False
-    test_missing_keys = False
 
     def setUp(self):
         self.model_tester = BartModelTester(self)
@@ -1445,6 +1444,7 @@ class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, un
     fx_comptatible = True
     test_pruning = False
     is_encoder_decoder = False
+    test_missing_keys = False
 
     def setUp(
         self,

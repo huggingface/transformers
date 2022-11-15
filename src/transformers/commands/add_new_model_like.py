@@ -389,6 +389,7 @@ SPECIAL_PATTERNS = {
     "_CHECKPOINT_FOR_DOC =": "checkpoint",
     "_CONFIG_FOR_DOC =": "config_class",
     "_TOKENIZER_FOR_DOC =": "tokenizer_class",
+    "_IMAGE_PROCESSOR_FOR_DOC =": "image_processor_class",
     "_FEAT_EXTRACTOR_FOR_DOC =": "feature_extractor_class",
     "_PROCESSOR_FOR_DOC =": "processor_class",
 }

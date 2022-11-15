@@ -648,7 +648,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
         "data_parallel_size": args.target_data_parallel_size,
         "make_vocab_size_divisible_by": args.make_vocab_size_divisible_by,
         "rank": 0,
-        "tokenizer_type": None,
+        "tokenizer_type": "GPT2BPETokenizer",
     }
 
     if config.activation_function == "gelu":

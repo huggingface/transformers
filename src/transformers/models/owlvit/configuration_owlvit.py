@@ -165,6 +165,8 @@ class OwlViTVisionConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
+        num_channels (`int`, *optional*, defaults to 3):
+            Number of channels in the input images.
         image_size (`int`, *optional*, defaults to 768):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 32):
@@ -206,6 +208,7 @@ class OwlViTVisionConfig(PretrainedConfig):
         intermediate_size=3072,
         num_hidden_layers=12,
         num_attention_heads=12,
+        num_channels=3,
         image_size=768,
         patch_size=32,
         hidden_act="quick_gelu",
@@ -222,6 +225,7 @@ class OwlViTVisionConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.num_channels = num_channels
         self.image_size = image_size
         self.patch_size = patch_size
         self.hidden_act = hidden_act

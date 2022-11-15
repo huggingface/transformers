@@ -65,7 +65,6 @@ from .utils import (
     is_pytorch_quantization_available,
     is_rjieba_available,
     is_safetensors_available,
-    is_scatter_available,
     is_scipy_available,
     is_sentencepiece_available,
     is_soundfile_availble,
@@ -319,16 +318,6 @@ def require_intel_extension_for_pytorch(test_case):
     )(test_case)
 
 
-def require_torch_scatter(test_case):
-    """
-    Decorator marking a test that requires PyTorch scatter.
-
-    These tests are skipped when PyTorch scatter isn't installed.
-
-    """
-    return unittest.skipUnless(is_scatter_available(), "test requires PyTorch scatter")(test_case)
-
-
 def require_tensorflow_probability(test_case):
     """
     Decorator marking a test that requires TensorFlow probability.
@@ -403,14 +392,6 @@ def require_pytesseract(test_case):
     Decorator marking a test that requires PyTesseract. These tests are skipped when PyTesseract isn't installed.
     """
     return unittest.skipUnless(is_pytesseract_available(), "test requires PyTesseract")(test_case)
-
-
-def require_scatter(test_case):
-    """
-    Decorator marking a test that requires PyTorch Scatter. These tests are skipped when PyTorch Scatter isn't
-    installed.
-    """
-    return unittest.skipUnless(is_scatter_available(), "test requires PyTorch Scatter")(test_case)
 
 
 def require_pytorch_quantization(test_case):

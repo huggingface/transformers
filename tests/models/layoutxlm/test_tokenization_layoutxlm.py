@@ -32,7 +32,6 @@ from transformers.testing_utils import (
     get_tests_dir,
     is_pt_tf_cross_test,
     require_pandas,
-    require_scatter,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -1176,7 +1175,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @require_torch
     @slow
-    @require_scatter
     def test_torch_encode_plus_sent_to_model(self):
         import torch
 
@@ -1945,4 +1943,12 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @unittest.skip("Doesn't support another framework than PyTorch")
     def test_np_encode_plus_sent_to_model(self):
+        pass
+
+    @unittest.skip("Doesn't use SentencePiece")
+    def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
+        pass
+
+    @unittest.skip("Doesn't use SentencePiece")
+    def test_sentencepiece_tokenize_and_decode(self):
         pass

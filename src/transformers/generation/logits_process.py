@@ -20,8 +20,8 @@ from typing import Callable, Iterable, List, Optional, Tuple
 import numpy as np
 import torch
 
-from .utils import add_start_docstrings
-from .utils.logging import get_logger
+from ..utils import add_start_docstrings
+from ..utils.logging import get_logger
 
 
 logger = get_logger(__name__)

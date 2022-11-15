@@ -42,32 +42,34 @@ if is_torch_available():
         pipeline,
         top_k_top_p_filtering,
     )
-    from transformers.generation_beam_constraints import DisjunctiveConstraint, PhrasalConstraint
-    from transformers.generation_beam_search import BeamSearchScorer, ConstrainedBeamSearchScorer
-    from transformers.generation_logits_process import (
-        ForcedBOSTokenLogitsProcessor,
-        ForcedEOSTokenLogitsProcessor,
-        HammingDiversityLogitsProcessor,
-        InfNanRemoveLogitsProcessor,
-        LogitsProcessorList,
-        MinLengthLogitsProcessor,
-        NoBadWordsLogitsProcessor,
-        NoRepeatNGramLogitsProcessor,
-        RepetitionPenaltyLogitsProcessor,
-        TemperatureLogitsWarper,
-        TopKLogitsWarper,
-        TopPLogitsWarper,
-    )
-    from transformers.generation_stopping_criteria import MaxLengthCriteria, StoppingCriteria, StoppingCriteriaList
-    from transformers.generation_utils import (
+    from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
         BeamSearchDecoderOnlyOutput,
         BeamSearchEncoderDecoderOutput,
+        BeamSearchScorer,
+        ConstrainedBeamSearchScorer,
+        DisjunctiveConstraint,
+        ForcedBOSTokenLogitsProcessor,
+        ForcedEOSTokenLogitsProcessor,
         GreedySearchDecoderOnlyOutput,
         GreedySearchEncoderDecoderOutput,
+        HammingDiversityLogitsProcessor,
+        InfNanRemoveLogitsProcessor,
+        LogitsProcessorList,
+        MaxLengthCriteria,
+        MinLengthLogitsProcessor,
+        NoBadWordsLogitsProcessor,
+        NoRepeatNGramLogitsProcessor,
+        PhrasalConstraint,
+        RepetitionPenaltyLogitsProcessor,
         SampleDecoderOnlyOutput,
         SampleEncoderDecoderOutput,
+        StoppingCriteria,
+        StoppingCriteriaList,
+        TemperatureLogitsWarper,
+        TopKLogitsWarper,
+        TopPLogitsWarper,
     )
 
 
@@ -1409,9 +1411,8 @@ class GenerationTesterMixin:
         # check `generate()` and `contrastive_search()` are equal
         for model_class in self.all_generative_model_classes:
 
-            # TODO: Fix Bloom. Bloom fails because `past` has a different shape.
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
-            if any(model_name in model_class.__name__.lower() for model_name in ["bloom", "fsmt", "reformer"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
                 return
 
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
@@ -1432,9 +1433,8 @@ class GenerationTesterMixin:
     def test_contrastive_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
 
-            # TODO: Fix Bloom. Bloom fails because `past` has a different shape.
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
-            if any(model_name in model_class.__name__.lower() for model_name in ["bloom", "fsmt", "reformer"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
                 return
 
             # enable cache
