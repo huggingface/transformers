@@ -216,21 +216,6 @@ class ChineseCLIPModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertTrue(models_equal)
 
-    def test_load_vision_text_config(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # Save ChineseCLIPConfig and check if we can load ChineseCLIPVisionConfig from it
-        with tempfile.TemporaryDirectory() as tmp_dir_name:
-            config.save_pretrained(tmp_dir_name)
-            vision_config = CLIPVisionConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
-
-        # Save ChineseCLIPConfig and check if we can load ChineseCLIPTextConfig from it
-        with tempfile.TemporaryDirectory() as tmp_dir_name:
-            config.save_pretrained(tmp_dir_name)
-            text_config = BertConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
