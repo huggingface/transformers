@@ -390,7 +390,7 @@ class PLBartTokenizer(PreTrainedTokenizer):
         self.src_lang = self._convert_lang_code_special_format(src_lang)
         self.tgt_lang = self._convert_lang_code_special_format(tgt_lang)
         inputs = self(raw_inputs, add_special_tokens=True, return_tensors=return_tensors, **extra_kwargs)
-        tgt_lang_id = self.convert_tokens_to_ids(tgt_lang)
+        tgt_lang_id = self.convert_tokens_to_ids(self.tgt_lang)
         inputs["forced_bos_token_id"] = tgt_lang_id
         return inputs
 
