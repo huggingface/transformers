@@ -14,12 +14,6 @@
 # limitations under the License.
 """ Generation configuration class and utilities."""
 
-# TODO -- Generation config wishlist before making it a public class, ordered:
-# - We can load a Generation Config from a Model Config (to make it compatible with all existing repos)
-# - `.generate()` inherits default values from generate config, instead of from model config
-# - Add doctests for loading, storing, and using with `.generate()`
-# - (bonus) Generate config validates its attributes at initialization time
-
 import copy
 import json
 import os

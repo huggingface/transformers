@@ -15,8 +15,8 @@
 
 import tempfile
 import unittest
-from parameterized import parameterized
 
+from parameterized import parameterized
 from transformers.generation import GenerationConfig
 from transformers.utils import GENERATION_CONFIG_NAME
 
