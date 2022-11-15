@@ -17,7 +17,7 @@
 import copy
 import json
 import os
-from typing import Any, Dict, Union
+from typing import Any, Dict, Optional, Union
 
 from .. import __version__
 from ..utils import (
@@ -217,7 +217,7 @@ class GenerationConfig(PushToHubMixin):
     def save_pretrained(
         self,
         save_directory: Union[str, os.PathLike],
-        config_name: str = GENERATION_CONFIG_NAME,
+        config_name: Optional[str] = None,
         push_to_hub: bool = False,
         **kwargs
     ):
@@ -225,7 +225,7 @@ class GenerationConfig(PushToHubMixin):
         # REVIEWERS: As discussed on Slack, this config file has an argument to specify the file name (`config_name`),
         # to facilitate the creation of multiple generation config files in the root directory of a model.
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        """
+        r"""
         Args:
         Save a generation configuration object to the directory `save_directory`, so that it can be re-loaded using the:
         [`~GenerationConfig.from_pretrained`] class method.
@@ -240,6 +240,8 @@ class GenerationConfig(PushToHubMixin):
             kwargs:
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        config_name = config_name if config_name is not None else GENERATION_CONFIG_NAME
+
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
@@ -267,7 +269,7 @@ class GenerationConfig(PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-        cls, pretrained_model_name: Union[str, os.PathLike], config_name: str = GENERATION_CONFIG_NAME, **kwargs
+        cls, pretrained_model_name: Union[str, os.PathLike], config_name: Optional[str] = None, **kwargs
     ) -> "GenerationConfig":
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         # REVIEWERS: Contrarily to the model config, the first argument is a folder (as opposed to a folder OR a
@@ -350,6 +352,8 @@ class GenerationConfig(PushToHubMixin):
         assert unused_kwargs == {"foo": False}
         ```"""
         # TODO: convert the examples above to doctest when we have public examples on the hub
+        config_name = config_name if config_name is not None else GENERATION_CONFIG_NAME
+
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)

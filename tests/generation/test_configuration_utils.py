@@ -18,11 +18,10 @@ import unittest
 
 from parameterized import parameterized
 from transformers.generation import GenerationConfig
-from transformers.utils import GENERATION_CONFIG_NAME
 
 
 class LogitsProcessorTest(unittest.TestCase):
-    @parameterized.expand([(GENERATION_CONFIG_NAME,), ("foo.json",)])
+    @parameterized.expand([(None,), ("foo.json",)])
     def test_save_load_config(self, config_name):
         config = GenerationConfig(
             do_sample=True,
