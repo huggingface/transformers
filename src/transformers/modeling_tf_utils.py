@@ -94,7 +94,11 @@ TFModelInputType = Union[
 
 
 def dummy_loss(y_true, y_pred):
-    return tf.reduce_mean(y_pred)
+    if y_pred.shape.rank <= 1:
+        return y_pred
+    else:
+        reduction_axes = list(range(1, y_pred.shape.rank))
+        return tf.reduce_mean(y_pred, axis=reduction_axes)
 
 
 class TFModelUtilsMixin:
