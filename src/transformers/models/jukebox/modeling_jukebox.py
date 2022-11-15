@@ -2228,7 +2228,13 @@ class JukeboxPrior(PreTrainedModel):
         else:
             return loss, metrics
 
-    def forward(self, hidden_states: torch.Tensor, metadata: Optional[List[torch.LongTensor]], decode: Optional[bool] = False, get_preds: Optional[bool] = False)  -> List[torch.Tensor]:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        metadata: Optional[List[torch.LongTensor]],
+        decode: Optional[bool] = False,
+        get_preds: Optional[bool] = False,
+    ) -> List[torch.Tensor]:
         """
         Encode the hidden states using the `vqvae` encoder, and then predicts the next token in the `forward_tokens`
         function. The loss is the sum of the `encoder` loss and the `decoder` loss.
