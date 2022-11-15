@@ -35,6 +35,7 @@ from requests.exceptions import HTTPError
 from transformers import is_tf_available, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
 from transformers.models.auto import get_values
+from transformers.keras_callbacks import PushToHubCallback
 from transformers.testing_utils import (  # noqa: F401
     TOKEN,
     USER,
@@ -2345,6 +2346,11 @@ class TFModelPushToHubTester(unittest.TestCase):
             pass
 
         try:
+            delete_repo(token=cls._token, repo_id="test-model-tf-callback")
+        except HTTPError:
+            pass
+
+        try:
             delete_repo(token=cls._token, repo_id="valid_org/test-model-tf-org")
         except HTTPError:
             pass
@@ -2380,6 +2386,33 @@ class TFModelPushToHubTester(unittest.TestCase):
             model.save_pretrained(tmp_dir, repo_id="test-model-tf", push_to_hub=True, use_auth_token=self._token)
 
         new_model = TFBertModel.from_pretrained(f"{USER}/test-model-tf")
+        models_equal = True
+        for p1, p2 in zip(model.weights, new_model.weights):
+            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                models_equal = False
+        self.assertTrue(models_equal)
+
+    def test_push_to_hub_callback(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = TFBertModel(config)
+
+        logging.set_verbosity_info()
+        logger = logging.get_logger("transformers.utils.hub")
+        with CaptureLogger(logger) as cl:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                push_to_hub_callback = PushToHubCallback(
+                    output_dir=tmp_dir,
+                    hub_model_id="test-model-tf-callback",
+                    hub_token=self._token,
+                )
+                model.fit(model.dummy_inputs, epochs=1, callbacks=[push_to_hub_callback])
+        logging.set_verbosity_warning()
+        # Check the model card was created and uploaded.
+        self.assertIn("Uploading README.md to __DUMMY_TRANSFORMERS_USER__/test-model-tf-callback", cl.out)
+
+        new_model = TFBertModel.from_pretrained(f"{USER}/test-model-tf-callback")
         models_equal = True
         for p1, p2 in zip(model.weights, new_model.weights):
             if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
