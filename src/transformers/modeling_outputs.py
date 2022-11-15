@@ -1271,7 +1271,7 @@ class BackboneOutput(ModelOutput):
     Base class for outputs of backbones.
 
     Args:
-        stage_names (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        stage_names (`tuple(str)`):
             Names of the stages.
         hidden_states (`tuple(torch.FloatTensor)` of shape `(batch_size, num_channels, height, width)`):
             Hidden states (also called feature maps) of the stages.
