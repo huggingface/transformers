@@ -340,5 +340,5 @@ class NATModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
-        expected_slice = torch.tensor([-0.1545, -0.7667, 0.4642]).to(torch_device)
+        expected_slice = torch.tensor([0.3805, -0.8676, -0.3912]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
