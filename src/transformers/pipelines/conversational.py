@@ -168,14 +168,17 @@ class ConversationalPipeline(Pipeline):
 
     ```python
     >>> from transformers import pipeline, Conversation
+
     >>> chatbot = pipeline(model="microsoft/DialoGPT-medium")
     >>> conversation = Conversation("Going to the movies tonight - any suggestions?")
     >>> conversation = chatbot(conversation)
-    >>> assert conversation.generated_responses[-1] == "The Big Lebowski"
+    >>> conversation.generated_responses[-1]
+    'The Big Lebowski'
+
     >>> conversation.add_user_input("Is it an action movie?")
     >>> conversation = chatbot(conversation)
-    >>> assert conversation.generated_responses[-1] == "It's a comedy."
-
+    >>> conversation.generated_responses[-1]
+    "It's a comedy."
     ```
 
     This conversational pipeline can currently be loaded from [`pipeline`] using the following task identifier:
