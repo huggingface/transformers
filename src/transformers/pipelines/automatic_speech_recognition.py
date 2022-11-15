@@ -113,7 +113,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     ```python
     from transformers import pipeline
 
-    pipe = pipeline(model="openai/whisper-base")
+    resolver = pipeline(model="openai/whisper-base")
     result = pipe("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
 
     assert result == {
@@ -121,7 +121,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     }
     ```
 
-    [More complex examples](pipeline_tutorial)
+    [Using pipelines in a webserver or with a dataset](../pipeline_tutorial)
 
     Arguments:
         model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
