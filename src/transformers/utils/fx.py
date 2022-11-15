@@ -21,6 +21,7 @@ import math
 import operator
 import os
 import random
+import sys
 import warnings
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
@@ -60,7 +61,7 @@ _IS_IN_DEBUG_MODE = os.environ.get("FX_DEBUG_MODE", "").upper() in ENV_VARS_TRUE
 
 
 DEVICE = "meta"
-if "PYTEST_CURRENT_TEST" in os.environ:
+if "pytest" in sys.modules:
     # We are running under pytest, act accordingly...
     DEVICE = "cpu"
 
