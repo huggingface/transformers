@@ -76,7 +76,7 @@ class ChineseCLIPOutput(ModelOutput):
             The text embeddings obtained by applying the projection layer to the pooled output of [`BertModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of [`CLIPVisionModel`].
-        text_model_output(`BaseModelOutputWithPooling`):
+        text_model_output(`BaseModelOutputWithPoolingAndCrossAttentions`):
             The output of the [`BertModel`].
         vision_model_output(`BaseModelOutputWithPoolingAndCrossAttentions`):
             The output of the [`CLIPVisionModel`].
@@ -87,7 +87,7 @@ class ChineseCLIPOutput(ModelOutput):
     logits_per_text: torch.FloatTensor = None
     text_embeds: torch.FloatTensor = None
     image_embeds: torch.FloatTensor = None
-    text_model_output: BaseModelOutputWithPooling = None
+    text_model_output: BaseModelOutputWithPoolingAndCrossAttentions = None
     vision_model_output: BaseModelOutputWithPoolingAndCrossAttentions = None
 
     def to_tuple(self) -> Tuple[Any]:
