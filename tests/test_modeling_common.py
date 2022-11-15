@@ -1596,8 +1596,6 @@ class ModelTesterMixin:
             with torch.no_grad():
                 tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
-                print(len(tuple_output))
-                print(len(dict_output))
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (List, Tuple)):
