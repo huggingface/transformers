@@ -272,9 +272,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
 
         # page links (to visualize)
         expected_masks = [
-            "https://huggingface.co/datasets/hf-internal-testing/mask-for-image-segmentation-tests/blob/main/mask_0.png"
-            "https://huggingface.co/datasets/hf-internal-testing/mask-for-image-segmentation-tests/blob/main/mask_1.png"
-            "https://huggingface.co/datasets/hf-internal-testing/mask-for-image-segmentation-tests/blob/main/mask_2.png"
+            "https://huggingface.co/datasets/hf-internal-testing/mask-for-image-segmentation-tests/blob/main/mask_0.png",
+            "https://huggingface.co/datasets/hf-internal-testing/mask-for-image-segmentation-tests/blob/main/mask_1.png",
+            "https://huggingface.co/datasets/hf-internal-testing/mask-for-image-segmentation-tests/blob/main/mask_2.png",
         ]
         # actual links to get files
         expected_masks = [x.replace("/blob/", "/resolve/") for x in expected_masks]
