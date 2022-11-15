@@ -34,7 +34,7 @@ from transformers import (
     is_tf_available,
 )
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_scatter, require_tensorflow_probability, require_tf, require_torch, slow
+from transformers.testing_utils import require_tensorflow_probability, require_tf, require_torch, slow
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -509,11 +509,6 @@ class TFTapasModelTest(TFModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="The default test gets NaN losses with the test-generated inputs")
     def test_loss_computation(self):
         pass
-
-    @require_torch
-    @require_scatter
-    def test_pt_tf_model_equivalence(self):
-        super().test_pt_tf_model_equivalence()
 
 
 def prepare_tapas_single_inputs_for_inference():
