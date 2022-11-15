@@ -36,7 +36,7 @@ if is_torch_available():
         SwitchTransformersModel,
         SwitchTransformersTop1Router,
     )
-    from transformers.generation_utils import BeamSampleDecoderOnlyOutput, BeamSampleEncoderDecoderOutput
+    from transformers.generation import BeamSampleDecoderOnlyOutput, BeamSampleEncoderDecoderOutput
     from transformers.models.switch_transformers.modeling_switch_transformers import (
         SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
         load_balancing_loss_func,
