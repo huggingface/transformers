@@ -1311,7 +1311,7 @@ class ClearMLCallback(TrainerCallback):
 
     Environment:
             CLEARML_PROJECT (`str`, *optional*, defaults to `"HuggingFace Transformers"`):
-                ClearML project name. If not set deafault project name will be assigned.
+                ClearML project name.
             CLEARML_TASK (`str`, *optional* defaults to `"Trainer"`):
                 ClearML task name.
     """
