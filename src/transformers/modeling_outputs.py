@@ -1263,3 +1263,25 @@ class XVectorOutput(ModelOutput):
     embeddings: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class BackboneOutput(ModelOutput):
+    """
+    Base class for outputs of backbones.
+
+    Args:
+        stage_names (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Names of the stages.
+        hidden_states (`tuple(torch.FloatTensor)` of shape `(batch_size, num_channels, height, width)`):
+            Hidden states (also called feature maps) of the stages.
+        channels (`Tuple(int)`):
+            Number of channels of the stages.
+        strides (`Tuple(int)`):
+            Strides of the stages.
+    """
+
+    stage_names: Tuple[str] = None
+    hidden_states: Tuple[torch.FloatTensor] = None
+    channels: Tuple[int] = None
+    strides: Tuple[int] = None
