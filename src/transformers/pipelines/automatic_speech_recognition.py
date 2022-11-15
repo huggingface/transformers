@@ -112,10 +112,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
     ```python
     from transformers import pipeline
+
     pipe = pipeline(model="openai/whisper-base")
     result = pipe("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
 
-    assert result == {'text': ' He hoped there would be stew for dinner, turnips and carrots and bruised potatoes and fat mutton pieces to be ladled out in thick, peppered flour fat and sauce.'}
+    assert result == {
+        "text": " He hoped there would be stew for dinner, turnips and carrots and bruised potatoes and fat mutton pieces to be ladled out in thick, peppered flour fat and sauce."
+    }
     ```
 
     [More complex examples](pipeline_tutorial)
@@ -194,8 +197,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         **kwargs,
     ):
         """
-        Transcribe the audio sequence(s) given as inputs to text. See the [`AutomaticSpeechRecognitionPipeline`] documentation for more
-        information.
+        Transcribe the audio sequence(s) given as inputs to text. See the [`AutomaticSpeechRecognitionPipeline`]
+        documentation for more information.
 
         Args:
             inputs (`np.ndarray` or `bytes` or `str` or `dict`):
