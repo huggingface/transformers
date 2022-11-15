@@ -59,7 +59,10 @@ logger = logging.get_logger(__name__)
 _IS_IN_DEBUG_MODE = os.environ.get("FX_DEBUG_MODE", "").upper() in ENV_VARS_TRUE_VALUES
 
 
-DEVICE = "cpu"
+DEVICE = "meta"
+if "PYTEST_CURRENT_TEST" in os.environ:
+    # We are running under pytest, act accordingly...
+    DEVICE = "cpu"
 
 
 def _generate_supported_model_class_names(
