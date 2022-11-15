@@ -448,11 +448,8 @@ class PLBartTokenizer(PreTrainedTokenizer):
         tgt_lang: str = "python",
         **kwargs,
     ) -> BatchEncoding:
-        src_lang = self._convert_lang_code_special_format(src_lang)
-        tgt_lang = self._convert_lang_code_special_format(tgt_lang)
-
-        self.src_lang = src_lang
-        self.tgt_lang = tgt_lang
+        self.src_lang = self._convert_lang_code_special_format(src_lang)
+        self.tgt_lang = self._convert_lang_code_special_format(tgt_lang)
         return super().prepare_seq2seq_batch(src_texts, tgt_texts, **kwargs)
 
     def _switch_to_input_mode(self):
