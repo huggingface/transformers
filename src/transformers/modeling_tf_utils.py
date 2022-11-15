@@ -94,7 +94,7 @@ TFModelInputType = Union[
 
 
 def dummy_loss(y_true, y_pred):
-    return tf.reduce_mean(y_pred)
+    return y_pred
 
 
 class TFModelUtilsMixin:
