@@ -19,7 +19,7 @@ import inspect
 import unittest
 
 from transformers import DiNATConfig
-from transformers.testing_utils import require_torch, require_vision, require_natten, slow, torch_device
+from transformers.testing_utils import require_natten, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester

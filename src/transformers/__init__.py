@@ -3353,8 +3353,8 @@ if TYPE_CHECKING:
     from .models.deformable_detr import DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DeformableDetrConfig
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
-    from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
     from .models.dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DiNATConfig
+    from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
     from .models.donut import DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, DonutProcessor, DonutSwinConfig
     from .models.dpr import (
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4207,6 +4207,12 @@ if TYPE_CHECKING:
             DeiTModel,
             DeiTPreTrainedModel,
         )
+        from .models.dinat import (
+            DINAT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DiNATForImageClassification,
+            DiNATModel,
+            DiNATPreTrainedModel,
+        )
         from .models.distilbert import (
             DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             DistilBertForMaskedLM,
@@ -4216,12 +4222,6 @@ if TYPE_CHECKING:
             DistilBertForTokenClassification,
             DistilBertModel,
             DistilBertPreTrainedModel,
-        )
-        from .models.dinat import (
-            DINAT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DiNATForImageClassification,
-            DiNATModel,
-            DiNATPreTrainedModel,
         )
         from .models.donut import DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST, DonutSwinModel, DonutSwinPreTrainedModel
         from .models.dpr import (

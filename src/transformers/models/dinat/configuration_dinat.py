@@ -31,16 +31,14 @@ class DiNATConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`DiNATModel`]. It is used to instantiate a DiNAT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the DiNAT
-    [shi-labs/dinat-mini-in1k-224](https://huggingface.co/shi-labs/dinat-mini-in1k-224)
-    architecture.
+    [shi-labs/dinat-mini-in1k-224](https://huggingface.co/shi-labs/dinat-mini-in1k-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
         patch_size (`int`, *optional*, defaults to 4):
-            The size (resolution) of each patch.
-            NOTE: Only patch size of 4 is supported at the moment.
+            The size (resolution) of each patch. NOTE: Only patch size of 4 is supported at the moment.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         embed_dim (`int`, *optional*, defaults to 64):

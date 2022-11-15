@@ -28,19 +28,19 @@ from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
-    OptionalDependencyNotAvailable,
     ModelOutput,
+    OptionalDependencyNotAvailable,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    logging,
     is_natten_available,
+    logging,
 )
 from .configuration_dinat import DiNATConfig
 
 
 if is_natten_available():
-    from natten.functional import natten2dqkrpb, natten2dav
+    from natten.functional import natten2dav, natten2dqkrpb
 else:
 
     def natten2dqkrpb(*args, **kwargs):
@@ -745,8 +745,8 @@ class DiNATModel(DiNATPreTrainedModel):
 
 @add_start_docstrings(
     """
-    DiNAT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.
+    DiNAT Model transformer with an image classification head on top (a linear layer on top of the final hidden state
+    of the [CLS] token) e.g. for ImageNet.
     """,
     DINAT_START_DOCSTRING,
 )
