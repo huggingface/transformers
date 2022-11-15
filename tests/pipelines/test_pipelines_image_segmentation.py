@@ -20,6 +20,7 @@ import datasets
 import numpy as np
 from datasets import load_dataset
 
+import requests
 from transformers import (
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
     MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
@@ -58,6 +59,12 @@ def mask_to_test_readable(mask: Image) -> Dict:
     white_pixels = (npimg == 255).sum()
     shape = npimg.shape
     return {"hash": hashimage(mask), "white_pixels": white_pixels, "shape": shape}
+
+
+def mask_to_test_readable_only_shape(mask: Image) -> Dict:
+    npimg = np.array(mask)
+    shape = npimg.shape
+    return {"shape": shape}
 
 
 @require_vision
@@ -177,7 +184,6 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         )
 
     @require_torch
-    @unittest.skip("This test is broken for now")
     def test_small_model_pt(self):
         model_id = "hf-internal-testing/tiny-detr-mobilenetsv3-panoptic"
 
@@ -260,25 +266,53 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         # The `panoptic` returns only LABEL_215, and this returns 3 labels.
         #
         output = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", subtask="semantic")
+
+        output_masks = [o["mask"] for o in output]
+
+        # page links (to visualize)
+        expected_masks = [
+            "https://huggingface.co/datasets/hf-internal-testing/mask-for-image-segmentation-tests/blob/main/mask_0.png",
+            "https://huggingface.co/datasets/hf-internal-testing/mask-for-image-segmentation-tests/blob/main/mask_1.png",
+            "https://huggingface.co/datasets/hf-internal-testing/mask-for-image-segmentation-tests/blob/main/mask_2.png",
+        ]
+        # actual links to get files
+        expected_masks = [x.replace("/blob/", "/resolve/") for x in expected_masks]
+        expected_masks = [Image.open(requests.get(image, stream=True).raw) for image in expected_masks]
+
+        # Convert masks to numpy array
+        output_masks = [np.array(x) for x in output_masks]
+        expected_masks = [np.array(x) for x in expected_masks]
+
+        self.assertEqual(output_masks[0].shape, expected_masks[0].shape)
+        self.assertEqual(output_masks[1].shape, expected_masks[1].shape)
+        self.assertEqual(output_masks[2].shape, expected_masks[2].shape)
+
+        # With un-trained tiny random models, the output `logits` tensor is very likely to contain many values
+        # close to each other, which cause `argmax` to give quite different results when running the test on 2
+        # environments. We use a lower threshold `0.9` here to avoid flakiness.
+        self.assertGreaterEqual(np.mean(output_masks[0] == expected_masks[0]), 0.9)
+        self.assertGreaterEqual(np.mean(output_masks[1] == expected_masks[1]), 0.9)
+        self.assertGreaterEqual(np.mean(output_masks[2] == expected_masks[2]), 0.9)
+
         for o in output:
-            o["mask"] = mask_to_test_readable(o["mask"])
+            o["mask"] = mask_to_test_readable_only_shape(o["mask"])
         self.maxDiff = None
         self.assertEqual(
             nested_simplify(output, decimals=4),
             [
                 {
                     "label": "LABEL_88",
-                    "mask": {"hash": "7f0bf661a4", "shape": (480, 640), "white_pixels": 3},
+                    "mask": {"shape": (480, 640)},
                     "score": None,
                 },
                 {
                     "label": "LABEL_101",
-                    "mask": {"hash": "10ab738dc9", "shape": (480, 640), "white_pixels": 8948},
+                    "mask": {"shape": (480, 640)},
                     "score": None,
                 },
                 {
                     "label": "LABEL_215",
-                    "mask": {"hash": "b431e0946c", "shape": (480, 640), "white_pixels": 298249},
+                    "mask": {"shape": (480, 640)},
                     "score": None,
                 },
             ],
