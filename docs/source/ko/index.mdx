@@ -12,40 +12,40 @@ specific language governing permissions and limitations under the License.
 
 # 🤗 Transformers
 
-State-of-the-art Machine Learning for [PyTorch](https://pytorch.org/), [TensorFlow](https://www.tensorflow.org/), and [JAX](https://jax.readthedocs.io/en/latest/).
+[PyTorch](https://pytorch.org/), [TensorFlow](https://www.tensorflow.org/), [JAX](https://jax.readthedocs.io/en/latest/)를 위한 최첨단 머신러닝
 
-🤗 Transformers provides APIs and tools to easily download and train state-of-the-art pretrained models. Using pretrained models can reduce your compute costs, carbon footprint, and save you the time and resources required to train a model from scratch. These models support common tasks in different modalities, such as:
+🤗 Transformers는 사전학습된 최첨단 모델들을 쉽게 다운로드하고 훈련시킬 수 있는 API와 도구를 제공합니다. 사전학습된 모델을 쓰면 컴퓨팅 비용과 탄소 배출량이 줄고, 모델을 처음부터 훈련시키는 데 필요한 시간과 리소스를 절약할 수 있습니다. 저희 모델들은 다양한 분야의 태스크를 지원합니다.
 
-📝 **Natural Language Processing**: text classification, named entity recognition, question answering, language modeling, summarization, translation, multiple choice, and text generation.<br>
-🖼️ **Computer Vision**: image classification, object detection, and segmentation.<br>
-🗣️ **Audio**: automatic speech recognition and audio classification.<br>
-🐙 **Multimodal**: table question answering, optical character recognition, information extraction from scanned documents, video classification, and visual question answering.
+📝 **자연어 처리**: 텍스트 분류, 개체명 인식, 질의응답, 언어 모델링, 요약, 번역, 객관식 질의응답, 텍스트 생성<br>
+🖼️ **컴퓨터 비전**: 이미지 분류, 객체 탐지, 객체 분할<br>
+🗣️ **오디오**: 자동음성인식, 오디오 분류<br>
+🐙 **멀티모달**: 표 질의응답, 광학 문자 인식 (OCR), 스캔한 문서에서 정보 추출, 비디오 분류, 시각 질의응답
 
-🤗 Transformers support framework interoperability between PyTorch, TensorFlow, and JAX. This provides the flexibility to use a different framework at each stage of a model's life; train a model in three lines of code in one framework, and load it for inference in another. Models can also be exported to a format like ONNX and TorchScript for deployment in production environments.
+🤗 Transformers는 PyTorch, TensorFlow와 JAX 간의 상호운용성을 지원합니다. 유연하게 모델의 각 단계마다 다른 프레임워크를 사용할 수도 있습니다. 예를 들어 코드 3줄만 써서 모델을 훈련시킨 다음, 다른 프레임워크 상에서 추론할 수 있습니다. 모델을 운영 환경에 배포하기 위해 ONNX나 TorchScript 형식으로 내보낼 수도 있습니다.
 
-Join the growing community on the [Hub](https://huggingface.co/models), [forum](https://discuss.huggingface.co/), or [Discord](https://discord.com/invite/JfAtkvEtRb) today!
+커뮤니티에 참여하시려면 [Hub](https://huggingface.co/models), [포럼](https://discuss.huggingface.co/), [디스코드](https://discord.com/invite/JfAtkvEtRb)를 방문해주세요!
 
-## If you are looking for custom support from the Hugging Face team
+## Hugging Face 팀과 직접 대화하고 싶으신가요?[[hugging-face-team]]
 
 <a target="_blank" href="https://huggingface.co/support">
     <img alt="HuggingFace Expert Acceleration Program" src="https://cdn-media.huggingface.co/marketing/transformers/new-support-improved.png" style="width: 100%; max-width: 600px; border: 1px solid #eee; border-radius: 4px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
 </a>
 
-## Contents
+## 콘텐츠[[contents]]
 
-The documentation is organized into five sections:
+저희 기술문서는 크게 5개 섹션으로 나눌 수 있습니다:
 
-- **GET STARTED** provides a quick tour of the library and installation instructions to get up and running.
-- **TUTORIALS** are a great place to start if you're a beginner. This section will help you gain the basic skills you need to start using the library.
-- **HOW-TO GUIDES** show you how to achieve a specific goal, like finetuning a pretrained model for language modeling or how to write and share a custom model.
-- **CONCEPTUAL GUIDES** offers more discussion and explanation of the underlying concepts and ideas behind models, tasks, and the design philosophy of 🤗 Transformers.
-- **API** describes all classes and functions:
+- **시작하기**에서 라이브러리를 간단히 훑어보고, 본격적으로 뛰어들 수 있게 설치 방법을 안내합니다.
+- **튜토리얼**에서 라이브러리에 익숙해질 수 있도록 자세하고도 쉽게 기본적인 부분을 안내합니다.
+- **How-to 가이드**에서 언어 모델링을 위해 사전학습된 모델을 파인 튜닝하는 방법이나, 직접 모델을 작성하고 공유하는 방법과 같이 특정 목표를 달성하는 방법을 안내합니다.
+- **개념 가이드**에서 🤗 Transformers의 설계 철학과 함께 모델이나 태스크 뒤에 숨겨진 개념들과 아이디어를 탐구하고 설명을 덧붙입니다.
+- **API**에서 모든 클래스와 함수를 설명합니다.
 
-  - **MAIN CLASSES** details the most important classes like configuration, model, tokenizer, and pipeline.
-  - **MODELS** details the classes and functions related to each model implemented in the library.
-  - **INTERNAL HELPERS** details utility classes and functions used internally.
+  - **메인 클래스**에서 configuration, model, tokenizer, pipeline과 같이 제일 중요한 클래스들을 자세히 설명합니다.
+  - **모델**에서 라이브러리 속 구현된 각 모델과 연관된 클래스와 함수를 자세히 설명합니다.
+  - **내부 유틸리티**에서 내부적으로 사용되는 유틸리티 클래스와 함수를 자세히 설명합니다.
 
-### Supported models
+### 지원 모델[[supported-models]]
 
 <!--This list is updated automatically from the README with _make fix-copies_. Do not update manually! -->
 
@@ -66,7 +66,6 @@ The documentation is organized into five sections:
 1. **[ByT5](model_doc/byt5)** (from Google Research) released with the paper [ByT5: Towards a token-free future with pre-trained byte-to-byte models](https://arxiv.org/abs/2105.13626) by Linting Xue, Aditya Barua, Noah Constant, Rami Al-Rfou, Sharan Narang, Mihir Kale, Adam Roberts, Colin Raffel.
 1. **[CamemBERT](model_doc/camembert)** (from Inria/Facebook/Sorbonne) released with the paper [CamemBERT: a Tasty French Language Model](https://arxiv.org/abs/1911.03894) by Louis Martin*, Benjamin Muller*, Pedro Javier Ortiz Suárez*, Yoann Dupont, Laurent Romary, Éric Villemonte de la Clergerie, Djamé Seddah and Benoît Sagot.
 1. **[CANINE](model_doc/canine)** (from Google Research) released with the paper [CANINE: Pre-training an Efficient Tokenization-Free Encoder for Language Representation](https://arxiv.org/abs/2103.06874) by Jonathan H. Clark, Dan Garrette, Iulia Turc, John Wieting.
-1. **[Chinese-CLIP](model_doc/chinese-clip)** (from OFA-Sys) released with the paper [Chinese CLIP: Contrastive Vision-Language Pretraining in Chinese](https://arxiv.org/abs/2211.01335) by An Yang, Junshu Pan, Junyang Lin, Rui Men, Yichang Zhang, Jingren Zhou, Chang Zhou.
 1. **[CLIP](model_doc/clip)** (from OpenAI) released with the paper [Learning Transferable Visual Models From Natural Language Supervision](https://arxiv.org/abs/2103.00020) by Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, Ilya Sutskever.
 1. **[CLIPSeg](model_doc/clipseg)** (from University of Göttingen) released with the paper [Image Segmentation Using Text and Image Prompts](https://arxiv.org/abs/2112.10003) by Timo Lüddecke and Alexander Ecker.
 1. **[CodeGen](model_doc/codegen)** (from Salesforce) released with the paper [A Conversational Paradigm for Program Synthesis](https://arxiv.org/abs/2203.13474) by Erik Nijkamp, Bo Pang, Hiroaki Hayashi, Lifu Tu, Huan Wang, Yingbo Zhou, Silvio Savarese, Caiming Xiong.
@@ -92,7 +91,7 @@ The documentation is organized into five sections:
 1. **[ELECTRA](model_doc/electra)** (from Google Research/Stanford University) released with the paper [ELECTRA: Pre-training text encoders as discriminators rather than generators](https://arxiv.org/abs/2003.10555) by Kevin Clark, Minh-Thang Luong, Quoc V. Le, Christopher D. Manning.
 1. **[EncoderDecoder](model_doc/encoder-decoder)** (from Google Research) released with the paper [Leveraging Pre-trained Checkpoints for Sequence Generation Tasks](https://arxiv.org/abs/1907.12461) by Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
 1. **[ERNIE](model_doc/ernie)** (from Baidu) released with the paper [ERNIE: Enhanced Representation through Knowledge Integration](https://arxiv.org/abs/1904.09223) by Yu Sun, Shuohuan Wang, Yukun Li, Shikun Feng, Xuyi Chen, Han Zhang, Xin Tian, Danxiang Zhu, Hao Tian, Hua Wu.
-1. **[ESM](model_doc/esm)** (from Meta AI) are transformer protein language models.  **ESM-1b** was released with the paper [Biological structure and function emerge from scaling unsupervised learning to 250 million protein sequences](https://www.pnas.org/content/118/15/e2016239118) by Alexander Rives, Joshua Meier, Tom Sercu, Siddharth Goyal, Zeming Lin, Jason Liu, Demi Guo, Myle Ott, C. Lawrence Zitnick, Jerry Ma, and Rob Fergus. **ESM-1v** was released with the paper [Language models enable zero-shot prediction of the effects of mutations on protein function](https://doi.org/10.1101/2021.07.09.450648) by Joshua Meier, Roshan Rao, Robert Verkuil, Jason Liu, Tom Sercu and Alexander Rives. **ESM-2 and ESMFold** were released with the paper [Language models of protein sequences at the scale of evolution enable accurate structure prediction](https://doi.org/10.1101/2022.07.20.500902) by Zeming Lin, Halil Akin, Roshan Rao, Brian Hie, Zhongkai Zhu, Wenting Lu, Allan dos Santos Costa, Maryam Fazel-Zarandi, Tom Sercu, Sal Candido, Alexander Rives.
+1. **[ESM](model_doc/esm)** (from Meta AI) are transformer protein language models.  **ESM-1b** was released with the paper [Biological structure and function emerge from scaling unsupervised learning to 250 million protein sequences](https://www.pnas.org/content/118/15/e2016239118) by Alexander Rives, Joshua Meier, Tom Sercu, Siddharth Goyal, Zeming Lin, Jason Liu, Demi Guo, Myle Ott, C. Lawrence Zitnick, Jerry Ma, and Rob Fergus. **ESM-1v** was released with the paper [Language models enable zero-shot prediction of the effects of mutations on protein function](https://doi.org/10.1101/2021.07.09.450648) by Joshua Meier, Roshan Rao, Robert Verkuil, Jason Liu, Tom Sercu and Alexander Rives. **ESM-2 and ESMFold** were released with the paper [Language models of protein sequences at the scale of evolution enable accurate structure prediction](https://doi.org/10.1101/2022.07.20.500902) by Zeming Lin, Halil Akin, Roshan Rao, Brian Hie, Zhongkai Zhu, Wenting Lu, Allan dos Santos Costa, Maryam Fazel-Zarandi, Tom Sercu, Sal Candido, Alexander Rives. 
 1. **[FLAN-T5](model_doc/flan-t5)** (from Google AI) released in the repository [google-research/t5x](https://github.com/google-research/t5x/blob/main/docs/models.md#flan-t5-checkpoints) by Hyung Won Chung, Le Hou, Shayne Longpre, Barret Zoph, Yi Tay, William Fedus, Eric Li, Xuezhi Wang, Mostafa Dehghani, Siddhartha Brahma, Albert Webson, Shixiang Shane Gu, Zhuyun Dai, Mirac Suzgun, Xinyun Chen, Aakanksha Chowdhery, Sharan Narang, Gaurav Mishra, Adams Yu, Vincent Zhao, Yanping Huang, Andrew Dai, Hongkun Yu, Slav Petrov, Ed H. Chi, Jeff Dean, Jacob Devlin, Adam Roberts, Denny Zhou, Quoc V. Le, and Jason Wei
 1. **[FlauBERT](model_doc/flaubert)** (from CNRS) released with the paper [FlauBERT: Unsupervised Language Model Pre-training for French](https://arxiv.org/abs/1912.05372) by Hang Le, Loïc Vial, Jibril Frej, Vincent Segonne, Maximin Coavoux, Benjamin Lecouteux, Alexandre Allauzen, Benoît Crabbé, Laurent Besacier, Didier Schwab.
 1. **[FLAVA](model_doc/flava)** (from Facebook AI) released with the paper [FLAVA: A Foundational Language And Vision Alignment Model](https://arxiv.org/abs/2112.04482) by Amanpreet Singh, Ronghang Hu, Vedanuj Goswami, Guillaume Couairon, Wojciech Galuba, Marcus Rohrbach, and Douwe Kiela.
@@ -132,7 +131,6 @@ The documentation is organized into five sections:
 1. **[Megatron-GPT2](model_doc/megatron_gpt2)** (from NVIDIA) released with the paper [Megatron-LM: Training Multi-Billion Parameter Language Models Using Model Parallelism](https://arxiv.org/abs/1909.08053) by Mohammad Shoeybi, Mostofa Patwary, Raul Puri, Patrick LeGresley, Jared Casper and Bryan Catanzaro.
 1. **[mLUKE](model_doc/mluke)** (from Studio Ousia) released with the paper [mLUKE: The Power of Entity Representations in Multilingual Pretrained Language Models](https://arxiv.org/abs/2110.08151) by Ryokan Ri, Ikuya Yamada, and Yoshimasa Tsuruoka.
 1. **[MobileBERT](model_doc/mobilebert)** (from CMU/Google Brain) released with the paper [MobileBERT: a Compact Task-Agnostic BERT for Resource-Limited Devices](https://arxiv.org/abs/2004.02984) by Zhiqing Sun, Hongkun Yu, Xiaodan Song, Renjie Liu, Yiming Yang, and Denny Zhou.
-1. **[MobileNetV2](model_doc/mobilenet_v2)** (from Google Inc.) released with the paper [MobileNetV2: Inverted Residuals and Linear Bottlenecks](https://arxiv.org/abs/1801.04381) by Mark Sandler, Andrew Howard, Menglong Zhu, Andrey Zhmoginov, Liang-Chieh Chen.
 1. **[MobileViT](model_doc/mobilevit)** (from Apple) released with the paper [MobileViT: Light-weight, General-purpose, and Mobile-friendly Vision Transformer](https://arxiv.org/abs/2110.02178) by Sachin Mehta and Mohammad Rastegari.
 1. **[MPNet](model_doc/mpnet)** (from Microsoft Research) released with the paper [MPNet: Masked and Permuted Pre-training for Language Understanding](https://arxiv.org/abs/2004.09297) by Kaitao Song, Xu Tan, Tao Qin, Jianfeng Lu, Tie-Yan Liu.
 1. **[MT5](model_doc/mt5)** (from Google AI) released with the paper [mT5: A massively multilingual pre-trained text-to-text transformer](https://arxiv.org/abs/2010.11934) by Linting Xue, Noah Constant, Adam Roberts, Mihir Kale, Rami Al-Rfou, Aditya Siddhant, Aditya Barua, Colin Raffel.
@@ -205,11 +203,9 @@ The documentation is organized into five sections:
 1. **[YOSO](model_doc/yoso)** (from the University of Wisconsin - Madison) released with the paper [You Only Sample (Almost) Once: Linear Cost Self-Attention Via Bernoulli Sampling](https://arxiv.org/abs/2111.09714) by Zhanpeng Zeng, Yunyang Xiong, Sathya N. Ravi, Shailesh Acharya, Glenn Fung, Vikas Singh.
 
 
-### Supported frameworks
+### 지원 프레임워크[[supported-framework]]
 
-The table below represents the current support in the library for each of those models, whether they have a Python
-tokenizer (called "slow"). A "fast" tokenizer backed by the 🤗 Tokenizers library, whether they have support in Jax (via
-Flax), PyTorch, and/or TensorFlow.
+아래 표는 라이브러리 속 각 모델의 지원 현황을 나타냅니다. 토큰화를 파이썬 (별칭 "slow") 또는 🤗 Tokenizers (별칭 "fast") 라이브러리로 하는지; (Flax를 통한) Jax, PyTorch, TensorFlow 중 어떤 프레임워크를 지원하는지 표시되어 있습니다.
 
 <!--This table is updated automatically from the auto modules with _make fix-copies_. Do not update manually!-->
 
@@ -227,7 +223,6 @@ Flax), PyTorch, and/or TensorFlow.
 |            BLOOM            |       ❌       |       ✅       |       ✅        |         ❌         |      ❌      |
 |          CamemBERT          |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 |           CANINE            |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
-|        Chinese-CLIP         |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |            CLIP             |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
 |           CLIPSeg           |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |           CodeGen           |       ✅       |       ✅       |       ✅        |         ❌         |      ❌      |
@@ -286,7 +281,6 @@ Flax), PyTorch, and/or TensorFlow.
 |            mBART            |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
 |        Megatron-BERT        |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |         MobileBERT          |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
-|         MobileNetV2         |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |          MobileViT          |       ❌       |       ❌       |       ✅        |         ✅         |      ❌      |
 |            MPNet            |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 |             MT5             |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
