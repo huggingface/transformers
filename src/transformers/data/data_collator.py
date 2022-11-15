@@ -316,7 +316,6 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
-            # Conversion to tensors will fail if we have labels as they are not of the same length yet.
             return_tensors="pt" if labels is None else None,
         )
 
