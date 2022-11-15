@@ -34,8 +34,8 @@ from huggingface_hub.file_download import http_get
 from requests.exceptions import HTTPError
 from transformers import is_tf_available, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
-from transformers.models.auto import get_values
 from transformers.keras_callbacks import PushToHubCallback
+from transformers.models.auto import get_values
 from transformers.testing_utils import (  # noqa: F401
     TOKEN,
     USER,
