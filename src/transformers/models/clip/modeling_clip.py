@@ -75,10 +75,10 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 @dataclass
 class CLIPVisionModelOutput(ModelOutput):
     """
-    Base class for vision model's outputs that also contains a pooling of the last hidden states.
+    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
 
     Args:
-        image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim` *optional* returned when model is initialized with `with_projection=True`):
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
             The image embeddings obtained by applying the projection layer to the pooler_output.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
@@ -107,7 +107,7 @@ class CLIPTextModelOutput(ModelOutput):
     Base class for text model's outputs that also contains a pooling of the last hidden states.
 
     Args:
-        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim` *optional* returned when model is initialized with `with_projection=True`):
+        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
             The text embeddings obtained by applying the projection layer to the pooler_output.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
