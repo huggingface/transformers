@@ -334,7 +334,6 @@ Dado que DistilBERT es un modelo de tipo _encoder-decoder_, su configuración se
 ...                 ("attention_mask", {0: "batch", 1: "sequence"}),
 ...             ]
 ...         )
-
 ```
 
 Cada objeto de configuración debe implementar la propiedad `inputs` y devolver un mapeo, 
@@ -360,7 +359,6 @@ instancia proporcionando la configuración del modelo base de la siguiente maner
 
 >>> config = AutoConfig.from_pretrained("distilbert-base-uncased")
 >>> onnx_config = DistilBertOnnxConfig(config)
-
 ```
 
 El objeto resultante tiene varias propiedades útiles. Por ejemplo, puedes ver el conjunto de operadores ONNX que se 
@@ -369,7 +367,6 @@ utilizará durante la exportación:
 ```python
 >>> print(onnx_config.default_onnx_opset)
 11
-
 ```
 
 También puedes ver los resultados asociados con el modelo de la siguiente manera:
@@ -377,7 +374,6 @@ También puedes ver los resultados asociados con el modelo de la siguiente maner
 ```python
 >>> print(onnx_config.outputs)
 OrderedDict([("last_hidden_state", {0: "batch", 1: "sequence"})])
-
 ```
 
 Observa que la propiedad de salidas sigue la misma estructura que las entradas; 
@@ -396,7 +392,6 @@ exportar DistilBERT con un cabezal de clasificación de secuencias, podríamos u
 >>> onnx_config_for_seq_clf = DistilBertOnnxConfig(config, task="sequence-classification")
 >>> print(onnx_config_for_seq_clf.outputs)
 OrderedDict([('logits', {0: 'batch'})])
-
 ```
 
 <Tip>
@@ -425,7 +420,6 @@ y la ruta para guardar el archivo exportado:
 >>> tokenizer = AutoTokenizer.from_pretrained(model_ckpt)
 
 >>> onnx_inputs, onnx_outputs = export(tokenizer, base_model, onnx_config, onnx_config.default_onnx_opset, onnx_path)
-
 ```
 
 Los objetos `onnx_inputs` y `onnx_outputs` devueltos por la función `export()` 
@@ -437,7 +431,6 @@ Una vez exportado el modelo, puedes probar que el modelo está bien formado de l
 
 >>> onnx_model = onnx.load("model.onnx")
 >>> onnx.checker.check_model(onnx_model)
-
 ```
 
 <Tip>
@@ -462,7 +455,6 @@ proporcionada por el paquete `transformers.onnx` de la siguiente manera:
 >>> validate_model_outputs(
 ...     onnx_config, tokenizer, base_model, onnx_path, onnx_outputs, onnx_config.atol_for_validation
 ... )
-
 ```
 
 Esta función usa el método `OnnxConfig.generate_dummy_inputs()` para generar entradas para el modelo base 
@@ -593,7 +585,6 @@ model = BertModel.from_pretrained("bert-base-uncased", torchscript=True)
 # Creating the trace
 traced_model = torch.jit.trace(model, [tokens_tensor, segments_tensors])
 torch.jit.save(traced_model, "traced_bert.pt")
-
 ```
 
 #### Cargar un modelo
@@ -606,7 +597,6 @@ loaded_model = torch.jit.load("traced_bert.pt")
 loaded_model.eval()
 
 all_encoder_layers, pooled_output = loaded_model(*dummy_input)
-
 ```
 
 #### Usar un modelo rastreado para la inferencia
@@ -615,7 +605,6 @@ Usar el modelo rastreado para la inferencia es tan simple como usar su método `
 
 ```python
 traced_model(tokens_tensor, segments_tensors)
-
 ```
 
 ### Implementar los modelos HuggingFace TorchScript en AWS mediante Neuron SDK
@@ -661,20 +650,17 @@ del SDK de Neuron a través de una API de Python.
 from transformers import BertModel, BertTokenizer, BertConfig
 import torch
 import torch.neuron
-
 ```
 Y modificando la línea de código de rastreo de:
 
 ```python
 torch.jit.trace(model, [tokens_tensor, segments_tensors])
-
 ```
 
 con lo siguiente:
 
 ```python
 torch.neuron.trace(model, [token_tensor, segments_tensors])
-
 ```
 
 Este cambio permite a Neuron SDK rastrear el modelo y optimizarlo para ejecutarse en instancias Inf1.
