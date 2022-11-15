@@ -1313,7 +1313,7 @@ class ClearMLCallback(TrainerCallback):
             CLEARML_PROJECT (`str`, *optional*, defaults to `"HuggingFace Transformers"`):
                 ClearML project name. If not set deafault project name will be assigned.
             CLEARML_TASK (`str`, *optional* defaults to `"Trainer"`):
-                ClearML task name. If not set default task name will be assigned.
+                ClearML task name.
     """
 
     def __init__(self):
