@@ -351,6 +351,8 @@
         title: Splinter
       - local: model_doc/squeezebert
         title: SqueezeBERT
+      - local: model_doc/switch_transformers
+        title: SwitchTransformers
       - local: model_doc/t5
         title: T5
       - local: model_doc/t5v1.1
