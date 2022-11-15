@@ -441,16 +441,6 @@ class ResNetBackbone(ResNetPreTrainedModel):
         self.stage_names = ["stem", "stage1", "stage2", "stage3", "stage4"]
         self.out_features = config.out_features
 
-        # TODO calculate strides appropriately
-        current_stride = self.resnet.embedder.embedder.convolution.stride[0]
-        self.out_feature_strides = {
-            "stem": current_stride,
-            "stage1": current_stride * 2,
-            "stage2": current_stride * 2,
-            "stage3": current_stride * 2,
-            "stage4": current_stride * 2,
-        }
-
         self.out_feature_channels = {
             "stem": config.embedding_size,
             "stage1": config.hidden_sizes[0],
@@ -465,10 +455,6 @@ class ResNetBackbone(ResNetPreTrainedModel):
     @property
     def channels(self):
         return [self.out_feature_channels[name] for name in self.out_features]
-
-    @property
-    def strides(self):
-        return [self.out_feature_strides[name] for name in self.out_features]
 
     @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
