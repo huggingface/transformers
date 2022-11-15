@@ -218,19 +218,6 @@ class SwitchTransformersTop1Router(nn.Module):
         """
         router_probs, router_logits = self._compute_router_probabilities(hidden_states)
 
-        # Flax code for reference TODO check what happens with padded inputs here
-        if self.ignore_padding_tokens:
-            # To identify non-padding tokens, we rely on the fact that padding tokens
-            # in the inputs have already been masked in the default T5 architecture.
-            # See
-            # https://github.com/google/flaxformer/blob/9712a16/flaxformer/architectures/t5/t5_architecture.py#L315
-            # and
-            # https://github.com/google/flaxformer/blob/9712a16/flaxformer/architectures/t5/t5_architecture.py#L603.
-            padding_mask = torch.Tensor((torch.sum(torch.abs(hidden_states), axis=-1) > 0)).to(hidden_states.dtype)
-            router_logits *= padding_mask.unsqueeze(-1)
-        else:
-            padding_mask = None
-
         expert_index = torch.argmax(router_probs, dim=-1)
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
 
