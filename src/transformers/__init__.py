@@ -100,6 +100,7 @@ _import_structure = {
     "generation": [],
     "hf_argparser": ["HfArgumentParser"],
     "integrations": [
+        "is_clearml_available",
         "is_comet_available",
         "is_neptune_available",
         "is_optuna_available",
@@ -108,7 +109,6 @@ _import_structure = {
         "is_sigopt_available",
         "is_tensorboard_available",
         "is_wandb_available",
-        "is_clearml_available",
     ],
     "modelcard": ["ModelCard"],
     "modeling_tf_pytorch_utils": [
