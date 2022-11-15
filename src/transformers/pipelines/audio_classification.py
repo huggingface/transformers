@@ -74,13 +74,20 @@ class AudioClassificationPipeline(Pipeline):
     Example:
 
     ```python
-    from transformers import pipeline
+    >>> from transformers import pipeline
 
-    classifier = pipeline(model="openai/whisper-base")
-    result = classifier("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
-    assert result == {
-        "text": " He hoped there would be stew for dinner, turnips and carrots and bruised potatoes and fat mutton pieces to be ladled out in thick, peppered flour fat and sauce."
-    }
+    >>> classifier = pipeline(model="superb/wav2vec2-base-superb-ks")
+    >>> result = classifier("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+    >>> # Simplify results, different torch versions might alter the scores slightly.
+    >>> from transformers.testing_utils import nested_simplify
+
+    >>> assert nested_simplify(result) == [
+    ...     {"score": 0.997, "label": "_unknown_"},
+    ...     {"score": 0.002, "label": "left"},
+    ...     {"score": 0.0, "label": "yes"},
+    ...     {"score": 0.0, "label": "down"},
+    ...     {"score": 0.0, "label": "stop"},
+    ... ]
     ```
 
     [Using pipelines in a webserver or with a dataset](../pipeline_tutorial)
