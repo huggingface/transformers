@@ -350,7 +350,12 @@ def can_return_loss(model_class):
         signature = inspect.signature(model_class.__call__)
     else:
         signature = inspect.signature(model_class.forward)
-    return any(p == "return_loss" for p in signature.parameters)
+
+    for p in signature.parameters:
+        if p == "return_loss" and signature.parameters[p].default is True:
+            return True
+
+    return False
 
 
 def find_labels(model_class):
