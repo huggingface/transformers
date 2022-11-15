@@ -319,14 +319,12 @@ repo_utils_job = CircleCIJob(
     "repo_utils",
     install_steps=[
         "pip install --upgrade pip",
-        "pip install .[all,quality]",
-        "pip install pytest pytest-xdist",
+        "pip install .[quality,testing]",
     ],
     parallelism=None,
     pytest_num_workers=1,
     resource_class=None,
     tests_to_run="tests/repo_utils",
-    cache_name="repo_utils_v3",
 )
 
 REGULAR_TESTS = [
