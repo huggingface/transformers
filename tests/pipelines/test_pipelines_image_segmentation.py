@@ -184,7 +184,6 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         )
 
     @require_torch
-    @unittest.skip("This test is broken for now")
     def test_small_model_pt(self):
         model_id = "hf-internal-testing/tiny-detr-mobilenetsv3-panoptic"
 
