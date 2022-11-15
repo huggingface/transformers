@@ -18,14 +18,14 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_natten_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {"configuration_dinat": ["DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DiNATConfig"]}
 
 
 try:
-    if not is_torch_available() or not is_natten_available():
+    if not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from .configuration_dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DiNATConfig
 
     try:
-        if not is_torch_available() or not is_natten_available():
+        if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass

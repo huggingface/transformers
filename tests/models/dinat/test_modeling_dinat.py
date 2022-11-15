@@ -51,9 +51,7 @@ class DiNATModelTester:
         depths=[1, 2, 1],
         num_heads=[2, 4, 8],
         kernel_size=3,
-        dilations=[[3],
-                   [1, 2],
-                   [1]],
+        dilations=[[3], [1, 2], [1]],
         mlp_ratio=2.0,
         qkv_bias=True,
         hidden_dropout_prob=0.0,
@@ -136,7 +134,9 @@ class DiNATModelTester:
         expected_height = expected_width = (config.image_size // config.patch_size) // (2 ** (len(config.depths) - 1))
         expected_dim = int(config.embed_dim * 2 ** (len(config.depths) - 1))
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_height, expected_width, expected_dim))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, expected_height, expected_width, expected_dim)
+        )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -260,8 +260,8 @@ class DiNATModelTest(ModelTesterMixin, unittest.TestCase):
             else (config.patch_size, config.patch_size)
         )
 
-        height = (image_size[0] // patch_size[0])
-        width = (image_size[1] // patch_size[1])
+        height = image_size[0] // patch_size[0]
+        width = image_size[1] // patch_size[1]
 
         self.assertListEqual(
             list(hidden_states[0].shape[-3:]),
@@ -326,11 +326,7 @@ class DiNATModelTest(ModelTesterMixin, unittest.TestCase):
 class DiNATModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return (
-            AutoFeatureExtractor.from_pretrained("shi-labs/dinat-mini-in1k-224")
-            if is_vision_available()
-            else None
-        )
+        return AutoFeatureExtractor.from_pretrained("shi-labs/dinat-mini-in1k-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
@@ -347,5 +343,5 @@ class DiNATModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
-        expected_slice = torch.tensor([-0.1545, -0.7667,  0.4642]).to(torch_device)
+        expected_slice = torch.tensor([-0.1545, -0.7667, 0.4642]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

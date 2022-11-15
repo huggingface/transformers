@@ -28,6 +28,7 @@ from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
+    OptionalDependencyNotAvailable,
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -40,6 +41,13 @@ from .configuration_dinat import DiNATConfig
 
 if is_natten_available():
     from natten.functional import natten2dqkrpb, natten2dav
+else:
+
+    def natten2dqkrpb(*args, **kwargs):
+        raise OptionalDependencyNotAvailable()
+
+    def natten2dav(*args, **kwargs):
+        raise OptionalDependencyNotAvailable()
 
 
 logger = logging.get_logger(__name__)
