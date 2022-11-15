@@ -120,6 +120,12 @@ class ASTModelTester:
             time_stride=self.time_stride,
         )
 
+    def get_pipeline_config(self):
+        config = self.get_config()
+        config.time_dimension = 1024
+        config.frequency_dimension = 128
+        return config
+
     def create_and_check_model(self, config, input_values, labels):
         model = ASTModel(config=config)
         model.to(torch_device)

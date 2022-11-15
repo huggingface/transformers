@@ -93,9 +93,8 @@ class ASTEmbeddings(nn.Module):
 
 class ASTPatchEmbeddings(nn.Module):
     """
-    This class turns `input_values` of shape `(batch_size, num_channels, height, width)` into the initial
-    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
-    Transformer.
+    This class turns `input_values` into the initial `hidden_states` (patch embeddings) of shape `(batch_size,
+    seq_length, hidden_size)` to be consumed by a Transformer.
     """
 
     def __init__(self, config):
