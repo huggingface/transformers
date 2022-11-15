@@ -632,29 +632,30 @@ que admite el rastreo y la optimización de modelos de  transformers para su imp
 3. Soporte para modelos HuggingFace Transformers construidos con [PyTorch](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/pytorch/bert_tutorial/tutorial_pretrained_bert.html) 
 o [TensorFlow](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/tensorflow/huggingface_bert/huggingface_bert.html).
 
-#### Implications
+#### Implicaciones
 
-Transformers Models based on the [BERT (Bidirectional Encoder Representations from Transformers)](https://huggingface.co/docs/transformers/main/model_doc/bert)
-architecture, or its variants such as [distilBERT](https://huggingface.co/docs/transformers/main/model_doc/distilbert)
- and [roBERTa](https://huggingface.co/docs/transformers/main/model_doc/roberta)
- will run best on Inf1 for non-generative tasks such as Extractive Question Answering,
- Sequence Classification, Token Classification. Alternatively, text generation
-tasks can be adapted to run on Inf1, according to this [AWS Neuron MarianMT tutorial](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/pytorch/transformers-marianmt.html).
-More information about models that can be converted out of the box on Inferentia can be
-found in the [Model Architecture Fit section of the Neuron documentation](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/models/models-inferentia.html#models-inferentia).
+Los modelos Transformers basados en la arquitectura 
+[BERT (Representaciones de _Enconder_ bidireccional de Transformers)](https://huggingface.co/docs/transformers/main/model_doc/bert), 
+o sus variantes, como [distilBERT](https://huggingface.co/docs/transformers/main/model_doc/distilbert) y 
+[roBERTa](https://huggingface.co/docs/transformers/main/model_doc/roberta), se ejecutarán mejor en Inf1 para tareas no 
+generativas, como la respuesta extractiva de preguntas, la clasificación de secuencias y la clasificación de tokens.
+Como alternativa, las tareas de generación de texto se pueden adaptar para ejecutarse en Inf1, según este 
+[tutorial de AWS Neuron MarianMT](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/src/examples/pytorch/transformers-marianmt.html).
+Puedes encontrar más información sobre los modelos que están listos para usarse en Inferentia en la 
+[sección _Model Architecture Fit_ de la documentación de Neuron](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/models/models-inferentia.html#models-inferentia).
 
-#### Dependencies
+#### Dependencias
 
-Using AWS Neuron to convert models requires the following dependencies and environment:
+Usar AWS Neuron para convertir modelos requiere las siguientes dependencias y entornos:
 
-* A [Neuron SDK environment](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/neuron-frameworks/pytorch-neuron/index.html#installation-guide),
-  which comes pre-configured on [AWS Deep Learning AMI](https://docs.aws.amazon.com/dlami/latest/devguide/tutorial-inferentia-launching.html).
+* Un [entorno Neuron SDK](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-guide/neuron-frameworks/pytorch-neuron/index.html#installation-guide), 
+que viene preconfigurado en [AWS Deep Learning AMI](https://docs.aws.amazon.com/dlami/latest/devguide/tutorial-inferentia-launching.html).
 
-#### Converting a Model for AWS Neuron
+#### Convertir un modelo a AWS Neuron
 
-Using the same script as in [Using TorchScript in Python](https://huggingface.co/docs/transformers/main/en/serialization#using-torchscript-in-python)
-to trace a "BertModel", you import `torch.neuron` framework extension to access
-the components of the Neuron SDK through a Python API.
+Con el mismo script usado en [Uso de TorchScript en Python](https://huggingface.co/docs/transformers/main/es/serialization#using-torchscript-in-python) ç
+para rastrear un "BertModel", puedes importar la extensión del _framework_ `torch.neuron` para acceder a los componentes 
+del SDK de Neuron a través de una API de Python.
 
 ```python
 from transformers import BertModel, BertTokenizer, BertConfig
@@ -662,23 +663,21 @@ import torch
 import torch.neuron
 
 ```
-And only modify the tracing line of code
-
-from:
+Y modificando la línea de código de rastreo de:
 
 ```python
 torch.jit.trace(model, [tokens_tensor, segments_tensors])
 
 ```
 
-to:
+con lo siguiente:
 
 ```python
 torch.neuron.trace(model, [token_tensor, segments_tensors])
 
 ```
 
-This change enables Neuron SDK to trace the model and optimize it to run in Inf1 instances.
+Este cambio permite a Neuron SDK rastrear el modelo y optimizarlo para ejecutarse en instancias Inf1.
 
-To learn more about AWS Neuron SDK features, tools, example tutorials and latest updates,
-please see the [AWS NeuronSDK documentation](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/index.html).
+Para obtener más información sobre las funciones, las herramientas, los tutoriales de ejemplo y las últimas actualizaciones 
+de AWS Neuron SDK, consulte la [documentación de AWS NeuronSDK](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/index.html).
