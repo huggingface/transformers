@@ -156,10 +156,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     Examples:
 
     ```python
-    >>> from transformers import pipeline
-    >>> pipe = pipeline(model="openai/whisper-base")
-    >>> pipe("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
-    {'text': ' He hoped there would be stew for dinner, turnips and carrots and bruised potatoes and fat mutton pieces to be ladled out in thick, peppered flour fat and sauce.'}
+    from transformers import pipeline
+    pipe = pipeline(model="openai/whisper-base")
+    result = pipe("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+
+    assert result == {'text': ' He hoped there would be stew for dinner, turnips and carrots and bruised potatoes and fat mutton pieces to be ladled out in thick, peppered flour fat and sauce.'}
     ```
 
     [More complex examples](pipeline_tutorial)
