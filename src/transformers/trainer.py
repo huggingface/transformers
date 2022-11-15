@@ -134,6 +134,7 @@ from .utils import (
     CONFIG_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    can_return_loss,
     find_labels,
     get_full_repo_name,
     is_apex_available,
@@ -625,6 +626,7 @@ class Trainer:
         self.use_tune_checkpoints = False
         default_label_names = find_labels(self.model.__class__)
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
+        self.can_return_loss = can_return_loss(self.model.__class__)
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
         # Internal variables to keep track of the original batch size
@@ -3190,6 +3192,14 @@ class Trainer:
             logits and labels (each being optional).
         """
         has_labels = False if len(self.label_names) == 0 else all(inputs.get(k) is not None for k in self.label_names)
+        # For CLIP-like models capable of returning loss values.
+        # If `return_loss` is not specified or being `None` in `inputs`, we check if the default value of `return_loss`
+        # is `True` in `model.forward`.
+        return_loss = inputs.get("return_loss", None)
+        if return_loss is None:
+            return_loss = self.can_return_loss
+        loss_without_labels = True if len(self.label_names) == 0 and return_loss else False
+
         inputs = self._prepare_inputs(inputs)
         if ignore_keys is None:
             if hasattr(self.model, "config"):
@@ -3198,7 +3208,7 @@ class Trainer:
                 ignore_keys = []
 
         # labels may be popped when computing the loss (label smoothing for instance) so we grab them first.
-        if has_labels:
+        if has_labels or loss_without_labels:
             labels = nested_detach(tuple(inputs.get(name) for name in self.label_names))
             if len(labels) == 1:
                 labels = labels[0]
@@ -3208,7 +3218,7 @@ class Trainer:
         with torch.no_grad():
             if is_sagemaker_mp_enabled():
                 raw_outputs = smp_forward_only(model, inputs)
-                if has_labels:
+                if has_labels or loss_without_labels:
                     if isinstance(raw_outputs, dict):
                         loss_mb = raw_outputs["loss"]
                         logits_mb = tuple(v for k, v in raw_outputs.items() if k not in ignore_keys + ["loss"])
@@ -3226,7 +3236,7 @@ class Trainer:
                         logits_mb = raw_outputs
                     logits = smp_nested_concat(logits_mb)
             else:
-                if has_labels:
+                if has_labels or loss_without_labels:
                     with self.compute_loss_context_manager():
                         loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                     loss = loss.mean().detach()
