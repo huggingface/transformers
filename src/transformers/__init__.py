@@ -3858,6 +3858,7 @@ if TYPE_CHECKING:
         from .models.detr import DetrFeatureExtractor
         from .models.donut import DonutFeatureExtractor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
+        from .models.fan import FANFeatureExtractor
         from .models.flava import FlavaFeatureExtractor, FlavaImageProcessor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
