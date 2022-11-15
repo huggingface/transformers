@@ -34,7 +34,7 @@ from transformers import (
     is_tf_available,
 )
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_tensorflow_probability, require_tf, require_torch, slow
+from transformers.testing_utils import require_tensorflow_probability, require_tf, slow
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
