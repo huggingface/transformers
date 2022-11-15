@@ -269,11 +269,15 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         output = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", subtask="semantic")
 
         output_masks = [o["mask"] for o in output]
+
+        # page links (to visualize)
         expected_masks = [
-            "https://huggingface.co/datasets/hf-internal-testing/mask-for-image-segmentation-tests/resolve/main/mask_0.png",
-            "https://huggingface.co/datasets/hf-internal-testing/mask-for-image-segmentation-tests/resolve/main/mask_1.png",
-            "https://huggingface.co/datasets/hf-internal-testing/mask-for-image-segmentation-tests/resolve/main/mask_2.png",
+            "https://huggingface.co/datasets/hf-internal-testing/mask-for-image-segmentation-tests/blob/main/mask_0.png"
+            "https://huggingface.co/datasets/hf-internal-testing/mask-for-image-segmentation-tests/blob/main/mask_1.png"
+            "https://huggingface.co/datasets/hf-internal-testing/mask-for-image-segmentation-tests/blob/main/mask_2.png"
         ]
+        # actual links to get files
+        expected_masks = [x.replace("/blob/", "/resolve/") for x in expected_masks]
         expected_masks = [Image.open(requests.get(image, stream=True).raw) for image in expected_masks]
 
         # Convert masks to numpy array
