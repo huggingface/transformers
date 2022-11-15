@@ -1108,8 +1108,6 @@ else:
             "CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ChineseCLIPModel",
             "ChineseCLIPPreTrainedModel",
-            "ChineseCLIPTextModel",
-            "ChineseCLIPVisionModel",
         ]
     )
     _import_structure["models.clipseg"].extend(
@@ -4091,8 +4089,6 @@ if TYPE_CHECKING:
             CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             ChineseCLIPModel,
             ChineseCLIPPreTrainedModel,
-            ChineseCLIPTextModel,
-            ChineseCLIPVisionModel,
         )
         from .models.clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
