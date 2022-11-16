@@ -142,7 +142,6 @@ class SegformerModelTester:
         )
         self.parent.assertGreater(result.loss, 0.0)
 
-
     def create_and_check_for_binary_image_segmentation(self, config, pixel_values, labels):
         config.num_labels = 1
         model = SegformerForSemanticSegmentation(config=config)
