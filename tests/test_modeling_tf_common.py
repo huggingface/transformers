@@ -1848,7 +1848,7 @@ class TFModelTesterMixin:
 
         Either the model supports XLA generation and passes the inner test, or it raises an appropriate exception
         """
-        self._test_xla_generate(num_beams=2, num_return_sequences=2, max_new_tokens=128)
+        self._test_xla_generate(num_beams=8, num_return_sequences=2, max_new_tokens=128)
 
     def _generate_random_bad_tokens(self, num_bad_tokens, model):
         # special tokens cannot be bad tokens
