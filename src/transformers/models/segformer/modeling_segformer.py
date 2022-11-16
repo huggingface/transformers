@@ -706,7 +706,7 @@ class SegformerDecodeHead(SegformerPreTrainedModel):
 
         self.config = config
 
-    def forward(self, encoder_hidden_states: torch.FloatTensor):
+    def forward(self, encoder_hidden_states: torch.FloatTensor) -> torch.Tensor:
         batch_size = encoder_hidden_states[-1].shape[0]
 
         all_hidden_states = ()
