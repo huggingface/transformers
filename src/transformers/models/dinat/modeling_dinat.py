@@ -58,7 +58,7 @@ _FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "shi-labs/dinat-mini-in1k-224"
-_EXPECTED_OUTPUT_SHAPE = [1, 49, 768]
+_EXPECTED_OUTPUT_SHAPE = [1, 7, 7, 512]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "shi-labs/dinat-mini-in1k-224"
