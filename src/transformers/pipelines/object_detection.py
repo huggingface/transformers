@@ -32,10 +32,7 @@ class ObjectDetectionPipeline(Pipeline):
     >>> from transformers import pipeline
 
     >>> detector = pipeline(model="facebook/detr-resnet-50")
-    >>> objects = detector("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png")
-    >>> from transformers.testing_utils import nested_simplify
-
-    >>> nested_simplify(objects)  # Slight score differences might occur based on PyTorch/Tensorflow differences
+    >>> detector("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png")
     [{'score': 0.997, 'label': 'bird', 'box': {'xmin': 69, 'ymin': 171, 'xmax': 396, 'ymax': 507}}, {'score': 0.999, 'label': 'bird', 'box': {'xmin': 398, 'ymin': 105, 'xmax': 767, 'ymax': 507}}]
 
     >>> # x, y  are expressed relative to the top left hand corner.
