@@ -78,8 +78,6 @@ class ResNetConfig(PretrainedConfig):
     """
     model_type = "resnet"
     layer_types = ["basic", "bottleneck"]
-    # note that this assumes there are always 4 stages
-    stage_names = ["stem", "stage1", "stage2", "stage3", "stage4"]
 
     def __init__(
         self,
@@ -103,6 +101,7 @@ class ResNetConfig(PretrainedConfig):
         self.layer_type = layer_type
         self.hidden_act = hidden_act
         self.downsample_in_first_stage = downsample_in_first_stage
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
         if out_features is not None:
             if not isinstance(out_features, list):
                 raise ValueError("out_features should be a list")
