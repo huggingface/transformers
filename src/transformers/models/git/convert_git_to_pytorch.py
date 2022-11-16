@@ -27,6 +27,8 @@ import requests
 from transformers import GITConfig, GITForCausalLM, GITVisionConfig
 from transformers.utils import logging
 
+from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
+
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -128,9 +130,9 @@ def read_in_q_k_v(state_dict, config):
         in_proj_bias = state_dict.pop(f"module.image_encoder.transformer.resblocks.{i}.attn.in_proj_bias")
         # next, add query, keys and values (in that order) to the state dict
         state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[
-            : dim, :
+            :dim, :
         ]
-        state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[: dim]
+        state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:dim]
         state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[
             dim : dim * 2, :
         ]
@@ -138,16 +140,25 @@ def read_in_q_k_v(state_dict, config):
             dim : dim * 2
         ]
         state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[
-            -dim :, :
+            -dim:, :
         ]
-        state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-dim :]
+        state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-dim:]
 
 
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    image = Image.open(requests.get(url, stream=True).raw)
+    return image
+
+
+image_transforms = Compose([
+    Resize(224, interpolation=Image.BICUBIC),
+    CenterCrop(224),
+    ToTensor(),
+    Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
+    ]
+)
 
 
 @torch.no_grad()
@@ -175,14 +186,18 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
 
     # load HuggingFace model
     model = GITForCausalLM(config)
-    model.load_state_dict(state_dict)
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     model.eval()
 
+    assert missing_keys == ['git.embeddings.position_ids', 'git.image_encoder.vision_model.embeddings.position_ids']
+    assert len(unexpected_keys) == 0
+
     # TODO verify results
-    pixel_values = torch.randn(1, 3, 224, 224)
+    image = prepare_img()
+    pixel_values = image_transforms(image).unsqueeze(0)
     input_ids = torch.randint(0, 100, (1, 10))
 
-    logits = model(pixel_values, input_ids).logits
+    logits = model(input_ids, pixel_values=pixel_values).logits
     print(logits.shape)
 
     if pytorch_dump_folder_path is not None:

@@ -17,6 +17,7 @@
 
 
 import math
+from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -25,6 +26,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...file_utils import ModelOutput
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -54,6 +56,33 @@ GIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/git-base",
     # See all GIT models at https://huggingface.co/models?filter=git
 ]
+
+
+@dataclass
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionModelOutput with CLIP->GIT
+class GITVisionModelOutput(ModelOutput):
+    """
+    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
+    Args:
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+            The image embeddings obtained by applying the projection layer to the pooler_output.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    image_embeds: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class GITEmbeddings(nn.Module):
@@ -90,7 +119,9 @@ class GITEmbeddings(nn.Module):
             position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
         if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
+            embeddings = self.word_embeddings(input_ids)
+        else:
+            embeddings = inputs_embeds
 
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
@@ -1079,11 +1110,26 @@ class GITVisionModel(GITPreTrainedModel):
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        return self.vision_model(
+        vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+        )
+
+        pooled_output = vision_outputs[1]  # pooled_output
+
+        image_embeds = self.visual_projection(pooled_output)
+
+        if not return_dict:
+            outputs = (image_embeds, vision_outputs[0]) + vision_outputs[2:]
+            return tuple(output for output in outputs if output is not None)
+
+        return GITVisionModelOutput(
+            image_embeds=image_embeds,
+            last_hidden_state=vision_outputs.last_hidden_state,
+            hidden_states=vision_outputs.hidden_states,
+            attentions=vision_outputs.attentions,
         )
 
 
@@ -1100,7 +1146,8 @@ class GITProjection(nn.Module):
 
 
 @add_start_docstrings(
-    "The bare GIT Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare GIT Model transformer consisting of a CLIP image encoder and text decoder outputting raw hidden-states"
+    " without any specific head on top.",
     GIT_START_DOCSTRING,
 )
 class GITModel(GITPreTrainedModel):
@@ -1144,6 +1191,7 @@ class GITModel(GITPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        pixel_values: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
@@ -1155,15 +1203,6 @@ class GITModel(GITPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
         past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
 
@@ -1224,6 +1263,13 @@ class GITModel(GITPreTrainedModel):
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+
+        if pixel_values is not None:
+            vision_outputs = self.image_encoder(pixel_values)
+        else:
+            visual_features = None
+
+        print("Shape of visual features:", vision_outputs.image_embeds.shape)
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
@@ -1293,10 +1339,9 @@ class GITForCausalLM(GITPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        pixel_values: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.Tensor]] = None,
         use_cache: Optional[bool] = None,
@@ -1305,15 +1350,6 @@ class GITForCausalLM(GITPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
@@ -1336,10 +1372,9 @@ class GITForCausalLM(GITPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            pixel_values=pixel_values,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
