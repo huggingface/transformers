@@ -88,6 +88,29 @@ class TokenClassificationPipeline(Pipeline):
     Named Entity Recognition pipeline using any `ModelForTokenClassification`. See the [named entity recognition
     examples](../task_summary#named-entity-recognition) for more information.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> token_classifier = pipeline(model="Jean-Baptiste/camembert-ner", aggregation_strategy="simple")
+    >>> sentence = "Je m'appelle jean-baptiste et je vis à montréal"
+    >>> tokens = token_classifier(sentence)
+    >>> from transformers.testing_utils import (
+    ...     nested_simplify,
+    ... )  # Score might vary slightly based on PyTorch/Tensorflow versions
+
+    >>> nested_simplify(tokens)
+    [{'entity_group': 'PER', 'score': 0.9931, 'word': 'jean-baptiste', 'start': 12, 'end': 26}, {'entity_group': 'LOC', 'score': 0.998, 'word': 'montréal', 'start': 38, 'end': 47}]
+
+    >>> token = tokens[0]
+    >>> # Start and end provide an easy way to highlight words in the original text.
+    >>> sentence[token["start"] : token["end"]]
+    ' jean-baptiste'
+    ```
+
+    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+
     This token recognition pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"ner"` (for predicting the classes of tokens in a sequence: person, organisation, location or miscellaneous).
 
