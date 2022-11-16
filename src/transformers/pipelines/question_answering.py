@@ -232,12 +232,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
     >>> from transformers import pipeline
 
     >>> oracle = pipeline(model="deepset/roberta-base-squad2")
-    >>> answer = oracle(question="Where do I live?", context="My name is Wolfgang and I live in Berlin")
-    >>> from transformers.testing_utils import (
-    ...     nested_simplify,
-    ... )  # The score might differ slightly across PyTorch/Tensorflow versions
-
-    >>> nested_simplify(answer)
+    >>> oracle(question="Where do I live?", context="My name is Wolfgang and I live in Berlin")
     {'score': 0.9191, 'start': 34, 'end': 40, 'answer': 'Berlin'}
     ```
 
