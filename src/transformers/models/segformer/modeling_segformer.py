@@ -813,11 +813,13 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
             if self.config.num_labels > 1:
                 loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
                 loss = loss_fct(upsampled_logits, labels)
-            else:
+            elif self.config.num_labels == 1:
                 valid_mask = ((labels >= 0) & (labels != self.config.semantic_loss_ignore_index)).float()
-                loss_fct = BCEWithLogitsLoss(redction="none")
-                loss = loss_fct(upsampled_logits, labels.float())
+                loss_fct = BCEWithLogitsLoss(reduction="none")
+                loss = loss_fct(upsampled_logits.squeeze(1), labels.float())
                 loss = (loss * valid_mask).mean()
+            else:
+                raise ValueError("Number of labels should be >=0: {}".format(self.config.num_labels))
 
         if not return_dict:
             if output_hidden_states:
