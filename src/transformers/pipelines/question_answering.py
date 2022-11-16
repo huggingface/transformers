@@ -226,6 +226,23 @@ class QuestionAnsweringPipeline(ChunkPipeline):
     Question Answering pipeline using any `ModelForQuestionAnswering`. See the [question answering
     examples](../task_summary#question-answering) for more information.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> oracle = pipeline(model="deepset/roberta-base-squad2")
+    >>> answer = oracle(question="Where do I live?", context="My name is Wolfgang and I live in Berlin")
+    >>> from transformers.testing_utils import (
+    ...     nested_simplify,
+    ... )  # The score might differ slightly across PyTorch/Tensorflow versions
+
+    >>> nested_simplify(answer)
+    {'score': 0.9191, 'start': 34, 'end': 40, 'answer': 'Berlin'}
+    ```
+
+    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+
     This question answering pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"question-answering"`.
 
