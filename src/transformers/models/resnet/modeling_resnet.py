@@ -435,10 +435,9 @@ class ResNetBackbone(ResNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        self.stage_names = config.stage_names
         self.resnet = ResNetModel(config)
 
-        # note that this assumes there are always 4 stages
-        self.stage_names = ["stem", "stage1", "stage2", "stage3", "stage4"]
         self.out_features = config.out_features
 
         self.out_feature_channels = {
