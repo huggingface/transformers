@@ -597,8 +597,8 @@ class GITOnlyMLMHead(nn.Module):
         self.predictions = GITLMPredictionHead(config)
 
     def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
-        logits = self.predictions(sequence_output)
-        return logits
+        prediction_scores = self.predictions(sequence_output)
+        return prediction_scores
 
 
 class GITPreTrainedModel(PreTrainedModel):

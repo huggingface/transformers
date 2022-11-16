@@ -27,13 +27,13 @@ GIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-# Copied from transformers.models.clip.configuration_clip.CLIPVisionConfig with CLIP->GIT, clip->git
+# Copied from transformers.models.clip.configuration_clip.CLIPVisionConfig with CLIP->GIT, clip->git, openai/git-vit-base-patch32->microsoft/git-base, 32->16
 class GITVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GITModel`]. It is used to instantiate an GIT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the GIT
-    [openai/git-vit-base-patch32](https://huggingface.co/openai/git-vit-base-patch32) architecture.
+    [microsoft/git-base](https://huggingface.co/microsoft/git-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -50,7 +50,7 @@ class GITVisionConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
+        patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -71,10 +71,10 @@ class GITVisionConfig(PretrainedConfig):
     ```python
     >>> from transformers import GITVisionConfig, GITVisionModel
 
-    >>> # Initializing a GITVisionConfig with openai/git-vit-base-patch32 style configuration
+    >>> # Initializing a GITVisionConfig with microsoft/git-base style configuration
     >>> configuration = GITVisionConfig()
 
-    >>> # Initializing a GITVisionModel (with random weights) from the openai/git-vit-base-patch32 style configuration
+    >>> # Initializing a GITVisionModel (with random weights) from the microsoft/git-base style configuration
     >>> model = GITVisionModel(configuration)
 
     >>> # Accessing the model configuration
@@ -92,7 +92,7 @@ class GITVisionConfig(PretrainedConfig):
         num_attention_heads=12,
         num_channels=3,
         image_size=224,
-        patch_size=32,
+        patch_size=16,
         hidden_act="quick_gelu",
         layer_norm_eps=0.00001,
         dropout=0.0,
