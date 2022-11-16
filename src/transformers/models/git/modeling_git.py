@@ -1,6 +1,6 @@
 # coding=utf-8
-# Copyright 2022 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2022 Microsoft Research and The HuggingFace Inc. team.
+# All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1291,7 +1291,7 @@ class GITForCausalLM(GITPreTrainedModel):
             logger.warning("If you want to use `GITForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.git = GITModel(config, add_pooling_layer=False)
-        self.output = nn.Linear(self.hidden_size, config.vocab_size)
+        self.output = nn.Linear(config.hidden_size, config.vocab_size)
 
         # Initialize weights and apply final processing
         self.post_init()
