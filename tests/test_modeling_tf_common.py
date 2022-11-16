@@ -2370,7 +2370,7 @@ class TFModelPushToHubTester(unittest.TestCase):
             model.push_to_hub("test-model-tf", use_auth_token=self._token)
         logging.set_verbosity_warning()
         # Check the model card was created and uploaded.
-        self.assertIn("Uploading README.md to __DUMMY_TRANSFORMERS_USER__/test-model-tf", cl.out)
+        self.assertIn("Uploading the following files to __DUMMY_TRANSFORMERS_USER__/test-model-tf", cl.out)
 
         new_model = TFBertModel.from_pretrained(f"{USER}/test-model-tf")
         models_equal = True
@@ -2400,19 +2400,13 @@ class TFModelPushToHubTester(unittest.TestCase):
         model = TFBertForMaskedLM(config)
         model.compile()
 
-        logging.set_verbosity_info()
-        logger = logging.get_logger("transformers.utils.hub")
-        with CaptureLogger(logger) as cl:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                push_to_hub_callback = PushToHubCallback(
-                    output_dir=tmp_dir,
-                    hub_model_id="test-model-tf-callback",
-                    hub_token=self._token,
-                )
-                model.fit(model.dummy_inputs, model.dummy_inputs, epochs=1, callbacks=[push_to_hub_callback])
-        logging.set_verbosity_warning()
-        # Check the model card was created and uploaded.
-        self.assertIn("Uploading README.md to __DUMMY_TRANSFORMERS_USER__/test-model-tf-callback", cl.out)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            push_to_hub_callback = PushToHubCallback(
+                output_dir=tmp_dir,
+                hub_model_id="test-model-tf-callback",
+                hub_token=self._token,
+            )
+            model.fit(model.dummy_inputs, model.dummy_inputs, epochs=1, callbacks=[push_to_hub_callback])
 
         new_model = TFBertForMaskedLM.from_pretrained(f"{USER}/test-model-tf-callback")
         models_equal = True
