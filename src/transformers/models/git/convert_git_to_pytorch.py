@@ -61,7 +61,7 @@ def create_rename_keys(config):
     rename_keys.append(("module.image_encoder.ln_post.weight", "git.image_encoder.vision_model.post_layernorm.weight"))
     rename_keys.append(("module.image_encoder.ln_post.bias", "git.image_encoder.vision_model.post_layernorm.bias"))
     # fmt: on
-    # TODO: projection layer 768 -> 512
+    rename_keys.append(("module.image_encoder.proj", "git.image_encoder.visual_projection.weight"))
 
     # fmt: off
     for i in range(config.vision_config.num_hidden_layers):
@@ -116,7 +116,31 @@ def create_rename_keys(config):
 
 def rename_key(dct, old, new):
     val = dct.pop(old)
-    dct[new] = val
+    dct[new] = val.T if "image_encoder.visual_projection" in new else val
+
+
+# we split up the matrix of each CLIP encoder layer into queries, keys and values
+def read_in_q_k_v(state_dict, config):
+    dim = config.vision_config.hidden_size
+    for i in range(config.vision_config.num_hidden_layers):
+        # read in weights + bias of input projection layer (in the original implementation, this is a single matrix + bias)
+        in_proj_weight = state_dict.pop(f"module.image_encoder.transformer.resblocks.{i}.attn.in_proj_weight")
+        in_proj_bias = state_dict.pop(f"module.image_encoder.transformer.resblocks.{i}.attn.in_proj_bias")
+        # next, add query, keys and values (in that order) to the state dict
+        state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[
+            : dim, :
+        ]
+        state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[: dim]
+        state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[
+            dim : dim * 2, :
+        ]
+        state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[
+            dim : dim * 2
+        ]
+        state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[
+            -dim :, :
+        ]
+        state_dict[f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-dim :]
 
 
 # We will verify our results on an image of cute cats
@@ -141,12 +165,13 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     # load original state_dict from URL
     checkpoint_url = model_name_to_url[model_name]
     # state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
+    # TODO remove line below
     state_dict = torch.load("/Users/nielsrogge/Documents/GIT/model.pt", map_location="cpu")["model"]
     # rename keys
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
-    # TODO: qkv of CLIP encoder
+    read_in_q_k_v(state_dict, config)
 
     # load HuggingFace model
     model = GITForCausalLM(config)

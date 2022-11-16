@@ -1056,12 +1056,14 @@ class GITVisionTransformer(nn.Module):
 
 
 class GITVisionModel(GITPreTrainedModel):
-    config_class = GITConfig
+    config_class = GITVisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: GITConfig):
         super().__init__(config)
         self.vision_model = GITVisionTransformer(config)
+
+        self.visual_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
         # Initialize weights and apply final processing
         self.post_init()
 
