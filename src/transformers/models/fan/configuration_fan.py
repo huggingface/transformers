@@ -35,6 +35,7 @@ original_feature_mapping = {
     "in_chans": "num_channels",
     "num_classes": "num_labels",
     "embed_dim": "hidden_size",
+    "act_layer": "hidden_act",
 }
 # DONE: Rename embed_dim to hidden_size
 # DONE: Rename num_classes to num_labels
@@ -46,7 +47,7 @@ class FANConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`~FANModel`].
     It is used to instantiate an FAN model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the FAN [nvidia/fan](https://huggingface.co/nvidia/fan) architecture.
+    the FAN [ksmcg/fan_base_18_p16_224](https://huggingface.co/ksmcg/fan_base_18_p16_224) architecture.
 
     Configuration objects inherit from  [`PretrainedConfig`] and can be used
     to control the model outputs. Read the documentation from  [`PretrainedConfig`]
@@ -118,6 +119,8 @@ class FANConfig(PretrainedConfig):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
+        hybrid_patch_size (`int`, defaults to 2):
+            The patch size used in the hybrid embeddings, when using default backbone.
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with.
             Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
@@ -130,10 +133,10 @@ class FANConfig(PretrainedConfig):
     ```python
     >>> from transformers import FANModel, FANConfig
 
-    >>> # Initializing a FAN nvidia/fan style configuration
+    >>> # Initializing a FAN ksmcg/fan_base_18_p16_224 style configuration
     >>> configuration = FANConfig()
 
-    >>> # Initializing a model from the nvidia/fan style configuration
+    >>> # Initializing a model from the ksmcg/fan_base_18_p16_224 style configuration
     >>> model = FANModel(configuration)
 
     >>> # Accessing the model configuration
@@ -162,10 +165,10 @@ class FANConfig(PretrainedConfig):
         attn_drop_rate=0.0,  # HASCOMMENTS
         drop_path_rate=0.0,  # HASCOMMENTS
         decoder_dropout=0.1,  # HASCOMMENTS
-        act_layer=None,  # TODO: Add Documentation Refactor modeling to include ACT2CLS/ACT2FN from activations
+        hidden_act="gelu",  # HASCOMMENTS # TODO: Add Documentation Refactor modeling to include ACT2CLS/ACT2FN from activations
         norm_layer=None,
         cls_attn_layers=2,  # HASCOMMENTS
-        hybrid_patch_size=2,
+        hybrid_patch_size=2,  # HASCOMMENTS
         channel_dims=None,  # HASCOMMENTS
         feat_downsample=False,  # HASCOMMENTS
         out_index=-1,
@@ -200,7 +203,7 @@ class FANConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.decoder_dropout = decoder_dropout
         self.norm_layer = norm_layer
-        self.act_layer = act_layer
+        self.hidden_act = hidden_act
         self.cls_attn_layers = cls_attn_layers
         self.hybrid_patch_size = hybrid_patch_size
         self.channel_dims = channel_dims
