@@ -40,11 +40,7 @@ class ImageClassificationPipeline(Pipeline):
     >>> from transformers import pipeline
 
     >>> classifier = pipeline(model="microsoft/beit-base-patch16-224-pt22k-ft22k")
-    >>> potential_words = classifier("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png")
-
-    >>> from transformers.testing_utils import nested_simplify
-
-    >>> nested_simplify(potential_words)  # The scores might vary slightly across pytorch/tensorflow versions.
+    >>> classifier("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png")
     [{'score': 0.442, 'label': 'macaw'}, {'score': 0.088, 'label': 'popinjay'}, {'score': 0.075, 'label': 'parrot'}, {'score': 0.073, 'label': 'parodist, lampooner'}, {'score': 0.046, 'label': 'poll, poll_parrot'}]
     ```
 
