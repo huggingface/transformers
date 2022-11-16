@@ -2230,7 +2230,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model = cls(config, *model_args, **model_kwargs)
 
         if load_in_8bit:
-            from .utils.bitsandbytes import get_keys_to_not_convert, replace_8bit_linear
+            from .utils.bitsandbytes import get_keys_to_not_convert, replace_8bit_linear, warn_uncompatible_save
 
             logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
 
@@ -2339,6 +2339,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dtype=torch_dtype,
                 load_in_8bit=load_in_8bit,
             )
+
+        # Let's add a safety checker to warn users that `save_pretrained` cannot be used
+        # under 8_bit models
+        if load_in_8bit:
+            setattr(model, "save_pretrained", warn_uncompatible_save(model.save_pretrained))
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
