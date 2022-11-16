@@ -36,7 +36,7 @@ class DepthEstimationPipeline(Pipeline):
     torch.Size([1, 384, 384])
     ```
 
-    [Using pipelines in a webserver or with a dataset](../pipeline_tutorial)
+    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
 
 
     This depth estimation pipeline can currently be loaded from [`pipeline`] using the following task identifier:

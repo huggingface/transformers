@@ -77,16 +77,11 @@ class AudioClassificationPipeline(Pipeline):
     >>> from transformers import pipeline
 
     >>> classifier = pipeline(model="superb/wav2vec2-base-superb-ks")
-    >>> result = classifier("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
-
-    >>> # Simplify results, different torch versions might alter the scores slightly.
-    >>> from transformers.testing_utils import nested_simplify
-
-    >>> nested_simplify(result)
+    >>> classifier("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
     [{'score': 0.997, 'label': '_unknown_'}, {'score': 0.002, 'label': 'left'}, {'score': 0.0, 'label': 'yes'}, {'score': 0.0, 'label': 'down'}, {'score': 0.0, 'label': 'stop'}]
     ```
 
-    [Using pipelines in a webserver or with a dataset](../pipeline_tutorial)
+    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
 
 
     This pipeline can currently be loaded from [`pipeline`] using the following task identifier:
