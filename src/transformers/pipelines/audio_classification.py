@@ -79,7 +79,6 @@ class AudioClassificationPipeline(Pipeline):
     >>> classifier = pipeline(model="superb/wav2vec2-base-superb-ks")
     >>> classifier("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
     [{'score': 0.997, 'label': '_unknown_'}, {'score': 0.002, 'label': 'left'}, {'score': 0.0, 'label': 'yes'}, {'score': 0.0, 'label': 'down'}, {'score': 0.0, 'label': 'stop'}]
-
     ```
 
     [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
