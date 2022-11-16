@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Dict, Optional, Union
 
 import numpy as np
 
+import requests
+
 from ..utils import is_torch_available, logging
 from .audio_utils import ffmpeg_read
 from .base import ChunkPipeline
@@ -106,6 +108,18 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     The input can be either a raw waveform or a audio file. In case of the audio file, ffmpeg should be installed for
     to support multiple audio formats
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> transcriber = pipeline(model="openai/whisper-base")
+    >>> transcriber("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+    {'text': ' He hoped there would be stew for dinner, turnips and carrots and bruised potatoes and fat mutton pieces to be ladled out in thick, peppered flour fat and sauce.'}
+    ```
+
+    [Using pipelines in a webserver or with a dataset](../pipeline_tutorial)
+
     Arguments:
         model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
@@ -150,6 +164,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             [PyCTCDecode's
             BeamSearchDecoderCTC](https://github.com/kensho-technologies/pyctcdecode/blob/2fd33dc37c4111417e08d89ccd23d28e9b308d19/pyctcdecode/decoder.py#L180)
             can be passed for language model boosted decoding. See [`Wav2Vec2ProcessorWithLM`] for more information.
+
     """
 
     def __init__(self, feature_extractor: Union["SequenceFeatureExtractor", str], *args, **kwargs):
@@ -179,8 +194,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         **kwargs,
     ):
         """
-        Classify the sequence(s) given as inputs. See the [`AutomaticSpeechRecognitionPipeline`] documentation for more
-        information.
+        Transcribe the audio sequence(s) given as inputs to text. See the [`AutomaticSpeechRecognitionPipeline`]
+        documentation for more information.
 
         Args:
             inputs (`np.ndarray` or `bytes` or `str` or `dict`):
@@ -236,8 +251,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
     def preprocess(self, inputs, chunk_length_s=0, stride_length_s=None, ignore_warning=False):
         if isinstance(inputs, str):
-            with open(inputs, "rb") as f:
-                inputs = f.read()
+            if inputs.startswith("http://") or inputs.startswith("https://"):
+                # We need to actually check for a real protocol, otherwise it's impossible to use a local file
+                # like http_huggingface_co.png
+                inputs = requests.get(inputs).content
+            else:
+                with open(inputs, "rb") as f:
+                    inputs = f.read()
 
         if isinstance(inputs, bytes):
             inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
