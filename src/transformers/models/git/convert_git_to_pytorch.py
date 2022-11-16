@@ -195,10 +195,11 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     # TODO verify results
     image = prepare_img()
     pixel_values = image_transforms(image).unsqueeze(0)
-    input_ids = torch.randint(0, 100, (1, 10))
+    input_ids = torch.tensor([[101]])
 
     logits = model(input_ids, pixel_values=pixel_values).logits
-    print(logits.shape)
+    assert torch.allclose(logits[0,-1,:3], torch.tensor([-1.2832, -1.2835, -1.2840]), atol=1e-4)
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
