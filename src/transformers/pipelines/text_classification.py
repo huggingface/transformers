@@ -56,13 +56,10 @@ class TextClassificationPipeline(Pipeline):
     >>> from transformers import pipeline
 
     >>> classifier = pipeline(model="distilbert-base-uncased-finetuned-sst-2-english")
-    >>> scores = classifier("This movie is disgustingly good !")
-    >>> from transformers.testing_utils import nested_simplify
-
-    >>> nested_simplify(scores)  # The scores might vary very slightly based on PyTorch version or Tensorflow.
+    >>> classifier("This movie is disgustingly good !")
     [{'label': 'POSITIVE', 'score': 1.0}]
 
-    >>> nested_simplify(classifier("Director tried too much."))
+    >>> classifier("Director tried too much.")
     [{'label': 'NEGATIVE', 'score': 0.996}]
     ```
 
