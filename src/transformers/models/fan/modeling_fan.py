@@ -204,10 +204,10 @@ class PositionalEncodingFourier(nn.Module):
         # Segmentation Positional Encoder link https://github.com/NVlabs/FAN/blob/master/segmentation/mmseg/models/backbones/fan.py
         # Classifier Positional Encoder link https://github.com/NVlabs/FAN/blob/master/models/fan.py
 
-    def forward(self, batch_size: int, H: int, W: int):
+    def forward(self, batch_size: int, height: int, width: int):
         device = self.token_projection.weight.device
-        y_embed = torch.arange(1, H + 1, dtype=torch.float32, device=device).unsqueeze(1).repeat(1, 1, W)
-        x_embed = torch.arange(1, W + 1, dtype=torch.float32, device=device).repeat(1, H, 1)
+        y_embed = torch.arange(1, height + 1, dtype=torch.float32, device=device).unsqueeze(1).repeat(1, 1, width)
+        x_embed = torch.arange(1, width + 1, dtype=torch.float32, device=device).repeat(1, height, 1)
         y_embed = y_embed / (y_embed[:, -1:, :] + self.eps) * self.scale
         x_embed = x_embed / (x_embed[:, :, -1:] + self.eps) * self.scale
         dim_t = torch.arange(self.hidden_dim, dtype=torch.float32, device=device)
@@ -218,7 +218,7 @@ class PositionalEncodingFourier(nn.Module):
         pos_y = torch.stack([pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()], dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         pos = self.token_projection(pos)
-        return pos.repeat(batch_size, 1, 1, 1)  # (batch_size, C, H, W)
+        return pos.repeat(batch_size, 1, 1, 1)  # (batch_size, C, height, width)
 
 
 def conv3x3(in_planes, out_planes, stride=1):
@@ -296,17 +296,21 @@ class SEMlp(nn.Module):
             self.relu = nn.ReLU(inplace=True)
         self.se = SqueezeExcite(out_features, se_ratio=0.25) if use_se else nn.Identity()
 
-    def forward(self, x, H, W):
+    def forward(self, x, height, width):
         batch_size, N, C = x.shape
         x = self.fc1(x)
         if self.linear:
             x = self.relu(x)
         # import pdb; pdb.set_trace()
-        x = self.drop(self.weight * self.dwconv(x, H, W)) + x
+        x = self.drop(self.weight * self.dwconv(x, height, width)) + x
         x = self.fc2(x)
         x = self.drop(x)
-        x = self.se(x.permute(0, 2, 1).reshape(batch_size, C, H, W)).reshape(batch_size, C, N).permute(0, 2, 1)
-        return x, H, W
+        x = (
+            self.se(x.permute(0, 2, 1).reshape(batch_size, C, height, width))
+            .reshape(batch_size, C, N)
+            .permute(0, 2, 1)
+        )
+        return x, height, width
 
 
 class Mlp(nn.Module):
@@ -332,11 +336,11 @@ class Mlp(nn.Module):
         if self.linear:
             self.relu = nn.ReLU(inplace=True)
 
-    def forward(self, x, H, W):
+    def forward(self, x, height, width):
         x = self.fc1(x)
         if self.linear:
             x = self.relu(x)
-        x = self.drop(self.weight * self.dwconv(x, H, W)) + x
+        x = self.drop(self.weight * self.dwconv(x, height, width)) + x
         x = self.fc2(x)
         x = self.drop(x)
         return x
@@ -414,9 +418,9 @@ class DWConv(nn.Module):
             groups=out_features,
         )
 
-    def forward(self, x, H: int, W: int):
+    def forward(self, x, height: int, width: int):
         batch_size, N, C = x.shape
-        x = x.permute(0, 2, 1).reshape(batch_size, C, H, W)
+        x = x.permute(0, 2, 1).reshape(batch_size, C, height, width)
         x = self.conv1(x)
         x = self.act(x)
         x = self.bn(x)
@@ -643,7 +647,7 @@ class TokenMixing(nn.Module):
         self.linear = linear
         # self.sr_ratio = sr_ratio
 
-    def forward(self, x, H, W, atten=None, return_attention=False):
+    def forward(self, x, height, width, atten=None, return_attention=False):
         batch_size, N, C = x.shape
         q = (
             self.q(x)
@@ -716,14 +720,14 @@ class HybridEmbed(nn.Module):
 
     def forward(self, x, return_feat=False):
         x, out_list = self.backbone(x, return_feat=return_feat)
-        batch_size, C, H, W = x.shape
+        batch_size, C, height, width = x.shape
         if isinstance(x, (list, tuple)):
             x = x[-1]  # last feature if backbone outputs list/tuple of features
         x = self.proj(x).flatten(2).transpose(1, 2)
         if return_feat:
-            return x, (H // self.patch_size[0], W // self.patch_size[1]), out_list
+            return x, (height // self.patch_size[0], width // self.patch_size[1]), out_list
         else:
-            return x, (H // self.patch_size[0], W // self.patch_size[1])
+            return x, (height // self.patch_size[0], width // self.patch_size[1])
 
 
 class ChannelProcessing(nn.Module):
@@ -777,7 +781,7 @@ class ChannelProcessing(nn.Module):
         attn = torch.sigmoid(q @ k)
         return attn * self.temperature
 
-    def forward(self, x, H, W, atten=None):
+    def forward(self, x, height, width, atten=None):
         batch_size, N, C = x.shape
         v = x.reshape(batch_size, N, self.num_attention_heads, C // self.num_attention_heads).permute(0, 2, 1, 3)
 
@@ -793,7 +797,7 @@ class ChannelProcessing(nn.Module):
 
         Bv, Hd, Nv, Cv = v.shape
         v = (
-            self.norm_v(self.mlp_v(v.transpose(1, 2).reshape(Bv, Nv, Hd * Cv), H, W))
+            self.norm_v(self.mlp_v(v.transpose(1, 2).reshape(Bv, Nv, Hd * Cv), height, width))
             .reshape(Bv, Nv, Hd, Cv)
             .transpose(1, 2)
         )
@@ -916,11 +920,8 @@ class FANBlock(nn.Module):
         self.weight2 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
 
         self.downsample = downsample
-        # self.H = None
-        # self.W = None
 
     def forward(self, x, Hp, Wp, attn=None, return_attention=False):
-        # H, W = self.H, self.W
 
         x_new, attn_s = self.attn(self.norm1(x), Hp, Wp)
         x = x + self.drop_path(self.weight1 * x_new)
@@ -932,7 +933,6 @@ class FANBlock(nn.Module):
 
         if self.downsample is not None:
             x, Hp, Wp = self.downsample(x, Hp, Wp)
-        # self.H, self.W = H, W
         return x, Hp, Wp, attn_s
 
 
@@ -946,8 +946,8 @@ class OverlapPatchEmbed(nn.Module):
 
         self.img_size = img_size
         self.patch_size = patch_size
-        self.H, self.W = img_size[0] // patch_size[0], img_size[1] // patch_size[1]
-        self.num_patches = self.H * self.W
+        self.height, self.width = img_size[0] // patch_size[0], img_size[1] // patch_size[1]
+        self.num_patches = self.height * self.width
         self.proj = nn.Conv2d(
             in_chans,
             hidden_size,
@@ -957,16 +957,16 @@ class OverlapPatchEmbed(nn.Module):
         )
         self.norm = nn.LayerNorm(hidden_size)
 
-    def forward(self, x, H, W):
+    def forward(self, x, height, width):
         batch_size, N, C = x.shape
-        x = x.transpose(-1, -2).reshape(batch_size, C, H, W)
+        x = x.transpose(-1, -2).reshape(batch_size, C, height, width)
         x = self.proj(x)
-        _, _, H, W = x.shape
+        _, _, height, width = x.shape
 
         x = x.flatten(2).transpose(1, 2)
         x = self.norm(x)
 
-        return x, H, W
+        return x, height, width
 
 
 # ConvNext Utils for Hybrid Backbones
@@ -981,7 +981,7 @@ def _is_contiguous(tensor: torch.Tensor) -> bool:
 
 
 class LayerNorm2d(nn.LayerNorm):
-    r"""LayerNorm for channels_first tensors with 2d spatial dimensions (ie N, C, H, W)."""
+    r"""LayerNorm for channels_first tensors with 2d spatial dimensions (ie N, C, height, width)."""
 
     def __init__(self, normalized_shape, eps=1e-6):
         super().__init__(normalized_shape, eps=eps)
@@ -1035,12 +1035,12 @@ class ConvMlp(nn.Module):
 class ConvNeXtBlock(nn.Module):
     """ConvNeXt Block
     There are two equivalent implementations:
-      (1) DwConv -> LayerNorm (channels_first) -> 1x1 Conv -> GELU -> 1x1 Conv; all in (N, C, H, W)
-      (2) DwConv -> Permute to (N, H, W, C); LayerNorm (channels_last) -> Linear -> GELU -> Linear; Permute back
+      (1) DwConv -> LayerNorm (channels_first) -> 1x1 Conv -> GELU -> 1x1 Conv; all in (N, C, height, width)
+      (2) DwConv -> Permute to (N, height, width, C); LayerNorm (channels_last) -> Linear -> GELU -> Linear; Permute back
 
     Unlike the official impl, this one allows choice of 1 or 2, 1x1 conv can be faster with appropriate
     choice of LayerNorm impl, however as model size increases the tradeoffs appear to change and nn.Linear
-    is a better choice. This was observed with PyTorch 1.10 on 3090 GPU, it could change over time & w/ different HW.
+    is a better choice. This was observed with PyTorch 1.10 on 3090 GPU, it could change over time & width/ different HW.
 
     Args:
         dim (int): Number of input channels.
@@ -1181,7 +1181,7 @@ class ConvNeXt(nn.Module):
         self.drop_rate = drop_rate
         self.feature_info = []
 
-        # NOTE: this stem is a minimal form of ViT PatchEmbed, as used in SwinTransformer w/ patch_size = 4
+        # NOTE: this stem is a minimal form of ViT PatchEmbed, as used in SwinTransformer width/ patch_size = 4
         self.stem = nn.Sequential(
             nn.Conv2d(in_chans, dims[0], kernel_size=patch_size, stride=patch_size),
             norm_layer(dims[0]),
