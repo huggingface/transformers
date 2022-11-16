@@ -65,18 +65,11 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     ...     "I have a problem with my iphone that needs to be resolved asap!!",
     ...     candidate_labels=["urgent", "not urgent", "phone", "tablet", "computer"],
     ... )
-    >>> from transformers.testing_utils import (
-    ...     nested_simplify,
-    ... )  # Actual scores might vary slightly depending on PyTorch version or Tensorflow
-
-    >>> nested_simplify(answers)
     {'sequence': 'I have a problem with my iphone that needs to be resolved asap!!', 'labels': ['urgent', 'phone', 'computer', 'not urgent', 'tablet'], 'scores': [0.504, 0.479, 0.013, 0.003, 0.002]}
 
-    >>> nested_simplify(
-    ...     oracle(
-    ...         "I have a problem with my iphone that needs to be resolved asap!!",
-    ...         candidate_labels=["english", "german"],
-    ...     )
+    >>> oracle(
+    ...     "I have a problem with my iphone that needs to be resolved asap!!",
+    ...     candidate_labels=["english", "german"],
     ... )
     {'sequence': 'I have a problem with my iphone that needs to be resolved asap!!', 'labels': ['english', 'german'], 'scores': [0.814, 0.186]}
     ```
