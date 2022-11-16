@@ -128,6 +128,11 @@ class FANConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        out_index (`int`, *optional*, defaults to -1):
+            Additional Hidden state index position to add to the backbone hidden states and the last hidden state.
+            Only applicable when using hybrid backbone.
+        decoder_hidden_size (`int`, *optional*, defaults to 768):
+            The dimension of the all-MLP decode head for Semantic Segmenatation.
         Example:
 
     ```python
@@ -171,12 +176,12 @@ class FANConfig(PretrainedConfig):
         hybrid_patch_size=2,  # HASCOMMENTS
         channel_dims=None,  # HASCOMMENTS
         feat_downsample=False,  # HASCOMMENTS
-        out_index=-1,
+        out_index=-1,  # HASCOMMENTS
         rounding_mode="floor",  # HASCOMMENTS
         segmentation_in_channels=[128, 256, 480, 480],  # HASCOMMENTS
-        feature_strides=[4, 8, 16, 32],
-        channels=256,
-        decoder_hidden_size=768,
+        # feature_strides=[4, 8, 16, 32],
+        # channels=256,
+        decoder_hidden_size=768,  # HASCOMMENTS
         reshape_last_stage=False,
         semantic_loss_ignore_index=-100,  # HASCOMMENTS
         **kwargs,
@@ -211,8 +216,8 @@ class FANConfig(PretrainedConfig):
         self.feat_downsample = feat_downsample
         self.rounding_mode = rounding_mode
         self.segmentation_in_channels = segmentation_in_channels
-        self.feature_strides = feature_strides
-        self.channels = channels
+        # self.feature_strides = feature_strides
+        # self.channels = channels
 
         self.decoder_hidden_size = decoder_hidden_size
         self.reshape_last_stage = reshape_last_stage
