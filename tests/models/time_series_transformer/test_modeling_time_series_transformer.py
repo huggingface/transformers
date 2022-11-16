@@ -51,7 +51,7 @@ class TimeSeriesTransformerModelTester:
         prediction_length=7,
         context_length=14,
         cardinality=19,
-        embedding_dimension=5,
+        embedding_dimension=4,
         num_time_features=4,
         is_training=True,
         hidden_size=16,
@@ -148,7 +148,7 @@ class TimeSeriesTransformerModelTester:
             encoder.save_pretrained(tmpdirname)
             encoder = TimeSeriesTransformerEncoder.from_pretrained(tmpdirname).to(torch_device)
 
-        transformer_inputs, _, _ = model.create_network_inputs(**inputs_dict)
+        transformer_inputs, _, _, _ = model.create_network_inputs(**inputs_dict)
         enc_input = transformer_inputs[:, : config.context_length, ...]
         dec_input = transformer_inputs[:, config.context_length :, ...]
 
@@ -302,7 +302,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
             )
             out_len = len(outputs)
 
-            correct_outlen = 6
+            correct_outlen = 7
 
             if "last_hidden_state" in outputs:
                 correct_outlen += 1
