@@ -91,15 +91,15 @@ def create_rename_keys(config):
     # rename_keys.append(("module.textual.embedding.token_type.weight", "git.embeddings.token_type_embeddings.weight"))
     rename_keys.append(("module.textual.embedding.layer_norm.weight", "git.embeddings.LayerNorm.weight"))
     rename_keys.append(("module.textual.embedding.layer_norm.bias", "git.embeddings.LayerNorm.bias"))
-    rename_keys.append("module.textual.output.weight", "output.weight")
-    rename_keys.append("module.textual.output.bias", "output.bias")
+    rename_keys.append(("module.textual.output.weight", "output.weight"))
+    rename_keys.append(("module.textual.output.bias", "output.bias"))
     for i in range(config.num_hidden_layers):
-        rename_keys.append(("module.textual.transformer.encoder.layer.{i}.attention.self.query.weight", f"git.encoder.layer.{i}.attention.self.query.weight"))
-        rename_keys.append(("module.textual.transformer.encoder.layer.{i}.attention.self.query.bias", f"git.encoder.layer.{i}.attention.self.query.bias"))
-        rename_keys.append(("module.textual.transformer.encoder.layer.{i}.attention.self.key.weight", f"git.encoder.layer.{i}.attention.self.key.weight"))
-        rename_keys.append(("module.textual.transformer.encoder.layer.{i}.attention.self.key.bias", f"git.encoder.layer.{i}.attention.self.key.bias"))
-        rename_keys.append(("module.textual.transformer.encoder.layer.{i}.attention.self.value.weight", f"git.encoder.layer.{i}.attention.self.value.weight"))
-        rename_keys.append(("module.textual.transformer.encoder.layer.{i}.attention.self.value.bias", f"git.encoder.layer.{i}.attention.self.value.bias"))
+        rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.attention.self.query.weight", f"git.encoder.layer.{i}.attention.self.query.weight"))
+        rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.attention.self.query.bias", f"git.encoder.layer.{i}.attention.self.query.bias"))
+        rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.attention.self.key.weight", f"git.encoder.layer.{i}.attention.self.key.weight"))
+        rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.attention.self.key.bias", f"git.encoder.layer.{i}.attention.self.key.bias"))
+        rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.attention.self.value.weight", f"git.encoder.layer.{i}.attention.self.value.weight"))
+        rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.attention.self.value.bias", f"git.encoder.layer.{i}.attention.self.value.bias"))
         rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.attention.output.dense.weight", f"git.encoder.layer.{i}.attention.output.dense.weight"))
         rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.attention.output.dense.bias", f"git.encoder.layer.{i}.attention.output.dense.bias"))
         rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.attention.output.LayerNorm.weight", f"git.encoder.layer.{i}.attention.output.LayerNorm.weight"))
@@ -111,6 +111,8 @@ def create_rename_keys(config):
         rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.output.LayerNorm.weight", f"git.encoder.layer.{i}.output.LayerNorm.weight"))
         rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.output.LayerNorm.bias", f"git.encoder.layer.{i}.output.LayerNorm.bias"))
     # fmt: on
+
+    return rename_keys
 
 
 def rename_key(dct, old, new):
@@ -139,7 +141,8 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     config = get_git_config(model_name)
     # load original state_dict from URL
     checkpoint_url = model_name_to_url[model_name]
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
+    # state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
+    state_dict = torch.load("/Users/nielsrogge/Documents/GIT/model.pt", map_location="cpu")["model"]
     # rename keys
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
