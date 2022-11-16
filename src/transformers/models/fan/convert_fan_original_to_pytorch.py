@@ -27,12 +27,6 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import (
-    FANConfig,
-    SegformerFeatureExtractor,
-    SegformerForImageClassification,
-    SegformerForSemanticSegmentation,
-)
 from transformers.utils import logging
 
 logging.set_verbosity_info()
@@ -128,5 +122,4 @@ remap_fn = compose(
 
 
 def remap_state(state_dict):
-    # remap_fn = compose(remap_embeddings, remap_gamma, remap_head, remap_encoder)
     return {remap_fn(k): v for k, v in state_dict.items()}

@@ -163,7 +163,6 @@ class FANConfig(PretrainedConfig):
         drop_path_rate=0.0,  # HASCOMMENTS
         decoder_dropout=0.1,  # HASCOMMENTS
         hidden_act="gelu",  # HASCOMMENTS
-        norm_layer=None,
         cls_attn_layers=2,  # HASCOMMENTS
         hybrid_patch_size=2,  # HASCOMMENTS
         channel_dims=None,  # HASCOMMENTS
@@ -199,7 +198,6 @@ class FANConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.drop_path_rate = drop_path_rate
         self.decoder_dropout = decoder_dropout
-        self.norm_layer = norm_layer
         self.hidden_act = hidden_act
         self.cls_attn_layers = cls_attn_layers
         self.hybrid_patch_size = hybrid_patch_size
