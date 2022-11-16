@@ -1022,7 +1022,7 @@ GIT_VISION_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer with CLIP->GITVision
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer with CLIPEncoder->GITVisionEncoder, CLIP->GIT
 class GITVisionTransformer(nn.Module):
     def __init__(self, config: GITVisionConfig):
         super().__init__()
