@@ -1538,6 +1538,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             kwargs:
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        # Checks if the model has been loaded in 8-bit
+        if hasattr(self, "is_loaded_in_8bit"):
+            if self.is_loaded_in_8bit:
+                warnings.warn(
+                    "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
+                    " behaviors. ",
+                    UserWarning,
+                )
+
         if "save_config" in kwargs:
             warnings.warn(
                 "`save_config` is deprecated and will be removed in v5 of Transformers. Use `is_main_process` instead."
@@ -2230,7 +2239,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model = cls(config, *model_args, **model_kwargs)
 
         if load_in_8bit:
-            from .utils.bitsandbytes import get_keys_to_not_convert, replace_8bit_linear, warn_uncompatible_save
+            from .utils.bitsandbytes import get_keys_to_not_convert, replace_8bit_linear
 
             logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
 
@@ -2343,7 +2352,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Let's add a safety checker to warn users that `save_pretrained` cannot be used
         # under 8_bit models
         if load_in_8bit:
-            setattr(model, "save_pretrained", warn_uncompatible_save(model.save_pretrained))
+            setattr(model, "is_loaded_in_8bit", True)
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()

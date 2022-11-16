@@ -1,4 +1,3 @@
-import warnings
 from copy import deepcopy
 
 from transformers.utils import is_accelerate_available, is_bitsandbytes_available
@@ -162,26 +161,3 @@ def get_keys_to_not_convert(model):
     list_untouched = tied_keys + list(intersection)
 
     return [module_name.split(".")[0] for module_name in list_untouched]
-
-
-class warn_uncompatible_save(object):
-    r"""
-    Wrapper that throws a warning when a user tries to save an 8-bit model
-    """
-
-    def __init__(self, callback):
-        self.callback = callback
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, ex_typ, ex_val, traceback):
-        return True
-
-    def __call__(self, *args, **kwargs):
-        warnings.warn(
-            "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
-            " behaviors. ",
-            UserWarning,
-        )
-        return self.callback(*args, **kwargs)
