@@ -226,9 +226,10 @@ class GenerationConfig(PushToHubMixin):
         # to facilitate the creation of multiple generation config files in the root directory of a model.
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         r"""
-        Args:
-        Save a generation configuration object to the directory `save_directory`, so that it can be re-loaded using the:
+        Save a generation configuration object to the directory `save_directory`, so that it can be re-loaded using the
         [`~GenerationConfig.from_pretrained`] class method.
+
+        Args:
             save_directory (`str` or `os.PathLike`):
                 Directory where the configuration JSON file will be saved (will be created if it does not exist).
             config_name (`str`, *optional*, defaults to `"generation_config.json"`):
