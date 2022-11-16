@@ -225,5 +225,5 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             + self.num_dynamic_real_features
             + self.num_time_features
             + max(1, self.num_static_real_features)  # there is at least one dummy static real feature
-            + self.input_size  # the log(scale)
+            + self.input_size * 2  # the log1p(abs(loc)) and log(scale) features
         )

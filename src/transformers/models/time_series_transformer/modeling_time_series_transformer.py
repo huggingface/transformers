@@ -306,7 +306,9 @@ class MeanScaler(nn.Module):
             .unsqueeze(dim=self.dim)
         )
 
-        return data / scale, scale if self.keepdim else scale.squeeze(dim=self.dim)
+        loc = torch.zeros_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
+
+        return data / scale, loc, scale if self.keepdim else scale.squeeze(dim=self.dim)
 
 
 class NOPScaler(nn.Module):
@@ -326,8 +328,9 @@ class NOPScaler(nn.Module):
         self.keepdim = keepdim
 
     def forward(self, data: torch.Tensor, observed_indicator: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        scale = torch.ones_like(data).mean(dim=self.dim, keepdim=self.keepdim)
-        return data, scale
+        scale = torch.ones_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
+        loc = torch.zeros_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
+        return data, loc, scale
 
 
 def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
@@ -443,9 +446,12 @@ class Seq2SeqTimeSeriesModelOutput(ModelOutput):
 
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
+        loc: (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+            Shift values of each time series' context window which is used to give the model inputs of the same
+            magnitude and then used to shift back to the original magnitude.
         scale: (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
             Scaling values of each time series' context window which is used to give the model inputs of the same
-            magnitude and then used to rescale to the original scale.
+            magnitude and then used to rescale back to the original magnitude.
         static_features: (`torch.FloatTensor` of shape `(batch_size, feature size)`, *optional*):
             Static features of each time series' in a batch which are copied to the covariates at inference time.
     """
@@ -458,6 +464,7 @@ class Seq2SeqTimeSeriesModelOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loc: Optional[torch.FloatTensor] = None
     scale: Optional[torch.FloatTensor] = None
     static_features: Optional[torch.FloatTensor] = None
 
@@ -510,9 +517,12 @@ class Seq2SeqTimeSeriesPredictionOutput(ModelOutput):
 
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
+        loc: (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+            Shift values of each time series' context window which is used to give the model inputs of the same
+            magnitude and then used to shift back to the original magnitude.
         scale: (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
             Scaling values of each time series' context window which is used to give the model inputs of the same
-            magnitude and then used to rescale to the original scale.
+            magnitude and then used to rescale back to the original magnitude.
         static_features: (`torch.FloatTensor` of shape `(batch_size, feature size)`, *optional*):
             Static features of each time series' in a batch which are copied to the covariates at inference time.
     """
@@ -526,6 +536,7 @@ class Seq2SeqTimeSeriesPredictionOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loc: Optional[torch.FloatTensor] = None
     scale: Optional[torch.FloatTensor] = None
     static_features: Optional[torch.FloatTensor] = None
 
@@ -1503,12 +1514,12 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
 
         context = past_values[:, -self.config.context_length :]
         observed_context = past_observed_mask[:, -self.config.context_length :]
-        _, scale = self.scaler(context, observed_context)
+        _, loc, scale = self.scaler(context, observed_context)
 
         inputs = (
-            torch.cat((past_values, future_values), dim=1) / scale
+            (torch.cat((past_values, future_values), dim=1) - loc) / scale
             if future_values is not None
-            else past_values / scale
+            else (past_values - loc) / scale
         )
 
         inputs_length = (
@@ -1530,9 +1541,12 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
 
         # embeddings
         embedded_cat = self.embedder(static_categorical_features)
+
         # static features
+        log_loc = loc.abs().log1p() if self.config.input_size == 1 else loc.squeeze(-1).abs().log1p()
         log_scale = scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
-        static_feat = torch.cat((embedded_cat, static_real_features, log_scale), dim=1)
+
+        static_feat = torch.cat((embedded_cat, static_real_features, log_loc, log_scale), dim=1)
         expanded_static_feat = static_feat.unsqueeze(1).expand(-1, time_feat.shape[1], -1)
 
         # all features
@@ -1545,7 +1559,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
 
         transformer_inputs = torch.cat((reshaped_lagged_sequence, features), dim=-1)
 
-        return transformer_inputs, scale, static_feat
+        return transformer_inputs, loc, scale, static_feat
 
     def enc_dec_outputs(self, transformer_inputs):
         enc_input = transformer_inputs[:, : self.config.context_length, ...]
@@ -1623,7 +1637,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        transformer_inputs, scale, static_feat = self.create_network_inputs(
+        transformer_inputs, loc, scale, static_feat = self.create_network_inputs(
             past_values=past_values,
             past_time_features=past_time_features,
             past_observed_mask=past_observed_mask,
@@ -1665,7 +1679,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         )
 
         if not return_dict:
-            return decoder_outputs + encoder_outputs + (scale, static_feat)
+            return decoder_outputs + encoder_outputs + (loc, scale, static_feat)
 
         return Seq2SeqTimeSeriesModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1676,6 +1690,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
+            loc=loc,
             scale=scale,
             static_features=static_feat,
         )
@@ -1719,11 +1734,11 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         return self.model.get_decoder()
 
     @torch.jit.ignore
-    def output_distribution(self, params, scale=None, trailing_n=None) -> torch.distributions.Distribution:
+    def output_distribution(self, params, loc=None, scale=None, trailing_n=None) -> torch.distributions.Distribution:
         sliced_params = params
         if trailing_n is not None:
             sliced_params = [p[:, -trailing_n:] for p in params]
-        return self.distribution_output.distribution(sliced_params, scale=scale)
+        return self.distribution_output.distribution(sliced_params, loc=loc, scale=scale)
 
     @add_start_docstrings_to_model_forward(TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqTimeSeriesModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1834,7 +1849,9 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         params = None
         if future_values is not None:
             params = self.output_params(outputs[0])  # outputs.last_hidden_state
-            distribution = self.output_distribution(params, outputs[-2])  # outputs.scale
+            distribution = self.output_distribution(
+                params, loc=outputs[-3], scale=outputs[-2]
+            )  # outputs.loc, outputs.scale
 
             loss = self.loss(distribution, future_values)
 
@@ -1862,6 +1879,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
+            loc=outputs.loc,
             scale=outputs.scale,
             static_features=outputs.static_features,
         )
@@ -1894,10 +1912,12 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
 
         decoder = self.model.get_decoder()
         enc_last_hidden = outputs.encoder_last_hidden_state
+        loc = outputs.loc
         scale = outputs.scale
         static_feat = outputs.static_features
 
         num_parallel_samples = self.config.num_parallel_samples
+        repeated_loc = loc.repeat_interleave(repeats=num_parallel_samples, dim=0)
         repeated_scale = scale.repeat_interleave(repeats=num_parallel_samples, dim=0)
 
         repeated_past_values = past_values.repeat_interleave(repeats=num_parallel_samples, dim=0) / repeated_scale
@@ -1927,10 +1947,12 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             dec_last_hidden = dec_output.last_hidden_state
 
             params = self.parameter_projection(dec_last_hidden[:, -1:])
-            distr = self.output_distribution(params, scale=repeated_scale)
+            distr = self.output_distribution(params, loc=repeated_loc, scale=repeated_scale)
             next_sample = distr.sample()
 
-            repeated_past_values = torch.cat((repeated_past_values, next_sample / repeated_scale), dim=1)
+            repeated_past_values = torch.cat(
+                (repeated_past_values, (next_sample - repeated_loc) / repeated_scale), dim=1
+            )
             future_samples.append(next_sample)
 
         concat_future_samples = torch.cat(future_samples, dim=1)
