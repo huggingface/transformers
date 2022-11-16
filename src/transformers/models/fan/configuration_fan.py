@@ -122,7 +122,7 @@ class FANConfig(PretrainedConfig):
             The dimension of the all-MLP decode head for Semantic Segmenatation.
         semantic_loss_ignore_index (`int`, *optional*, defaults to -100):
             The index that is ignored by the loss function of the semantic segmentation model.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
 
         Example:
@@ -176,6 +176,7 @@ class FANConfig(PretrainedConfig):
         decoder_hidden_size=768,  # HASCOMMENTS
         reshape_last_stage=False,
         semantic_loss_ignore_index=-100,  # HASCOMMENTS
+        layer_norm_eps=1e-6,
         **kwargs,
     ):
 
@@ -210,4 +211,5 @@ class FANConfig(PretrainedConfig):
         self.decoder_hidden_size = decoder_hidden_size
         self.reshape_last_stage = reshape_last_stage
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
+        self.layer_norm_eps = layer_norm_eps
         super().__init__(**kwargs)

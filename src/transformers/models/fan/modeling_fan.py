@@ -33,17 +33,26 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
 from ...activations import ACT2CLS, ACT2FN
-from ...modeling_outputs import (BaseModelOutput,
-                                 BaseModelOutputWithPastAndCrossAttentions,
-                                 ImageClassifierOutput, ModelOutput,
-                                 SemanticSegmenterOutput)
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPastAndCrossAttentions,
+    ImageClassifierOutput,
+    ModelOutput,
+    SemanticSegmenterOutput,
+)
 from ...modeling_utils import PreTrainedModel, SequenceSummary
 from ...pytorch_utils import (  # is_torch_greater_than_1_6,
-    apply_chunking_to_forward, find_pruneable_heads_and_indices,
-    prune_linear_layer)
-from ...utils import (add_code_sample_docstrings, add_start_docstrings,
-                      add_start_docstrings_to_model_forward, logging,
-                      replace_return_docstrings)
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
+)
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_fan import FANConfig
 
 logger = logging.get_logger(__name__)
@@ -1372,7 +1381,7 @@ class FANEncoderLayer(FANPreTrainedModel):
         channel_dims = (
             [config.hidden_size] * config.num_hidden_layers if config.channel_dims is None else config.channel_dims
         )
-        norm_layer = config.norm_layer or partial(nn.LayerNorm, eps=1e-6)
+        norm_layer = partial(nn.LayerNorm, eps=config.layer_norm_eps)
         act_layer = ACT2CLS[config.hidden_act] if config.hidden_act else nn.GELU
 
         downsample = None
@@ -1428,7 +1437,7 @@ class FANEncoder(FANPreTrainedModel):
         channel_dims = (
             [config.hidden_size] * config.num_hidden_layers if config.channel_dims is None else config.channel_dims
         )
-        norm_layer = config.norm_layer or partial(nn.LayerNorm, eps=1e-6)
+        norm_layer = partial(nn.LayerNorm, eps=config.layer_norm_eps)
         act_layer = ACT2CLS[config.hidden_act] if config.hidden_act else nn.GELU
         self.blocks = nn.ModuleList([FANEncoderLayer(config, i) for i in range(config.num_hidden_layers)])
         self.num_features = self.hidden_size = channel_dims[-1]
@@ -1631,7 +1640,8 @@ class FANForImageClassification(FANPreTrainedModel):
 
         num_features = config.hidden_size if config.channel_dims is None else config.channel_dims[-1]
         # Image clasification head
-        self.head = FANClassificationHead(config.num_labels, num_features, config.norm_layer)
+        norm_layer = partial(nn.LayerNorm, eps=config.layer_norm_eps)
+        self.head = FANClassificationHead(config.num_labels, num_features, norm_layer)
 
         # Initialize weights and apply final processing
         self.post_init()
