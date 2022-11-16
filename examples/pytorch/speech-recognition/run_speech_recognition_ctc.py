@@ -50,7 +50,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.24.0.dev0")
+check_min_version("4.25.0.dev0")
 
 require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
@@ -749,7 +749,7 @@ def main():
     config_name = data_args.dataset_config_name if data_args.dataset_config_name is not None else "na"
     kwargs = {
         "finetuned_from": model_args.model_name_or_path,
-        "tasks": "speech-recognition",
+        "tasks": "automatic-speech-recognition",
         "tags": ["automatic-speech-recognition", data_args.dataset_name],
         "dataset_args": (
             f"Config: {config_name}, Training split: {data_args.train_split_name}, Eval split:"

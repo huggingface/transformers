@@ -85,7 +85,7 @@ if is_tf_available():
         TFRagModel,
         TFSharedEmbeddings,
     )
-    from transformers.generation_tf_utils import (
+    from transformers.generation import (
         TFBeamSampleDecoderOnlyOutput,
         TFBeamSampleEncoderDecoderOutput,
         TFBeamSearchDecoderOnlyOutput,
@@ -1544,6 +1544,11 @@ class TFModelTesterMixin:
             else:
                 metrics = []
 
+            if hasattr(self.model_tester, "batch_size"):
+                sample_weight = tf.convert_to_tensor([0.5] * self.model_tester.batch_size, dtype=tf.float32)
+            else:
+                sample_weight = None
+
             model(model.dummy_inputs)  # Build the model so we can get some constant weights
             model_weights = model.get_weights()
 
@@ -1553,6 +1558,7 @@ class TFModelTesterMixin:
             history1 = model.fit(
                 prepared_for_class,
                 validation_data=prepared_for_class,
+                sample_weight=sample_weight,
                 steps_per_epoch=1,
                 validation_steps=1,
                 shuffle=False,
@@ -1588,6 +1594,7 @@ class TFModelTesterMixin:
                 inputs_minus_labels,
                 labels,
                 validation_data=(inputs_minus_labels, labels),
+                sample_weight=sample_weight,
                 steps_per_epoch=1,
                 validation_steps=1,
                 shuffle=False,
@@ -1605,14 +1612,22 @@ class TFModelTesterMixin:
 
             # Make sure fit works with tf.data.Dataset and results are consistent
             dataset = tf.data.Dataset.from_tensor_slices(prepared_for_class)
+
+            if sample_weight is not None:
+                # Add in the sample weight
+                weighted_dataset = dataset.map(lambda x: (x, None, tf.convert_to_tensor(0.5, dtype=tf.float32)))
+            else:
+                weighted_dataset = dataset
             # Pass in all samples as a batch to match other `fit` calls
+            weighted_dataset = weighted_dataset.batch(len(dataset))
             dataset = dataset.batch(len(dataset))
 
             # Reinitialize to fix batchnorm again
             model.set_weights(model_weights)
 
+            # To match the other calls, don't pass sample weights in the validation data
             history3 = model.fit(
-                dataset,
+                weighted_dataset,
                 validation_data=dataset,
                 steps_per_epoch=1,
                 validation_steps=1,
@@ -1783,7 +1798,7 @@ class TFModelTesterMixin:
                 model.compile(optimizer="sgd", run_eagerly=True)
                 model.train_on_batch(test_batch, test_batch_labels)
 
-    def _test_xla_generate(self, num_beams, num_return_sequences, max_length):
+    def _test_xla_generate(self, num_beams, num_return_sequences, max_length, **generate_kwargs):
         def _generate_and_check_results(model, config, inputs_dict):
             if "input_ids" in inputs_dict:
                 inputs = inputs_dict["input_ids"]
@@ -1801,9 +1816,9 @@ class TFModelTesterMixin:
             else:
                 raise ValueError("No valid generate input found in inputs_dict")
 
-            generated = model.generate(inputs).numpy()
+            generated = model.generate(inputs, **generate_kwargs).numpy()
             generate_xla = tf.function(model.generate, jit_compile=True)
-            generated_xla = generate_xla(inputs).numpy()
+            generated_xla = generate_xla(inputs, **generate_kwargs).numpy()
             self.assertListEqual(generated.tolist(), generated_xla.tolist())
 
         for model_class in self.all_generative_model_classes:
@@ -1843,6 +1858,19 @@ class TFModelTesterMixin:
         num_return_sequences = 1
         max_length = 10
         self._test_xla_generate(num_beams, num_return_sequences, max_length)
+
+    def test_xla_generate_contrastive(self):
+        """
+        Similar to `test_xla_generate_fast`, but for contrastive search -- contrastive search directly manipulates the
+        model cache and other outputs, and this test ensures that they are in a valid format that is also supported
+        by XLA.
+
+        Either the model supports XLA generation and passes the inner test, or it raises an appropriate exception
+        """
+        num_beams = 1
+        num_return_sequences = 1
+        max_length = 10
+        self._test_xla_generate(num_beams, num_return_sequences, max_length, penalty_alpha=0.5, top_k=5)
 
     @slow
     def test_xla_generate_slow(self):

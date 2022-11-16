@@ -94,7 +94,7 @@ class ImageToTextPipeline(Pipeline):
     def _forward(self, model_inputs, generate_kwargs=None):
         if generate_kwargs is None:
             generate_kwargs = {}
-        # FIXME: We need to pop here due to a difference in how `generation_utils.py` and `generation_tf_utils.py`
+        # FIXME: We need to pop here due to a difference in how `generation.py` and `generation.tf_utils.py`
         #  parse inputs. In the Tensorflow version, `generate` raises an error if we don't use `input_ids` whereas
         #  the PyTorch version matches it with `self.model.main_input_name` or `self.model.encoder.main_input_name`
         #  in the `_prepare_model_inputs` method.

@@ -413,8 +413,8 @@ class TrainingArguments:
             instance of `Dataset`.
         report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
-            `"comet_ml"`, `"mlflow"`, `"neptune"`, `"tensorboard"` and `"wandb"`. Use `"all"` to report to all
-            integrations installed, `"none"` for no integrations.
+            `"comet_ml"`, `"mlflow"`, `"neptune"`, `"tensorboard"`,`"clearml"` and `"wandb"`. Use `"all"` to report to
+            all integrations installed, `"none"` for no integrations.
         ddp_find_unused_parameters (`bool`, *optional*):
             When using distributed training, the value of the flag `find_unused_parameters` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.

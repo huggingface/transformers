@@ -56,7 +56,7 @@ from transformers.utils import PaddingStrategy, check_min_version, get_full_repo
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.24.0.dev0")
+check_min_version("4.25.0.dev0")
 
 logger = get_logger(__name__)
 # You should update this to your particular problem to have better documentation of `model_type`
@@ -205,7 +205,7 @@ def parse_args():
         default="all",
         help=(
             'The integration to report the results and logs to. Supported platforms are `"tensorboard"`,'
-            ' `"wandb"` and `"comet_ml"`. Use `"all"` (default) to report to all integrations.'
+            ' `"wandb"`, `"comet_ml"` and `"clearml"`. Use `"all"` (default) to report to all integrations.'
             "Only applicable when `--with_tracking` is passed."
         ),
     )
@@ -398,7 +398,11 @@ def main():
         logger.info("Training new model from scratch")
         model = AutoModelForMultipleChoice.from_config(config)
 
-    model.resize_token_embeddings(len(tokenizer))
+    # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
+    # on a small vocab and want a smaller embedding size, remove this test.
+    embedding_size = model.get_input_embeddings().weight.shape[0]
+    if len(tokenizer) > embedding_size:
+        model.resize_token_embeddings(len(tokenizer))
 
     # Preprocessing the datasets.
     # First we tokenize all the texts.

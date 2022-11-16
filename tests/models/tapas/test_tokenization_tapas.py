@@ -35,7 +35,6 @@ from transformers.models.tapas.tokenization_tapas import (
 from transformers.testing_utils import (
     is_pt_tf_cross_test,
     require_pandas,
-    require_scatter,
     require_tensorflow_probability,
     require_tokenizers,
     require_torch,
@@ -1031,7 +1030,6 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @require_torch
     @slow
-    @require_scatter
     def test_torch_encode_plus_sent_to_model(self):
         import torch
 

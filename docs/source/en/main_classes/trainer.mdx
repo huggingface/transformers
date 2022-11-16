@@ -579,7 +579,7 @@ add `--fsdp "full_shard offload auto_wrap"` or `--fsdp "shard_grad_op offload au
   This specifies the transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` ....
   This is important because submodules that share weights (e.g., embedding layer) should not end up in different FSDP wrapped units. 
   Using this policy, wrapping happens for each block containing Multi-Head Attention followed by couple of MLP layers. 
-  Remaining layers including the shared embeddings are conviniently wrapped in same outermost FSDP unit.
+  Remaining layers including the shared embeddings are conveniently wrapped in same outermost FSDP unit.
   Therefore, use this for transformer based models.
   - For size based auto wrap policy, please add `--fsdp_min_num_params <number>` to command line arguments.
   It specifies FSDP's minimum number of parameters for auto wrapping.
@@ -620,7 +620,7 @@ please follow this nice medium article [GPU-Acceleration Comes to PyTorch on M1 
 
 **Usage**:
 User has to just pass `--use_mps_device` argument. 
-For example, you can run the offical Glue text classififcation task (from the root folder) using Apple Silicon GPU with below command:
+For example, you can run the official Glue text classififcation task (from the root folder) using Apple Silicon GPU with below command:
 
 ```bash
 export TASK_NAME=mrpc

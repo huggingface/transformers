@@ -20,7 +20,7 @@ from transformers import BertConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
@@ -523,6 +523,11 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_decoder_model_past_with_large_inputs_relative_pos_emb(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        config_and_inputs[0].position_embedding_type = "relative_key"
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     def test_for_multiple_choice(self):

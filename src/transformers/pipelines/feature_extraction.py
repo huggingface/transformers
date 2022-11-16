@@ -9,6 +9,19 @@ class FeatureExtractionPipeline(Pipeline):
     Feature extraction pipeline using no model head. This pipeline extracts the hidden states from the base
     transformer, which can be used as features in downstream tasks.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> extractor = pipeline(model="bert-base-uncased", task="feature-extraction")
+    >>> result = extractor("This is a simple test.", return_tensors=True)
+    >>> result.shape  # This is a tensor of shape [1, sequence_lenth, hidden_dimension] representing the input string.
+    torch.Size([1, 8, 768])
+    ```
+
+    [Using pipelines in a webserver or with a dataset](../pipeline_tutorial)
+
     This feature extraction pipeline can currently be loaded from [`pipeline`] using the task identifier:
     `"feature-extraction"`.
 

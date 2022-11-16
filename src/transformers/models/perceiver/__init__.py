@@ -38,6 +38,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_perceiver"] = ["PerceiverFeatureExtractor"]
+    _import_structure["image_processing_perceiver"] = ["PerceiverImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -71,6 +72,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_perceiver import PerceiverFeatureExtractor
+        from .image_processing_perceiver import PerceiverImageProcessor
 
     try:
         if not is_torch_available():

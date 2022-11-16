@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.image_utils import PILImageResampling
+from transformers.utils import TensorType
 from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
 
 
@@ -27,6 +27,7 @@ if is_vision_available():
 
     from .image_utils import (
         ChannelDimension,
+        PILImageResampling,
         get_channel_dimension_axis,
         get_image_size,
         infer_channel_dimension_format,
@@ -108,7 +109,7 @@ def rescale(
 
 
 def to_pil_image(
-    image: Union[np.ndarray, PIL.Image.Image, "torch.Tensor", "tf.Tensor", "jnp.Tensor"],
+    image: Union[np.ndarray, PIL.Image.Image, "torch.Tensor", "tf.Tensor", "jnp.ndarray"],
     do_rescale: Optional[bool] = None,
 ) -> PIL.Image.Image:
     """
@@ -138,6 +139,9 @@ def to_pil_image(
 
     # If the channel as been moved to first dim, we put it back at the end.
     image = to_channel_dimension_format(image, ChannelDimension.LAST)
+
+    # If there is a single channel, we squeeze it, as otherwise PIL can't handle it.
+    image = np.squeeze(image, axis=-1) if image.shape[-1] == 1 else image
 
     # PIL.Image can only store uint8 values, so we rescale the image to be between 0 and 255 if needed.
     do_rescale = isinstance(image.flat[0], float) if do_rescale is None else do_rescale
@@ -229,7 +233,7 @@ def resize(
             The image to resize.
         size (`Tuple[int, int]`):
             The size to use for resizing the image.
-        resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
+        resample (`int`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             The filter to user for resampling.
         data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the output image. If `None`, will use the inferred format from the input.
@@ -259,6 +263,9 @@ def resize(
 
     if return_numpy:
         resized_image = np.array(resized_image)
+        # If the input image channel dimension was of size 1, then it is dropped when converting to a PIL image
+        # so we need to add it back if necessary.
+        resized_image = np.expand_dims(resized_image, axis=-1) if resized_image.ndim == 2 else resized_image
         resized_image = to_channel_dimension_format(resized_image, data_format)
     return resized_image
 
@@ -294,6 +301,9 @@ def normalize(
         image = to_numpy_array(image)
         image = rescale(image, scale=1 / 255)
 
+    if not isinstance(image, np.ndarray):
+        raise ValueError("image must be a numpy array")
+
     input_data_format = infer_channel_dimension_format(image)
     channel_axis = get_channel_dimension_axis(image)
     num_channels = image.shape[channel_axis]
@@ -303,12 +313,14 @@ def normalize(
             raise ValueError(f"mean must have {num_channels} elements if it is an iterable, got {len(mean)}")
     else:
         mean = [mean] * num_channels
+    mean = np.array(mean, dtype=image.dtype)
 
     if isinstance(std, Iterable):
         if len(std) != num_channels:
             raise ValueError(f"std must have {num_channels} elements if it is an iterable, got {len(std)}")
     else:
         std = [std] * num_channels
+    std = np.array(std, dtype=image.dtype)
 
     if input_data_format == ChannelDimension.LAST:
         image = (image - mean) / std
@@ -372,6 +384,7 @@ def center_crop(
 
     orig_height, orig_width = get_image_size(image)
     crop_height, crop_width = size
+    crop_height, crop_width = int(crop_height), int(crop_width)
 
     # In case size is odd, (image_shape[0] + size[0]) // 2 won't give the proper result.
     top = (orig_height - crop_height) // 2
@@ -411,3 +424,147 @@ def center_crop(
         new_image = to_pil_image(new_image)
 
     return new_image
+
+
+def _center_to_corners_format_torch(bboxes_center: "torch.Tensor") -> "torch.Tensor":
+    center_x, center_y, width, height = bboxes_center.unbind(-1)
+    bbox_corners = torch.stack(
+        # top left x, top left y, bottom right x, bottom right y
+        [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)],
+        dim=-1,
+    )
+    return bbox_corners
+
+
+def _center_to_corners_format_numpy(bboxes_center: np.ndarray) -> np.ndarray:
+    center_x, center_y, width, height = bboxes_center.T
+    bboxes_corners = np.stack(
+        # top left x, top left y, bottom right x, bottom right y
+        [center_x - 0.5 * width, center_y - 0.5 * height, center_x + 0.5 * width, center_y + 0.5 * height],
+        axis=-1,
+    )
+    return bboxes_corners
+
+
+def _center_to_corners_format_tf(bboxes_center: "tf.Tensor") -> "tf.Tensor":
+    center_x, center_y, width, height = tf.unstack(bboxes_center, axis=-1)
+    bboxes_corners = tf.stack(
+        # top left x, top left y, bottom right x, bottom right y
+        [center_x - 0.5 * width, center_y - 0.5 * height, center_x + 0.5 * width, center_y + 0.5 * height],
+        axis=-1,
+    )
+    return bboxes_corners
+
+
+# 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
+def center_to_corners_format(bboxes_center: TensorType) -> TensorType:
+    """
+    Converts bounding boxes from center format to corners format.
+
+    center format: contains the coordinate for the center of the box and its width, height dimensions
+        (center_x, center_y, width, height)
+    corners format: contains the coodinates for the top-left and bottom-right corners of the box
+        (top_left_x, top_left_y, bottom_right_x, bottom_right_y)
+    """
+    # Function is used during model forward pass, so we use the input framework if possible, without
+    # converting to numpy
+    if is_torch_tensor(bboxes_center):
+        return _center_to_corners_format_torch(bboxes_center)
+    elif isinstance(bboxes_center, np.ndarray):
+        return _center_to_corners_format_numpy(bboxes_center)
+    elif is_tf_tensor(bboxes_center):
+        return _center_to_corners_format_tf(bboxes_center)
+
+    raise ValueError(f"Unsupported input type {type(bboxes_center)}")
+
+
+def _corners_to_center_format_torch(bboxes_corners: "torch.Tensor") -> "torch.Tensor":
+    top_left_x, top_left_y, bottom_right_x, bottom_right_y = bboxes_corners.unbind(-1)
+    b = [
+        (top_left_x + bottom_right_x) / 2,  # center x
+        (top_left_y + bottom_right_y) / 2,  # center y
+        (bottom_right_x - top_left_x),  # width
+        (bottom_right_y - top_left_y),  # height
+    ]
+    return torch.stack(b, dim=-1)
+
+
+def _corners_to_center_format_numpy(bboxes_corners: np.ndarray) -> np.ndarray:
+    top_left_x, top_left_y, bottom_right_x, bottom_right_y = bboxes_corners.T
+    bboxes_center = np.stack(
+        [
+            (top_left_x + bottom_right_x) / 2,  # center x
+            (top_left_y + bottom_right_y) / 2,  # center y
+            (bottom_right_x - top_left_x),  # width
+            (bottom_right_y - top_left_y),  # height
+        ],
+        axis=-1,
+    )
+    return bboxes_center
+
+
+def _corners_to_center_format_tf(bboxes_corners: "tf.Tensor") -> "tf.Tensor":
+    top_left_x, top_left_y, bottom_right_x, bottom_right_y = tf.unstack(bboxes_corners, axis=-1)
+    bboxes_center = tf.stack(
+        [
+            (top_left_x + bottom_right_x) / 2,  # center x
+            (top_left_y + bottom_right_y) / 2,  # center y
+            (bottom_right_x - top_left_x),  # width
+            (bottom_right_y - top_left_y),  # height
+        ],
+        axis=-1,
+    )
+    return bboxes_center
+
+
+def corners_to_center_format(bboxes_corners: TensorType) -> TensorType:
+    """
+    Converts bounding boxes from corners format to center format.
+
+    corners format: contains the coodinates for the top-left and bottom-right corners of the box
+        (top_left_x, top_left_y, bottom_right_x, bottom_right_y)
+    center format: contains the coordinate for the center of the box and its the width, height dimensions
+        (center_x, center_y, width, height)
+    """
+    # Inverse function accepts different input types so implemented here too
+    if is_torch_tensor(bboxes_corners):
+        return _corners_to_center_format_torch(bboxes_corners)
+    elif isinstance(bboxes_corners, np.ndarray):
+        return _corners_to_center_format_numpy(bboxes_corners)
+    elif is_tf_tensor(bboxes_corners):
+        return _corners_to_center_format_tf(bboxes_corners)
+
+    raise ValueError(f"Unsupported input type {type(bboxes_corners)}")
+
+
+# 2 functions below copied from https://github.com/cocodataset/panopticapi/blob/master/panopticapi/utils.py
+# Copyright (c) 2018, Alexander Kirillov
+# All rights reserved.
+def rgb_to_id(color):
+    """
+    Converts RGB color to unique ID.
+    """
+    if isinstance(color, np.ndarray) and len(color.shape) == 3:
+        if color.dtype == np.uint8:
+            color = color.astype(np.int32)
+        return color[:, :, 0] + 256 * color[:, :, 1] + 256 * 256 * color[:, :, 2]
+    return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
+
+
+def id_to_rgb(id_map):
+    """
+    Converts unique ID to RGB color.
+    """
+    if isinstance(id_map, np.ndarray):
+        id_map_copy = id_map.copy()
+        rgb_shape = tuple(list(id_map.shape) + [3])
+        rgb_map = np.zeros(rgb_shape, dtype=np.uint8)
+        for i in range(3):
+            rgb_map[..., i] = id_map_copy % 256
+            id_map_copy //= 256
+        return rgb_map
+    color = []
+    for _ in range(3):
+        color.append(id_map % 256)
+        id_map //= 256
+    return color
