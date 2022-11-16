@@ -33,7 +33,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_git"] = [
         "GIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "GITLMHeadModel",
+        "GITForCausalLM",
         "GITModel",
         "GITPreTrainedModel",
         "GITVisionModel",
@@ -50,7 +50,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_git import (
             GIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GITLMHeadModel,
+            GITForCausalLM,
             GITModel,
             GITPreTrainedModel,
             GITVisionModel,

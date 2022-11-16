@@ -597,8 +597,8 @@ class GITOnlyMLMHead(nn.Module):
         self.predictions = GITLMPredictionHead(config)
 
     def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
-        prediction_scores = self.predictions(sequence_output)
-        return prediction_scores
+        logits = self.predictions(sequence_output)
+        return logits
 
 
 class GITPreTrainedModel(PreTrainedModel):
@@ -1280,30 +1280,27 @@ class GITModel(GITPreTrainedModel):
         )
 
 
-@add_start_docstrings("""GIT Model with a `language modeling` head on top for CLM fine-tuning.""", GIT_START_DOCSTRING)
-# Copied from transformers.models.bert.modeling_bert.BertLMHeadModel with BERT->GIT,Bert->GIT,bert->git
-class GITLMHeadModel(GITPreTrainedModel):
-
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", r"cls.predictions.decoder.weight"]
-
+@add_start_docstrings(
+    """GIT Model with a `language modeling` head on top for autoregressive language modeling.""", GIT_START_DOCSTRING
+)
+class GITForCausalLM(GITPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `GITLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning("If you want to use `GITForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.git = GITModel(config, add_pooling_layer=False)
-        self.cls = GITOnlyMLMHead(config)
+        self.output = nn.Linear(self.hidden_size, config.vocab_size)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
-        return self.cls.predictions.decoder
+        return self.output
 
     def set_output_embeddings(self, new_embeddings):
-        self.cls.predictions.decoder = new_embeddings
+        self.output = new_embeddings
 
     @add_start_docstrings_to_model_forward(GIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1374,23 +1371,23 @@ class GITLMHeadModel(GITPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
+        logits = self.output(sequence_output)
 
         lm_loss = None
         if labels is not None:
             # we are doing next-token prediction; shift prediction scores and input ids by one
-            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
+            shifted_logits = logits[:, :-1, :].contiguous()
             labels = labels[:, 1:].contiguous()
             loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            lm_loss = loss_fct(shifted_logits.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
+            output = (logits,) + outputs[2:]
             return ((lm_loss,) + output) if lm_loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=lm_loss,
-            logits=prediction_scores,
+            logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,

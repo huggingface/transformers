@@ -1006,7 +1006,7 @@ else:
     _import_structure["models.git"].extend(
         [
             "GIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "GITLMHeadModel",
+            "GITForCausalLM",
             "GITModel",
             "GITPreTrainedModel",
             "GITVisionModel",
@@ -4421,7 +4421,7 @@ if TYPE_CHECKING:
         )
         from .models.git import (
             GIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GITLMHeadModel,
+            GITForCausalLM,
             GITModel,
             GITPreTrainedModel,
             GITVisionModel,
