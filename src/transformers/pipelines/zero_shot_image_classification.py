@@ -39,22 +39,15 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
     >>> from transformers import pipeline
 
     >>> classifier = pipeline(model="openai/clip-vit-large-patch14")
-    >>> answers = classifier(
+    >>> classifier(
     ...     "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png",
     ...     candidate_labels=["animals", "humans", "landscape"],
     ... )
-    >>> from transformers.testing_utils import (
-    ...     nested_simplify,
-    ... )  # Actual scores might vary slightly depending on PyTorch version or Tensorflow
-
-    >>> nested_simplify(answers)
     [{'score': 0.965, 'label': 'animals'}, {'score': 0.03, 'label': 'humans'}, {'score': 0.005, 'label': 'landscape'}]
 
-    >>> nested_simplify(
-    ...     classifier(
-    ...         "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png",
-    ...         candidate_labels=["black and white", "photorealist", "painting"],
-    ...     )
+    >>> classifier(
+    ...     "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png",
+    ...     candidate_labels=["black and white", "photorealist", "painting"],
     ... )
     [{'score': 0.996, 'label': 'black and white'}, {'score': 0.003, 'label': 'photorealist'}, {'score': 0.0, 'label': 'painting'}]
     ```
