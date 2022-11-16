@@ -86,7 +86,7 @@ class AudioClassificationPipeline(Pipeline):
     [{'score': 0.997, 'label': '_unknown_'}, {'score': 0.002, 'label': 'left'}, {'score': 0.0, 'label': 'yes'}, {'score': 0.0, 'label': 'down'}, {'score': 0.0, 'label': 'stop'}]
     ```
 
-    [Using pipelines in a webserver or with a dataset](../pipeline_tutorial)
+    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
 
 
     This pipeline can currently be loaded from [`pipeline`] using the following task identifier:

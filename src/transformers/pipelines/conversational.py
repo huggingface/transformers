@@ -181,7 +181,7 @@ class ConversationalPipeline(Pipeline):
     "It's a comedy."
     ```
 
-    [Using pipelines in a webserver or with a dataset](../pipeline_tutorial)
+    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
 
     This conversational pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"conversational"`.
