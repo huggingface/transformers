@@ -106,6 +106,22 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
     similar to the (extractive) question answering pipeline; however, the pipeline takes an image (and optional OCR'd
     words/boxes) as input instead of text context.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> document_qa = pipeline(model="impira/layoutlm-document-qa")
+    >>> result = document_qa(
+    ...     image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
+    ...     question="What is the invoice number?",
+    ... )
+    >>> result[0]["answer"]
+    '1110212019'
+    ```
+
+    [Using pipelines in a webserver or with a dataset](../pipeline_tutorial)
+
     This document question answering pipeline can currently be loaded from [`pipeline`] using the following task
     identifier: `"document-question-answering"`.
 
