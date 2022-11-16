@@ -571,9 +571,9 @@ def main():
             if args.push_to_hub:
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
-    if args.output_dir is not None:
-        with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
-            json.dump({"eval_accuracy": eval_metric["accuracy"]}, f)
+            all_results = {f"eval_{k}": v for k, v in eval_metric.items()}
+            with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+                json.dump(all_results, f)
 
 
 if __name__ == "__main__":
