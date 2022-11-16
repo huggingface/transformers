@@ -1539,13 +1539,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         # Checks if the model has been loaded in 8-bit
-        if hasattr(self, "is_loaded_in_8bit"):
-            if self.is_loaded_in_8bit:
-                warnings.warn(
-                    "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
-                    " behaviors. ",
-                    UserWarning,
-                )
+        if getatttr(self, "is_loaded_in_8bit", False):
+            warnings.warn(
+                "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
+                " behaviors. ",
+                UserWarning,
+            )
 
         if "save_config" in kwargs:
             warnings.warn(
@@ -2349,10 +2348,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 load_in_8bit=load_in_8bit,
             )
 
-        # Let's add a safety checker to warn users that `save_pretrained` cannot be used
-        # under 8_bit models
-        if load_in_8bit:
-            setattr(model, "is_loaded_in_8bit", True)
+        self.is_loaded_in_8bit = load_in_8bit
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
