@@ -33,6 +33,27 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
     Zero shot object detection pipeline using `OwlViTForObjectDetection`. This pipeline predicts bounding boxes of
     objects when you provide an image and a set of `candidate_labels`.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> detector = pipeline(model="google/owlvit-base-patch32", task="zero-shot-object-detection")
+    >>> detector(
+    ...     "http://images.cocodataset.org/val2017/000000039769.jpg",
+    ...     candidate_labels=["cat", "couch"],
+    ... )
+    [[{'score': 0.287, 'label': 'cat', 'box': {'xmin': 324, 'ymin': 20, 'xmax': 640, 'ymax': 373}}, {'score': 0.254, 'label': 'cat', 'box': {'xmin': 1, 'ymin': 55, 'xmax': 315, 'ymax': 472}}, {'score': 0.121, 'label': 'couch', 'box': {'xmin': 4, 'ymin': 0, 'xmax': 642, 'ymax': 476}}]]
+
+    >>> detector(
+    ...     "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png",
+    ...     candidate_labels=["head", "bird"],
+    ... )
+    [[{'score': 0.119, 'label': 'bird', 'box': {'xmin': 71, 'ymin': 170, 'xmax': 410, 'ymax': 508}}]]
+    ```
+
+    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+
     This object detection pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"zero-shot-object-detection"`.
 
@@ -87,6 +108,8 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
             - **box** (`Dict[str,int]`) -- Bounding box of the detected object in image's original size. It is a
               dictionary with `x_min`, `x_max`, `y_min`, `y_max` keys.
         """
+        if "candidate_labels" in kwargs:
+            text_queries = kwargs.pop("candidate_labels")
         if isinstance(text_queries, str) or (isinstance(text_queries, List) and not isinstance(text_queries[0], List)):
             if isinstance(images, (str, Image.Image)):
                 inputs = {"images": images, "text_queries": text_queries}
