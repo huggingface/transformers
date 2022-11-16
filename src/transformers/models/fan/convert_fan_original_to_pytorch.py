@@ -22,11 +22,11 @@ import re
 from collections import OrderedDict
 from pathlib import Path
 
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import hf_hub_download
 from transformers import (
     FANConfig,
     SegformerFeatureExtractor,
@@ -34,7 +34,6 @@ from transformers import (
     SegformerForSemanticSegmentation,
 )
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -64,6 +63,10 @@ def fix_linear_fuse(key):
 
 def compose(*functions):
     return functools.reduce(lambda f, g: lambda x: f(g(x)), functions, lambda x: x)
+
+
+def remap_patch_embed(k):
+    return k.replace("patch_embed", "patch_embeddings")
 
 
 def remap_embeddings(k):
@@ -120,6 +123,7 @@ remap_fn = compose(
     remap_gamma,
     remap_head,
     remap_embeddings,
+    remap_patch_embed,
 )
 
 

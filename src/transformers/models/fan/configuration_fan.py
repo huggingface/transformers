@@ -125,7 +125,6 @@ class FANConfig(PretrainedConfig):
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
 
-
         Example:
 
     ```python
@@ -163,7 +162,7 @@ class FANConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,  # HASCOMMENTS
         drop_path_rate=0.0,  # HASCOMMENTS
         decoder_dropout=0.1,  # HASCOMMENTS
-        hidden_act="gelu",  # HASCOMMENTS # TODO: Add Documentation Refactor modeling to include ACT2CLS/ACT2FN from activations
+        hidden_act="gelu",  # HASCOMMENTS
         norm_layer=None,
         cls_attn_layers=2,  # HASCOMMENTS
         hybrid_patch_size=2,  # HASCOMMENTS

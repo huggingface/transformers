@@ -33,26 +33,17 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
 from ...activations import ACT2CLS, ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPastAndCrossAttentions,
-    ImageClassifierOutput,
-    ModelOutput,
-    SemanticSegmenterOutput,
-)
+from ...modeling_outputs import (BaseModelOutput,
+                                 BaseModelOutputWithPastAndCrossAttentions,
+                                 ImageClassifierOutput, ModelOutput,
+                                 SemanticSegmenterOutput)
 from ...modeling_utils import PreTrainedModel, SequenceSummary
 from ...pytorch_utils import (  # is_torch_greater_than_1_6,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+    apply_chunking_to_forward, find_pruneable_heads_and_indices,
+    prune_linear_layer)
+from ...utils import (add_code_sample_docstrings, add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging,
+                      replace_return_docstrings)
 from .configuration_fan import FANConfig
 
 logger = logging.get_logger(__name__)
@@ -1303,7 +1294,7 @@ class FANEmbeddings(FANPreTrainedModel):
         act_layer = ACT2CLS[config.hidden_act] if config.hidden_act else nn.GELU
 
         if config.backbone == None:
-            self.patch_embed = ConvPatchEmbed(
+            self.patch_embeddings = ConvPatchEmbed(
                 img_size=img_size,
                 patch_size=config.patch_size,
                 in_chans=config.num_channels,
@@ -1317,7 +1308,7 @@ class FANEmbeddings(FANPreTrainedModel):
                 use_head=False,
                 ls_init_value=self.config.initializer_range,
             )
-            self.patch_embed = HybridEmbed(
+            self.patch_embeddings = HybridEmbed(
                 backbone=backbone, patch_size=config.hybrid_patch_size, hidden_size=config.hidden_size
             )
         else:
@@ -1344,12 +1335,12 @@ class FANEmbeddings(FANPreTrainedModel):
         """
         batch_size = pixel_values.shape[0]
         encoder_states = () if output_hidden_states else None
-        if isinstance(self.patch_embed, HybridEmbed):
-            hidden_states, (Hp, Wp), out_list = self.patch_embed(pixel_values, return_feat=True)
+        if isinstance(self.patch_embeddings, HybridEmbed):
+            hidden_states, (Hp, Wp), out_list = self.patch_embeddings(pixel_values, return_feat=True)
             if output_hidden_states:
                 encoder_states = encoder_states + tuple(out_list)
         else:
-            hidden_states, (Hp, Wp) = self.patch_embed(pixel_values)
+            hidden_states, (Hp, Wp) = self.patch_embeddings(pixel_values)
 
         if self.config.use_pos_embed:
             pos_encoding = (
@@ -1552,7 +1543,7 @@ class FANModel(FANPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings.patch_embed
+        return self.embeddings.patch_embeddings
 
     @add_start_docstrings_to_model_forward(FAN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
