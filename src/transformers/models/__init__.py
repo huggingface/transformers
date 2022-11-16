@@ -69,6 +69,7 @@ from . import (
     fnet,
     fsmt,
     funnel,
+    git,
     glpn,
     gpt2,
     gpt_neo,
