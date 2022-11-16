@@ -666,8 +666,8 @@ def main():
             if args.push_to_hub:
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
-        with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
-            json.dump({"perplexity": perplexity}, f)
+            with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+                json.dump({"perplexity": perplexity}, f)
 
 
 if __name__ == "__main__":
