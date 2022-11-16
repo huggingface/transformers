@@ -178,7 +178,6 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
         we used pipline for inference speed benchmarking we want to make sure that this feature does not break anything
         on pipline.
         """
-        # self._clear_cuda_cache()
         self.pipe = pipeline(
             "text-generation",
             model=self.model_name,
@@ -207,23 +206,8 @@ class MixedInt8TestMultiGpu(BaseMixedInt8Test):
             self.model_name, load_in_8bit=True, max_memory=memory_mapping, device_map="auto"
         )
 
-        def get_list_devices(model):
-            list_devices = []
-            for _, module in model.named_children():
-                if len(list(module.children())) > 0:
-                    list_devices.extend(get_list_devices(module))
-                else:
-                    # Do a try except since we can encounter Dropout modules that does not
-                    # have any device set
-                    try:
-                        list_devices.append(next(module.parameters()).device.index)
-                    except BaseException:
-                        continue
-            return list_devices
-
-        list_devices = get_list_devices(model_parallel)
-        # Check that we have dispatched the model into 2 separate devices
-        self.assertTrue((1 in list_devices) and (0 in list_devices))
+        # Check that the model has been correctly set on device 0 and 1.
+        self.assertEqual(set(model_parallel.hf_device_map.values()), {0, 1})
 
         # Check that inference pass works on the model
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
@@ -231,3 +215,80 @@ class MixedInt8TestMultiGpu(BaseMixedInt8Test):
         # Second real batch
         output_parallel = model_parallel.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
         self.assertEqual(self.tokenizer.decode(output_parallel[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+
+@require_torch_multi_gpu
+class MixedInt8TestCpuGpu(BaseMixedInt8Test):
+    def setUp(self):
+        super().setUp()
+
+    def check_inference_correctness(self):
+        self.model_8bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, load_in_8bit=True, device_map=self.device_map, torch_dtype="auto"
+        ).eval()
+
+        # Check that the model has been correctly set on device 0, 1, and `cpu`.
+        self.assertEqual(set(self.model_8bit.hf_device_map.values()), {0, 1, "cpu"})
+
+        # Check that inference pass works on the model
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+
+        # Check the exactness of the results
+        output_parallel = self.model_8bit.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+
+        # Get the generation
+        output_text = self.tokenizer.decode(output_parallel[0], skip_special_tokens=True)
+        self.assertEqual(output_text, self.EXPECTED_OUTPUT)
+
+    def test_cpu_gpu_loading_random_device_map(self):
+        r"""
+        A test to check is dispatching a model on cpu & gpu works correctly using a random `device_map`.
+        """
+        self.device_map = {
+            "transformer.word_embeddings": 0,
+            "transformer.word_embeddings_layernorm": 0,
+            "lm_head": 0,
+            "transformer.word_embeddings_layernorm": 0,
+            "transformer.h.0": "cpu",
+            "transformer.h.1": "cpu",
+            "transformer.h.2": 0,
+            "transformer.h.3": 0,
+            "transformer.h.4": 0,
+            "transformer.h.5": 0,
+            "transformer.h.6": 0,
+            "transformer.h.7": 0,
+            "transformer.h.8": 0,
+            "transformer.h.9": 1,
+            "transformer.h.10": 0,
+            "transformer.h.11": 1,
+            "transformer.h.12": 0,
+            "transformer.h.13": 0,
+            "transformer.h.14": 1,
+            "transformer.h.15": 0,
+            "transformer.h.16": 0,
+            "transformer.h.17": 1,
+            "transformer.h.18": 1,
+            "transformer.h.19": 0,
+            "transformer.h.20": 1,
+            "transformer.h.21": 1,
+            "transformer.h.22": 0,
+            "transformer.h.23": 0,
+            "transformer.ln_f": 1,
+        }
+        self.check_inference_correctness()
+
+    def test_cpu_gpu_loading_custom_device_map(self):
+        r"""
+        A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
+        This time the device map is more organized than the test above and uses the abstraction
+        `transformer.h` to encapsulate all the decoder layers.
+        """
+        self.device_map = {
+            "transformer.word_embeddings": "cpu",
+            "transformer.word_embeddings_layernorm": "cpu",
+            "lm_head": "cpu",
+            "transformer.word_embeddings_layernorm": "cpu",
+            "transformer.h": 0,
+            "transformer.ln_f": 1,
+        }
+        self.check_inference_correctness()

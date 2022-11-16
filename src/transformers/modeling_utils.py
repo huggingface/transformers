@@ -2239,6 +2239,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 modules_to_not_convert = get_keys_to_not_convert(model)
             else:
                 modules_to_not_convert = load_in_8bit_skip_modules
+
+            # Extend the modules to not convert to keys that are supposed to be offloaded to `cpu` or `disk`
+            if isinstance(device_map, dict) and len(device_map.keys()) > 1:
+                keys_on_cpu = [key for key, value in device_map.items() if value in ["disk", "cpu"]]
+                modules_to_not_convert.extend(keys_on_cpu)
+
             model = replace_8bit_linear(
                 model, threshold=load_in_8bit_threshold, modules_to_not_convert=modules_to_not_convert
             )
