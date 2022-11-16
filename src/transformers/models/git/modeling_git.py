@@ -56,15 +56,13 @@ GIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert->GIT
 class GITEmbeddings(nn.Module):
-    """Construct the embeddings from word, position and token_type embeddings."""
+    """Construct the embeddings from word and position embeddings."""
 
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -665,14 +663,7 @@ GIT_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
 
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
@@ -1111,6 +1102,18 @@ class GITVisionModel(GITPreTrainedModel):
         )
 
 
+class GITProjection(nn.Module):
+    def __init__(self, config: GITConfig):
+        super().__init__()
+        self.config = config
+        self.visual_projection = nn.Sequential(
+            nn.Linear(config.vision_config.hidden_size, config.hidden_size), nn.LayerNorm(config.hidden_size)
+        )
+
+    def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
+        return self.visual_projection(embeddings)
+
+
 @add_start_docstrings(
     "The bare GIT Model transformer outputting raw hidden-states without any specific head on top.",
     GIT_START_DOCSTRING,
@@ -1124,6 +1127,7 @@ class GITModel(GITPreTrainedModel):
         self.image_encoder = GITVisionModel(config.vision_config)
         self.encoder = GITEncoder(config)
 
+        self.visual_projection = GITProjection(config)
         self.pooler = GITPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing

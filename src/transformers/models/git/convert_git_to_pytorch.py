@@ -38,11 +38,84 @@ def get_git_config(model_name):
     return config
 
 
-def rename_key(name):
-    if "downsample_layers.0.0" in name:
-        name = name.replace("downsample_layers.0.0", "embeddings.patch_embeddings")
+# here we list all keys to be renamed (original name on the left, our name on the right)
+def create_rename_keys(config):
+    rename_keys = []
 
-    return name
+    # image encoder
+    # ftm: off
+    rename_keys.append(
+        ("module.image_encoder.class_embedding", "git.image_encoder.vision_model.embeddings.class_embedding")
+    )
+    rename_keys.append(
+        (
+            "module.image_encoder.positional_embedding",
+            "git.image_encoder.vision_model.embeddings.position_embedding.weight",
+        )
+    )
+    rename_keys.append(
+        ("module.image_encoder.conv1.weight", "git.image_encoder.vision_model.embeddings.patch_embedding.weight")
+    )
+    rename_keys.append(("module.image_encoder.ln_pre.weight", "git.image_encoder.vision_model.pre_layrnorm.weight"))
+    rename_keys.append(("module.image_encoder.ln_pre.bias", "git.image_encoder.vision_model.pre_layrnorm.bias"))
+    rename_keys.append(("module.image_encoder.ln_post.weight", "git.image_encoder.vision_model.post_layernorm.weight"))
+    rename_keys.append(("module.image_encoder.ln_post.bias", "git.image_encoder.vision_model.post_layernorm.bias"))
+    # fmt: on
+    # TODO: projection layer 768 -> 512
+
+    # fmt: off
+    for i in range(config.vision_config.num_hidden_layers):
+        # image encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
+        rename_keys.append((f"module.image_encoder.transformer.resblocks.{i}.attn.out_proj.weight", f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.out_proj.weight"))
+        rename_keys.append((f"module.image_encoder.transformer.resblocks.{i}.attn.out_proj.bias", f"git.image_encoder.vision_model.encoder.layers.{i}.self_attn.out_proj.bias"))
+        rename_keys.append((f"module.image_encoder.transformer.resblocks.{i}.ln_1.weight", f"git.image_encoder.vision_model.encoder.layers.{i}.layer_norm1.weight"))
+        rename_keys.append((f"module.image_encoder.transformer.resblocks.{i}.ln_1.bias", f"git.image_encoder.vision_model.encoder.layers.{i}.layer_norm1.bias"))
+        rename_keys.append((f"module.image_encoder.transformer.resblocks.{i}.mlp.c_fc.weight", f"git.image_encoder.vision_model.encoder.layers.{i}.mlp.fc1.weight"))
+        rename_keys.append((f"module.image_encoder.transformer.resblocks.{i}.mlp.c_fc.bias", f"git.image_encoder.vision_model.encoder.layers.{i}.mlp.fc1.bias"))
+        rename_keys.append((f"module.image_encoder.transformer.resblocks.{i}.mlp.c_proj.weight", f"git.image_encoder.vision_model.encoder.layers.{i}.mlp.fc2.weight"))
+        rename_keys.append((f"module.image_encoder.transformer.resblocks.{i}.mlp.c_proj.bias", f"git.image_encoder.vision_model.encoder.layers.{i}.mlp.fc2.bias"))
+        rename_keys.append((f"module.image_encoder.transformer.resblocks.{i}.ln_2.weight", f"git.image_encoder.vision_model.encoder.layers.{i}.layer_norm2.weight"))
+        rename_keys.append((f"module.image_encoder.transformer.resblocks.{i}.ln_2.bias", f"git.image_encoder.vision_model.encoder.layers.{i}.layer_norm2.bias"))
+    # fmt: on
+
+    # text decoder
+    # fmt: off
+    rename_keys.append(("module.textual.embedding.words.weight", "git.embeddings.word_embeddings.weight"))
+    rename_keys.append(("module.textual.embedding.positions.weight", "git.embeddings.position_embeddings.weight"))
+    # TODO visual projection layers
+    # rename_keys.append(("module.textual.visual_projection.0.weight", ""))
+    # rename_keys.append(("module.textual.visual_projection.0.bias", ""))
+    # rename_keys.append(("module.textual.visual_projection.1.weight", ""))
+    # rename_keys.append(("module.textual.visual_projection.1.bias", ""))
+
+    # rename_keys.append(("module.textual.embedding.token_type.weight", "git.embeddings.token_type_embeddings.weight"))
+    rename_keys.append(("module.textual.embedding.layer_norm.weight", "git.embeddings.LayerNorm.weight"))
+    rename_keys.append(("module.textual.embedding.layer_norm.bias", "git.embeddings.LayerNorm.bias"))
+    rename_keys.append("module.textual.output.weight", "output.weight")
+    rename_keys.append("module.textual.output.bias", "output.bias")
+    for i in range(config.num_hidden_layers):
+        rename_keys.append(("module.textual.transformer.encoder.layer.{i}.attention.self.query.weight", f"git.encoder.layer.{i}.attention.self.query.weight"))
+        rename_keys.append(("module.textual.transformer.encoder.layer.{i}.attention.self.query.bias", f"git.encoder.layer.{i}.attention.self.query.bias"))
+        rename_keys.append(("module.textual.transformer.encoder.layer.{i}.attention.self.key.weight", f"git.encoder.layer.{i}.attention.self.key.weight"))
+        rename_keys.append(("module.textual.transformer.encoder.layer.{i}.attention.self.key.bias", f"git.encoder.layer.{i}.attention.self.key.bias"))
+        rename_keys.append(("module.textual.transformer.encoder.layer.{i}.attention.self.value.weight", f"git.encoder.layer.{i}.attention.self.value.weight"))
+        rename_keys.append(("module.textual.transformer.encoder.layer.{i}.attention.self.value.bias", f"git.encoder.layer.{i}.attention.self.value.bias"))
+        rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.attention.output.dense.weight", f"git.encoder.layer.{i}.attention.output.dense.weight"))
+        rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.attention.output.dense.bias", f"git.encoder.layer.{i}.attention.output.dense.bias"))
+        rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.attention.output.LayerNorm.weight", f"git.encoder.layer.{i}.attention.output.LayerNorm.weight"))
+        rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.attention.output.LayerNorm.bias", f"git.encoder.layer.{i}.attention.output.LayerNorm.bias"))
+        rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.intermediate.dense.weight", f"git.encoder.layer.{i}.intermediate.dense.weight"))
+        rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.intermediate.dense.bias", f"git.encoder.layer.{i}.intermediate.dense.bias"))
+        rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.output.dense.weight", f"git.encoder.layer.{i}.output.dense.weight"))
+        rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.output.dense.bias", f"git.encoder.layer.{i}.output.dense.bias"))
+        rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.output.LayerNorm.weight", f"git.encoder.layer.{i}.output.LayerNorm.weight"))
+        rename_keys.append((f"module.textual.transformer.encoder.layer.{i}.output.LayerNorm.bias", f"git.encoder.layer.{i}.output.LayerNorm.bias"))
+    # fmt: on
+
+
+def rename_key(dct, old, new):
+    val = dct.pop(old)
+    dct[new] = val
 
 
 # We will verify our results on an image of cute cats
@@ -68,9 +141,10 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     checkpoint_url = model_name_to_url[model_name]
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
     # rename keys
-    for key in state_dict.copy().keys():
-        val = state_dict.pop(key)
-        state_dict[rename_key(key)] = val
+    rename_keys = create_rename_keys(config)
+    for src, dest in rename_keys:
+        rename_key(state_dict, src, dest)
+    # TODO: qkv of CLIP encoder
 
     # load HuggingFace model
     model = GITForCausalLM(config)
@@ -109,7 +183,6 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path",
         default=None,
         type=str,
-        required=True,
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
