@@ -684,7 +684,7 @@ class HybridEmbed(nn.Module):
                 training = backbone.training
                 if training:
                     backbone.eval()
-                o = self.backbone.forward_features(torch.zeros(1, in_chans, img_size[0], img_size[1]))
+                o = self.backbone(torch.zeros(1, in_chans, img_size[0], img_size[1]))
                 if isinstance(o, (list, tuple)):
                     o = o[-1]  # last feature if backbone outputs list/tuple of features
                 feature_size = o.shape[-2:]
@@ -705,7 +705,7 @@ class HybridEmbed(nn.Module):
         self.proj = nn.Conv2d(feature_dim, hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, x, return_feat=False):
-        x, out_list = self.backbone.forward_features(x, return_feat=return_feat)
+        x, out_list = self.backbone(x, return_feat=return_feat)
         B, C, H, W = x.shape
         if isinstance(x, (list, tuple)):
             x = x[-1]  # last feature if backbone outputs list/tuple of features
@@ -1173,18 +1173,17 @@ class ConvNeXt(nn.Module):
             norm_layer(dims[0]),
         )
 
-        self.stages = nn.Sequential()
         dp_rates = [x.tolist() for x in torch.linspace(0, drop_path_rate, sum(depths)).split(depths)]
         curr_stride = patch_size
         prev_chs = dims[0]
-        stages = []
+        self.stages = nn.ModuleList()
         # 4 feature resolution stages, each consisting of multiple residual blocks
         for i in range(len(depths)):
             stride = 2 if i > 0 else 1
             # FIXME support dilation / output_stride
             curr_stride *= stride
             out_chs = dims[i]
-            stages.append(
+            self.stages.append(
                 ConvNeXtStage(
                     prev_chs,
                     out_chs,
@@ -1200,27 +1199,16 @@ class ConvNeXt(nn.Module):
             prev_chs = out_chs
             # NOTE feature_info use currently assumes stage 0 == stride 1, rest are stride 2
             self.feature_info += [dict(num_chs=prev_chs, reduction=curr_stride, module=f"stages.{i}")]
-        self.stages = nn.Sequential(*stages)
-
         self.num_features = prev_chs
-        # TODO: Check if any config has norm_pre
-        self.norm_pre = nn.Identity()
-        # DONE: Remove Head
 
-    # TODO: Rename Forward Features
-    def forward_features(self, x, return_feat=False):
+    def forward(self, x, return_feat=False):
         x = self.stem(x)
         out_list = []
-        for i in range(len(self.stages)):
-            x = self.stages[i](x)
+        for stage in self.stages:
+            x = stage(x)
             out_list.append(x)
-        x = self.norm_pre(x)
 
         return x, out_list if return_feat else x
-
-    def forward(self, x):
-        x = self.forward_features(x)
-        return x
 
 
 class FANPreTrainedModel(PreTrainedModel):
@@ -1813,7 +1801,7 @@ class FANDecodeHead(FANPreTrainedModel):
                 encoder_hidden_states[-1],
             )
         else:
-            encoder_states = (reshape_hidden_state(encoder_hidden_states[idx]) for idx in out_index) + (
+            encoder_states = tuple(reshape_hidden_state(encoder_hidden_states[idx]) for idx in out_index) + (
                 encoder_hidden_states[-1],
             )
 
