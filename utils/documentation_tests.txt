@@ -58,6 +58,7 @@ src/transformers/models/deberta/modeling_deberta.py
 src/transformers/models/deberta_v2/configuration_deberta_v2.py
 src/transformers/models/deberta_v2/modeling_deberta_v2.py
 src/transformers/models/decision_transformer/configuration_decision_transformer.py
+src/transformers/models/deformable_detr/configuration_deformable_detr.py
 src/transformers/models/deformable_detr/modeling_deformable_detr.py
 src/transformers/models/deit/configuration_deit.py
 src/transformers/models/deit/modeling_deit.py
