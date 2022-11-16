@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
+import tempfile
 import unittest
 
 from transformers import (
@@ -222,19 +223,12 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
     def setUp(self):
         super().setUp()
 
-    def check_inference_correctness(self):
-        self.model_8bit = AutoModelForCausalLM.from_pretrained(
-            self.model_name, load_in_8bit=True, device_map=self.device_map, torch_dtype="auto"
-        ).eval()
-
-        # Check that the model has been correctly set on device 0, 1, and `cpu`.
-        self.assertEqual(set(self.model_8bit.hf_device_map.values()), {0, 1, "cpu"})
-
+    def check_inference_correctness(self, model):
         # Check that inference pass works on the model
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 
         # Check the exactness of the results
-        output_parallel = self.model_8bit.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+        output_parallel = model.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
 
         # Get the generation
         output_text = self.tokenizer.decode(output_parallel[0], skip_special_tokens=True)
@@ -244,7 +238,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
         r"""
         A test to check is dispatching a model on cpu & gpu works correctly using a random `device_map`.
         """
-        self.device_map = {
+        device_map = {
             "transformer.word_embeddings": 0,
             "transformer.word_embeddings_layernorm": 0,
             "lm_head": 0,
@@ -275,7 +269,15 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
             "transformer.h.23": 0,
             "transformer.ln_f": 1,
         }
-        self.check_inference_correctness()
+
+        model_8bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, load_in_8bit=True, device_map=device_map, torch_dtype="auto"
+        ).eval()
+
+        # Check that the model has been correctly set on device 0, 1, and `cpu`.
+        self.assertEqual(set(model_8bit.hf_device_map.values()), {0, 1, "cpu"})
+
+        self.check_inference_correctness(model_8bit)
 
     def test_cpu_gpu_loading_custom_device_map(self):
         r"""
@@ -283,7 +285,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
         This time the device map is more organized than the test above and uses the abstraction
         `transformer.h` to encapsulate all the decoder layers.
         """
-        self.device_map = {
+        device_map = {
             "transformer.word_embeddings": "cpu",
             "transformer.word_embeddings_layernorm": "cpu",
             "lm_head": "cpu",
@@ -291,4 +293,40 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
             "transformer.h": 0,
             "transformer.ln_f": 1,
         }
-        self.check_inference_correctness()
+        # Load model
+        model_8bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, load_in_8bit=True, device_map=device_map, torch_dtype="auto"
+        ).eval()
+
+        # Check that the model has been correctly set on device 0, 1, and `cpu`.
+        self.assertEqual(set(model_8bit.hf_device_map.values()), {0, 1, "cpu"})
+
+        self.check_inference_correctness(model_8bit)
+
+    def test_cpu_gpu_disk_loading_custom_device_map(self):
+        r"""
+        A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
+        This time we also add `disk` on the device_map.
+        """
+        device_map = {
+            "transformer.word_embeddings": "cpu",
+            "transformer.word_embeddings_layernorm": "cpu",
+            "lm_head": "disk",
+            "transformer.word_embeddings_layernorm": "cpu",
+            "transformer.h": 0,
+            "transformer.ln_f": 1,
+        }
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # Load model
+            model_8bit = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                load_in_8bit=True,
+                device_map=device_map,
+                torch_dtype="auto",
+                offload_folder=tmpdirname,
+            ).eval()
+
+            # Check that the model has been correctly set on device 0, 1, and `cpu`.
+            self.assertEqual(set(model_8bit.hf_device_map.values()), {0, 1, "cpu", "disk"})
+
+            self.check_inference_correctness(model_8bit)
