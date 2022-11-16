@@ -27,6 +27,21 @@ class Text2TextGenerationPipeline(Pipeline):
     """
     Pipeline for text to text generation using seq2seq models.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> generator = pipeline(model="mrm8488/t5-base-finetuned-question-generation-ap")
+    >>> generator(
+    ...     "answer: Manuel context: Manuel has created RuPERTa-base with the support of HF-Transformers and Google"
+    ... )
+    [{'generated_text': 'question: Who created the RuPERTa-base?'}]
+    ```
+
+    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+
+
     This Text2TextGenerationPipeline pipeline can currently be loaded from [`pipeline`] using the following task
     identifier: `"text2text-generation"`.
 
