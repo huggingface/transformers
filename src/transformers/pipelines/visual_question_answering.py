@@ -28,21 +28,16 @@ class VisualQuestionAnsweringPipeline(Pipeline):
 
     >>> oracle = pipeline(model="dandelin/vilt-b32-finetuned-vqa")
     >>> image_url = "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/lena.png"
-    >>> answers = oracle(question="What is she wearing ?", image=image_url)
-    >>> from transformers.testing_utils import (
-    ...     nested_simplify,
-    ... )  # Actual scores might vary slightly depending on PyTorch version or Tensorflow
-
-    >>> nested_simplify(answers)
+    >>> oracle(question="What is she wearing ?", image=image_url)
     [{'score': 0.948, 'answer': 'hat'}, {'score': 0.009, 'answer': 'fedora'}, {'score': 0.003, 'answer': 'clothes'}, {'score': 0.003, 'answer': 'sun hat'}, {'score': 0.002, 'answer': 'nothing'}]
 
-    >>> nested_simplify(oracle(question="What is she wearing ?", image=image_url, top_k=1))
+    >>> oracle(question="What is she wearing ?", image=image_url, top_k=1)
     [{'score': 0.948, 'answer': 'hat'}]
 
-    >>> nested_simplify(oracle(question="Is this a person ?", image=image_url, top_k=1))
+    >>> oracle(question="Is this a person ?", image=image_url, top_k=1)
     [{'score': 0.993, 'answer': 'yes'}]
 
-    >>> nested_simplify(oracle(question="Is this a man ?", image=image_url, top_k=1))
+    >>> oracle(question="Is this a man ?", image=image_url, top_k=1)
     [{'score': 0.996, 'answer': 'no'}]
     ```
 
