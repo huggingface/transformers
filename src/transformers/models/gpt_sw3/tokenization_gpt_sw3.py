@@ -1,9 +1,3 @@
-# coding=utf-8
-# Copyright 2022 AI Sweden and the HuggingFace Inc. team.
-# See license in model repos
-""" Tokenization classes for GPT-SW3 model."""
-
-
 import os
 import unicodedata
 from shutil import copyfile
@@ -16,24 +10,26 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
+# TODO: rename spm.model -> spiece.model?
+VOCAB_FILES_NAMES = {"vocab_file": "spm.model"}
 
+# TODO: rename spm.model -> spiece.model?
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "gpt-sw3-126m": "https://huggingface.co/gpt-sw3-126m/resolve/main/spiece.model",
-        "gpt-sw3-350m": "https://huggingface.co/gpt-sw3-350m/resolve/main/spiece.model",
-        "gpt-sw3-1.6b": "https://huggingface.co/gpt-sw3-1.6b/resolve/main/spiece.model",
-        "gpt-sw3-6.7b": "https://huggingface.co/gpt-sw3-6.7b/resolve/main/spiece.model",
-        "gpt-sw3-20b": "https://huggingface.co/gpt-sw3-20b/resolve/main/spiece.model",
+        "AI-Sweden/gpt-sw3-126m": "https://huggingface.co/AI-Sweden/gpt-sw3-126m/resolve/main/spm.model",
+        "AI-Sweden/gpt-sw3-350m": "https://huggingface.co/AI-Sweden/gpt-sw3-350m/resolve/main/spm.model",
+        "AI-Sweden/gpt-sw3-1.6b": "https://huggingface.co/AI-Sweden/gpt-sw3-1.6b/resolve/main/spm.model",
+        "AI-Sweden/gpt-sw3-6.7b": "https://huggingface.co/AI-Sweden/gpt-sw3-6.7b/resolve/main/spm.model",
+        "AI-Sweden/gpt-sw3-20b": "https://huggingface.co/AI-Sweden/gpt-sw3-20b/resolve/main/spm.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "gpt-sw3-126m": 2048,
-    "gpt-sw3-350m": 2048,
-    "gpt-sw3-1.6b": 2048,
-    "gpt-sw3-6.7b": 2048,
-    "gpt-sw3-20b": 2048,
+    "AI-Sweden/gpt-sw3-126m": 2048,
+    "AI-Sweden/gpt-sw3-350m": 2048,
+    "AI-Sweden/gpt-sw3-1.6b": 2048,
+    "AI-Sweden/gpt-sw3-6.7b": 2048,
+    "AI-Sweden/gpt-sw3-20b": 2048,
 }
 
 SPIECE_UNDERLINE = "▁"
@@ -41,7 +37,7 @@ SPIECE_UNDERLINE = "▁"
 
 class GptSw3Tokenizer(PreTrainedTokenizer):
     """
-    Construct a GPT-SW3 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
+    Construct an ALBERT tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
@@ -119,27 +115,17 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
     def __init__(
         self,
         vocab_file,
-        do_lower_case=True,
-        remove_space=True,
+        do_lower_case=False,
+        remove_space=False,
         keep_accents=False,
-        bos_token="[CLS]",
-        eos_token="[SEP]",
-        unk_token="<unk>",
-        sep_token="[SEP]",
-        pad_token="<pad>",
-        cls_token="[CLS]",
-        mask_token="[MASK]",
+        unk_token="<|endoftext|>",
+        bos_token="<|endoftext|>",
+        eos_token="<|endoftext|>",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
     ) -> None:
-        # Mask token behave like a normal word, i.e. include the space before it and
-        # is included in the raw text, there should be a match in a non-normalized sentence.
-        mask_token = (
-            AddedToken(mask_token, lstrip=True, rstrip=False, normalized=False)
-            if isinstance(mask_token, str)
-            else mask_token
-        )
 
+        print("INSIDE TOKENIZATION_GPT_SW3 CLASS INIT! :)")
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         super().__init__(
@@ -149,10 +135,6 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
-            sep_token=sep_token,
-            pad_token=pad_token,
-            cls_token=cls_token,
-            mask_token=mask_token,
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
@@ -162,6 +144,8 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
         self.keep_accents = keep_accents
         self.vocab_file = vocab_file
 
+        # print("MODEL NAME OR PATH")
+        # print(self.name_or_path)
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
 
@@ -194,11 +178,14 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
             outputs = " ".join(inputs.strip().split())
         else:
             outputs = inputs
-        outputs = outputs.replace("``", '"').replace("''", '"')
+
+        # TODO: other normalization we used in data pipeline
+        # outputs = outputs.replace("``", '"').replace("''", '"')
 
         if not self.keep_accents:
-            outputs = unicodedata.normalize("NFKD", outputs)
-            outputs = "".join([c for c in outputs if not unicodedata.combining(c)])
+            # outputs = unicodedata.normalize("NFC", outputs)
+            # outputs = "".join([c for c in outputs if not unicodedata.combining(c)])
+            outputs = outputs
         if self.do_lower_case:
             outputs = outputs.lower()
 
@@ -207,22 +194,23 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
     def _tokenize(self, text: str) -> List[str]:
         """Tokenize a string."""
         text = self.preprocess_text(text)
-        pieces = self.sp_model.encode(text, out_type=str)
-        new_pieces = []
-        for piece in pieces:
-            if len(piece) > 1 and piece[-1] == str(",") and piece[-2].isdigit():
-                cur_pieces = self.sp_model.EncodeAsPieces(piece[:-1].replace(SPIECE_UNDERLINE, ""))
-                if piece[0] != SPIECE_UNDERLINE and cur_pieces[0][0] == SPIECE_UNDERLINE:
-                    if len(cur_pieces[0]) == 1:
-                        cur_pieces = cur_pieces[1:]
-                    else:
-                        cur_pieces[0] = cur_pieces[0][1:]
-                cur_pieces.append(piece[-1])
-                new_pieces.extend(cur_pieces)
-            else:
-                new_pieces.append(piece)
-
-        return new_pieces
+        # pieces = self.sp_model.encode(text, out_type=str)
+        # new_pieces = []
+        # for piece in pieces:
+        #     if len(piece) > 1 and piece[-1] == str(",") and piece[-2].isdigit():
+        #         cur_pieces = self.sp_model.EncodeAsPieces(piece[:-1].replace(SPIECE_UNDERLINE, ""))
+        #         if piece[0] != SPIECE_UNDERLINE and cur_pieces[0][0] == SPIECE_UNDERLINE:
+        #             if len(cur_pieces[0]) == 1:
+        #                 cur_pieces = cur_pieces[1:]
+        #             else:
+        #                 cur_pieces[0] = cur_pieces[0][1:]
+        #         cur_pieces.append(piece[-1])
+        #         new_pieces.extend(cur_pieces)
+        #     else:
+        #         new_pieces.append(piece)
+        #
+        # return new_pieces
+        return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
@@ -232,109 +220,15 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.sp_model.IdToPiece(index)
 
-    def convert_tokens_to_string(self, tokens):
-        """Converts a sequence of tokens (string) in a single string."""
-        current_sub_tokens = []
-        out_string = ""
-        prev_is_special = False
+    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+        out_str = ""
         for token in tokens:
-            # make sure that special tokens are not decoded using sentencepiece model
-            if token in self.all_special_tokens:
-                if not prev_is_special:
-                    out_string += " "
-                out_string += self.sp_model.decode(current_sub_tokens) + token
-                prev_is_special = True
-                current_sub_tokens = []
+            if token[0] == SPIECE_UNDERLINE:
+                out_str += " " + token[1:]
             else:
-                current_sub_tokens.append(token)
-                prev_is_special = False
-        out_string += self.sp_model.decode(current_sub_tokens)
-        return out_string.strip()
+                out_str += token
 
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. An ALBERT sequence has the following format:
-
-        - single sequence: `[CLS] X [SEP]`
-        - pair of sequences: `[CLS] A [SEP] B [SEP]`
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
-        if token_ids_1 is None:
-            return cls + token_ids_0 + sep
-        return cls + token_ids_0 + sep + token_ids_1 + sep
-
-    def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
-        """
-        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer `prepare_for_model` method.
-
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not the token list is already formatted with special tokens for the model.
-
-        Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
-
-
-        if already_has_special_tokens:
-            return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
-            )
-
-        if token_ids_1 is not None:
-            return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
-        return [1] + ([0] * len(token_ids_0)) + [1]
-
-    def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. An ALBERT
-        sequence pair mask has the following format:
-
-        ```
-        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-        | first sequence    | second sequence |
-        ```
-
-        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
-        """
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
-
-        if token_ids_1 is None:
-            return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
+        return out_str.strip()
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
@@ -352,4 +246,3 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
-
