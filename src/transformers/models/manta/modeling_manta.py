@@ -376,9 +376,7 @@ class MantaCachedConvolutionPooling(nn.Module):
         block_embeddings = self.highway(block_embeddings)
         block_embeddings = self.out_projection(block_embeddings)
 
-        attention_mask = torch.ones_like(block_byte_proba)
-
-        return block_embeddings, attention_mask, regularized_token_size, block_byte_proba
+        return block_embeddings
 
     def pooling(self, embeddings: torch.Tensor, block_byte_proba: torch.Tensor):
         block_embeddings = []
@@ -614,7 +612,7 @@ class MantaModel(MantaPreTrainedModel):
         
         frontier_predictions = self.frontier_predictor(byte_embeddings, attention_mask)
         
-        pooled_representations, _, _, _ = self.pooler(frontier_predictions, byte_embeddings)
+        pooled_representations = self.pooler(frontier_predictions, byte_embeddings)
 
         return pooled_representations
 
@@ -788,7 +786,7 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
         
         frontier_predictions = self.frontier_predictor(byte_embeddings, attention_mask)
         
-        pooled_representations, _, _, _ = self.pooler(frontier_predictions, byte_embeddings)
+        pooled_representations = self.pooler(frontier_predictions, byte_embeddings)
 
         return pooled_representations
     
@@ -866,7 +864,6 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
             )
             # Convert encoder inputs in embeddings if needed
             encoder_outputs = self.encoder_decoder.encoder(
-                attention_mask=attention_mask,
                 inputs_embeds=pooled_representations,
                 head_mask=head_mask,
                 output_attentions=output_attentions,
@@ -894,7 +891,6 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
             attention_mask=decoder_attention_mask,
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
-            encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             use_cache=use_cache,
@@ -1074,7 +1070,7 @@ class MantaEncoderModel(MantaPreTrainedModel):
         
         frontier_predictions = self.frontier_predictor(byte_embeddings, attention_mask)
         
-        pooled_representations, _, _, _ = self.pooler(frontier_predictions, byte_embeddings)
+        pooled_representations = self.pooler(frontier_predictions, byte_embeddings)
 
         return pooled_representations
 
