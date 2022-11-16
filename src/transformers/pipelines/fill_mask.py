@@ -42,12 +42,9 @@ class FillMaskPipeline(Pipeline):
     >>> from transformers import pipeline
 
     >>> fill_masker = pipeline(model="bert-base-uncased")
-    >>> potential_words = fill_masker("This is a simple [MASK].")
-
-    >>> from transformers.testing_utils import nested_simplify
-
-    >>> nested_simplify(potential_words)  # The scores might vary slightly across pytorch/tensorflow versions.
+    >>> fill_masker("This is a simple [MASK].")
     [{'score': 0.042, 'token': 3291, 'token_str': 'problem', 'sequence': 'this is a simple problem.'}, {'score': 0.031, 'token': 3160, 'token_str': 'question', 'sequence': 'this is a simple question.'}, {'score': 0.03, 'token': 8522, 'token_str': 'equation', 'sequence': 'this is a simple equation.'}, {'score': 0.027, 'token': 2028, 'token_str': 'one', 'sequence': 'this is a simple one.'}, {'score': 0.024, 'token': 3627, 'token_str': 'rule', 'sequence': 'this is a simple rule.'}]
+
     ```
 
     [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
