@@ -22,25 +22,15 @@ from PIL import Image
 from transformers.image_utils import PILImageResampling
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
-from ...utils import TensorType, is_torch_available, logging
+from ...image_transforms import center_to_corners_format
+from ...image_utils import ImageFeatureExtractionMixin
+from ...utils import TensorType, is_torch_available, is_torch_tensor, logging
 
 
 if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
-
-
-# Copied from transformers.models.detr.feature_extraction_detr.center_to_corners_format
-def center_to_corners_format(x):
-    """
-    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
-    (x_0, y_0, x_1, y_1).
-    """
-    center_x, center_y, width, height = x.unbind(-1)
-    b = [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)]
-    return torch.stack(b, dim=-1)
 
 
 # Copied from transformers.models.detr.modeling_detr._upcast

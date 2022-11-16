@@ -1931,12 +1931,12 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     return NestedTensor(tensor, mask)
 
 
-# Copied from transformers.models.detr.modeling_detr.center_to_corners_format
-def center_to_corners_format(x):
-    """
-    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
-    (x_0, y_0, x_1, y_1).
-    """
-    center_x, center_y, width, height = x.unbind(-1)
-    b = [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)]
-    return torch.stack(b, dim=-1)
+# Copied from transformers.image_transforms._center_to_corners_format_torch -> center_to_corners_format
+def center_to_corners_format(bboxes_center):
+    center_x, center_y, width, height = bboxes_center.unbind(-1)
+    bbox_corners = torch.stack(
+        # top left x, top left y, bottom right x, bottom right y
+        [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)],
+        dim=-1,
+    )
+    return bbox_corners
