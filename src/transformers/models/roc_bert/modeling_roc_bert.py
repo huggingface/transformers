@@ -1217,11 +1217,6 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
         >>> logits = outputs.logits
         >>> logits.shape
         torch.Size([1, 11, 21128])
-
-
-
-
-
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
