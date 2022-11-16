@@ -1297,7 +1297,7 @@ class FANEmbeddings(FANPreTrainedModel):
             img_size[0] % config.patch_size == 0
         ), "`patch_size` should divide image dimensions evenly"
 
-        act_layer = ACT2CLS[config.act_layer] if config.act_layer else nn.GELU
+        act_layer = ACT2CLS[config.hidden_act] if config.hidden_act else nn.GELU
 
         if config.backbone == None:
             self.patch_embed = ConvPatchEmbed(
@@ -1379,7 +1379,7 @@ class FANEncoderLayer(FANPreTrainedModel):
             [config.hidden_size] * config.num_hidden_layers if config.channel_dims is None else config.channel_dims
         )
         norm_layer = config.norm_layer or partial(nn.LayerNorm, eps=1e-6)
-        act_layer = ACT2CLS[config.act_layer] if config.act_layer else nn.GELU
+        act_layer = ACT2CLS[config.hidden_act] if config.hidden_act else nn.GELU
 
         downsample = None
 
@@ -1435,7 +1435,7 @@ class FANEncoder(FANPreTrainedModel):
             [config.hidden_size] * config.num_hidden_layers if config.channel_dims is None else config.channel_dims
         )
         norm_layer = config.norm_layer or partial(nn.LayerNorm, eps=1e-6)
-        act_layer = ACT2CLS[config.act_layer] if config.act_layer else nn.GELU
+        act_layer = ACT2CLS[config.hidden_act] if config.hidden_act else nn.GELU
         self.blocks = nn.ModuleList([FANEncoderLayer(config, i) for i in range(config.num_hidden_layers)])
         self.num_features = self.hidden_size = channel_dims[-1]
         self.cls_token = nn.Parameter(torch.zeros(1, 1, channel_dims[-1]))
@@ -1847,7 +1847,6 @@ class FANForSemanticSegmentation(FANPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, SemanticSegmenterOutput]:
-        # TODO: Update Docstring
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
