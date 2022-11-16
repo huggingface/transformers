@@ -18,14 +18,8 @@ from typing import Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.utils import ExplicitEnum
-from transformers.utils.import_utils import (
-    TensorType,
-    is_flax_available,
-    is_tf_available,
-    is_torch_available,
-    is_vision_available,
-)
+from transformers.utils import ExplicitEnum, TensorType
+from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
 
 
 if is_vision_available():
@@ -594,17 +588,19 @@ def pad(
     mode: PaddingMode = PaddingMode.CONSTANT,
     constant_values: Union[float, Iterable[float]] = 0.0,
     data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> np.ndarray:
     """
-    Pads the `image` with the specified `padding` and `mode`.
+    Pads the `image` with the specified (height, width) `padding` and `mode`.
 
     Args:
         image (`np.ndarray`):
             The image to pad.
         padding (`int` or `Tuple[int, int]` or `Iterable[Tuple[int, int]]`):
-            Padding to apply to the edges of each axis. ((before_1, after_1), … (before_N, after_N)) unique pad widths
-            for each axis. ((before, after),) yields same before and after pad for each axis. (pad,) or int is a
-            shortcut for before = after = pad width for all axes.
+            Padding to apply to the edges of the height, width axes. Can be one of three formats:
+            - ((before_height, after_height), (before_width, after_width)) unique pad widths for each axis.
+            - ((before, after),) yields same before and after pad for height and width.
+            - (pad,) or int is a shortcut for before = after = pad width for all axes.
         mode (`PaddingMode`):
             The padding mode to use. Can be one of:
                 - `"constant"`: pads with a constant value.
@@ -618,15 +614,46 @@ def pad(
             The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            If unset, will use same as the input image.
+        input_data_format (`str` or `ChannelDimension`, *optional*):
+            The channel dimension format for the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
             If unset, will use the inferred format of the input image.
 
     Returns:
         `np.ndarray`: The padded image.
 
     """
-    mode = PaddingMode(mode)
+    if input_data_format is None:
+        input_data_format = infer_channel_dimension_format(image)
+
+    def _expand_for_data_format(values):
+        """
+        Convert values to be in the format expected by np.pad based on the data format.
+        """
+        if isinstance(values, (int, float)):
+            values = ((values, values), (values, values))
+        elif isinstance(values, tuple) and len(values) == 1:
+            values = ((values[0], values[0]), (values[0], values[0]))
+        elif isinstance(values, tuple) and len(values) == 2 and isinstance(values[0], int):
+            values = (values, values)
+        elif isinstance(values, tuple) and len(values) == 2 and isinstance(values[0], tuple):
+            values = values
+        else:
+            raise ValueError(f"Unsupported format: {values}")
+
+        # add 0 for channel dimension
+        values = ((0, 0), *values) if input_data_format == ChannelDimension.FIRST else (*values, (0, 0))
+
+        # Add additional padding if there's a batch dimension
+        values = (0, *values) if image.ndim == 4 else values
+        return values
+
+    padding = _expand_for_data_format(padding)
 
     if mode == PaddingMode.CONSTANT:
+        constant_values = _expand_for_data_format(constant_values)
         image = np.pad(image, padding, mode="constant", constant_values=constant_values)
     elif mode == PaddingMode.REFLECT:
         image = np.pad(image, padding, mode="reflect")
