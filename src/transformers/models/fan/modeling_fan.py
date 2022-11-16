@@ -845,6 +845,7 @@ class FANBlock_SE(nn.Module):
             proj_drop=drop,
             drop=drop,
             drop_path=drop_path,
+            act_layer=act_layer,
             # sr_ratio=sr_ratio,
             linear=linear,
             emlp=False,
@@ -895,6 +896,7 @@ class FANBlock(nn.Module):
             num_attention_heads=num_attention_heads,
             qkv_bias=qkv_bias,
             mlp_hidden_dim=int(dim * mlp_ratio),
+            act_layer=act_layer,
             sharpen_attn=sharpen_attn,
             attn_drop=attn_drop,
             proj_drop=drop,
@@ -908,6 +910,7 @@ class FANBlock(nn.Module):
         self.mlp = ChannelProcessing(
             dim,
             num_attention_heads=num_attention_heads,
+            act_layer=act_layer,
             qkv_bias=qkv_bias,
             attn_drop=attn_drop,
             drop_path=drop_path,
@@ -1321,7 +1324,7 @@ class FANEmbeddings(FANPreTrainedModel):
             raise ValueError(f"{config.backbone} has to be either hybrid or None")
         if config.use_pos_embed:
             self.pos_embed = PositionalEncodingFourier(dim=config.hidden_size, rounding_mode=self.config.rounding_mode)
-        self.pos_drop = nn.Dropout(p=config.drop_rate)
+        self.pos_drop = nn.Dropout(p=config.hidden_dropout_prob)
 
     def forward(
         self,
@@ -1401,9 +1404,9 @@ class FANEncoderLayer(FANPreTrainedModel):
             num_attention_heads=num_attention_heads[index],
             mlp_ratio=config.mlp_ratio,
             qkv_bias=config.qkv_bias,
-            drop=config.drop_rate,
+            drop=config.hidden_dropout_prob,
             # sr_ratio=config.sr_ratio[index], # Unused
-            attn_drop=config.attn_drop_rate,
+            attn_drop=config.attention_probs_dropout_prob,
             drop_path=config.drop_path_rate,
             act_layer=act_layer,
             norm_layer=norm_layer,
@@ -1446,8 +1449,8 @@ class FANEncoder(FANPreTrainedModel):
                     num_attention_heads=num_attention_heads[-1],
                     mlp_ratio=config.mlp_ratio,
                     qkv_bias=config.qkv_bias,
-                    drop=config.drop_rate,
-                    attn_drop=config.attn_drop_rate,
+                    drop=config.hidden_dropout_prob,
+                    attn_drop=config.attention_probs_dropout_prob,
                     act_layer=act_layer,
                     norm_layer=norm_layer,
                     eta=config.eta,

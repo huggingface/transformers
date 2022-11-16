@@ -36,6 +36,8 @@ original_feature_mapping = {
     "num_classes": "num_labels",
     "embed_dim": "hidden_size",
     "act_layer": "hidden_act",
+    "attn_drop_rate": "attention_probs_dropout_prob",
+    "drop_rate": "hidden_dropout_prob",
 }
 # DONE: Rename embed_dim to hidden_size
 # DONE: Rename num_classes to num_labels
@@ -86,10 +88,10 @@ class FANConfig(PretrainedConfig):
             encoder blocks.
         qkv_bias (`bool`, defaults to True):
             Whether or not to use bias in Query, Key and Value in attention layers.
-        drop_rate (`float`, defaults to 0):
-            Dropout used in MLP.
-        attn_drop_rate (`float`, defaults to 0):
-            Dropout used in Toxen Mixing after attention.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
         drop_path_rate (`float`, defaults to 0):
             Dropout used in Toxen Mixing after MLP.
         decoder_dropout (`float`, defaults to 0.1):
@@ -114,37 +116,12 @@ class FANConfig(PretrainedConfig):
         rounding_mode (`string`, *optional*, defaults to 'floor'):
             Torch Divison rounding mode used for positional encoding.
             Should be set to None in Semantic Segmentation tasks to be compatible with original paper implementation.
-
-
         segmentation_in_channels (tuple(int), defaults to (128, 256, 480, 480)):
             Number of channels in each of the hidden features used for Semantic Segmentation.
         decoder_hidden_size (`int`, *optional*, defaults to 768):
             The dimension of the all-MLP decode head for Semantic Segmenatation.
         semantic_loss_ignore_index (`int`, *optional*, defaults to -100):
             The index that is ignored by the loss function of the semantic segmentation model.
-
-        num_labels (`int`, defaults to 1000):
-            Number of classes used to predict, used for ImageClassification and  SemanticSegmentation tasks.
-
-
-
-
-
-
-
-
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-
-        max_position_embeddings (`int`, *optional*, defaults to 512):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
-
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
 
@@ -182,8 +159,8 @@ class FANConfig(PretrainedConfig):
         use_pos_embed=True,  # HASCOMMENTS
         mlp_ratio=4.0,  # HASCOMMENTS
         qkv_bias=True,  # HASCOMMENTS
-        drop_rate=0.0,  # HASCOMMENTS
-        attn_drop_rate=0.0,  # HASCOMMENTS
+        hidden_dropout_prob=0.0,  # HASCOMMENTS
+        attention_probs_dropout_prob=0.0,  # HASCOMMENTS
         drop_path_rate=0.0,  # HASCOMMENTS
         decoder_dropout=0.1,  # HASCOMMENTS
         hidden_act="gelu",  # HASCOMMENTS # TODO: Add Documentation Refactor modeling to include ACT2CLS/ACT2FN from activations
@@ -218,9 +195,8 @@ class FANConfig(PretrainedConfig):
         self.use_pos_embed = use_pos_embed
         self.mlp_ratio = mlp_ratio
         self.qkv_bias = qkv_bias
-        # TODO: Clean Different Dropout Rates
-        self.drop_rate = drop_rate
-        self.attn_drop_rate = attn_drop_rate
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.drop_path_rate = drop_path_rate
         self.decoder_dropout = decoder_dropout
         self.norm_layer = norm_layer
@@ -232,9 +208,6 @@ class FANConfig(PretrainedConfig):
         self.feat_downsample = feat_downsample
         self.rounding_mode = rounding_mode
         self.segmentation_in_channels = segmentation_in_channels
-        # self.feature_strides = feature_strides
-        # self.channels = channels
-
         self.decoder_hidden_size = decoder_hidden_size
         self.reshape_last_stage = reshape_last_stage
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
