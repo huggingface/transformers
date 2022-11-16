@@ -23,6 +23,21 @@ class TextGenerationPipeline(Pipeline):
     Language generation pipeline using any `ModelWithLMHead`. This pipeline predicts the words that will follow a
     specified text prompt.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> generator = pipeline(model="gpt2")
+    >>> generator("I can't believe you did such a ", do_sample=False)
+    [{'generated_text': "I can't believe you did such a icky thing to me. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I"}]
+
+    >>> # These parameters will return suggestions, and only the newly created text making it easier for prompting suggestions.
+    >>> outputs = generator("My tart needs some", num_return_sequences=4, return_full_text=False)
+    ```
+
+    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+
     This language generation pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"text-generation"`.
 
