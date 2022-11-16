@@ -158,11 +158,7 @@ class GptSw3Config(PretrainedConfig):
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
-<<<<<<< HEAD
         scale_attn_by_inverse_layer_idx=True,
-=======
-        scale_attn_by_inverse_layer_idx=False,
->>>>>>> 05ef62e37999e231338a76a9c4ea98c78b496578
         reorder_and_upcast_attn=False,
         **kwargs,
     ):

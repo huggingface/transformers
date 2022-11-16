@@ -25,10 +25,8 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.cuda.amp import autocast
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-<<<<<<< HEAD
 import torch.nn.functional as F
-=======
->>>>>>> 05ef62e37999e231338a76a9c4ea98c78b496578
+
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -63,10 +61,6 @@ GPT_SW3_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 05ef62e37999e231338a76a9c4ea98c78b496578
 def load_tf_weights_in_gpt_sw3(model, config, gpt_sw3_checkpoint_path):
     """Load tf checkpoints in a pytorch model"""
     try:
@@ -159,13 +153,8 @@ class GptSw3Attention(nn.Module):
             self.c_attn = Conv1D(2 * self.embed_dim, self.embed_dim)
             self.q_attn = Conv1D(self.embed_dim, self.embed_dim)
         else:
-<<<<<<< HEAD
             self.c_attn = nn.Linear(self.embed_dim, 3 * self.embed_dim)
         self.c_proj = nn.Linear(self.embed_dim, self.embed_dim)
-=======
-            self.c_attn = Conv1D(3 * self.embed_dim, self.embed_dim)
-        self.c_proj = Conv1D(self.embed_dim, self.embed_dim)
->>>>>>> 05ef62e37999e231338a76a9c4ea98c78b496578
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
@@ -188,7 +177,6 @@ class GptSw3Attention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
-<<<<<<< HEAD
         """
         See: https://github.com/NVIDIA/NeMo/blob/117029aef03b86359a0b777079f8f39515cacf0e/nemo/collections/nlp/modules/common/megatron/transformer.py#L414
 
@@ -219,14 +207,6 @@ class GptSw3Attention(nn.Module):
             attn_weights = attn_weights / torch.full(
                  [], scale_factor, dtype=attn_weights.dtype, device=attn_weights.device
              )
-=======
-        attn_weights = torch.matmul(query, key.transpose(-1, -2))
-
-        if self.scale_attn_weights:
-            attn_weights = attn_weights / torch.full(
-                [], value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device
-            )
->>>>>>> 05ef62e37999e231338a76a9c4ea98c78b496578
 
         # Layer-wise attention scaling
         if self.scale_attn_by_inverse_layer_idx:
@@ -386,17 +366,11 @@ class GptSw3MLP(nn.Module):
     def __init__(self, intermediate_size, config):
         super().__init__()
         embed_dim = config.hidden_size
-<<<<<<< HEAD
         self.c_fc = nn.Linear(embed_dim, intermediate_size)
         self.c_proj = nn.Linear(intermediate_size, embed_dim)
         # TODO: Verify that we can change the activation function like this!
         # self.act = ACT2FN[config.activation_function]
         self.act = F.gelu
-=======
-        self.c_fc = Conv1D(intermediate_size, embed_dim)
-        self.c_proj = Conv1D(embed_dim, intermediate_size)
-        self.act = ACT2FN[config.activation_function]
->>>>>>> 05ef62e37999e231338a76a9c4ea98c78b496578
         self.dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
@@ -434,12 +408,9 @@ class GptSw3Block(nn.Module):
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
     ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
-<<<<<<< HEAD
 
         # Pre-LN: x -> LN -> MHA -> Residual -> LN -> MLP -> Residual
 
-=======
->>>>>>> 05ef62e37999e231338a76a9c4ea98c78b496578
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
         attn_outputs = self.attn(
