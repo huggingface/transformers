@@ -23,7 +23,6 @@ DONUT_PRETRAINED_MODEL_NAME = "nielsr/donut-base"
 
 
 class DonutProcessorTest(unittest.TestCase):
-
     def setUp(self):
         self.processor = DonutProcessor.from_pretrained(DONUT_PRETRAINED_MODEL_NAME)
 
