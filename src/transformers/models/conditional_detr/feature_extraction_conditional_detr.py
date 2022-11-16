@@ -31,7 +31,6 @@ if is_torch_available():
     import torch
     from torch import nn
 
-
 logger = logging.get_logger(__name__)
 
 
