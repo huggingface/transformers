@@ -170,12 +170,9 @@ class FANConfig(PretrainedConfig):
         out_index=-1,  # HASCOMMENTS
         rounding_mode="floor",  # HASCOMMENTS
         segmentation_in_channels=[128, 256, 480, 480],  # HASCOMMENTS
-        # feature_strides=[4, 8, 16, 32],
-        # channels=256,
         decoder_hidden_size=768,  # HASCOMMENTS
-        reshape_last_stage=False,
         semantic_loss_ignore_index=-100,  # HASCOMMENTS
-        layer_norm_eps=1e-6,
+        layer_norm_eps=1e-6,  # HASCOMMENTS
         **kwargs,
     ):
 
@@ -207,7 +204,6 @@ class FANConfig(PretrainedConfig):
         self.rounding_mode = rounding_mode
         self.segmentation_in_channels = segmentation_in_channels
         self.decoder_hidden_size = decoder_hidden_size
-        self.reshape_last_stage = reshape_last_stage
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
         self.layer_norm_eps = layer_norm_eps
         super().__init__(**kwargs)

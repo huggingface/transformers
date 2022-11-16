@@ -1800,7 +1800,7 @@ class FANDecodeHead(FANPreTrainedModel):
 
         all_hidden_states = ()
         for encoder_hidden_state, mlp in zip(encoder_states, self.linear_c):
-            if self.config.reshape_last_stage is False and encoder_hidden_state.ndim == 3:
+            if encoder_hidden_state.ndim == 3:
                 height = width = int(math.sqrt(encoder_hidden_state.shape[-1]))
                 encoder_hidden_state = (
                     encoder_hidden_state.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
