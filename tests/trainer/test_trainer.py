@@ -2293,6 +2293,13 @@ if is_torch_available():
         "lr": TrainingArguments.learning_rate,
     }
 
+    default_anyprecision_kwargs = {
+        "use_kahan_summation": False,
+        "momentum_dtype": torch.float32,
+        "variance_dtype": torch.float32,
+        "compensation_buffer_dtype": torch.bfloat16,
+    }
+
     optim_test_params = [
         (
             TrainingArguments(optim=OptimizerNames.ADAMW_HF, output_dir="None"),
@@ -2344,13 +2351,6 @@ if is_torch_available():
 
     if is_torchdistx_available():
         import torchdistx
-
-        default_anyprecision_kwargs = {
-            "use_kahan_summation": False,
-            "momentum_dtype": torch.float32,
-            "variance_dtype": torch.float32,
-            "compensation_buffer_dtype": torch.bfloat16,
-        }
 
         optim_test_params.append(
             (
