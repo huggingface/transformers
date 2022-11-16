@@ -409,7 +409,7 @@ class PushToHubCallback(Callback):
                 model=self.model,
                 model_name=self.hub_model_id,
                 keras_history=self.training_history,
-                **self.model_card_args
+                **self.model_card_args,
             )
             model_card = train_summary.to_model_card()
             with (self.output_dir / "README.md").open("w") as f:
