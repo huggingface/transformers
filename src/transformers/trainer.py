@@ -1139,11 +1139,13 @@ class Trainer:
 
                 optimizer_cls = AnyPrecisionAdamW
                 optimizer_kwargs.update(adam_kwargs)
+
+                # TODO Change dtypes back to M=FP32, Var = BF16, Kahan = False once they can be cast together in torchdistx.
                 optimizer_kwargs.update(
                     {
                         "use_kahan_summation": strtobool(optim_args.get("use_kahan_summation", "False")),
                         "momentum_dtype": getattr(torch, optim_args.get("momentum_dtype", "float32")),
-                        "variance_dtype": getattr(torch, optim_args.get("variance_dtype", "bfloat16")),
+                        "variance_dtype": getattr(torch, optim_args.get("variance_dtype", "float32")),
                         "compensation_buffer_dtype": getattr(
                             torch, optim_args.get("compensation_buffer_dtype", "bfloat16")
                         ),

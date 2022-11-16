@@ -2348,7 +2348,7 @@ if is_torch_available():
         default_anyprecision_kwargs = {
             "use_kahan_summation": False,
             "momentum_dtype": torch.float32,
-            "variance_dtype": torch.bfloat16,
+            "variance_dtype": torch.float32,
             "compensation_buffer_dtype": torch.bfloat16,
         }
 
