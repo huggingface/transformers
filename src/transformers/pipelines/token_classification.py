@@ -107,6 +107,11 @@ class TokenClassificationPipeline(Pipeline):
     >>> # Start and end provide an easy way to highlight words in the original text.
     >>> sentence[token["start"] : token["end"]]
     ' jean-baptiste'
+
+    >>> # Some models use the same idea to do part of speech.
+    >>> syntaxer = pipeline(model="vblagoje/bert-english-uncased-finetuned-pos", aggregation_strategy="simple")
+    >>> nested_simplify(syntaxer("My name is Sarah and I live in London"))
+    [{'entity_group': 'PRON', 'score': 0.999, 'word': 'my', 'start': 0, 'end': 2}, {'entity_group': 'NOUN', 'score': 0.997, 'word': 'name', 'start': 3, 'end': 7}, {'entity_group': 'AUX', 'score': 0.994, 'word': 'is', 'start': 8, 'end': 10}, {'entity_group': 'PROPN', 'score': 0.999, 'word': 'sarah', 'start': 11, 'end': 16}, {'entity_group': 'CCONJ', 'score': 0.999, 'word': 'and', 'start': 17, 'end': 20}, {'entity_group': 'PRON', 'score': 0.999, 'word': 'i', 'start': 21, 'end': 22}, {'entity_group': 'VERB', 'score': 0.998, 'word': 'live', 'start': 23, 'end': 27}, {'entity_group': 'ADP', 'score': 0.999, 'word': 'in', 'start': 28, 'end': 30}, {'entity_group': 'PROPN', 'score': 0.999, 'word': 'london', 'start': 31, 'end': 37}]
     ```
 
     [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
