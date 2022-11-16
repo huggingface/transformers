@@ -702,8 +702,6 @@ def main():
                 decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
                 decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
-
-                decoded_preds, decoded_labels = accelerator.gather_for_metrics(decoded_preds, decoded_labels)
                 metric.add_batch(
                     predictions=decoded_preds,
                     references=decoded_labels,
