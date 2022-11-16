@@ -255,6 +255,44 @@ class FeatureEmbedder(nn.Module):
         )
 
 
+class StdScaler(nn.Module):
+    """
+    Standardize features by calculating the mean and scaling along some given dimension `dim`, and then
+    normalizes it by subtracting from the mean and dividing by the standard deviation.
+
+    Args:
+        dim (`int`):
+            Dimension along which to calculate the mean and standard deviation.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+        minimum_scale (`float`, *optional*, defaults to 1e-10):
+            Default scale that is used for elements that are constantly zero along dimension `dim`.
+    """
+
+    def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-10):
+        super().__init__()
+        if not dim > 0:
+            raise ValueError("Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0")
+        self.dim = dim
+        self.keepdim = keepdim
+        self.register_buffer("minimum_scale", torch.tensor(minimum_scale))
+
+    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        weighted_data = data * weights
+        mean_data = weighted_data.mean(self.dim, keepdim=self.keepdim).detach()
+
+        std_data = torch.sqrt(
+            torch.var(weighted_data - mean_data, dim=self.dim, keepdim=self.keepdim, unbiased=False)
+            + self.minimum_scale
+        ).detach()
+
+        return (
+            (data - mean_data) / std_data,
+            mean_data if self.keepdim else mean_data.squeeze(dim=self.dim),
+            std_data if self.keepdim else std_data.squeeze(dim=self.dim),
+        )
+
+
 class MeanScaler(nn.Module):
     """
     Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
@@ -277,7 +315,7 @@ class MeanScaler(nn.Module):
         self.keepdim = keepdim
         self.register_buffer("minimum_scale", torch.tensor(minimum_scale))
 
-    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # these will have shape (N, C)
         total_weight = weights.sum(dim=self.dim)
         weighted_sum = (data.abs() * weights).sum(dim=self.dim)
@@ -327,7 +365,9 @@ class NOPScaler(nn.Module):
         self.dim = dim
         self.keepdim = keepdim
 
-    def forward(self, data: torch.Tensor, observed_indicator: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, data: torch.Tensor, observed_indicator: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         scale = torch.ones_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
         loc = torch.zeros_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
         return data, loc, scale
