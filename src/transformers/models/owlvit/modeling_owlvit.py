@@ -31,10 +31,15 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_vision_available,
     logging,
     replace_return_docstrings,
 )
 from .configuration_owlvit import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
+
+
+if is_vision_available():
+    from transformers.image_transforms import center_to_corners_format
 
 
 logger = logging.get_logger(__name__)
@@ -112,17 +117,6 @@ class OwlViTOutput(ModelOutput):
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
         )
-
-
-# Copied from transformers.image_transforms._center_to_corners_format_torch -> center_to_corners_format
-def center_to_corners_format(bboxes_center):
-    center_x, center_y, width, height = bboxes_center.unbind(-1)
-    bbox_corners = torch.stack(
-        # top left x, top left y, bottom right x, bottom right y
-        [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)],
-        dim=-1,
-    )
-    return bbox_corners
 
 
 # Copied from transformers.models.detr.modeling_detr._upcast

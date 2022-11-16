@@ -33,6 +33,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_scipy_available,
     is_timm_available,
+    is_vision_available,
     logging,
     replace_return_docstrings,
     requires_backends,
@@ -45,6 +46,9 @@ if is_scipy_available():
 
 if is_timm_available():
     from timm import create_model
+
+if is_vision_available():
+    from transformers.image_transforms import center_to_corners_format
 
 logger = logging.get_logger(__name__)
 
@@ -2282,17 +2286,6 @@ def generalized_box_iou(boxes1, boxes2):
     area = width_height[:, :, 0] * width_height[:, :, 1]
 
     return iou - (area - union) / area
-
-
-# Copied from transformers.image_transforms._center_to_corners_format_torch -> center_to_corners_format
-def center_to_corners_format(bboxes_center):
-    center_x, center_y, width, height = bboxes_center.unbind(-1)
-    bbox_corners = torch.stack(
-        # top left x, top left y, bottom right x, bottom right y
-        [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)],
-        dim=-1,
-    )
-    return bbox_corners
 
 
 # below: taken from https://github.com/facebookresearch/detr/blob/master/util/misc.py#L306
