@@ -39,22 +39,15 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
     >>> from transformers import pipeline
 
     >>> detector = pipeline(model="google/owlvit-base-patch32", task="zero-shot-object-detection")
-    >>> answers = detector(
+    >>> detector(
     ...     "http://images.cocodataset.org/val2017/000000039769.jpg",
     ...     candidate_labels=["cat", "couch"],
     ... )
-    >>> from transformers.testing_utils import (
-    ...     nested_simplify,
-    ... )  # Actual scores might vary slightly depending on PyTorch version or Tensorflow
-
-    >>> nested_simplify(answers)
     [[{'score': 0.287, 'label': 'cat', 'box': {'xmin': 324, 'ymin': 20, 'xmax': 640, 'ymax': 373}}, {'score': 0.254, 'label': 'cat', 'box': {'xmin': 1, 'ymin': 55, 'xmax': 315, 'ymax': 472}}, {'score': 0.121, 'label': 'couch', 'box': {'xmin': 4, 'ymin': 0, 'xmax': 642, 'ymax': 476}}]]
 
-    >>> nested_simplify(
-    ...     detector(
-    ...         "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png",
-    ...         candidate_labels=["head", "bird"],
-    ...     )
+    >>> detector(
+    ...     "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png",
+    ...     candidate_labels=["head", "bird"],
     ... )
     [[{'score': 0.119, 'label': 'bird', 'box': {'xmin': 71, 'ymin': 170, 'xmax': 410, 'ymax': 508}}]]
     ```
