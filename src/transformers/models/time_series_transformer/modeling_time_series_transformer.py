@@ -1469,8 +1469,10 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
     def __init__(self, config: TimeSeriesTransformerConfig):
         super().__init__(config)
 
-        if config.scaling:
+        if config.scaling == "mean":
             self.scaler = MeanScaler(dim=1, keepdim=True)
+        elif config.scaling == "std":
+            self.scaler = StdScaler(dim=1, keepdim=True)
         else:
             self.scaler = NOPScaler(dim=1, keepdim=True)
 

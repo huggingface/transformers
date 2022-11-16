@@ -56,8 +56,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         input_size (`int`, *optional*, defaults to 1):
             The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
             multivariate targets.
-        scaling (`bool`, *optional* defaults to `True`):
-            Whether to scale the input targets.
+        scaling (`string`, *optional* defaults to `mean`):
+            Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`.
         lags_sequence (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 5, 6, 7]`):
             The lags of the input time series as covariates often dictated by the frequency. Default is `[1, 2, 3, 4,
             5, 6, 7]`.
@@ -138,7 +138,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         distribution_output: str = "student_t",
         loss: str = "nll",
         lags_sequence: List[int] = [1, 2, 3, 4, 5, 6, 7],
-        scaling: bool = True,
+        scaling: Optional[str] = "mean",
         num_dynamic_real_features: int = 0,
         num_static_categorical_features: int = 0,
         num_static_real_features: int = 0,
