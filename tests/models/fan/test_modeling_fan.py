@@ -423,7 +423,8 @@ class FANModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification_head(self):
         IMG_CLF_PATH = "ksmcg/fan_base_18_p16_224"
-        model = FANForImageClassification.from_pretrained(IMG_CLF_PATH)
+        model = FANForImageClassification.from_pretrained(IMG_CLF_PATH).to(torch_device)
+        model.eval()
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
@@ -436,6 +437,6 @@ class FANModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-1.0266, 0.1912, -1.2861]).to(torch_device)
+        expected_slice = torch.tensor([0.4830, -0.7349, -0.4465]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
