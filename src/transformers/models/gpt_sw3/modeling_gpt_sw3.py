@@ -25,6 +25,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.cuda.amp import autocast
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -57,7 +58,6 @@ GPT_SW3_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "",
     # See all gpt-sw3 models at https://huggingface.co/models?filter=gpt-sw3
 ]
-
 
 
 def load_tf_weights_in_gpt_sw3(model, config, gpt_sw3_checkpoint_path):
@@ -152,8 +152,8 @@ class GptSw3Attention(nn.Module):
             self.c_attn = Conv1D(2 * self.embed_dim, self.embed_dim)
             self.q_attn = Conv1D(self.embed_dim, self.embed_dim)
         else:
-            self.c_attn = Conv1D(3 * self.embed_dim, self.embed_dim)
-        self.c_proj = Conv1D(self.embed_dim, self.embed_dim)
+            self.c_attn = nn.Linear(self.embed_dim, 3 * self.embed_dim)
+        self.c_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
@@ -176,12 +176,36 @@ class GptSw3Attention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
+        """
+        See: https://github.com/NVIDIA/NeMo/blob/117029aef03b86359a0b777079f8f39515cacf0e/nemo/collections/nlp/modules/common/megatron/transformer.py#L414
+
+        coeff = None
+        self.norm_factor = math.sqrt(self.hidden_size_per_attention_head)
+        if self.apply_query_key_layer_scaling:
+            coeff = self.layer_number
+            self.norm_factor *= coeff
+
+        matmul_result = torch.baddbmm(
+            matmul_input_buffer,
+            query_layer.transpose(0, 1),  # [b * np, sq, hn]
+            key_layer.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
+            beta=0.0,
+            alpha=(1.0 / self.norm_factor) if self.normalize_attention_scores else 1.0,
+          )
+
+        See: https://pytorch.org/docs/stable/generated/torch.baddbmm.html
+        alpha (Number, optional) – multiplier for batch1 @ batch2 (alpha)
+        """
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
         if self.scale_attn_weights:
+            # attn_weights = attn_weights / torch.full(
+            #     [], value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device
+            # )
+            scale_factor = math.sqrt(self.head_dim) ** 0.5
             attn_weights = attn_weights / torch.full(
-                [], value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device
-            )
+                 [], scale_factor, dtype=attn_weights.dtype, device=attn_weights.device
+             )
 
         # Layer-wise attention scaling
         if self.scale_attn_by_inverse_layer_idx:
@@ -341,9 +365,11 @@ class GptSw3MLP(nn.Module):
     def __init__(self, intermediate_size, config):
         super().__init__()
         embed_dim = config.hidden_size
-        self.c_fc = Conv1D(intermediate_size, embed_dim)
-        self.c_proj = Conv1D(embed_dim, intermediate_size)
-        self.act = ACT2FN[config.activation_function]
+        self.c_fc = nn.Linear(embed_dim, intermediate_size)
+        self.c_proj = nn.Linear(intermediate_size, embed_dim)
+        # TODO: Verify that we can change the activation function like this!
+        # self.act = ACT2FN[config.activation_function]
+        self.act = F.gelu
         self.dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
@@ -381,6 +407,9 @@ class GptSw3Block(nn.Module):
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
     ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
+
+        # Pre-LN: x -> LN -> MHA -> Residual -> LN -> MLP -> Residual
+
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
         attn_outputs = self.attn(
