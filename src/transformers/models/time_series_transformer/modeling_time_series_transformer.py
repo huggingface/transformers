@@ -446,10 +446,10 @@ class Seq2SeqTimeSeriesModelOutput(ModelOutput):
 
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
-        loc: (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+        loc (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
             Shift values of each time series' context window which is used to give the model inputs of the same
             magnitude and then used to shift back to the original magnitude.
-        scale: (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+        scale (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
             Scaling values of each time series' context window which is used to give the model inputs of the same
             magnitude and then used to rescale back to the original magnitude.
         static_features: (`torch.FloatTensor` of shape `(batch_size, feature size)`, *optional*):
@@ -517,10 +517,10 @@ class Seq2SeqTimeSeriesPredictionOutput(ModelOutput):
 
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
-        loc: (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+        loc (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
             Shift values of each time series' context window which is used to give the model inputs of the same
             magnitude and then used to shift back to the original magnitude.
-        scale: (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+        scale (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
             Scaling values of each time series' context window which is used to give the model inputs of the same
             magnitude and then used to rescale back to the original magnitude.
         static_features: (`torch.FloatTensor` of shape `(batch_size, feature size)`, *optional*):
@@ -1849,9 +1849,8 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         params = None
         if future_values is not None:
             params = self.output_params(outputs[0])  # outputs.last_hidden_state
-            distribution = self.output_distribution(
-                params, loc=outputs[-3], scale=outputs[-2]
-            )  # outputs.loc, outputs.scale
+            # loc is 3rd last and scale is 2nd last output
+            distribution = self.output_distribution(params, loc=outputs[-3], scale=outputs[-2])
 
             loss = self.loss(distribution, future_values)
 
