@@ -50,6 +50,24 @@ class TextClassificationPipeline(Pipeline):
     Text classification pipeline using any `ModelForSequenceClassification`. See the [sequence classification
     examples](../task_summary#sequence-classification) for more information.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> classifier = pipeline(model="distilbert-base-uncased-finetuned-sst-2-english")
+    >>> scores = classifier("This movie is disgustingly good !")
+    >>> from transformers.testing_utils import nested_simplify
+
+    >>> nested_simplify(scores)  # The scores might vary very slightly based on PyTorch version or Tensorflow.
+    [{'label': 'POSITIVE', 'score': 1.0}]
+
+    >>> nested_simplify(classifier("Director tried too much."))
+    [{'label': 'NEGATIVE', 'score': 0.996}]
+    ```
+
+    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+
     This text classification pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"sentiment-analysis"` (for classifying sequences according to positive or negative sentiments).
 
