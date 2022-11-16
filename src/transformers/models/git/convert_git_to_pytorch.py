@@ -82,11 +82,10 @@ def create_rename_keys(config):
     # fmt: off
     rename_keys.append(("module.textual.embedding.words.weight", "git.embeddings.word_embeddings.weight"))
     rename_keys.append(("module.textual.embedding.positions.weight", "git.embeddings.position_embeddings.weight"))
-    # TODO visual projection layers
-    # rename_keys.append(("module.textual.visual_projection.0.weight", ""))
-    # rename_keys.append(("module.textual.visual_projection.0.bias", ""))
-    # rename_keys.append(("module.textual.visual_projection.1.weight", ""))
-    # rename_keys.append(("module.textual.visual_projection.1.bias", ""))
+    rename_keys.append(("module.textual.visual_projection.0.weight", "git.visual_projection.visual_projection.0.weight"))
+    rename_keys.append(("module.textual.visual_projection.0.bias", "git.visual_projection.visual_projection.0.bias"))
+    rename_keys.append(("module.textual.visual_projection.1.weight", "git.visual_projection.visual_projection.1.weight"))
+    rename_keys.append(("module.textual.visual_projection.1.bias", "git.visual_projection.visual_projection.1.bias"))
 
     # rename_keys.append(("module.textual.embedding.token_type.weight", "git.embeddings.token_type_embeddings.weight"))
     rename_keys.append(("module.textual.embedding.layer_norm.weight", "git.embeddings.LayerNorm.weight"))
