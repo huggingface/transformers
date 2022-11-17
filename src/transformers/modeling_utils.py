@@ -1538,6 +1538,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             kwargs:
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        # Checks if the model has been loaded in 8-bit
+        if getattr(self, "is_loaded_in_8bit", False):
+            warnings.warn(
+                "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
+                " behaviors. ",
+                UserWarning,
+            )
+
         if "save_config" in kwargs:
             warnings.warn(
                 "`save_config` is deprecated and will be removed in v5 of Transformers. Use `is_main_process` instead."
@@ -2339,6 +2347,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dtype=torch_dtype,
                 load_in_8bit=load_in_8bit,
             )
+
+        cls.is_loaded_in_8bit = load_in_8bit
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()

@@ -163,6 +163,7 @@ class GPT2Config(PretrainedConfig):
         eos_token_id=50256,
         scale_attn_by_inverse_layer_idx=False,
         reorder_and_upcast_attn=False,
+        efficient_methods=[],
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -186,6 +187,7 @@ class GPT2Config(PretrainedConfig):
         self.use_cache = use_cache
         self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
         self.reorder_and_upcast_attn = reorder_and_upcast_attn
+        self.efficient_methods = []
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id

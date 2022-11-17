@@ -15,10 +15,16 @@
 
 import inspect
 import math
-from typing import Callable, Iterable, List, Optional, Tuple
+from typing import Callable, Iterable, List, Optional, Tuple, Dict
 
 import numpy as np
 import torch
+from torch import nn 
+from torch.autograd import Function
+try:
+    import ngram_repeat_block_cuda
+except ModuleNotFoundError:
+    ngram_repeat_block_cuda = None
 
 from ..utils import add_start_docstrings
 from ..utils.logging import get_logger
@@ -26,6 +32,59 @@ from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+
+class NGramRepeatBlockFunction(Function):
+    """
+    forward inputs to ngram_repeat_block cuda extension
+    backward method not needed.
+    """
+    def forward(self, tokens, lprobs, bsz,
+        step, beam_size, no_repeat_ngram_size):
+        """
+        Args:
+        tokens(Tensor): Input tokens(Bsz*beam, seq_len)
+        lprobs(Tensor): likelihood probability
+        Expected to be updated in place.(Bsz*beam, vocab_size)
+        bsz(int): batch size
+        step(int): current step
+        beam_size(int): beam size
+        no_repeat_ngram_size(int): Ngram size
+        """
+        outputs = ngram_repeat_block_cuda.forward(tokens,
+        lprobs, bsz, step, beam_size, no_repeat_ngram_size)
+        return outputs
+
+    def backward (*args):
+        raise NotImplementedError
+
+class NGramRepeatBlock(nn.Module):
+    """ Wrapper class for calling ngram_repeat_block cuda extension """
+    def __init__(self):
+        super(NGramRepeatBlock, self).__init__()
+
+    def reset_parameters(self):
+        pass
+
+    def forward(self, tokens, lprobs, bsz,
+        step, beam_size, no_repeat_ngram_size):
+        """
+        Args:
+        tokens(Tensor): Input tokens(Bsz*beam, seq_len)
+        lprobs(Tensor): likelihood probability,
+        Expected to be updated in place.(Bsz*beam, vocab_size)
+        bsz(int): batch size
+        step(int): current step
+        beam_size(int): beam size
+        no_repeat_ngram_size(int): Ngram size
+        """
+        assert tokens.size(0) == bsz*beam_size
+        assert lprobs.size(0) == bsz*beam_size
+        tokens = tokens.contiguous()
+        lprobs = lprobs.contiguous()
+        return NGramRepeatBlockFunction.apply(tokens, lprobs,
+               bsz, step, beam_size, no_repeat_ngram_size)
+
+no_repeat_ngram_op = NGramRepeatBlock()
 
 LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
     Args:
@@ -284,14 +343,15 @@ class TypicalLogitsWarper(LogitsWarper):
         return scores
 
 
-def _get_ngrams(ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int):
+def _get_ngrams(ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int, pad_token_id: int = None) -> List[Dict]:
     generated_ngrams = [{} for _ in range(num_hypos)]
     for idx in range(num_hypos):
         gen_tokens = prev_input_ids[idx].tolist()
         generated_ngram = generated_ngrams[idx]
         for ngram in zip(*[gen_tokens[i:] for i in range(ngram_size)]):
-            prev_ngram_tuple = tuple(ngram[:-1])
-            generated_ngram[prev_ngram_tuple] = generated_ngram.get(prev_ngram_tuple, []) + [ngram[-1]]
+            if pad_token_id is None or ngram[-1] != pad_token_id:
+                prev_ngram_tuple = tuple(ngram[:-1])
+                generated_ngram[prev_ngram_tuple] = generated_ngram.get(prev_ngram_tuple, []) + [ngram[-1]]
     return generated_ngrams
 
 
@@ -303,14 +363,14 @@ def _get_generated_ngrams(banned_ngrams, prev_input_ids, ngram_size, cur_len):
 
 
 def _calc_banned_ngram_tokens(
-    ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int, cur_len: int
+    ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int, cur_len: int, pad_tokens_id: int
 ) -> List[Iterable[int]]:
     """Copied from fairseq for no_repeat_ngram in beam_search"""
     if cur_len + 1 < ngram_size:
         # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
         return [[] for _ in range(num_hypos)]
 
-    generated_ngrams = _get_ngrams(ngram_size, prev_input_ids, num_hypos)
+    generated_ngrams = _get_ngrams(ngram_size, prev_input_ids, num_hypos, pad_tokens_id)
 
     banned_tokens = [
         _get_generated_ngrams(generated_ngrams[hypo_idx], prev_input_ids[hypo_idx], ngram_size, cur_len)
@@ -319,7 +379,7 @@ def _calc_banned_ngram_tokens(
     return banned_tokens
 
 
-class NoRepeatNGramLogitsProcessor(LogitsProcessor):
+class NoRepeatNGramLogitsProcessor_origin(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that enforces no repetition of n-grams. See
     [Fairseq](https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345).
@@ -342,6 +402,49 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
         for i, banned_tokens in enumerate(banned_batch_tokens):
             scores[i, banned_tokens] = -float("inf")
 
+        return scores
+
+class NoRepeatNGramLogitsProcessor(NoRepeatNGramLogitsProcessor_origin):
+    r"""
+    :class:`transformers.LogitsProcessor` that enforces no repetition of n-grams. See `Fairseq
+    <https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345>`__.
+    Args:
+        ngram_size (:obj:`int`):
+            All ngrams of size :obj:`ngram_size` can only occur once.
+    """
+
+    def __init__(self, ngram_size: int, num_beams: int = None, batch_size: int = None, pad_token_id: int = None):
+        if not isinstance(ngram_size, int) or ngram_size <= 0:
+            raise ValueError(f"`ngram_size` has to be a strictly positive integer, but is {ngram_size}")
+        self.ngram_size = ngram_size
+        self.num_beams = num_beams
+        self.batch_size = batch_size
+        self.pad_token_id = pad_token_id
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        def _update_scores(banned_tokens):
+            banned_idx = [(bbsz_idx, banned_idx)
+                          for bbsz_idx in range(len(banned_tokens))
+                          for banned_idx in banned_tokens[bbsz_idx]]
+            if banned_idx:
+                banned_2d_idx = tuple(torch.LongTensor(list(zip(*banned_idx))))
+                scores.index_put_(
+                    banned_2d_idx,
+                    scores.new_tensor(
+                        [-float("inf") * banned_2d_idx[0].nelement()]))
+
+        cpu_input_ids = input_ids.cpu()
+        cur_len = input_ids.shape[-1]
+        if input_ids.is_cuda and scores.is_cuda:
+            if self.num_beams is not None and self.batch_size is not None:
+                x = self.num_beams * self.batch_size
+                if x == input_ids.size(0) and x == scores.size(0):
+                    scores = no_repeat_ngram_op(input_ids, scores.float(), self.batch_size, cur_len-1, self.num_beams, self.ngram_size)
+                    return scores
+
+        num_batch_hypotheses = scores.shape[0]
+        banned_batch_tokens = _calc_banned_ngram_tokens(self.ngram_size, cpu_input_ids, num_batch_hypotheses, cur_len, self.pad_token_id)
+        _update_scores(banned_batch_tokens)
         return scores
 
 

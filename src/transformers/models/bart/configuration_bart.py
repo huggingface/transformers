@@ -139,6 +139,7 @@ class BartConfig(PretrainedConfig):
         is_encoder_decoder=True,
         decoder_start_token_id=2,
         forced_eos_token_id=2,
+        efficient_methods=[],
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -161,6 +162,7 @@ class BartConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.efficient_methods = []
 
         super().__init__(
             num_labels=num_labels,

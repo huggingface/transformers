@@ -27,6 +27,7 @@ from torch.nn import CrossEntropyLoss
 from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
+from ...adapter import Adapter, LoRALinear, PrefixTuning
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -323,14 +324,20 @@ class T5LayerFF(nn.Module):
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
+        self.is_adapter = 'adapter' in config.efficient_methods
+        if self.is_adapter:
+            self.adapter = Adapter(config.d_model, config)
+
     def forward(self, hidden_states):
         forwarded_states = self.layer_norm(hidden_states)
         forwarded_states = self.DenseReluDense(forwarded_states)
+        if self.is_adapter:
+            forwarded_states = self.adapter(forwarded_states)
         hidden_states = hidden_states + self.dropout(forwarded_states)
         return hidden_states
 
 
-class T5Attention(nn.Module):
+class T5Attention_origin(nn.Module):
     def __init__(self, config: T5Config, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -342,12 +349,20 @@ class T5Attention(nn.Module):
         self.n_heads = config.num_heads
         self.dropout = config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim
+        self.efficient_methods = config.efficient_methods
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
-        self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        if 'lora' in config.efficient_methods:
+            self.q = LoRALinear(self.d_model, self.inner_dim, config, bias=False)
+            self.v = LoRALinear(self.d_model, self.inner_dim, config, bias=False)
+        else:
+            self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
+            self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
+
+        if 'prefix-tuning' in config.efficient_methods or 'p-tuning-v2' in config.efficient_methods:
+            self.prefix_tuning = PrefixTuning(config, self.n_heads, self.d_model)
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
@@ -505,6 +520,11 @@ class T5Attention(nn.Module):
             hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
         )
 
+        present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
+        if 'prefix-tuning' in self.efficient_methods or 'p-tuning-v2' in self.efficient_methods:
+            key_states, value_states, mask = self.prefix_tuning(key_states, value_states, mask)
+            key_length = key_states.size(2)
+
         # compute scores
         scores = torch.matmul(
             query_states, key_states.transpose(3, 2)
@@ -528,14 +548,7 @@ class T5Attention(nn.Module):
             if mask is not None:
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
-        if self.pruned_heads:
-            mask = torch.ones(position_bias.shape[1])
-            mask[list(self.pruned_heads)] = 0
-            position_bias_masked = position_bias[:, mask.bool()]
-        else:
-            position_bias_masked = position_bias
-
-        scores += position_bias_masked
+        scores += position_bias
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
             scores
         )  # (batch_size, n_heads, seq_length, key_length)
@@ -550,7 +563,167 @@ class T5Attention(nn.Module):
         attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
         attn_output = self.o(attn_output)
 
-        present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
+        outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
+
+        if output_attentions:
+            outputs = outputs + (attn_weights,)
+        return outputs
+
+
+class T5Attention(T5Attention_origin):
+    """Optimized T5Attention for self-attn and encoder-decoder-attn in T5."""
+
+    def __init__(self,
+                 config: T5Config,
+                 has_relative_attention_bias=False,
+                 num_beams=1):
+        super().__init__(
+            config=config,
+            has_relative_attention_bias=has_relative_attention_bias)
+        self.num_beams = num_beams
+
+    def forward(
+        self,
+        hidden_states,
+        mask=None,
+        key_value_states=None,
+        position_bias=None,
+        past_key_value=None,
+        layer_head_mask=None,
+        query_length=None,
+        use_cache=False,
+        output_attentions=False,
+    ):
+        """
+        Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
+        """
+        # Input is (batch_size, seq_length, dim)
+        # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
+        # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
+        batch_size, seq_length = hidden_states.shape[:2]
+
+        real_seq_length = seq_length
+
+        is_encoder_decoder_attn = key_value_states is not None
+
+        if past_key_value is not None:
+            assert (
+                len(past_key_value) == 2
+            ), f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
+            real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
+
+        key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
+
+        def shape(states):
+            """projection"""
+            return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+
+        def unshape(states):
+            """reshape"""
+            return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
+
+        def project(hidden_states, proj_layer, key_value_states, past_key_value):
+            """projects hidden states correctly to key/query states"""
+            if key_value_states is None:
+                # self-attn
+                # (batch_size, n_heads, seq_length, dim_per_head)
+                hidden_states = shape(proj_layer(hidden_states))
+            elif past_key_value is None:
+                # cross-attn
+                # (batch_size, n_heads, seq_length, dim_per_head)
+                hidden_states = shape(proj_layer(key_value_states))
+
+            if past_key_value is not None:
+                if key_value_states is None:
+                    # self-attn
+                    # (batch_size, n_heads, key_length, dim_per_head)
+                    hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
+                else:
+                    # cross-attn
+                    hidden_states = past_key_value
+            return hidden_states
+
+        # get query states
+        query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
+
+        # get key/value states
+        key_states = project(
+            hidden_states, self.k, key_value_states, past_key_value[0] if past_key_value is not None else None
+        )
+        value_states = project(
+            hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
+        )
+
+        if self.is_decoder and use_cache is True:
+            if is_encoder_decoder_attn:
+                if past_key_value is None:
+                    key_states = key_states.view(batch_size // self.num_beams, self.num_beams,
+                               self.n_heads, key_length,
+                               self.key_value_proj_dim)[:, 0:1, :, :, :].contiguous()
+                    value_states = value_states.view(batch_size // self.num_beams, self.num_beams,
+                               self.n_heads, key_length,
+                               self.key_value_proj_dim)[:, 0:1, :, :, :].contiguous()
+            present_key_value_state = (key_states, value_states)
+        else:
+            present_key_value_state = None
+        
+        if 'prefix-tuning' in self.efficient_methods or 'p-tuning-v2' in self.efficient_methods:
+            key_states, value_states, mask = self.prefix_tuning(key_states, value_states, mask)
+            key_length = key_states.size(2)
+
+        if is_encoder_decoder_attn and use_cache:
+            new_query_states = query_states.view(batch_size // self.num_beams, self.num_beams, self.n_heads,
+                           seq_length, self.key_value_proj_dim)
+            scores = torch.einsum(
+                "bmnqd,bxnkd->bmnqk", new_query_states, key_states).reshape(
+                    -1, self.n_heads, seq_length, key_length)  # (bs, n_heads, qlen, klen)
+        else:
+            scores = torch.matmul(query_states, key_states.transpose(3, 2))
+            # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
+
+        if position_bias is None:
+            if not self.has_relative_attention_bias:
+                position_bias = torch.zeros(
+                    (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
+                )
+                if self.gradient_checkpointing and self.training:
+                    position_bias.requires_grad = True
+            else:
+                position_bias = self.compute_bias(real_seq_length, key_length)
+
+            # if key and values are already calculated
+            # we want only the last query position bias
+            if past_key_value is not None:
+                position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
+
+            if mask is not None:
+                position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
+
+        scores = scores + position_bias
+        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
+            scores
+        )  # (batch_size, n_heads, seq_length, key_length)
+        attn_weights = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )  # (batch_size, n_heads, seq_length, key_length)
+
+        # Mask heads if we want to
+        if layer_head_mask is not None:
+            attn_weights = attn_weights * layer_head_mask
+
+        if is_encoder_decoder_attn and use_cache:
+            tmp_weights = attn_weights.view(batch_size // self.num_beams, self.num_beams,
+                                       self.n_heads, seq_length, key_length)
+            attn_output = torch.einsum(
+                "bmnqk,bxnkd->bmnqd", tmp_weights, value_states).reshape(
+                    -1, self.n_heads, seq_length, self.key_value_proj_dim
+                    )  # (bs, n_heads, qlen, dim_per_head)
+        else:
+            attn_output = torch.matmul(attn_weights, value_states)  # (bs, n_heads, qlen, dim_per_head)
+        attn_output = unshape(attn_output)  # (bs, qlen, dim)
+
+        attn_output = self.o(attn_output)
+
         outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
 
         if output_attentions:
@@ -564,6 +737,10 @@ class T5LayerSelfAttention(nn.Module):
         self.SelfAttention = T5Attention(config, has_relative_attention_bias=has_relative_attention_bias)
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
+
+        self.is_adapter = 'adapter' in config.efficient_methods
+        if self.is_adapter:
+            self.adapter = Adapter(config.d_model, config)
 
     def forward(
         self,
@@ -585,7 +762,10 @@ class T5LayerSelfAttention(nn.Module):
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
-        hidden_states = hidden_states + self.dropout(attention_output[0])
+        output = attention_output[0]
+        if self.is_adapter:
+            output = self.adapter(output)
+        hidden_states = hidden_states + self.dropout(output)
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
         return outputs
 
@@ -596,6 +776,10 @@ class T5LayerCrossAttention(nn.Module):
         self.EncDecAttention = T5Attention(config, has_relative_attention_bias=False)
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
+
+        self.is_adapter = 'adapter' in config.efficient_methods
+        if self.is_adapter:
+            self.adapter = Adapter(config.d_model, config)
 
     def forward(
         self,
@@ -621,7 +805,10 @@ class T5LayerCrossAttention(nn.Module):
             query_length=query_length,
             output_attentions=output_attentions,
         )
-        layer_output = hidden_states + self.dropout(attention_output[0])
+        output = attention_output[0]
+        if self.is_adapter:
+            output = self.adapter(output)
+        layer_output = hidden_states + self.dropout(output)
         outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
         return outputs
 
@@ -834,6 +1021,8 @@ class T5PreTrainedModel(PreTrainedModel):
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
+        assert torch.all(shifted_input_ids >= 0).item(), "Verify that `shifted_input_ids` has only positive values"
+
         return shifted_input_ids
 
 
@@ -949,7 +1138,7 @@ class T5Stack(T5PreTrainedModel):
             assert self.is_decoder, f"`use_cache` can only be set to `True` if {self} is used as a decoder"
 
         if attention_mask is None:
-            attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
+            attention_mask = torch.ones(batch_size, mask_seq_length).to(inputs_embeds.device)
         if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
             encoder_seq_length = encoder_hidden_states.shape[1]
             encoder_attention_mask = torch.ones(
@@ -1462,8 +1651,7 @@ class T5Model(T5PreTrainedModel):
         )
 
 
-@add_start_docstrings("""T5 Model with a `language modeling` head on top.""", T5_START_DOCSTRING)
-class T5ForConditionalGeneration(T5PreTrainedModel):
+class T5ForConditionalGeneration_origin(T5PreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"encoder.embed_tokens.weight",
         r"decoder.embed_tokens.weight",
@@ -1543,6 +1731,25 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
     def get_decoder(self):
         return self.decoder
+
+    def set_efficient_tuning(self):
+        methods = self.config.efficient_methods
+        assert methods, "If you want to use efficient tuning, make sure to pass the `efficient_methods`."
+
+        self.requires_grad_(False)
+        for layer in self.encoder.block + self.decoder.block:
+            if 'adapter' in methods:
+                for adapter in layer.layer:
+                    adapter.adapter.requires_grad_(True)
+            if any([m in ['prefix-tuning', 'p-tuning-v2', 'lora'] for m in methods]): 
+                attns = [layer.layer[0].SelfAttention] + ([layer.layer[1].EncDecAttention] if len(layer.layer) == 3 else [])
+                for attn in attns:
+                    if 'prefix-tuning' in methods or 'p-tuning-v2' in methods:
+                        attn.prefix_tuning.requires_grad_(True)
+                    if 'lora' in methods:
+                        for proj in [attn.v, attn.q]:
+                            proj.A.requires_grad_(True)
+                            proj.B.requires_grad_(True)
 
     @add_start_docstrings_to_model_forward(T5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1752,13 +1959,44 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
         return reordered_decoder_past
 
+@add_start_docstrings("""T5 Model with a `language modeling` head on top.""", T5_START_DOCSTRING)
+class T5ForConditionalGeneration(T5ForConditionalGeneration_origin):
+    """Optimized T5ForConditionalGenerationV2"""
+
+    def _reorder_cache(self, past, beam_idx):
+        # if decoder past is not included in output
+        # speedy decoding is disabled and no need to reorder
+        if past is None:
+            logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
+            return past
+
+        reordered_decoder_past = ()
+        for layer_past_states in past:
+            # get the correct batch idx from layer past batch dim
+            # batch dim of `past` is at 2nd position
+            reordered_layer_past_states = ()
+            for layer_past_state in layer_past_states[0:2]:
+                # need to set correct `past` for each of the four key / value states
+                reordered_layer_past_states = reordered_layer_past_states + (
+                    layer_past_state.index_select(0, beam_idx.to(layer_past_state.device)),
+                )
+
+            reordered_layer_past_states = (reordered_layer_past_states + layer_past_states[2:])
+
+            assert reordered_layer_past_states[0].shape == layer_past_states[0].shape
+            assert len(reordered_layer_past_states) == len(layer_past_states)
+
+            reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
+        return reordered_decoder_past
 
 @add_start_docstrings(
     "The bare T5 Model transformer outputting encoder's raw hidden-states without any specific head on top.",
     T5_START_DOCSTRING,
 )
 class T5EncoderModel(T5PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
+    authorized_missing_keys = [
+        r"encoder.embed_tokens.weight",
+    ]
 
     def __init__(self, config: T5Config):
         super().__init__(config)
@@ -1811,7 +2049,7 @@ class T5EncoderModel(T5PreTrainedModel):
         class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
-            self.encoder.block[layer].layer[0].SelfAttention.prune_heads(heads)
+            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(T5_ENCODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1854,3 +2092,4 @@ class T5EncoderModel(T5PreTrainedModel):
         )
 
         return encoder_outputs
+        

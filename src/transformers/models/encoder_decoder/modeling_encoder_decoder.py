@@ -446,7 +446,10 @@ class EncoderDecoderModel(PreTrainedModel):
         >>> # load fine-tuned model
         >>> model = EncoderDecoderModel.from_pretrained("./bert2bert")
         ```"""
-
+        if kwargs['config'].encoder and kwargs['config'].decoder:
+            encoder = AutoModel.from_pretrained(encoder_pretrained_model_name_or_path, config=kwargs['config'].encoder)
+            decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, config=kwargs['config'].decoder)
+            return cls(encoder=encoder, decoder=decoder, config=kwargs['config'])
         kwargs_encoder = {
             argument[len("encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")
         }
