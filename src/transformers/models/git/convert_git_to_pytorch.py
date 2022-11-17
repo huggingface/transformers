@@ -25,7 +25,7 @@ from PIL import Image
 from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
 
 import requests
-from transformers import GITConfig, GITForCausalLM, GITVisionConfig, AutoTokenizer
+from transformers import AutoTokenizer, GITConfig, GITForCausalLM, GITVisionConfig, GITProcessor, CLIPImageProcessor, BertTokenizerFast
 from transformers.utils import logging
 
 
@@ -193,6 +193,10 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     assert len(unexpected_keys) == 0
 
     # verify results
+    image_processor = CLIPImageProcessor()
+    tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+    processor = GITProcessor(tokenizer=tokenizer, feature_extractor=image_processor)
+
     image = prepare_img()
     pixel_values = image_transforms(image).unsqueeze(0)
     input_ids = torch.tensor([[101]])
@@ -204,9 +208,9 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     print("Generating caption...")
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
     predicted_ids = []
-    for i in range(20): 
+    for i in range(20):
         outputs = model(pixel_values=pixel_values, input_ids=input_ids)
-        logits = outputs.logits[:,-1,:]
+        logits = outputs.logits[:, -1, :]
         # perform argmax on the last dimension (i.e. greedy decoding)
         predicted_id = logits.argmax(-1)
         predicted_ids.append(predicted_id.item())

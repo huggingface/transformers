@@ -220,7 +220,7 @@ class GITConfig(PretrainedConfig):
         classifier_dropout=None,
         tie_word_embeddings=False,
         bos_token_id=101,
-        eos_token_id=102, # TODO check whether this is correct
+        eos_token_id=102,  # TODO check whether this is correct
         **kwargs
     ):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
