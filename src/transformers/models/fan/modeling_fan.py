@@ -218,7 +218,7 @@ class PositionalEncodingFourier(nn.Module):
         pos_y = torch.stack([pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()], dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         pos = self.token_projection(pos)
-        return pos.repeat(batch_size, 1, 1, 1)  # (batch_size, C, height, width)
+        return pos.repeat(batch_size, 1, 1, 1)  # (batch_size, num_channels, height, width)
 
 
 def conv3x3(in_planes, out_planes, stride=1):
@@ -297,7 +297,7 @@ class SEMlp(nn.Module):
         self.se = SqueezeExcite(out_features, se_ratio=0.25) if use_se else nn.Identity()
 
     def forward(self, x, height, width):
-        batch_size, N, C = x.shape
+        batch_size, seq_len, num_channels = x.shape
         x = self.fc1(x)
         if self.linear:
             x = self.relu(x)
@@ -306,8 +306,8 @@ class SEMlp(nn.Module):
         x = self.fc2(x)
         x = self.drop(x)
         x = (
-            self.se(x.permute(0, 2, 1).reshape(batch_size, C, height, width))
-            .reshape(batch_size, C, N)
+            self.se(x.permute(0, 2, 1).reshape(batch_size, num_channels, height, width))
+            .reshape(batch_size, num_channels, seq_len)
             .permute(0, 2, 1)
         )
         return x, height, width
@@ -388,7 +388,7 @@ class ConvPatchEmbed(nn.Module):
     def forward(self, x, return_feat=False):
         x = self.proj(x)
         Hp, Wp = x.shape[2], x.shape[3]
-        x = x.flatten(2).transpose(1, 2)  # (batch_size, N, C)
+        x = x.flatten(2).transpose(1, 2)  # (batch_size, seq_len, num_channels)
         if return_feat:
             return x, (Hp, Wp), None
         return x, (Hp, Wp)
@@ -419,14 +419,14 @@ class DWConv(nn.Module):
         )
 
     def forward(self, x, height: int, width: int):
-        batch_size, N, C = x.shape
-        x = x.permute(0, 2, 1).reshape(batch_size, C, height, width)
+        batch_size, seq_len, num_channels = x.shape
+        x = x.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
         x = self.conv1(x)
         x = self.act(x)
         x = self.bn(x)
 
         x = self.conv2(x)
-        x = x.reshape(batch_size, C, N).permute(0, 2, 1)
+        x = x.reshape(batch_size, num_channels, seq_len).permute(0, 2, 1)
         return x
 
 
@@ -506,23 +506,23 @@ class ClassAttn(nn.Module):
         self.proj_drop = nn.Dropout(proj_drop)
 
     def forward(self, x, return_attention=False):
-        batch_size, N, C = x.shape
+        batch_size, seq_len, num_channels = x.shape
         q = (
             self.q(x[:, 0])
             .unsqueeze(1)
-            .reshape(batch_size, 1, self.num_attention_heads, C // self.num_attention_heads)
+            .reshape(batch_size, 1, self.num_attention_heads, num_channels // self.num_attention_heads)
             .permute(0, 2, 1, 3)
         )
         k = (
             self.k(x)
-            .reshape(batch_size, N, self.num_attention_heads, C // self.num_attention_heads)
+            .reshape(batch_size, seq_len, self.num_attention_heads, num_channels // self.num_attention_heads)
             .permute(0, 2, 1, 3)
         )
 
         q = q * self.scale
         v = (
             self.v(x)
-            .reshape(batch_size, N, self.num_attention_heads, C // self.num_attention_heads)
+            .reshape(batch_size, seq_len, self.num_attention_heads, num_channels // self.num_attention_heads)
             .permute(0, 2, 1, 3)
         )
 
@@ -530,7 +530,7 @@ class ClassAttn(nn.Module):
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
 
-        x_cls = (attn @ v).transpose(1, 2).reshape(batch_size, 1, C)
+        x_cls = (attn @ v).transpose(1, 2).reshape(batch_size, 1, num_channels)
         x_cls = self.proj(x_cls)
         x_cls = self.proj_drop(x_cls)
 
@@ -648,16 +648,16 @@ class TokenMixing(nn.Module):
         # self.sr_ratio = sr_ratio
 
     def forward(self, x, height, width, atten=None, return_attention=False):
-        batch_size, N, C = x.shape
+        batch_size, seq_len, num_channels = x.shape
         q = (
             self.q(x)
-            .reshape(batch_size, N, self.num_attention_heads, C // self.num_attention_heads)
+            .reshape(batch_size, seq_len, self.num_attention_heads, num_channels // self.num_attention_heads)
             .permute(0, 2, 1, 3)
         )
 
         kv = (
             self.kv(x)
-            .reshape(batch_size, -1, 2, self.num_attention_heads, C // self.num_attention_heads)
+            .reshape(batch_size, -1, 2, self.num_attention_heads, num_channels // self.num_attention_heads)
             .permute(2, 0, 3, 1, 4)
         )
 
@@ -665,7 +665,7 @@ class TokenMixing(nn.Module):
         attn = q * self.scale @ k.transpose(-2, -1)  # * self.scale
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
-        x = (attn @ v).transpose(1, 2).reshape(batch_size, N, C)
+        x = (attn @ v).transpose(1, 2).reshape(batch_size, seq_len, num_channels)
         x = self.proj(x)
         x = self.proj_drop(x)
         return x, attn
@@ -720,7 +720,7 @@ class HybridEmbed(nn.Module):
 
     def forward(self, x, return_feat=False):
         x, out_list = self.backbone(x, return_feat=return_feat)
-        batch_size, C, height, width = x.shape
+        batch_size, num_channels, height, width = x.shape
         if isinstance(x, (list, tuple)):
             x = x[-1]  # last feature if backbone outputs list/tuple of features
         x = self.proj(x).flatten(2).transpose(1, 2)
@@ -775,22 +775,26 @@ class ChannelProcessing(nn.Module):
 
     def _gen_attn(self, q, k):
         q = q.softmax(-2).transpose(-1, -2)
-        _, _, N, _ = k.shape
-        k = torch.nn.functional.adaptive_avg_pool2d(k.softmax(-2), (N, 1))
+        _, _, seq_len, _ = k.shape
+        k = torch.nn.functional.adaptive_avg_pool2d(k.softmax(-2), (seq_len, 1))
 
         attn = torch.sigmoid(q @ k)
         return attn * self.temperature
 
     def forward(self, x, height, width, atten=None):
-        batch_size, N, C = x.shape
-        v = x.reshape(batch_size, N, self.num_attention_heads, C // self.num_attention_heads).permute(0, 2, 1, 3)
+        batch_size, seq_len, num_channels = x.shape
+        v = x.reshape(batch_size, seq_len, self.num_attention_heads, num_channels // self.num_attention_heads).permute(
+            0, 2, 1, 3
+        )
 
         q = (
             self.q(x)
-            .reshape(batch_size, N, self.num_attention_heads, C // self.num_attention_heads)
+            .reshape(batch_size, seq_len, self.num_attention_heads, num_channels // self.num_attention_heads)
             .permute(0, 2, 1, 3)
         )
-        k = x.reshape(batch_size, N, self.num_attention_heads, C // self.num_attention_heads).permute(0, 2, 1, 3)
+        k = x.reshape(batch_size, seq_len, self.num_attention_heads, num_channels // self.num_attention_heads).permute(
+            0, 2, 1, 3
+        )
 
         attn = self._gen_attn(q, k)
         attn = self.attn_drop(attn)
@@ -802,9 +806,9 @@ class ChannelProcessing(nn.Module):
             .transpose(1, 2)
         )
 
-        repeat_time = N // attn.shape[-1]
+        repeat_time = seq_len // attn.shape[-1]
         attn = attn.repeat_interleave(repeat_time, dim=-1) if attn.shape[-1] > 1 else attn
-        x = (attn * v.transpose(-1, -2)).permute(0, 3, 1, 2).reshape(batch_size, N, C)
+        x = (attn * v.transpose(-1, -2)).permute(0, 3, 1, 2).reshape(batch_size, seq_len, num_channels)
         return x, (attn * v.transpose(-1, -2)).transpose(-1, -2)  # attn
 
     @torch.jit.ignore
@@ -961,8 +965,8 @@ class OverlapPatchEmbed(nn.Module):
         self.norm = nn.LayerNorm(hidden_size)
 
     def forward(self, x, height, width):
-        batch_size, N, C = x.shape
-        x = x.transpose(-1, -2).reshape(batch_size, C, height, width)
+        batch_size, seq_len, num_channels = x.shape
+        x = x.transpose(-1, -2).reshape(batch_size, num_channels, height, width)
         x = self.proj(x)
         _, _, height, width = x.shape
 
@@ -984,7 +988,7 @@ def _is_contiguous(tensor: torch.Tensor) -> bool:
 
 
 class LayerNorm2d(nn.LayerNorm):
-    r"""LayerNorm for channels_first tensors with 2d spatial dimensions (ie N, C, height, width)."""
+    r"""LayerNorm for channels_first tensors with 2d spatial dimensions (ie seq_len, num_channels, height, width)."""
 
     def __init__(self, normalized_shape, eps=1e-6):
         super().__init__(normalized_shape, eps=eps)
@@ -1038,8 +1042,8 @@ class ConvMlp(nn.Module):
 class ConvNeXtBlock(nn.Module):
     """ConvNeXt Block
     There are two equivalent implementations:
-      (1) DwConv -> LayerNorm (channels_first) -> 1x1 Conv -> GELU -> 1x1 Conv; all in (N, C, height, width)
-      (2) DwConv -> Permute to (N, height, width, C); LayerNorm (channels_last) -> Linear -> GELU -> Linear; Permute back
+      (1) DwConv -> LayerNorm (channels_first) -> 1x1 Conv -> GELU -> 1x1 Conv; all in (seq_len, num_channels, height, width)
+      (2) DwConv -> Permute to (seq_len, height, width, num_channels); LayerNorm (channels_last) -> Linear -> GELU -> Linear; Permute back
 
     Unlike the official impl, this one allows choice of 1 or 2, 1x1 conv can be faster with appropriate
     choice of LayerNorm impl, however as model size increases the tradeoffs appear to change and nn.Linear
