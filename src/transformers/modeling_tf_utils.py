@@ -31,7 +31,7 @@ import h5py
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras import backend as K
-from tensorflow.python.keras.engine import data_adapter
+from tensorflow.python.keras.engine import base_layer, data_adapter
 from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 from tensorflow.python.keras.saving import hdf5_format
 
@@ -1062,6 +1062,153 @@ def init_copy_embeddings(old_embeddings, new_num_tokens):
         mask = tf.fill(tf.convert_to_tensor([new_num_tokens, 1]), True)
 
     return mask, current_weights
+
+
+class TFNestLayer(base_layer.Layer):
+    """
+    Custom keras layer that subclasses tf.keras.layers.Layer to enable access to all sublayers in a model of nested
+    layers. This is necessary for certain keras model behaviour such as displaying all layers on a
+    `model.summary(epxand_nested=True)` call.
+
+    All methods are from `keras.engine.training.Model`
+
+    For example:
+
+    # Cannot access sublayers
+    ```py
+    >>> class LayerX(tf.keras.layers.Layer):
+    ...     def __init__(self, **kwargs):
+    ...         super().__init__(**kwargs)
+    ...         self.l1 = tf.keras.layers.Dense(3)
+    ...         self.l2 = tf.keras.layers.Dense(4)
+
+    ...     def call(self, inputs):
+    ...         x = self.l1(inputs)
+    ...         x = self.l2(x)
+    ...         return x
+
+
+    >>> class LayerZ(tf.keras.layers.Layer):
+    ...     def __init__(self, **kwargs):
+    ...         super().__init__(**kwargs)
+    ...         self.l1 = LayerX()
+    ...         self.l2 = LayerX()
+
+    ...     def call(self, inputs):
+    ...         x = self.l1(inputs)
+    ...         x = self.l2(x)
+    ...         return x
+
+
+    >>> class Model(tf.keras.Model):
+    ...     def __init__(self, **kwargs):
+    ...         super().__init__(**kwargs)
+    ...         self.l1 = LayerZ()
+    ...         self.l2 = LayerZ()
+
+    ...     def call(self, inputs):
+    ...         x = self.l1(inputs)
+    ...         x = self.l2(x)
+    ...         return x
+
+
+    >>> prev_model = Model()
+    >>> prev_model.build(input_shape=(None, 10))
+    >>> prev_model.layers
+    [<__main__.LayerZ at 0x29a1ef1f0>, <__main__.LayerZ at 0x2c31052e0>]
+
+    >>> hasattr(prev_model.layers[0], "layers")
+    False
+
+    # Can now access all sublayers
+
+    >>> class LayerX(TFNestLayer):
+    ...     def __init__(self, **kwargs):
+    ...         super().__init__(**kwargs)
+    ...         self.l1 = tf.keras.layers.Dense(3)
+    ...         self.l2 = tf.keras.layers.Dense(4)
+
+    ...     def call(self, inputs):
+    ...         x = self.l1(inputs)
+    ...         x = self.l2(x)
+    ...         return x
+
+
+    >>> class LayerZ(TFNestLayer):
+    ...     def __init__(self, **kwargs):
+    ...         super().__init__(**kwargs)
+    ...         self.l1 = LayerX()
+    ...         self.l2 = LayerX()
+
+    ...     def call(self, inputs):
+    ...         x = self.l1(inputs)
+    ...         x = self.l2(x)
+    ...         return x
+
+
+    >>> class NestLayerModel(tf.keras.Model):
+    ...     def __init__(self, **kwargs):
+    ...         super().__init__(**kwargs)
+    ...         self.l1 = LayerZ()
+    ...         self.l2 = LayerZ()
+
+    ...     def call(self, inputs):
+    ...         x = self.l1(inputs)
+    ...         x = self.l2(x)
+    ...         return x
+
+
+    >>> nest_layer_model = NestLayerModel()
+    >>> nest_layer_model.build(input_shape=(None, 10))
+    >>> nest_layer_model.layers
+    [<__main__.LayerZ at 0x2c116e100>, <__main__.LayerZ at 0x2c32188e0>]
+
+    >>> hasattr(nest_layer_model.layers[0], "layers")
+    True
+    ```
+
+    See related issue: https://github.com/tensorflow/model-optimization/issues/638
+    """
+
+    # From keras.engine.training.Model.layers
+    @property
+    def layers(self):
+        return list(self._flatten_layers(include_self=False, recursive=False))
+
+    # From keras.engine.training.Model.get_layer
+    def get_layer(self, name=None, index=None):
+        """
+        Retrieves a layer based on either its name (unique) or index.
+
+        If `name` and `index` are both provided, `index` will take precedence. Indices are based on order of horizontal
+        graph traversal (bottom-up).
+
+        Args:
+            name: String, name of layer.
+            index: Integer, index of layer.
+
+        Returns:
+            A layer instance.
+        """
+        if index is not None and name is not None:
+            raise ValueError(f"Provide only a layer name or a layer index. Received: index={index}, name={name}.")
+
+        if index is not None:
+            if len(self.layers) <= index:
+                raise ValueError(
+                    f"Was asked to retrieve layer at index {index} but model only has {len(self.layers)} layers."
+                )
+            else:
+                return self.layers[index]
+
+        if name is not None:
+            for layer in self.layers:
+                if layer.name == name:
+                    return layer
+            raise ValueError(
+                f"No such layer: {name}. Existing layers are: {list(layer.name for layer in self.layers)}."
+            )
+        raise ValueError("Provide either a layer name or layer index at `get_layer`.")
 
 
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushToHubMixin):
