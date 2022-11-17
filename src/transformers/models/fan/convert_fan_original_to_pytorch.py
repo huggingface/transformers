@@ -15,20 +15,10 @@
 """Convert FAN checkpoints."""
 
 
-import argparse
 import functools
-import json
 import re
-from collections import OrderedDict
-from pathlib import Path
 
-import torch
-from PIL import Image
-
-import requests
-from huggingface_hub import hf_hub_download
 from transformers.utils import logging
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)

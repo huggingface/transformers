@@ -29,8 +29,8 @@ from ...image_utils import (
 )
 from ...utils import TensorType, logging
 
-
 logger = logging.get_logger(__name__)
+
 
 # Copied from transformers.models.deit.feature_extraction_deit.py with Deit->FAN
 class FANFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):

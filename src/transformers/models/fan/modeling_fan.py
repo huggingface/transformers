@@ -19,8 +19,6 @@
 
 import collections.abc
 import math
-import os
-from collections import OrderedDict
 from dataclasses import dataclass
 from functools import partial
 from itertools import repeat
@@ -32,20 +30,9 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
-from ...activations import ACT2CLS, ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPastAndCrossAttentions,
-    ImageClassifierOutput,
-    ModelOutput,
-    SemanticSegmenterOutput,
-)
-from ...modeling_utils import PreTrainedModel, SequenceSummary
-from ...pytorch_utils import (  # is_torch_greater_than_1_6,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
+from ...activations import ACT2CLS
+from ...modeling_outputs import ModelOutput, SemanticSegmenterOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -54,7 +41,6 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_fan import FANConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -1303,7 +1289,7 @@ class FANEmbeddings(FANPreTrainedModel):
 
         act_layer = ACT2CLS[config.hidden_act] if config.hidden_act else nn.GELU
 
-        if config.backbone == None:
+        if config.backbone is None:
             self.patch_embeddings = ConvPatchEmbed(
                 img_size=img_size,
                 patch_size=config.patch_size,
@@ -1577,7 +1563,6 @@ class FANModel(FANPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         batch_size, num_channels, height, width = pixel_values.shape
-        device = pixel_values.device
 
         # Prepare head mask if needed
         # First, sent pixel_values through Backbone to obtain the features if needed
@@ -1737,7 +1722,7 @@ class FANForImageClassification(FANPreTrainedModel):
         )
 
 
-## Copied from modeling_segformer.py, Since FAN Model uses the segformer head
+# Copied from modeling_segformer.py, Since FAN Model uses the segformer head
 class SegformerMLP(nn.Module):
     """
     Linear Embedding.

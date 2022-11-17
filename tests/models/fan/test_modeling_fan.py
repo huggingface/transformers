@@ -20,13 +20,12 @@ import unittest
 
 from PIL import Image
 
-from transformers import FANConfig, is_torch_available
+from transformers import FANConfig
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
-
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
@@ -34,6 +33,7 @@ if is_torch_available():
 
     from transformers import FANFeatureExtractor, FANForImageClassification, FANForSemanticSegmentation, FANModel
     from transformers.models.fan.modeling_fan import FAN_PRETRAINED_MODEL_ARCHIVE_LIST
+
 
 # Copied and adapted from transformers.tests.models.deit.test_modeling_deit.py
 class FANModelTester:
@@ -143,16 +143,6 @@ class FANModelTester:
         pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
-        return config, inputs_dict
 
     # Copied and adapted from transformers.tests.models.deit.test_modeling_deit.py
 
@@ -283,16 +273,6 @@ class FANModelSegmenentationTester:
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, self.seq_length + 1, self.hidden_size)
         )
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
-        return config, inputs_dict
 
 
 @require_torch

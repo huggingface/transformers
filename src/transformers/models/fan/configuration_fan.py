@@ -17,7 +17,6 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 FAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -42,10 +41,8 @@ original_feature_mapping = {
     "attn_drop_rate": "attention_probs_dropout_prob",
     "drop_rate": "hidden_dropout_prob",
 }
-# DONE: Rename embed_dim to hidden_size
-# DONE: Rename num_classes to num_labels
-# TODO: FANConfig Attributes rewrite
-# TODO: FANConfig features rename
+
+
 # ISSUE: Move configuration to nvidia/fan
 class FANConfig(PretrainedConfig):
     r"""
