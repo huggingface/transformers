@@ -39,6 +39,7 @@ from transformers import (
     PreTrainedTokenizerFast,
     logging,
 )
+from transformers.image_processing_utils import BaseImageProcessor
 from transformers.feature_extraction_utils import FeatureExtractionMixin
 from transformers.file_utils import is_tf_available, is_torch_available
 from transformers.image_processing_utils import BaseImageProcessor

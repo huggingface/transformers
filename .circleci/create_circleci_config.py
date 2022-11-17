@@ -349,7 +349,7 @@ EXAMPLES_TESTS = [
 ]
 PIPELINE_TESTS = [
     pipelines_torch_job,
-    pipelines_tf_job,
+    # pipelines_tf_job,
 ]
 REPO_UTIL_TESTS = [repo_utils_job]
 
@@ -372,16 +372,16 @@ def create_circleci_config(folder=None):
             test_list = f.read()
     else:
         test_list = []
-    if len(test_list) > 0:
-        jobs.extend(REGULAR_TESTS)
+    # if len(test_list) > 0:
+    #     jobs.extend(REGULAR_TESTS)
 
     example_file = os.path.join(folder, "examples_test_list.txt")
-    if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
-        jobs.extend(EXAMPLES_TESTS)
+    # if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
+    #     jobs.extend(EXAMPLES_TESTS)
     
     repo_util_file = os.path.join(folder, "test_repo_utils.txt")
-    if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
-        jobs.extend(REPO_UTIL_TESTS)
+    # if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
+    #     jobs.extend(REPO_UTIL_TESTS)
 
     if len(jobs) > 0:
         config = {"version": "2.1"}
