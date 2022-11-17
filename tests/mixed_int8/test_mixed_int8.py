@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
+import tempfile
 import unittest
 
 from transformers import (
@@ -106,6 +107,13 @@ class MixedInt8Test(BaseMixedInt8Test):
         output_sequences = self.model_8bit.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
 
         self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+    def test_warns_save_pretrained(self):
+        r"""
+        Test whether trying to save a model after converting it in 8-bit will throw a warning.
+        """
+        with self.assertWarns(UserWarning), tempfile.TemporaryDirectory() as tmpdirname:
+            self.model_8bit.save_pretrained(tmpdirname)
 
 
 class MixedInt8ModelClassesTest(BaseMixedInt8Test):
