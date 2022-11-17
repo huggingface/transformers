@@ -2375,8 +2375,9 @@ class TFModelPushToHubTester(unittest.TestCase):
         new_model = TFBertModel.from_pretrained(f"{USER}/test-model-tf")
         models_equal = True
         for p1, p2 in zip(model.weights, new_model.weights):
-            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+            if not tf.math.reduce_all(p1 == p2):
                 models_equal = False
+                break
         self.assertTrue(models_equal)
 
         # Reset repo
@@ -2389,8 +2390,9 @@ class TFModelPushToHubTester(unittest.TestCase):
         new_model = TFBertModel.from_pretrained(f"{USER}/test-model-tf")
         models_equal = True
         for p1, p2 in zip(model.weights, new_model.weights):
-            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+            if not tf.math.reduce_all(p1 == p2):
                 models_equal = False
+                break
         self.assertTrue(models_equal)
 
     def test_push_to_hub_callback(self):
@@ -2411,8 +2413,9 @@ class TFModelPushToHubTester(unittest.TestCase):
         new_model = TFBertForMaskedLM.from_pretrained(f"{USER}/test-model-tf-callback")
         models_equal = True
         for p1, p2 in zip(model.weights, new_model.weights):
-            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+            if not tf.math.reduce_all(p1 == p2):
                 models_equal = False
+                break
         self.assertTrue(models_equal)
 
     def test_push_to_hub_in_organization(self):
@@ -2428,8 +2431,9 @@ class TFModelPushToHubTester(unittest.TestCase):
         new_model = TFBertModel.from_pretrained("valid_org/test-model-tf-org")
         models_equal = True
         for p1, p2 in zip(model.weights, new_model.weights):
-            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+            if not tf.math.reduce_all(p1 == p2):
                 models_equal = False
+                break
         self.assertTrue(models_equal)
 
         # Reset repo
@@ -2444,6 +2448,7 @@ class TFModelPushToHubTester(unittest.TestCase):
         new_model = TFBertModel.from_pretrained("valid_org/test-model-tf-org")
         models_equal = True
         for p1, p2 in zip(model.weights, new_model.weights):
-            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+            if not tf.math.reduce_all(p1 == p2):
                 models_equal = False
+                break
         self.assertTrue(models_equal)
