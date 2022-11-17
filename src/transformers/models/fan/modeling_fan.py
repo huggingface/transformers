@@ -14,7 +14,7 @@
 # limitations under the License.
 """ PyTorch FAN model."""
 
-# Transformers implementation of the following paper: https://arxiv.org/pdf/2204.12451.pdf
+# Transformers implementation of the following paper: https://arxiv.org/abs/2204.12451
 # Based on the following repository https://github.com/NVlabs/FAN
 
 import collections.abc
