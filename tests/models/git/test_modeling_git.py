@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import unittest
-from typing import List, Tuple, Dict
+from typing import Dict, List, Tuple
 
-from transformers import GITConfig, is_torch_available, GITProcessor
+from transformers import GITConfig, GITProcessor, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -131,7 +131,6 @@ class GITModelTester:
         result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
         # inference without pixel values
         result = model(input_ids, attention_mask=input_mask)

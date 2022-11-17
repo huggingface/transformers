@@ -547,6 +547,10 @@ class GITPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
+        if isinstance(module, GITVisionEmbeddings):
+            nn.init.normal_(module.class_embedding, mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.patch_embedding.weight, std=self.config.initializer_range)
+            nn.init.normal_(module.position_embedding.weight, std=self.config.initializer_range)
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
