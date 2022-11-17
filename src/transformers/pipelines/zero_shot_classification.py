@@ -61,7 +61,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     >>> from transformers import pipeline
 
     >>> oracle = pipeline(model="facebook/bart-large-mnli")
-    >>> answers = oracle(
+    >>> oracle(
     ...     "I have a problem with my iphone that needs to be resolved asap!!",
     ...     candidate_labels=["urgent", "not urgent", "phone", "tablet", "computer"],
     ... )
