@@ -112,12 +112,11 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
     >>> from transformers import pipeline
 
     >>> document_qa = pipeline(model="impira/layoutlm-document-qa")
-    >>> result = document_qa(
+    >>> document_qa(
     ...     image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
     ...     question="What is the invoice number?",
     ... )
-    >>> result[0]["answer"]
-    '1110212019'
+    [{'score': 0.425, 'answer': 'us-001', 'start': 16, 'end': 16}]
     ```
 
     [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
