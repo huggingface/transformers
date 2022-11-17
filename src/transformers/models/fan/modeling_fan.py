@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch FAN model. """
+""" PyTorch FAN model."""
 
 # Transformers implementation of the following paper: https://arxiv.org/pdf/2204.12451.pdf
 # Based on the following repository https://github.com/NVlabs/FAN
@@ -431,11 +431,10 @@ class DWConv(nn.Module):
 def drop_path(x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: bool = True):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
-    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
-    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
-    'survival rate' as the argument.
+    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however, the original name is
+    misleading as 'Drop Connect' is a different form of dropout in a separate paper... See discussion:
+    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
+    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
 
     """
     if drop_prob == 0.0 or not training:
@@ -449,7 +448,7 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: 
 
 
 class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks)."""
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob=None, scale_by_keep=True):
         super(DropPath, self).__init__()
@@ -1039,12 +1038,13 @@ class ConvMlp(nn.Module):
 class ConvNeXtBlock(nn.Module):
     """ConvNeXt Block
     There are two equivalent implementations:
-      (1) DwConv -> LayerNorm (channels_first) -> 1x1 Conv -> GELU -> 1x1 Conv; all in (seq_len, num_channels, height, width)
-      (2) DwConv -> Permute to (seq_len, height, width, num_channels); LayerNorm (channels_last) -> Linear -> GELU -> Linear; Permute back
+      (1) DwConv -> LayerNorm (channels_first) -> 1x1 Conv -> GELU -> 1x1 Conv; all in (seq_len, num_channels, height,
+      width) (2) DwConv -> Permute to (seq_len, height, width, num_channels); LayerNorm (channels_last) -> Linear ->
+      GELU -> Linear; Permute back
 
-    Unlike the official impl, this one allows choice of 1 or 2, 1x1 conv can be faster with appropriate
-    choice of LayerNorm impl, however as model size increases the tradeoffs appear to change and nn.Linear
-    is a better choice. This was observed with PyTorch 1.10 on 3090 GPU, it could change over time & width/ different HW.
+    Unlike the official impl, this one allows choice of 1 or 2, 1x1 conv can be faster with appropriate choice of
+    LayerNorm impl, however as model size increases the tradeoffs appear to change and nn.Linear is a better choice.
+    This was observed with PyTorch 1.10 on 3090 GPU, it could change over time & width/ different HW.
 
     Args:
         dim (int): Number of input channels.
@@ -1139,7 +1139,7 @@ class ConvNeXtStage(nn.Module):
 
 class ConvNeXt(nn.Module):
     r"""ConvNeXt
-        A PyTorch impl of : `A ConvNet for the 2020s`  - https://arxiv.org/pdf/2201.03545.pdf
+        A PyTorch impl of : `A ConvNet for the 2020s` - https://arxiv.org/pdf/2201.03545.pdf
 
     Args:
         in_chans (int): Number of input image channels. Default: 3
@@ -1231,8 +1231,8 @@ class ConvNeXt(nn.Module):
 
 class FANPreTrainedModel(PreTrainedModel):
     """
-    An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = FANConfig
@@ -1262,14 +1262,14 @@ class FANPreTrainedModel(PreTrainedModel):
 
 # TODO: Update FAN Start Docstring
 FAN_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config ([`~FANConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 # TODO: Create FAN Feature Extractor
@@ -1334,14 +1334,15 @@ class FANEmbeddings(FANPreTrainedModel):
     ):
         """
         Args:
-            pixel_values (`torch.FloatTensor`): input to the layer of shape `(batch, height, width, input_channels(3))`
+            pixel_values (`torch.FloatTensor`):
+                input to the layer of shape `(batch, height, width, input_channels(3))`
 
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
             output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-                more detail.
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
         """
         batch_size = pixel_values.shape[0]
         encoder_states = () if output_hidden_states else None
@@ -1668,7 +1669,8 @@ class FANForImageClassification(FANPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import  FANForImageClassification, FANFeatureExtractor
+        >>> from transformers import FANForImageClassification, FANFeatureExtractor
+
         >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1865,6 +1867,7 @@ class FANForSemanticSegmentation(FANPreTrainedModel):
         >>> from transformers import FANForSemanticSegmentation, FANFeatureExtractor
         >>> from PIL import Image
         >>> import requests
+
         >>> feature_extractor = FANFeatureExtractor.from_pretrained("ksmcg/fan_base_16_p4_hybrid")
         >>> # note: we are loading a FANForSemanticSegmentation from the hub here,
         >>> # so the head will be randomly initialized, hence the predictions will be random

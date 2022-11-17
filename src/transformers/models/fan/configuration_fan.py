@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" FAN model configuration """
+""" FAN model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -49,14 +49,13 @@ original_feature_mapping = {
 # ISSUE: Move configuration to nvidia/fan
 class FANConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~FANModel`].
-    It is used to instantiate an FAN model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the FAN [ksmcg/fan_base_18_p16_224](https://huggingface.co/ksmcg/fan_base_18_p16_224) architecture.
+    This is the configuration class to store the configuration of a [`~FANModel`]. It is used to instantiate an FAN
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the FAN
+    [ksmcg/fan_base_18_p16_224](https://huggingface.co/ksmcg/fan_base_18_p16_224) architecture.
 
-    Configuration objects inherit from  [`PretrainedConfig`] and can be used
-    to control the model outputs. Read the documentation from  [`PretrainedConfig`]
-    for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
@@ -100,25 +99,24 @@ class FANConfig(PretrainedConfig):
         decoder_dropout (`float`, defaults to 0.1):
             Dropout used in Decode Head for SemanticSegmentation tasks.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
         cls_attn_layers (`int`, defaults to 2):
-            Number of ClassAttentionBlock used.
-            Class Attention Layer as in CaiT https://arxiv.org/abs/2103.17239.
+            Number of ClassAttentionBlock used. Class Attention Layer as in CaiT https://arxiv.org/abs/2103.17239.
         hybrid_patch_size (`int`, defaults to 2):
             The patch size used in the hybrid embeddings, when using default backbone.
         channel_dims (`tuple(int)`, *optional*, defaults to None):
-            List of Input channels for each of the encoder layers.
-            If None it defaults to [config.hidden_size] * config.num_hidden_layers.
+            List of Input channels for each of the encoder layers. If None it defaults to [config.hidden_size] *
+            config.num_hidden_layers.
         feat_downsample (`bool`, defaults to ):
-            Whether or not to use a learnable downsample convolution to obtain hidden states for SemanticSegmentation tasks.
-            Only appliable with hybrid backbone.
+            Whether or not to use a learnable downsample convolution to obtain hidden states for SemanticSegmentation
+            tasks. Only appliable with hybrid backbone.
         out_index (`int`, *optional*, defaults to -1):
-            Additional Hidden state index position to add to the backbone hidden states and the last hidden state.
-            Only applicable when using hybrid backbone.
+            Additional Hidden state index position to add to the backbone hidden states and the last hidden state. Only
+            applicable when using hybrid backbone.
         rounding_mode (`string`, *optional*, defaults to 'floor'):
-            Torch Divison rounding mode used for positional encoding.
-            Should be set to None in Semantic Segmentation tasks to be compatible with original paper implementation.
+            Torch Divison rounding mode used for positional encoding. Should be set to None in Semantic Segmentation
+            tasks to be compatible with original paper implementation.
         segmentation_in_channels (tuple(int), defaults to (128, 256, 480, 480)):
             Number of channels in each of the hidden features used for Semantic Segmentation.
         decoder_hidden_size (`int`, *optional*, defaults to 768):

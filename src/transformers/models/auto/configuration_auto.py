@@ -29,7 +29,6 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
-        ("fan", "FANConfig"),
         ("albert", "AlbertConfig"),
         ("bart", "BartConfig"),
         ("beit", "BeitConfig"),
@@ -68,6 +67,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("encoder-decoder", "EncoderDecoderConfig"),
         ("ernie", "ErnieConfig"),
         ("esm", "EsmConfig"),
+        ("fan", "FANConfig"),
         ("flaubert", "FlaubertConfig"),
         ("flava", "FlavaConfig"),
         ("fnet", "FNetConfig"),
@@ -179,7 +179,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
-        ("fan", "FAN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bart", "BART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -215,6 +214,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("electra", "ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("ernie", "ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("esm", "ESM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("fan", "FAN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("flaubert", "FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("flava", "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -314,7 +314,6 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("fan", "FAN"),
         ("albert", "ALBERT"),
         ("bart", "BART"),
         ("barthez", "BARThez"),
@@ -362,6 +361,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("encoder-decoder", "Encoder decoder"),
         ("ernie", "ERNIE"),
         ("esm", "ESM"),
+        ("fan", "FAN"),
         ("flan-t5", "FLAN-T5"),
         ("flaubert", "FlauBERT"),
         ("flava", "FLAVA"),
