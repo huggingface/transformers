@@ -198,6 +198,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     processor = GITProcessor(tokenizer=tokenizer, feature_extractor=image_processor)
 
     image = prepare_img()
+    # pixel_values = processor(images=image, return_tensors="pt").pixel_values
     pixel_values = image_transforms(image).unsqueeze(0)
     input_ids = torch.tensor([[101]])
 
@@ -224,15 +225,14 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-        print(f"Saving model to {pytorch_dump_folder_path}")
+        print(f"Saving model and processor to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        # TODO create feature extractor
-        # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-        # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print("Pushing model to the hub...")
+        print("Pushing model and processor to the hub...")
         model.push_to_hub(f"microsoft/{model_name}")
+        processor.push_to_hub(f"microsoft/{model_name}")
 
 
 if __name__ == "__main__":
