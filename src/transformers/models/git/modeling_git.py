@@ -1221,8 +1221,8 @@ class GITModel(GITPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         # TODO fix this
-        if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
+        # if attention_mask is None:
+        #     attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -1235,9 +1235,10 @@ class GITModel(GITPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        visual_features = self.image_encoder(pixel_values).last_hidden_state
-
-        projected_visual_features = self.visual_projection(visual_features)
+        projected_visual_features = None
+        if pixel_values is not None:
+            visual_features = self.image_encoder(pixel_values).last_hidden_state
+            projected_visual_features = self.visual_projection(visual_features)
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
@@ -1246,15 +1247,15 @@ class GITModel(GITPreTrainedModel):
             past_key_values_length=past_key_values_length,
         )
 
-        # print("Shape of embedding output:", embedding_output.shape)
-        # print("First values of embedding output:", embedding_output[0, :3, :3])
+        if projected_visual_features is None:
+            projected_visual_features = torch.zeros(
+                (embedding_output.shape[0], 0, embedding_output.shape[2]),
+                dtype=embedding_output.dtype,
+                device=embedding_output.device,
+            )
 
         # concatenate patch token and text token embeddings
         hidden_states = torch.cat((projected_visual_features, embedding_output), dim=1)
-
-        # print("Shape of hidden states:", hidden_states.shape)
-        # print("First values of hidden states:", hidden_states[0, :3, :3])
-        # print("Last values of hidden states::", hidden_states[0, -3:, -3:])
 
         # An additive mask for masking the future (one direction).
         tgt_mask = self._generate_future_mask(seq_length, embedding_output.dtype, embedding_output.device)

@@ -14,7 +14,7 @@
 # limitations under the License.
 import unittest
 
-from transformers import GITConfig, is_torch_available
+from transformers import GITConfig, is_torch_available, GITProcessor
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -125,22 +125,34 @@ class GITModelTester:
         model = GITModel(config=config)
         model.to(torch_device)
         model.eval()
+
+        # inference with pixel values
         result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-         # TODO support inference without pixel values
+        # inference without pixel values
+        result = model(input_ids, attention_mask=input_mask)
+        result = model(input_ids)
+
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.text_seq_length, self.hidden_size)
+        )
 
     def create_and_check_for_causal_lm(self, config, input_ids, input_mask, pixel_values, token_labels):
         model = GITForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
-        # inference
-        # TODO support inference without pixel values
+        # inference with pixel values
         result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+        # inference without pixel values
+        result = model(input_ids, attention_mask=input_mask)
+        result = model(input_ids)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.text_seq_length, self.vocab_size))
 
         # TODO training
         # result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values)
@@ -223,7 +235,5 @@ class GITModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head_absolute_embedding(self):
         processor = GITProcessor.from_pretrained("nielsr/git-base")
         model = GITForCausalLM.from_pretrained("nielsr/git-base")
-
-
 
         raise NotImplementedError("To do")
