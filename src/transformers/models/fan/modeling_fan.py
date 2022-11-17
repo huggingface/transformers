@@ -42,6 +42,7 @@ from ...utils import (
 )
 from .configuration_fan import FANConfig
 
+
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "ksmcg/fan_base_18_p16_224"
@@ -1264,8 +1265,7 @@ FAN_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`FANImageProcessor`]. See [`FANImageProcessor.__call__`] for
-            details.
+            Pixel values can be obtained using [`FANImageProcessor`]. See [`FANImageProcessor.__call__`] for details.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned

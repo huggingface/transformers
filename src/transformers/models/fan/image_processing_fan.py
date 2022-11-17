@@ -35,6 +35,7 @@ from ...image_utils import (
 )
 from ...utils import logging
 
+
 if is_vision_available():
     import PIL
 
