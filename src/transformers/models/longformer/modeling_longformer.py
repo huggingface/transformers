@@ -1350,7 +1350,7 @@ class LongformerEncoder(nn.Module):
         # this path should be recorded in the ONNX export, it is fine with padding_len == 0 as well
         if padding_len > 0:
             # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
-            hidden_states = hidden_states[:, : hidden_states.shape[2] - padding_len]
+            hidden_states = hidden_states[:, : hidden_states.shape[1] - padding_len]
             if output_hidden_states:
                 all_hidden_states = tuple([state[:, : state.shape[1] - padding_len] for state in all_hidden_states])
 
