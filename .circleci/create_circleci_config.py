@@ -310,7 +310,10 @@ layoutlm_job = CircleCIJob(
         "pip install pytesseract",
         "pip install natten",
     ],
-    tests_to_run="tests/models/*layoutlmv*",
+    tests_to_run=[
+        "tests/models/*layoutlmv*",
+        "tests/models/*nat",
+    ],
     pytest_num_workers=1,
     pytest_options={"durations": 100},
 )
