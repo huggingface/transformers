@@ -18,20 +18,25 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_tokenizers_available,
+    is_torch_available,
+    is_vision_available,
+)
 
-_import_structure = {
-    "configuration_fan": ["FAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "FANConfig"],
-    "feature_extraction_fan": ["FANFeatureExtractor"],
-}
+_import_structure = {"configuration_fan": ["FAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "FANConfig"]}
 
 try:
-    if not is_tokenizers_available():
+    if not is_vision_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_fan"] = ["FANFeatureExtractor"]
+    _import_structure["image_processing_fan"] = ["FANImageProcessor"]
+
 
 try:
     if not is_torch_available():
@@ -50,15 +55,15 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_fan import FAN_PRETRAINED_CONFIG_ARCHIVE_MAP, FANConfig
-    from .feature_extraction_fan import FANFeatureExtractor
 
     try:
-        if not is_tokenizers_available():
+        if not is_vision_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
     else:
         from .feature_extraction_fan import FANFeatureExtractor
+        from .image_processing_fan import FANImageProcessor
 
     try:
         if not is_torch_available():
