@@ -132,10 +132,9 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(language_tokens, ["__java__", "__python__", "__en_XX__", "<mask>"])
 
         code = "java.lang.Exception, python.lang.Exception, javascript, php, ruby, go"
+        input_ids = tokenizer(code).input_ids
         self.assertEqual(
-            tokenizer.decode(
-                tokenizer([code])["input_ids"][0], skip_special_tokens=True, clean_up_tokenization_spaces=False
-            ),
+            tokenizer.decode(input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False),
             code,
         )
 
@@ -220,10 +219,9 @@ class PLBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             language_tokens, ["__java__", "__python__", "__en_XX__", "__javascript__", "__php__", "__ruby__", "__go__"]
         )
         code = "java.lang.Exception, python.lang.Exception, javascript, php, ruby, go"
+        input_ids = tokenizer(code).input_ids
         self.assertEqual(
-            tokenizer.decode(
-                tokenizer([code])["input_ids"][0], skip_special_tokens=True, clean_up_tokenization_spaces=False
-            ),
+            tokenizer.decode(input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False),
             code,
         )
 
