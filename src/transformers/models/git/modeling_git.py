@@ -31,7 +31,6 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel
@@ -483,22 +482,6 @@ class GITEncoder(nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-
-
-# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->GIT
-class GITPooler(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->GIT
@@ -1020,7 +1003,12 @@ class GITVisionTransformer(nn.Module):
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state, pooler_output=pooled_output)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 class GITVisionModel(GITPreTrainedModel):
@@ -1091,7 +1079,7 @@ class GITProjection(nn.Module):
     GIT_START_DOCSTRING,
 )
 class GITModel(GITPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
 
@@ -1100,7 +1088,6 @@ class GITModel(GITPreTrainedModel):
         self.encoder = GITEncoder(config)
 
         self.visual_projection = GITProjection(config)
-        self.pooler = GITPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1264,9 +1251,6 @@ class GITModel(GITPreTrainedModel):
             tgt=embedding_output, memory=projected_visual_features, tgt_mask=tgt_mask
         )
 
-        # print("Shape of extended attention mask:", extended_attention_mask.shape)
-        # print("Mean of extended attention mask:", extended_attention_mask.mean())
-
         encoder_outputs = self.encoder(
             hidden_states,
             attention_mask=extended_attention_mask,
@@ -1278,14 +1262,12 @@ class GITModel(GITPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            return (sequence_output,) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPoolingAndCrossAttentions(
+        return BaseModelOutputWithPast(
             last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
             past_key_values=encoder_outputs.past_key_values,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
@@ -1299,7 +1281,7 @@ class GITForCausalLM(GITPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.git = GITModel(config, add_pooling_layer=False)
+        self.git = GITModel(config)
         self.output = nn.Linear(config.hidden_size, config.vocab_size)
 
         # Initialize weights and apply final processing
@@ -1368,9 +1350,6 @@ class GITForCausalLM(GITPreTrainedModel):
 
         sequence_output = outputs[0]
         logits = self.output(sequence_output)
-
-        # print("Shape of logits:", logits.shape)
-        # print("First values of logits:", logits[0, -1, :3])
 
         lm_loss = None
         if labels is not None:
