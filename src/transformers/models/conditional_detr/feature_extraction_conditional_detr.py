@@ -22,8 +22,9 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
-from ...utils import TensorType, is_torch_available, logging
+from ...image_transforms import center_to_corners_format, corners_to_center_format, rgb_to_id
+from ...image_utils import ImageFeatureExtractionMixin
+from ...utils import TensorType, is_torch_available, is_torch_tensor, logging
 
 
 if is_torch_available():
@@ -34,29 +35,6 @@ logger = logging.get_logger(__name__)
 
 
 ImageInput = Union[Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]]
-
-
-# Copied from transformers.models.detr.feature_extraction_detr.center_to_corners_format
-def center_to_corners_format(x):
-    """
-    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
-    (x_0, y_0, x_1, y_1).
-    """
-    center_x, center_y, width, height = x.unbind(-1)
-    b = [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)]
-    return torch.stack(b, dim=-1)
-
-
-# Copied from transformers.models.detr.feature_extraction_detr.corners_to_center_format
-def corners_to_center_format(x):
-    """
-    Converts a NumPy array of bounding boxes of shape (number of bounding boxes, 4) of corners format (x_0, y_0, x_1,
-    y_1) to center format (center_x, center_y, width, height).
-    """
-    x_transposed = x.T
-    x0, y0, x1, y1 = x_transposed[0], x_transposed[1], x_transposed[2], x_transposed[3]
-    b = [(x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0), (y1 - y0)]
-    return np.stack(b, axis=-1)
 
 
 # Copied from transformers.models.detr.feature_extraction_detr.masks_to_boxes
@@ -91,15 +69,6 @@ def masks_to_boxes(masks):
     y_min = y_min.reshape(y_min.shape[0], -1).min(-1)
 
     return np.stack([x_min, y_min, x_max, y_max], 1)
-
-
-# Copied from transformers.models.detr.feature_extraction_detr.rgb_to_id
-def rgb_to_id(color):
-    if isinstance(color, np.ndarray) and len(color.shape) == 3:
-        if color.dtype == np.uint8:
-            color = color.astype(np.int32)
-        return color[:, :, 0] + 256 * color[:, :, 1] + 256 * 256 * color[:, :, 2]
-    return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
 
 
 # Copied from transformers.models.detr.feature_extraction_detr.binary_mask_to_rle
