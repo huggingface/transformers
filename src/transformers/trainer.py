@@ -2476,7 +2476,7 @@ class Trainer:
         """
         return self.ctx_manager_torchdynamo
 
-    def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = None):
+    def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = True):
         """
         A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
         arguments, depending on the situation.
