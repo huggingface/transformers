@@ -518,7 +518,7 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_generative_model_classes = (T5ForConditionalGeneration,) if is_torch_available() else ()
     all_parallelizable_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
     fx_compatible = True
-    test_pruning = False
+    test_pruning = True
     test_resize_embeddings = True
     test_model_parallel = True
     is_encoder_decoder = True
