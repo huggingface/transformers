@@ -187,16 +187,15 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     config = get_git_config(model_name)
     # load original state_dict from URL
     checkpoint_url = model_name_to_url[model_name]
-    print("Checkpoint URL:", checkpoint_url)
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)["model"]
+    # state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)["model"]
     # TODO remove line below
-    # state_dict = torch.load("/Users/nielsrogge/Documents/GIT/model.pt", map_location="cpu")["model"]
+    state_dict = torch.load("/Users/nielsrogge/Documents/GIT/model.pt", map_location="cpu")["model"]
     # rename keys
     prefix = "module." if model_name in ["git-base", "git-large"] else ""
     rename_keys = create_rename_keys(config, prefix=prefix)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
-    read_in_q_k_v(state_dict, config)
+    read_in_q_k_v(state_dict, config, prefix=prefix)
 
     # load HuggingFace model
     model = GITForCausalLM(config)
