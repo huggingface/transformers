@@ -224,4 +224,5 @@ class LongformerOnnxConfig(OnnxConfig):
         inputs["global_attention_mask"] = torch.zeros_like(inputs["input_ids"])
         # make every second token global
         inputs["global_attention_mask"][:, ::2] = 1
+
         return inputs

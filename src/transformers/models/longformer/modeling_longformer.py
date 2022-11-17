@@ -791,7 +791,7 @@ class LongformerSelfAttention(nn.Module):
 
         chunk_size = [
             hidden_states.size(0),
-            hidden_states.size(1) // window_overlap - 1,
+            torch.div(hidden_states.size(1), window_overlap, rounding_mode="trunc") - 1,
             window_overlap * 2,
             hidden_states.size(2),
         ]
