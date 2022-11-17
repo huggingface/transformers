@@ -387,8 +387,8 @@ Note that we have added a randomly initialized _adapter layer_ to `wav2vec2-base
 output vector of `wav2vec2-base` has a receptive field of *ca.* 25ms (*cf.* 
 Section *4.2* of the [official Wav2Vec2 paper](https://arxiv.org/pdf/2006.11477.pdf)), which represents a little less a single character. On the other hand, BART
 makes use of a sentence-piece tokenizer as an input processor, so that a single 
-hidden vector of `bart-base` represents *ca.* 4 characters. To better align 
-the output of *Wav2Vec2* hidden-states with those of *BART*'s for the cross-attention 
+hidden vector of `bart-base` represents *ca.* 4 characters. To better align the 
+receptive field of the *Wav2Vec2* output vectors with *BART*'s hidden-states in the cross-attention 
 mechanism, we further subsample *Wav2Vec2*'s output by a factor of 8 by 
 adding a convolution-based adapter.
 
