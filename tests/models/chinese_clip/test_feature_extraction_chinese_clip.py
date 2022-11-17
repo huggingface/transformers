@@ -118,7 +118,7 @@ class ChineseCLIPFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittes
     feature_extraction_class = ChineseCLIPFeatureExtractor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = ChineseCLIPFeatureExtractionTester(self)
+        self.feature_extract_tester = ChineseCLIPFeatureExtractionTester(self, do_center_crop=False)
 
     @property
     def feat_extract_dict(self):
@@ -128,7 +128,7 @@ class ChineseCLIPFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittes
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         self.assertTrue(hasattr(feature_extractor, "do_resize"))
         self.assertTrue(hasattr(feature_extractor, "size"))
-        self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
+        self.assertFalse(hasattr(feature_extractor, "do_center_crop"))
         self.assertTrue(hasattr(feature_extractor, "center_crop"))
         self.assertTrue(hasattr(feature_extractor, "do_normalize"))
         self.assertTrue(hasattr(feature_extractor, "image_mean"))
@@ -242,7 +242,7 @@ class ChineseCLIPFeatureExtractionTestFourChannels(FeatureExtractionSavingTestMi
     feature_extraction_class = ChineseCLIPFeatureExtractor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = ChineseCLIPFeatureExtractionTester(self, num_channels=4)
+        self.feature_extract_tester = ChineseCLIPFeatureExtractionTester(self, num_channels=4, do_center_crop=False)
         self.expected_encoded_image_num_channels = 3
 
     @property
@@ -253,7 +253,7 @@ class ChineseCLIPFeatureExtractionTestFourChannels(FeatureExtractionSavingTestMi
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         self.assertTrue(hasattr(feature_extractor, "do_resize"))
         self.assertTrue(hasattr(feature_extractor, "size"))
-        self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
+        self.assertFalse(hasattr(feature_extractor, "do_center_crop"))
         self.assertTrue(hasattr(feature_extractor, "center_crop"))
         self.assertTrue(hasattr(feature_extractor, "do_normalize"))
         self.assertTrue(hasattr(feature_extractor, "image_mean"))
