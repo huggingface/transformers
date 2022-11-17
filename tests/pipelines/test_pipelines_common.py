@@ -17,7 +17,6 @@ import importlib
 import logging
 import os
 import random
-import requests
 import string
 import sys
 import tempfile
@@ -27,16 +26,14 @@ from functools import lru_cache
 from pathlib import Path
 from unittest import skipIf
 
-import huggingface_hub.utils
 import numpy as np
 
-from huggingface_hub import HfApi, HfFolder, Repository, delete_repo, set_access_token
+from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
     TOKENIZER_MAPPING,
     AutoFeatureExtractor,
-    AutoImageProcessor,
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DistilBertForSequenceClassification,
@@ -69,16 +66,6 @@ from test_module.custom_pipeline import PairClassificationPipeline  # noqa E402
 
 
 logger = logging.getLogger(__name__)
-
-
-PATH_TO_TRANSFORMERS = os.path.join(Path(__file__).parent.parent.parent, "src/transformers")
-
-
-# Dynamically import the Transformers module to grab the attribute classes of the processor form their names.
-spec = importlib.util.spec_from_file_location(
-    "transformers", os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"), submodule_search_locations=[PATH_TO_TRANSFORMERS]
-)
-transformers_module = spec.loader.load_module()
 
 
 ROBERTA_EMBEDDING_ADJUSMENT_CONFIGS = [
@@ -195,48 +182,63 @@ class ANY:
 
 class PipelineTestCaseMeta(type):
     def __new__(mcs, name, bases, dct):
-        def gen_test(repo_name, model_architecture, tokenizer_name, processor_name):
-            @skipIf(tokenizer_name is None and processor_name is None, "skip ...")
+        def gen_test(ModelClass, checkpoint, tiny_config, tokenizer_class, feature_extractor_class):
+            @skipIf(
+                tiny_config is None,
+                "TinyConfig does not exist, make sure that you defined a `_CONFIG_FOR_DOC` variable in the modeling"
+                " file",
+            )
+            @skipIf(
+                checkpoint is None,
+                "checkpoint does not exist, make sure that you defined a `_CHECKPOINT_FOR_DOC` variable in the"
+                " modeling file",
+            )
             def test(self):
-                # TODO: why set `is_encoder_decoder` and `is_decoder` in `tiny_config` here.
-                # TODO: check also `encoder_no_repeat_ngram_size`
-                # TODO: candidate for config_override
-
-                repo_id = f"hf-internal-testing/{repo_name}"
-
-                tokenizer = None
-                if tokenizer_name is not None:
-                    tokenizer_class = getattr(transformers_module, tokenizer_name)
-                    tokenizer = tokenizer_class.from_pretrained(repo_id)
-
-                processor = None
-                if processor_name is not None:
-                    processor_class = getattr(transformers_module, processor_name)
-                    processor = processor_class.from_pretrained(repo_id)
-
-                model = None
+                if ModelClass.__name__.endswith("ForCausalLM"):
+                    tiny_config.is_encoder_decoder = False
+                    if hasattr(tiny_config, "encoder_no_repeat_ngram_size"):
+                        # specific for blenderbot which supports both decoder-only
+                        # encoder/decoder but the test config  only reflects
+                        # encoder/decoder arch
+                        tiny_config.encoder_no_repeat_ngram_size = 0
+                if ModelClass.__name__.endswith("WithLMHead"):
+                    tiny_config.is_decoder = True
                 try:
-                    model = model_architecture.from_pretrained(repo_id)
-                except:
-                    pass
-
-                if model is None:
-                    self.skip("model is `None`")
-
+                    model = ModelClass(tiny_config)
+                except ImportError as e:
+                    self.skipTest(
+                        f"Cannot run with {tiny_config} as the model requires a library that isn't installed: {e}"
+                    )
                 if hasattr(model, "eval"):
                     model = model.eval()
+                if tokenizer_class is not None:
+                    try:
+                        tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
+                        # XLNet actually defines it as -1.
+                        if model.config.__class__.__name__ in ROBERTA_EMBEDDING_ADJUSMENT_CONFIGS:
+                            tokenizer.model_max_length = model.config.max_position_embeddings - 2
+                        elif (
+                            hasattr(model.config, "max_position_embeddings")
+                            and model.config.max_position_embeddings > 0
+                        ):
+                            tokenizer.model_max_length = model.config.max_position_embeddings
+                    # Rust Panic exception are NOT Exception subclass
+                    # Some test tokenizer contain broken vocabs or custom PreTokenizer, so we
+                    # provide some default tokenizer and hope for the best.
+                    except:  # noqa: E722
+                        self.skipTest(f"Ignoring {ModelClass}, cannot create a simple tokenizer")
+                else:
+                    tokenizer = None
+                feature_extractor = get_tiny_feature_extractor_from_checkpoint(
+                    checkpoint, tiny_config, feature_extractor_class
+                )
 
-                # TODO: candidate for config_override
-                # # XLNet actually defines it as -1.
-                # if model.config.__class__.__name__ in ROBERTA_EMBEDDING_ADJUSMENT_CONFIGS:
-                #     tokenizer.model_max_length = model.config.max_position_embeddings - 2
-                # elif (
-                #     hasattr(model.config, "max_position_embeddings")
-                #     and model.config.max_position_embeddings > 0
-                # ):
-                #     tokenizer.model_max_length = model.config.max_position_embeddings
-
-                pipeline, examples = self.get_test_pipeline(model, tokenizer, processor)
+                if tokenizer is None and feature_extractor is None:
+                    self.skipTest(
+                        f"Ignoring {ModelClass}, cannot create a tokenizer or feature_extractor (PerceiverConfig with"
+                        " no FastTokenizer ?)"
+                    )
+                pipeline, examples = self.get_test_pipeline(model, tokenizer, feature_extractor)
                 if pipeline is None:
                     # The test can disable itself, but it should be very marginal
                     # Concerns: Wav2Vec2ForCTC without tokenizer test (FastTokenizer don't exist)
@@ -264,50 +266,48 @@ class PipelineTestCaseMeta(type):
 
             return test
 
-        # Download tiny model summary
-        url = "https://huggingface.co/datasets/hf-internal-testing/tiny-random-model-summary/raw/main/processor_classes.json"
-        tiny_model_summary = requests.get(url).json()
-
         for prefix, key in [("pt", "model_mapping"), ("tf", "tf_model_mapping")]:
             mapping = dct.get(key, {})
             if mapping:
-                for config_class, model_architectures in mapping.items():
+                for configuration, model_architectures in mapping.items():
                     if not isinstance(model_architectures, tuple):
                         model_architectures = (model_architectures,)
 
                     for model_architecture in model_architectures:
-                        model_arch_name = model_architecture.__name__
-                        # Get the canonical name
-                        for _prefix in ["Flax", "TF"]:
-                             if model_arch_name.startswith(_prefix):
-                                model_arch_name = model_arch_name[len(_prefix):]
-                                break
-
-                        repo_name = f"tiny-random-{model_arch_name}"
-                        repo_id = f"hf-internal-testing/{repo_name}"
-
-                        tokenizer_name = None
-                        processor_name = None
-
-                        if model_arch_name in tiny_model_summary:
-                            # Avoid requesting from Hub too many times
-                            tokenizer_name = tiny_model_summary[model_arch_name]["tokenizer_class"]
-                            processor_name = tiny_model_summary[model_arch_name]["processor_class"]
+                        checkpoint = get_checkpoint_from_architecture(model_architecture)
+                        tiny_config = get_tiny_config_from_class(configuration)
+                        tokenizer_classes = TOKENIZER_MAPPING.get(configuration, [])
+                        feature_extractor_class = FEATURE_EXTRACTOR_MAPPING.get(configuration, None)
+                        feature_extractor_name = (
+                            feature_extractor_class.__name__ if feature_extractor_class else "nofeature_extractor"
+                        )
+                        if not tokenizer_classes:
+                            # We need to test even if there are no tokenizers.
+                            tokenizer_classes = [None]
                         else:
-                            try:
-                                tokenizer_name = AutoTokenizer.from_pretrained(repo_id).__class__.__name__
-                            except:
-                                pass
+                            # Remove the non defined tokenizers
+                            # ByT5 and Perceiver are bytes-level and don't define
+                            # FastTokenizer, we can just ignore those.
+                            tokenizer_classes = [
+                                tokenizer_class for tokenizer_class in tokenizer_classes if tokenizer_class is not None
+                            ]
 
-                            for auto_class in [AutoImageProcessor, AutoFeatureExtractor]:
-                                try:
-                                    processor_name = auto_class.from_pretrained(repo_id).__class__.__name__
-                                    break
-                                except:
-                                    continue
+                        for tokenizer_class in tokenizer_classes:
+                            if tokenizer_class is not None:
+                                tokenizer_name = tokenizer_class.__name__
+                            else:
+                                tokenizer_name = "notokenizer"
 
-                        test_name = f"test_{prefix}_{config_class.__name__}_{model_architecture.__name__}_{tokenizer_name}_{processor_name}"
-                        dct[test_name] = gen_test(repo_name, model_architecture, tokenizer_name, processor_name)
+                            test_name = f"test_{prefix}_{configuration.__name__}_{model_architecture.__name__}_{tokenizer_name}_{feature_extractor_name}"
+
+                            if tokenizer_class is not None or feature_extractor_class is not None:
+                                dct[test_name] = gen_test(
+                                    model_architecture,
+                                    checkpoint,
+                                    tiny_config,
+                                    tokenizer_class,
+                                    feature_extractor_class,
+                                )
 
         @abstractmethod
         def inner(self):
