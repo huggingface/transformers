@@ -836,6 +836,13 @@ _MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
+    [
+        # Backbone mapping
+        ("resnet", "ResNetBackbone"),
+    ]
+)
+
 MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_MAPPING_NAMES)
 MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_PRETRAINING_MAPPING_NAMES)
 MODEL_WITH_LM_HEAD_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_WITH_LM_HEAD_MAPPING_NAMES)
@@ -902,6 +909,8 @@ MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES
 )
 MODEL_FOR_AUDIO_XVECTOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES)
+
+MODEL_FOR_BACKBONE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_BACKBONE_MAPPING_NAMES)
 
 
 class AutoModel(_BaseAutoModelClass):
@@ -1124,6 +1133,10 @@ AutoModelForAudioFrameClassification = auto_class_update(
 
 class AutoModelForAudioXVector(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_AUDIO_XVECTOR_MAPPING
+
+
+class AutoBackbone(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_BACKBONE_MAPPING
 
 
 AutoModelForAudioXVector = auto_class_update(AutoModelForAudioXVector, head_doc="audio retrieval via x-vector")
