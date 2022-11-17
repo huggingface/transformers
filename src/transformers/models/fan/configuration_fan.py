@@ -112,18 +112,18 @@ class FANConfig(PretrainedConfig):
 
         Example:
 
-    ```python
-    >>> from transformers import FANModel, FANConfig
+        ```python
+        >>> from transformers import FANModel, FANConfig
 
-    >>> # Initializing a FAN ksmcg/fan_base_18_p16_224 style configuration
-    >>> configuration = FANConfig()
+        >>> # Initializing a FAN ksmcg/fan_base_18_p16_224 style configuration
+        >>> configuration = FANConfig()
 
-    >>> # Initializing a model from the ksmcg/fan_base_18_p16_224 style configuration
-    >>> model = FANModel(configuration)
+        >>> # Initializing a model from the ksmcg/fan_base_18_p16_224 style configuration
+        >>> model = FANModel(configuration)
 
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
+        ```"""
     model_type = "fan"
 
     def __init__(
