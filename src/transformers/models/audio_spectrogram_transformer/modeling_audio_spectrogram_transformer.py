@@ -583,8 +583,6 @@ class ASTForSequenceClassification(ASTPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        print("Shape of input_values: ", input_values.shape)
-
         outputs = self.audio_spectrogram_transformer(
             input_values,
             head_mask=head_mask,
