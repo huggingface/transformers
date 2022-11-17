@@ -29,19 +29,6 @@ FAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "ksmcg/fan_large_24_p16_224": "https://huggingface.co/ksmcg/fan_large_24_p16_224/resolve/main/config.json",
 }
 
-original_feature_mapping = {
-    "num_heads": "num_attention_heads",
-    "dropout_ratio": "decoder_dropout",
-    "depth": "num_hidden_layers",
-    "in_channels": "segmentation_in_channels",
-    "in_chans": "num_channels",
-    "num_classes": "num_labels",
-    "embed_dim": "hidden_size",
-    "act_layer": "hidden_act",
-    "attn_drop_rate": "attention_probs_dropout_prob",
-    "drop_rate": "hidden_dropout_prob",
-}
-
 
 # ISSUE: Move configuration to nvidia/fan
 class FANConfig(PretrainedConfig):
