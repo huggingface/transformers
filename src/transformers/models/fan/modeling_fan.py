@@ -229,10 +229,6 @@ def conv3x3(in_planes, out_planes, stride=1):
     )
 
 
-def sigmoid(x, inplace=False):
-    return x.sigmoid_() if inplace else x.sigmoid()
-
-
 def make_divisible(v, divisor=8, min_value=None):
     min_value = min_value or divisor
     new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
@@ -249,7 +245,7 @@ class SqueezeExcite(nn.Module):
         se_ratio=0.25,
         reduced_base_chs=None,
         act_layer=nn.ReLU,
-        gate_fn=sigmoid,
+        gate_fn=torch.sigmoid,
         divisor=1,
         **_,
     ):
@@ -383,7 +379,7 @@ class ConvPatchEmbed(nn.Module):
                 conv3x3(hidden_size // 4, hidden_size // 1, 2),
             )
         else:
-            raise ("For convolutional projection, patch size has to be in [8, 16]")
+            raise ValueError(f"For convolutional projection, patch size has to be in [8, 16] not {patch_size}")
 
     def forward(self, x, return_feat=False):
         x = self.proj(x)
