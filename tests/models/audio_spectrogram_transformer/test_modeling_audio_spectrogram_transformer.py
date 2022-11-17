@@ -48,8 +48,8 @@ class ASTModelTester:
         parent,
         batch_size=13,
         patch_size=2,
-        time_dimension=24,
-        frequency_dimension=16,
+        max_length=24,
+        num_mel_bins=16,
         is_training=True,
         use_labels=True,
         hidden_size=32,
@@ -68,8 +68,8 @@ class ASTModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.patch_size = patch_size
-        self.time_dimension = time_dimension
-        self.frequency_dimension = frequency_dimension
+        self.max_length = max_length
+        self.num_mel_bins = num_mel_bins
         self.is_training = is_training
         self.use_labels = use_labels
         self.hidden_size = hidden_size
@@ -86,13 +86,13 @@ class ASTModelTester:
         self.time_stride = time_stride
 
         # in AST, the seq length equals the number of patches + 2 (we add 2 for the [CLS] and distillation tokens)
-        frequency_out_dimension = (self.frequency_dimension - self.patch_size) // self.frequency_stride + 1
-        time_out_dimension = (self.time_dimension - self.patch_size) // self.time_stride + 1
+        frequency_out_dimension = (self.num_mel_bins - self.patch_size) // self.frequency_stride + 1
+        time_out_dimension = (self.max_length - self.patch_size) // self.time_stride + 1
         num_patches = frequency_out_dimension * time_out_dimension
         self.seq_length = num_patches + 2
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.time_dimension, self.frequency_dimension])
+        input_values = floats_tensor([self.batch_size, self.max_length, self.num_mel_bins])
 
         labels = None
         if self.use_labels:
@@ -105,8 +105,8 @@ class ASTModelTester:
     def get_config(self):
         return ASTConfig(
             patch_size=self.patch_size,
-            time_dimension=self.time_dimension,
-            frequency_dimension=self.frequency_dimension,
+            max_length=self.max_length,
+            num_mel_bins=self.num_mel_bins,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -122,8 +122,8 @@ class ASTModelTester:
 
     def get_pipeline_config(self):
         config = self.get_config()
-        config.time_dimension = 1024
-        config.frequency_dimension = 128
+        config.max_length = 1024
+        config.num_mel_bins = 128
         return config
 
     def create_and_check_model(self, config, input_values, labels):

@@ -73,8 +73,8 @@ class ASTEmbeddings(nn.Module):
     def get_shape(self, config):
         # see Karpathy's cs231n blog on how to calculate the output dimensions
         # https://cs231n.github.io/convolutional-networks/#conv
-        frequency_out_dimension = (config.frequency_dimension - config.patch_size) // config.frequency_stride + 1
-        time_out_dimension = (config.time_dimension - config.patch_size) // config.time_stride + 1
+        frequency_out_dimension = (config.num_mel_bins - config.patch_size) // config.frequency_stride + 1
+        time_out_dimension = (config.max_length - config.patch_size) // config.time_stride + 1
 
         return frequency_out_dimension, time_out_dimension
 
@@ -582,6 +582,8 @@ class ASTForSequenceClassification(ASTPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        print("Shape of input_values: ", input_values.shape)
 
         outputs = self.audio_spectrogram_transformer(
             input_values,

@@ -67,10 +67,10 @@ class ASTConfig(PretrainedConfig):
             Frequency stride to use when patchifying the spectrograms.
         time_stride (`int`, *optional*, defaults to 10):
             Temporal stride to use when patchifying the spectrograms.
-        time_dimension (`int`, *optional*, defaults to 1024):
+        max_length (`int`, *optional*, defaults to 1024):
             Temporal dimension of the spectrograms.
-        frequency_dimension (`int`, *optional*, defaults to 128):
-            Frequency dimension of the spectrograms.
+        num_mel_bins (`int`, *optional*, defaults to 128):
+            Frequency dimension of the spectrograms (number of Mel-frequency bins).
 
     Example:
 
@@ -103,8 +103,8 @@ class ASTConfig(PretrainedConfig):
         qkv_bias=True,
         frequency_stride=10,
         time_stride=10,
-        time_dimension=1024,
-        frequency_dimension=128,
+        max_length=1024,
+        num_mel_bins=128,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -122,5 +122,5 @@ class ASTConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.frequency_stride = frequency_stride
         self.time_stride = time_stride
-        self.time_dimension = time_dimension
-        self.frequency_dimension = frequency_dimension
+        self.max_length = max_length
+        self.num_mel_bins = num_mel_bins
