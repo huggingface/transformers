@@ -316,15 +316,15 @@ class ChineseCLIPImageProcessor(BaseImageProcessor):
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
+        # PIL RGBA images are converted to RGB
+        if do_convert_rgb:
+            images = [convert_to_rgb(image) for image in images]
+
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
         if do_resize:
             images = [self.resize(image=image, size=size, resample=resample) for image in images]
-
-        # PIL RGBA images are converted to RGB, the order of transforms are modified from CLIP
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
 
         if do_center_crop:
             images = [self.center_crop(image=image, size=crop_size) for image in images]
