@@ -118,7 +118,7 @@ class ChineseCLIPFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittes
     feature_extraction_class = ChineseCLIPFeatureExtractor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = ChineseCLIPFeatureExtractionTester(self, do_center_crop=False)
+        self.feature_extract_tester = ChineseCLIPFeatureExtractionTester(self, do_center_crop=True)
 
     @property
     def feat_extract_dict(self):
@@ -242,7 +242,7 @@ class ChineseCLIPFeatureExtractionTestFourChannels(FeatureExtractionSavingTestMi
     feature_extraction_class = ChineseCLIPFeatureExtractor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = ChineseCLIPFeatureExtractionTester(self, num_channels=4, do_center_crop=False)
+        self.feature_extract_tester = ChineseCLIPFeatureExtractionTester(self, num_channels=4, do_center_crop=True)
         self.expected_encoded_image_num_channels = 3
 
     @property
