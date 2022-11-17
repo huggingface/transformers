@@ -437,6 +437,13 @@ MODEL_MAPPING = None
 MODEL_WITH_LM_HEAD_MAPPING = None
 
 
+class AutoBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class AutoModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -4521,6 +4528,13 @@ def load_tf_weights_in_rembert(*args, **kwargs):
 
 
 RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class ResNetBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class ResNetForImageClassification(metaclass=DummyObject):
