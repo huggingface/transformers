@@ -78,9 +78,11 @@ if is_tf_available():
         TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         BertConfig,
+        PushToHubCallback,
         RagRetriever,
         TFAutoModel,
         TFAutoModelForSequenceClassification,
+        TFBertForMaskedLM,
         TFBertModel,
         TFRagModel,
         TFSharedEmbeddings,
@@ -2360,6 +2362,11 @@ class TFModelPushToHubTester(unittest.TestCase):
             pass
 
         try:
+            delete_repo(token=cls._token, repo_id="test-model-tf-callback")
+        except HTTPError:
+            pass
+
+        try:
             delete_repo(token=cls._token, repo_id="valid_org/test-model-tf-org")
         except HTTPError:
             pass
@@ -2378,13 +2385,14 @@ class TFModelPushToHubTester(unittest.TestCase):
             model.push_to_hub("test-model-tf", use_auth_token=self._token)
         logging.set_verbosity_warning()
         # Check the model card was created and uploaded.
-        self.assertIn("Uploading README.md to __DUMMY_TRANSFORMERS_USER__/test-model-tf", cl.out)
+        self.assertIn("Uploading the following files to __DUMMY_TRANSFORMERS_USER__/test-model-tf", cl.out)
 
         new_model = TFBertModel.from_pretrained(f"{USER}/test-model-tf")
         models_equal = True
         for p1, p2 in zip(model.weights, new_model.weights):
-            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+            if not tf.math.reduce_all(p1 == p2):
                 models_equal = False
+                break
         self.assertTrue(models_equal)
 
         # Reset repo
@@ -2397,8 +2405,32 @@ class TFModelPushToHubTester(unittest.TestCase):
         new_model = TFBertModel.from_pretrained(f"{USER}/test-model-tf")
         models_equal = True
         for p1, p2 in zip(model.weights, new_model.weights):
-            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+            if not tf.math.reduce_all(p1 == p2):
                 models_equal = False
+                break
+        self.assertTrue(models_equal)
+
+    def test_push_to_hub_callback(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = TFBertForMaskedLM(config)
+        model.compile()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            push_to_hub_callback = PushToHubCallback(
+                output_dir=tmp_dir,
+                hub_model_id="test-model-tf-callback",
+                hub_token=self._token,
+            )
+            model.fit(model.dummy_inputs, model.dummy_inputs, epochs=1, callbacks=[push_to_hub_callback])
+
+        new_model = TFBertForMaskedLM.from_pretrained(f"{USER}/test-model-tf-callback")
+        models_equal = True
+        for p1, p2 in zip(model.weights, new_model.weights):
+            if not tf.math.reduce_all(p1 == p2):
+                models_equal = False
+                break
         self.assertTrue(models_equal)
 
     def test_push_to_hub_in_organization(self):
@@ -2414,8 +2446,9 @@ class TFModelPushToHubTester(unittest.TestCase):
         new_model = TFBertModel.from_pretrained("valid_org/test-model-tf-org")
         models_equal = True
         for p1, p2 in zip(model.weights, new_model.weights):
-            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+            if not tf.math.reduce_all(p1 == p2):
                 models_equal = False
+                break
         self.assertTrue(models_equal)
 
         # Reset repo
@@ -2430,6 +2463,7 @@ class TFModelPushToHubTester(unittest.TestCase):
         new_model = TFBertModel.from_pretrained("valid_org/test-model-tf-org")
         models_equal = True
         for p1, p2 in zip(model.weights, new_model.weights):
-            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+            if not tf.math.reduce_all(p1 == p2):
                 models_equal = False
+                break
         self.assertTrue(models_equal)
