@@ -26,6 +26,20 @@ class ObjectDetectionPipeline(Pipeline):
     Object detection pipeline using any `AutoModelForObjectDetection`. This pipeline predicts bounding boxes of objects
     and their classes.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> detector = pipeline(model="facebook/detr-resnet-50")
+    >>> detector("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png")
+    [{'score': 0.997, 'label': 'bird', 'box': {'xmin': 69, 'ymin': 171, 'xmax': 396, 'ymax': 507}}, {'score': 0.999, 'label': 'bird', 'box': {'xmin': 398, 'ymin': 105, 'xmax': 767, 'ymax': 507}}]
+
+    >>> # x, y  are expressed relative to the top left hand corner.
+    ```
+
+    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+
     This object detection pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"object-detection"`.
 
