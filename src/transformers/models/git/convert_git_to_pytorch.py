@@ -25,7 +25,15 @@ from PIL import Image
 from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
 
 import requests
-from transformers import AutoTokenizer, GITConfig, GITForCausalLM, GITVisionConfig, GITProcessor, CLIPImageProcessor, BertTokenizerFast
+from transformers import (
+    AutoTokenizer,
+    BertTokenizerFast,
+    CLIPImageProcessor,
+    GITConfig,
+    GITForCausalLM,
+    GITProcessor,
+    GITVisionConfig,
+)
 from transformers.utils import logging
 
 
@@ -59,7 +67,9 @@ def create_rename_keys(config, prefix=""):
     )
     rename_keys.append((f"{prefix}image_encoder.ln_pre.weight", "git.image_encoder.vision_model.pre_layrnorm.weight"))
     rename_keys.append((f"{prefix}image_encoder.ln_pre.bias", "git.image_encoder.vision_model.pre_layrnorm.bias"))
-    rename_keys.append((f"{prefix}image_encoder.ln_post.weight", "git.image_encoder.vision_model.post_layernorm.weight"))
+    rename_keys.append(
+        (f"{prefix}image_encoder.ln_post.weight", "git.image_encoder.vision_model.post_layernorm.weight")
+    )
     rename_keys.append((f"{prefix}image_encoder.ln_post.bias", "git.image_encoder.vision_model.post_layernorm.bias"))
     # fmt: on
     rename_keys.append((f"{prefix}image_encoder.proj", "git.image_encoder.visual_projection.weight"))
@@ -173,14 +183,20 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         "git-base-vqav2": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_VQAV2/snapshot/model.pt",
         "git-base-textvqa": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_TEXTVQA/snapshot/model.pt",
         "git-base-vatex": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_VATEX/snapshot/model.pt",
-        "git-base-msrvtt-qa": "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_MSRVTT_QA/snapshot/model.pt",
+        "git-base-msrvtt-qa": (
+            "https://publicgit.blob.core.windows.net/data/output/GIT_BASE_MSRVTT_QA/snapshot/model.pt"
+        ),
         "git-large": "https://publicgit.blob.core.windows.net/data/output/GIT_LARGE/snapshot/model.pt",
         "git-large-coco": "https://publicgit.blob.core.windows.net/data/output/GIT_LARGE_COCO/snapshot/model.pt",
-        "git-large-textcaps": "https://publicgit.blob.core.windows.net/data/output/GIT_LARGE_TEXTCAPS/snapshot/model.pt",
+        "git-large-textcaps": (
+            "https://publicgit.blob.core.windows.net/data/output/GIT_LARGE_TEXTCAPS/snapshot/model.pt"
+        ),
         "git-large-vqav2": "https://publicgit.blob.core.windows.net/data/output/GIT_LARGE_VQAV2/snapshot/model.pt",
         "git-large-textvqa": "https://publicgit.blob.core.windows.net/data/output/GIT_LARGE_TEXTVQA/snapshot/model.pt",
         "git-large-vatex": "https://publicgit.blob.core.windows.net/data/output/GIT_LARGE_VATEX/snapshot/model.pt",
-        "git-large-msrvtt-qa": "https://publicgit.blob.core.windows.net/data/output/GIT_LARGE_MSRVTT_QA/snapshot/model.pt",
+        "git-large-msrvtt-qa": (
+            "https://publicgit.blob.core.windows.net/data/output/GIT_LARGE_MSRVTT_QA/snapshot/model.pt"
+        ),
     }
 
     # define GIT configuration based on model name
@@ -218,14 +234,14 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     outputs = model(input_ids, pixel_values=pixel_values)
     logits = outputs.logits
     print("Logits:", logits[0, -1, :3])
-    
+
     if model_name == "git-base":
         expected_slice_logits = torch.tensor([-1.2832, -1.2835, -1.2840])
     elif model_name == "git-base-coco":
         expected_slice_logits = torch.tensor([-0.9925, -0.9930, -0.9935])
     elif model_name == "git-base-textcaps":
         expected_slice_logits = torch.tensor([-1.2832, -1.2835, -1.2840])
-    
+
     assert torch.allclose(logits[0, -1, :3], expected_slice_logits, atol=1e-4)
     print("Looks ok!")
 

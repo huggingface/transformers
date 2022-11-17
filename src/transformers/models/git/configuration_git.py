@@ -147,6 +147,8 @@ class GITConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        vision_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`GITVisionConfig`].
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the GIT model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GITModel`].
@@ -225,7 +227,11 @@ class GITConfig(PretrainedConfig):
     ):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
 
-        self.vision_config = vision_config
+        if vision_config is None:
+            vision_config = {}
+            logger.info("vision_config is None. initializing the GITVisionConfig with default values.")
+
+        self.vision_config = GITVisionConfig(**vision_config)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
