@@ -98,9 +98,9 @@ def rename_key(name):
         name = name.replace("audio_spectrogram_transformer.norm", "audio_spectrogram_transformer.layernorm")
     # classifier head
     if "module.mlp_head.0" in name:
-        name = name.replace("module.mlp_head.0", "layernorm")
+        name = name.replace("module.mlp_head.0", "classifier.layernorm")
     if "module.mlp_head.1" in name:
-        name = name.replace("module.mlp_head.1", "classifier")
+        name = name.replace("module.mlp_head.1", "classifier.dense")
 
     return name
 

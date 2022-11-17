@@ -524,6 +524,18 @@ class ASTModel(ASTPreTrainedModel):
         )
 
 
+class ASTMLPHead(nn.Module):
+    def __init__(self, config: ASTConfig):
+        super().__init__()
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dense = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+
+    def forward(self, hidden_state):
+        hidden_state = self.layernorm(hidden_state)
+        hidden_state = self.dense(hidden_state)
+        return hidden_state
+
+
 @add_start_docstrings(
     """
     Audio Spectrogram Transformer model with an audio classification head on top (a linear layer on top of the pooled
@@ -539,8 +551,7 @@ class ASTForSequenceClassification(ASTPreTrainedModel):
         self.audio_spectrogram_transformer = ASTModel(config)
 
         # Classifier head
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        self.classifier = ASTMLPHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -581,8 +592,6 @@ class ASTForSequenceClassification(ASTPreTrainedModel):
         )
 
         pooled_output = outputs[1]
-
-        pooled_output = self.layernorm(pooled_output)
         logits = self.classifier(pooled_output)
 
         loss = None
