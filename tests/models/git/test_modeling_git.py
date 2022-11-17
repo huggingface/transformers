@@ -36,8 +36,9 @@ class GITModelTester:
         parent,
         num_channels=3,
         image_size=32,
+        patch_size=16,
         batch_size=13,
-        seq_length=7,
+        text_seq_length=7,
         is_training=True,
         use_input_mask=True,
         use_labels=True,
@@ -58,8 +59,9 @@ class GITModelTester:
         self.parent = parent
         self.num_channels = num_channels
         self.image_size = image_size
+        self.patch_size = patch_size
         self.batch_size = batch_size
-        self.seq_length = seq_length
+        self.text_seq_length = text_seq_length
         self.is_training = is_training
         self.use_input_mask = use_input_mask
         self.use_labels = use_labels
@@ -77,18 +79,21 @@ class GITModelTester:
         self.num_labels = num_labels
         self.scope = scope
 
+        # for GIT, the sequence length is the sum of the text and patch tokens, + 1 due to the CLS token
+        self.seq_length = self.text_seq_length + int((self.image_size / self.patch_size) ** 2) + 1
+
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_ids = ids_tensor([self.batch_size, self.text_seq_length], self.vocab_size)
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+            input_mask = random_attention_mask([self.batch_size, self.text_seq_length])
 
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         token_labels = None
         if self.use_labels:
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            token_labels = ids_tensor([self.batch_size, self.text_seq_length], self.num_labels)
 
         config = self.get_config()
 
@@ -99,7 +104,11 @@ class GITModelTester:
         Returns a tiny configuration by default.
         """
         return GITConfig(
-            vision_config={"image_size": self.image_size, "num_channels": self.num_channels},
+            vision_config={
+                "num_channels": self.num_channels,
+                "image_size": self.image_size,
+                "patch_size": self.patch_size,
+            },
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -109,8 +118,6 @@ class GITModelTester:
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
             initializer_range=self.initializer_range,
         )
 
@@ -118,18 +125,46 @@ class GITModelTester:
         model = GITModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask)
-        result = model(input_ids)
-        result = model(input_ids)
+        result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values)
+
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+
+         # TODO support inference without pixel values
 
     def create_and_check_for_causal_lm(self, config, input_ids, input_mask, pixel_values, token_labels):
         model = GITForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
+
+        # inference
+        # TODO support inference without pixel values
+        result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+        # TODO training
+        # result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values)
+        # self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        # self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+
+        (
+            config,
+            input_ids,
+            input_mask,
+            pixel_values,
+            token_labels,
+        ) = config_and_inputs
+
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "pixel_values": pixel_values,
+        }
+
+        return config, inputs_dict
 
 
 @require_torch
@@ -172,7 +207,7 @@ class GITModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_causal_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
     @slow
@@ -186,4 +221,9 @@ class GITModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 class GITModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
+        processor = GITProcessor.from_pretrained("nielsr/git-base")
+        model = GITForCausalLM.from_pretrained("nielsr/git-base")
+
+
+
         raise NotImplementedError("To do")
