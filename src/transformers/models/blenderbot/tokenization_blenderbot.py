@@ -99,6 +99,7 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
     ```
     >>> from transformers import BlenderbotTokenizer
     >>> tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-3B")
+    >>> tokenizer.add_prefix_space = False
     >>> tokenizer("Hello world")['input_ids']
     [6950, 1085, 2]
     >>> tokenizer(" Hello world")['input_ids']
