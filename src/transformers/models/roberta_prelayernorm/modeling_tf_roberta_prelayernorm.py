@@ -60,19 +60,19 @@ from .configuration_roberta_prelayernorm import RobertaPreLayerNormConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "princeton-nlp/efficient_mlm_m0.40"
+_CHECKPOINT_FOR_DOC = "andreasmadsen/efficient_mlm_m0.40"
 _CONFIG_FOR_DOC = "RobertaPreLayerNormConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 TF_ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "princeton-nlp/efficient_mlm_m0.15",
-    "princeton-nlp/efficient_mlm_m0.20",
-    "princeton-nlp/efficient_mlm_m0.30",
-    "princeton-nlp/efficient_mlm_m0.40",
-    "princeton-nlp/efficient_mlm_m0.50",
-    "princeton-nlp/efficient_mlm_m0.60",
-    "princeton-nlp/efficient_mlm_m0.70",
-    "princeton-nlp/efficient_mlm_m0.80",
+    "andreasmadsen/efficient_mlm_m0.15",
+    "andreasmadsen/efficient_mlm_m0.20",
+    "andreasmadsen/efficient_mlm_m0.30",
+    "andreasmadsen/efficient_mlm_m0.40",
+    "andreasmadsen/efficient_mlm_m0.50",
+    "andreasmadsen/efficient_mlm_m0.60",
+    "andreasmadsen/efficient_mlm_m0.70",
+    "andreasmadsen/efficient_mlm_m0.80",
     # See all RoBERTaWithPreLayerNorm models at https://huggingface.co/models?filter=roberta_with_prelayernorm
 ]
 
@@ -1338,7 +1338,7 @@ class TFRobertaPreLayerNormClassificationHead(tf.keras.layers.Layer):
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForSequenceClassification with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm,roberta-base->princeton-nlp/efficient_mlm_m0.40
+# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForSequenceClassification with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm,roberta-base->andreasmadsen/efficient_mlm_m0.40
 class TFRobertaPreLayerNormForSequenceClassification(
     TFRobertaPreLayerNormPreTrainedModel, TFSequenceClassificationLoss
 ):
@@ -1358,7 +1358,7 @@ class TFRobertaPreLayerNormForSequenceClassification(
     @add_start_docstrings_to_model_forward(ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="cardiffnlp/twitter-princeton-nlp/efficient_mlm_m0.40-emotion",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output="'optimism'",
@@ -1574,7 +1574,7 @@ class TFRobertaPreLayerNormForTokenClassification(TFRobertaPreLayerNormPreTraine
     @add_start_docstrings_to_model_forward(ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="ydshieh/roberta_prelayernorm-large-ner-english",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output="['O', 'ORG', 'ORG', 'O', 'O', 'O', 'O', 'O', 'LOC', 'O', 'LOC', 'LOC']",
@@ -1642,7 +1642,7 @@ class TFRobertaPreLayerNormForTokenClassification(TFRobertaPreLayerNormPreTraine
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForQuestionAnswering with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm,roberta-base->princeton-nlp/efficient_mlm_m0.40
+# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForQuestionAnswering with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm,roberta-base->andreasmadsen/efficient_mlm_m0.40
 class TFRobertaPreLayerNormForQuestionAnswering(TFRobertaPreLayerNormPreTrainedModel, TFQuestionAnsweringLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
@@ -1662,7 +1662,7 @@ class TFRobertaPreLayerNormForQuestionAnswering(TFRobertaPreLayerNormPreTrainedM
     @add_start_docstrings_to_model_forward(ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="ydshieh/princeton-nlp/efficient_mlm_m0.40-squad2",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output="' puppet'",

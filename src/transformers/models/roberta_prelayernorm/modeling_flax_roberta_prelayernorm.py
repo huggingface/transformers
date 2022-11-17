@@ -44,7 +44,7 @@ from .configuration_roberta_prelayernorm import RobertaPreLayerNormConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "princeton-nlp/efficient_mlm_m0.40"
+_CHECKPOINT_FOR_DOC = "andreasmadsen/efficient_mlm_m0.40"
 _CONFIG_FOR_DOC = "RobertaPreLayerNormConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 

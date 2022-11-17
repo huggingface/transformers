@@ -155,6 +155,6 @@ class FlaxRobertaPreLayerNormModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("princeton-nlp/efficient_mlm_m0.40", from_pt=True)
+            model = model_class_name.from_pretrained("andreasmadsen/efficient_mlm_m0.40", from_pt=True)
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)

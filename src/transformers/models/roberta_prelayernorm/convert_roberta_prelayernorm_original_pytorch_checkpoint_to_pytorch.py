@@ -74,7 +74,7 @@ if __name__ == "__main__":
         default=None,
         type=str,
         required=True,
-        help="Path the official PyTorch dump, e.g. 'princeton-nlp/efficient_mlm_m0.40'.",
+        help="Path the official PyTorch dump, e.g. 'andreasmadsen/efficient_mlm_m0.40'.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."

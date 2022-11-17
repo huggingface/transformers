@@ -651,7 +651,7 @@ class TFRobertaPreLayerNormModelTest(TFModelTesterMixin, unittest.TestCase):
 class TFRobertaPreLayerNormModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = TFRobertaPreLayerNormForMaskedLM.from_pretrained("princeton-nlp/efficient_mlm_m0.40", from_pt=True)
+        model = TFRobertaPreLayerNormForMaskedLM.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
 
         input_ids = tf.constant([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]
@@ -665,7 +665,7 @@ class TFRobertaPreLayerNormModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        model = TFRobertaPreLayerNormModel.from_pretrained("princeton-nlp/efficient_mlm_m0.40", from_pt=True)
+        model = TFRobertaPreLayerNormModel.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
 
         input_ids = tf.constant([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]

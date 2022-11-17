@@ -25,8 +25,8 @@ from ..bert.configuration_bert import BertConfig
 logger = logging.get_logger(__name__)
 
 ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "princeton-nlp/efficient_mlm_m0.40": (
-        "https://huggingface.co/princeton-nlp/efficient_mlm_m0.40/resolve/main/config.json"
+    "andreasmadsen/efficient_mlm_m0.40": (
+        "https://huggingface.co/andreasmadsen/efficient_mlm_m0.40/resolve/main/config.json"
     ),
 }
 
@@ -37,7 +37,7 @@ class RobertaPreLayerNormConfig(BertConfig):
     [`TFRobertaPreLayerNormModel`]. It is used to instantiate a RoBERTa-PreLayerNorm model according to the specified
     arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
     configuration to that of the RoBERTa-PreLayerNorm
-    [princeton-nlp/efficient_mlm_m0.40](https://huggingface.co/princeton-nlp/efficient_mlm_m0.40) architecture.
+    [andreasmadsen/efficient_mlm_m0.40](https://huggingface.co/andreasmadsen/efficient_mlm_m0.40) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

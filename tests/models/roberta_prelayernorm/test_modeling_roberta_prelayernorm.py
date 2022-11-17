@@ -507,7 +507,7 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, unit
 class RobertaPreLayerNormModelIntegrationTest(TestCasePlus):
     @slow
     def test_inference_masked_lm(self):
-        model = RobertaPreLayerNormForMaskedLM.from_pretrained("princeton-nlp/efficient_mlm_m0.40")
+        model = RobertaPreLayerNormForMaskedLM.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         with torch.no_grad():
@@ -522,7 +522,7 @@ class RobertaPreLayerNormModelIntegrationTest(TestCasePlus):
         # huggingface refers to the huggingface directory in https://github.com/princeton-nlp/dinkytrain
         # it does not relate to any module provided by corporation Hugging Face.
         # from huggingface.modeling_roberta_prelayernorm import RobertaForMaskedLM
-        # model = RobertaForMaskedLM.from_pretrained("princeton-nlp/efficient_mlm_m0.40")
+        # model = RobertaForMaskedLM.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
         # with torch.no_grad():
         #     expected_slice = model(input_ids)[0][:, :3, :3].detach()
 
@@ -530,7 +530,7 @@ class RobertaPreLayerNormModelIntegrationTest(TestCasePlus):
 
     @slow
     def test_inference_no_head(self):
-        model = RobertaPreLayerNormModel.from_pretrained("princeton-nlp/efficient_mlm_m0.40")
+        model = RobertaPreLayerNormModel.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         with torch.no_grad():
@@ -541,7 +541,7 @@ class RobertaPreLayerNormModelIntegrationTest(TestCasePlus):
         )
 
         # from huggingface.modeling_roberta_prelayernorm import RobertaModel
-        # model = RobertaForMaskedLM.from_pretrained("princeton-nlp/efficient_mlm_m0.40")
+        # model = RobertaForMaskedLM.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
         # with torch.no_grad():
         #     expected_slice = model(input_ids)[0][:, :3, :3].detach()
 

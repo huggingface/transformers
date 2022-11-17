@@ -48,19 +48,19 @@ from .configuration_roberta_prelayernorm import RobertaPreLayerNormConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "princeton-nlp/efficient_mlm_m0.40"
+_CHECKPOINT_FOR_DOC = "andreasmadsen/efficient_mlm_m0.40"
 _CONFIG_FOR_DOC = "RobertaPreLayerNormConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "princeton-nlp/efficient_mlm_m0.15",
-    "princeton-nlp/efficient_mlm_m0.20",
-    "princeton-nlp/efficient_mlm_m0.30",
-    "princeton-nlp/efficient_mlm_m0.40",
-    "princeton-nlp/efficient_mlm_m0.50",
-    "princeton-nlp/efficient_mlm_m0.60",
-    "princeton-nlp/efficient_mlm_m0.70",
-    "princeton-nlp/efficient_mlm_m0.80",
+    "andreasmadsen/efficient_mlm_m0.15",
+    "andreasmadsen/efficient_mlm_m0.20",
+    "andreasmadsen/efficient_mlm_m0.30",
+    "andreasmadsen/efficient_mlm_m0.40",
+    "andreasmadsen/efficient_mlm_m0.50",
+    "andreasmadsen/efficient_mlm_m0.60",
+    "andreasmadsen/efficient_mlm_m0.70",
+    "andreasmadsen/efficient_mlm_m0.80",
     # See all RoBERTaWithPreLayerNorm models at https://huggingface.co/models?filter=roberta_with_prelayernorm
 ]
 
@@ -874,7 +874,7 @@ class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
     """RoBERTa-PreLayerNorm Model with a `language modeling` head on top for CLM fine-tuning.""",
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm,roberta-base->princeton-nlp/efficient_mlm_m0.40
+# Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm,roberta-base->andreasmadsen/efficient_mlm_m0.40
 class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
@@ -955,10 +955,10 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel):
         >>> from transformers import RobertaTokenizer, RobertaPreLayerNormForCausalLM, RobertaPreLayerNormConfig
         >>> import torch
 
-        >>> tokenizer = RobertaTokenizer.from_pretrained("princeton-nlp/efficient_mlm_m0.40")
-        >>> config = RobertaPreLayerNormConfig.from_pretrained("princeton-nlp/efficient_mlm_m0.40")
+        >>> tokenizer = RobertaTokenizer.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
+        >>> config = RobertaPreLayerNormConfig.from_pretrained("andreasmadsen/efficient_mlm_m0.40")
         >>> config.is_decoder = True
-        >>> model = RobertaPreLayerNormForCausalLM.from_pretrained("princeton-nlp/efficient_mlm_m0.40", config=config)
+        >>> model = RobertaPreLayerNormForCausalLM.from_pretrained("andreasmadsen/efficient_mlm_m0.40", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1168,7 +1168,7 @@ class RobertaPreLayerNormLMHead(nn.Module):
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm,roberta-base->princeton-nlp/efficient_mlm_m0.40
+# Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm,roberta-base->andreasmadsen/efficient_mlm_m0.40
 class RobertaPreLayerNormForSequenceClassification(RobertaPreLayerNormPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -1186,7 +1186,7 @@ class RobertaPreLayerNormForSequenceClassification(RobertaPreLayerNormPreTrained
     @add_start_docstrings_to_model_forward(ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="cardiffnlp/twitter-princeton-nlp/efficient_mlm_m0.40-emotion",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output="'optimism'",
@@ -1387,7 +1387,7 @@ class RobertaPreLayerNormForTokenClassification(RobertaPreLayerNormPreTrainedMod
     @add_start_docstrings_to_model_forward(ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="Jean-Baptiste/roberta_prelayernorm-large-ner-english",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output="['O', 'ORG', 'ORG', 'O', 'O', 'O', 'O', 'O', 'LOC', 'O', 'LOC', 'LOC']",
@@ -1476,7 +1476,7 @@ class RobertaPreLayerNormClassificationHead(nn.Module):
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm,roberta-base->princeton-nlp/efficient_mlm_m0.40
+# Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm,roberta-base->andreasmadsen/efficient_mlm_m0.40
 class RobertaPreLayerNormForQuestionAnswering(RobertaPreLayerNormPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -1494,7 +1494,7 @@ class RobertaPreLayerNormForQuestionAnswering(RobertaPreLayerNormPreTrainedModel
     @add_start_docstrings_to_model_forward(ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="deepset/princeton-nlp/efficient_mlm_m0.40-squad2",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output="' puppet'",
