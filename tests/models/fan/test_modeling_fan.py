@@ -18,22 +18,24 @@
 import inspect
 import unittest
 
-from PIL import Image
-
 from transformers import FANConfig
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
-
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import FANFeatureExtractor, FANForImageClassification, FANForSemanticSegmentation, FANModel
+    from transformers import FANForImageClassification, FANForSemanticSegmentation, FANModel
     from transformers.models.fan.modeling_fan import FAN_PRETRAINED_MODEL_ARCHIVE_LIST
+
+if is_vision_available():
+    from PIL import Image
+
+    from transformers import FANFeatureExtractor
 
 
 # Copied and adapted from transformers.tests.models.deit.test_modeling_deit.py
@@ -397,6 +399,7 @@ def prepare_img():
 
 
 @require_torch
+@require_vision
 class FANModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
