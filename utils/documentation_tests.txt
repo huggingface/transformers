@@ -5,6 +5,7 @@ docs/source/en/autoclass_tutorial.mdx
 docs/source/en/task_summary.mdx
 docs/source/en/model_doc/markuplm.mdx
 docs/source/en/model_doc/speech_to_text.mdx
+docs/source/en/model_doc/switch_transformers.mdx
 docs/source/en/model_doc/t5.mdx
 docs/source/en/model_doc/t5v1.1.mdx
 docs/source/en/model_doc/byt5.mdx
@@ -57,6 +58,7 @@ src/transformers/models/deberta/modeling_deberta.py
 src/transformers/models/deberta_v2/configuration_deberta_v2.py
 src/transformers/models/deberta_v2/modeling_deberta_v2.py
 src/transformers/models/decision_transformer/configuration_decision_transformer.py
+src/transformers/models/deformable_detr/configuration_deformable_detr.py
 src/transformers/models/deformable_detr/modeling_deformable_detr.py
 src/transformers/models/deit/configuration_deit.py
 src/transformers/models/deit/modeling_deit.py
@@ -194,3 +196,4 @@ src/transformers/models/yolos/configuration_yolos.py
 src/transformers/models/yolos/modeling_yolos.py
 src/transformers/models/x_clip/modeling_x_clip.py
 src/transformers/models/yoso/configuration_yoso.py
+src/transformers/pipelines/

@@ -39,6 +39,7 @@ PRIVATE_MODELS = [
     "LongT5Stack",
     "RealmBertModel",
     "T5Stack",
+    "SwitchTransformersStack",
     "TFDPRSpanPredictor",
 ]
 
@@ -176,7 +177,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "PLBartDecoderWrapper",
     "BeitForMaskedImageModeling",
     "CLIPTextModel",
+    "CLIPTextModelWithProjection",
     "CLIPVisionModel",
+    "CLIPVisionModelWithProjection",
     "GroupViTTextModel",
     "GroupViTVisionModel",
     "TFCLIPTextModel",

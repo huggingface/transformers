@@ -38,6 +38,7 @@ from .generic import (
     PaddingStrategy,
     TensorType,
     cached_property,
+    can_return_loss,
     expand_dims,
     find_labels,
     flatten_dict,
