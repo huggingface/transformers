@@ -25,15 +25,7 @@ from PIL import Image
 from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
 
 import requests
-from transformers import (
-    AutoTokenizer,
-    BertTokenizerFast,
-    CLIPImageProcessor,
-    GITConfig,
-    GITForCausalLM,
-    GITProcessor,
-    GITVisionConfig,
-)
+from transformers import AutoTokenizer, BertTokenizerFast, CLIPImageProcessor, GITConfig, GITForCausalLM, GITProcessor
 from transformers.utils import logging
 
 
@@ -202,7 +194,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     # define GIT configuration based on model name
     config = get_git_config(model_name)
     # load original state_dict from URL
-    checkpoint_url = model_name_to_url[model_name]
+    # checkpoint_url = model_name_to_url[model_name]
     # state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)["model"]
     # TODO remove line below
     state_dict = torch.load("/Users/nielsrogge/Documents/GIT/model.pt", map_location="cpu")["model"]
