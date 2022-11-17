@@ -1743,21 +1743,21 @@ class DeiTPreTrainedModel(metaclass=DummyObject):
 DINAT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class DiNATForImageClassification(metaclass=DummyObject):
+class DinatForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class DiNATModel(metaclass=DummyObject):
+class DinatModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class DiNATPreTrainedModel(metaclass=DummyObject):
+class DinatPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -3765,21 +3765,21 @@ class MvpPreTrainedModel(metaclass=DummyObject):
 NAT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class NATForImageClassification(metaclass=DummyObject):
+class NatForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class NATModel(metaclass=DummyObject):
+class NatModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class NATPreTrainedModel(metaclass=DummyObject):
+class NatPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

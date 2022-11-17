@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_dinat": ["DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DiNATConfig"]}
+_import_structure = {"configuration_dinat": ["DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DinatConfig"]}
 
 
 try:
@@ -32,13 +32,13 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_dinat"] = [
         "DINAT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "DiNATForImageClassification",
-        "DiNATModel",
-        "DiNATPreTrainedModel",
+        "DinatForImageClassification",
+        "DinatModel",
+        "DinatPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DiNATConfig
+    from .configuration_dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DinatConfig
 
     try:
         if not is_torch_available():
@@ -48,9 +48,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_dinat import (
             DINAT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DiNATForImageClassification,
-            DiNATModel,
-            DiNATPreTrainedModel,
+            DinatForImageClassification,
+            DinatModel,
+            DinatPreTrainedModel,
         )
 
 else:

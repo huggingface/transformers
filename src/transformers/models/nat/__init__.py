@@ -12,6 +12,7 @@
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
+# distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
@@ -21,7 +22,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_nat": ["NAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "NATConfig"]}
+_import_structure = {"configuration_nat": ["NAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "NatConfig"]}
 
 
 try:
@@ -32,13 +33,13 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_nat"] = [
         "NAT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "NATForImageClassification",
-        "NATModel",
-        "NATPreTrainedModel",
+        "NatForImageClassification",
+        "NatModel",
+        "NatPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NATConfig
+    from .configuration_nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NatConfig
 
     try:
         if not is_torch_available():
@@ -48,9 +49,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_nat import (
             NAT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            NATForImageClassification,
-            NATModel,
-            NATPreTrainedModel,
+            NatForImageClassification,
+            NatModel,
+            NatPreTrainedModel,
         )
 
 else:

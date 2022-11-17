@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch DiNAT model. """
+""" Testing suite for the PyTorch Dinat model. """
 
 import collections
 import inspect
 import unittest
 
-from transformers import DiNATConfig
+from transformers import DinatConfig
 from transformers.testing_utils import require_natten, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -30,7 +30,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import DiNATForImageClassification, DiNATModel
+    from transformers import DinatForImageClassification, DinatModel
     from transformers.models.dinat.modeling_dinat import DINAT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
@@ -39,7 +39,7 @@ if is_vision_available():
     from transformers import AutoFeatureExtractor
 
 
-class DiNATModelTester:
+class DinatModelTester:
     def __init__(
         self,
         parent,
@@ -104,7 +104,7 @@ class DiNATModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return DiNATConfig(
+        return DinatConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -126,7 +126,7 @@ class DiNATModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = DiNATModel(config=config)
+        model = DinatModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -140,7 +140,7 @@ class DiNATModelTester:
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
-        model = DiNATForImageClassification(config)
+        model = DinatForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
@@ -148,7 +148,7 @@ class DiNATModelTester:
 
         # test greyscale images
         config.num_channels = 1
-        model = DiNATForImageClassification(config)
+        model = DinatForImageClassification(config)
         model.to(torch_device)
         model.eval()
 
@@ -169,16 +169,9 @@ class DiNATModelTester:
 
 @require_natten
 @require_torch
-class DiNATModelTest(ModelTesterMixin, unittest.TestCase):
+class DinatModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (
-        (
-            DiNATModel,
-            DiNATForImageClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (DinatModel, DinatForImageClassification) if is_torch_available() else ()
     fx_compatible = False
 
     test_torchscript = False
@@ -187,8 +180,8 @@ class DiNATModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = DiNATModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DiNATConfig, embed_dim=37)
+        self.model_tester = DinatModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=DinatConfig, embed_dim=37)
 
     def test_config(self):
         self.create_and_test_config_common_properties()
@@ -211,7 +204,7 @@ class DiNATModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
     def test_inputs_embeds(self):
-        # DiNAT does not use inputs_embeds
+        # Dinat does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):
@@ -236,7 +229,7 @@ class DiNATModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_attention_outputs(self):
-        self.skipTest("DiNAT's attention operation is handled entirely by NATTEN.")
+        self.skipTest("Dinat's attention operation is handled entirely by NATTEN.")
 
     def check_hidden_states_output(self, inputs_dict, config, model_class, image_size):
         model = model_class(config)
@@ -253,7 +246,7 @@ class DiNATModelTest(ModelTesterMixin, unittest.TestCase):
         )
         self.assertEqual(len(hidden_states), expected_num_layers)
 
-        # DiNAT has a different seq_length
+        # Dinat has a different seq_length
         patch_size = (
             config.patch_size
             if isinstance(config.patch_size, collections.abc.Iterable)
@@ -302,7 +295,7 @@ class DiNATModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in DINAT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DiNATModel.from_pretrained(model_name)
+            model = DinatModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     def test_initialization(self):
@@ -323,14 +316,14 @@ class DiNATModelTest(ModelTesterMixin, unittest.TestCase):
 @require_natten
 @require_vision
 @require_torch
-class DiNATModelIntegrationTest(unittest.TestCase):
+class DinatModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return AutoFeatureExtractor.from_pretrained("shi-labs/dinat-mini-in1k-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = DiNATForImageClassification.from_pretrained("shi-labs/dinat-mini-in1k-224").to(torch_device)
+        model = DinatForImageClassification.from_pretrained("shi-labs/dinat-mini-in1k-224").to(torch_device)
         feature_extractor = self.default_feature_extractor
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")

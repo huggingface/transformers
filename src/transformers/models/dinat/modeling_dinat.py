@@ -35,8 +35,9 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_natten_available,
     logging,
+    requires_backends,
 )
-from .configuration_dinat import DiNATConfig
+from .configuration_dinat import DinatConfig
 
 
 if is_natten_available():
@@ -53,8 +54,8 @@ else:
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "DiNATConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
+_CONFIG_FOR_DOC = "DinatConfig"
+_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "shi-labs/dinat-mini-in1k-224"
@@ -67,16 +68,17 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 DINAT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "shi-labs/dinat-mini-in1k-224",
-    # See all DiNAT models at https://huggingface.co/models?filter=dinat
+    # See all Dinat models at https://huggingface.co/models?filter=dinat
 ]
 
-# drop_path and DiNATDropPath are from the timm library.
+# drop_path and DinatDropPath are from the timm library.
 
 
 @dataclass
-class DiNATEncoderOutput(ModelOutput):
+# Copied from transformers.models.nat.modeling_nat.NatEncoderOutput with Nat->Dinat
+class DinatEncoderOutput(ModelOutput):
     """
-    DiNAT encoder's outputs, with potential hidden states and attentions.
+    Dinat encoder's outputs, with potential hidden states and attentions.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -107,9 +109,10 @@ class DiNATEncoderOutput(ModelOutput):
 
 
 @dataclass
-class DiNATModelOutput(ModelOutput):
+# Copied from transformers.models.nat.modeling_nat.NatModelOutput with Nat->Dinat
+class DinatModelOutput(ModelOutput):
     """
-    DiNAT model's outputs that also contains a pooling of the last hidden states.
+    Dinat model's outputs that also contains a pooling of the last hidden states.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -143,9 +146,10 @@ class DiNATModelOutput(ModelOutput):
 
 
 @dataclass
-class DiNATImageClassifierOutput(ModelOutput):
+# Copied from transformers.models.nat.modeling_nat.NatImageClassifierOutput with Nat->Dinat
+class DinatImageClassifierOutput(ModelOutput):
     """
-    DiNAT outputs for image classification.
+    Dinat outputs for image classification.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -178,7 +182,8 @@ class DiNATImageClassifierOutput(ModelOutput):
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class DiNATEmbeddings(nn.Module):
+# Copied from transformers.models.nat.modeling_nat.NatEmbeddings with Nat->Dinat
+class DinatEmbeddings(nn.Module):
     """
     Construct the patch and position embeddings.
     """
@@ -186,7 +191,7 @@ class DiNATEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.patch_embeddings = DiNATTokenizer(config)
+        self.patch_embeddings = DinatPatchEmbeddings(config)
 
         self.norm = nn.LayerNorm(config.embed_dim)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -200,7 +205,8 @@ class DiNATEmbeddings(nn.Module):
         return embeddings
 
 
-class DiNATTokenizer(nn.Module):
+# Copied from transformers.models.nat.modeling_nat.NatPatchEmbeddings with Nat->Dinat
+class DinatPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, height, width, hidden_size)` to be consumed by a
@@ -213,8 +219,11 @@ class DiNATTokenizer(nn.Module):
         num_channels, hidden_size = config.num_channels, config.embed_dim
         self.num_channels = num_channels
 
-        assert patch_size == 4, "DiNAT only supports patch size of 4 at the moment."
-        # TODO: Support arbitrary patch sizes.
+        if patch_size == 4:
+            pass
+        else:
+            # TODO: Support arbitrary patch sizes.
+            raise ValueError("Dinat only supports patch size of 4 at the moment.")
 
         self.projection = nn.Sequential(
             nn.Conv2d(self.num_channels, hidden_size // 2, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1)),
@@ -233,7 +242,8 @@ class DiNATTokenizer(nn.Module):
         return embeddings
 
 
-class DiNATDownsampler(nn.Module):
+# Copied from transformers.models.nat.modeling_nat.NatDownsampler with Nat->Dinat
+class DinatDownsampler(nn.Module):
     """
     Convolutional Downsampling Layer.
 
@@ -277,8 +287,8 @@ def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
     return output
 
 
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->DiNAT
-class DiNATDropPath(nn.Module):
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Dinat
+class DinatDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
@@ -306,6 +316,7 @@ class NeighborhoodAttention(nn.Module):
         self.kernel_size = kernel_size
         self.dilation = dilation
 
+        # rpb is learnable relative positional biases; same concept is used Swin.
         self.rpb = nn.Parameter(torch.zeros(num_heads, (2 * self.kernel_size - 1), (2 * self.kernel_size - 1)))
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
@@ -314,6 +325,7 @@ class NeighborhoodAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
+    # Copied from transformers.models.nat.modeling_nat.NeighborhoodAttention.transpose_for_scores with Nat->Dinat
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(new_x_shape)
@@ -354,6 +366,7 @@ class NeighborhoodAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.nat.modeling_nat.NeighborhoodAttentionOutput
 class NeighborhoodAttentionOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -374,6 +387,7 @@ class NeighborhoodAttentionModule(nn.Module):
         self.output = NeighborhoodAttentionOutput(config, dim)
         self.pruned_heads = set()
 
+    # Copied from transformers.models.nat.modeling_nat.NeighborhoodAttentionModule.prune_heads
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
@@ -392,6 +406,7 @@ class NeighborhoodAttentionModule(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    # Copied from transformers.models.nat.modeling_nat.NeighborhoodAttentionModule.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -403,7 +418,8 @@ class NeighborhoodAttentionModule(nn.Module):
         return outputs
 
 
-class DiNATIntermediate(nn.Module):
+# Copied from transformers.models.nat.modeling_nat.NatIntermediate with Nat->Dinat
+class DinatIntermediate(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
         self.dense = nn.Linear(dim, int(config.mlp_ratio * dim))
@@ -418,7 +434,8 @@ class DiNATIntermediate(nn.Module):
         return hidden_states
 
 
-class DiNATOutput(nn.Module):
+# Copied from transformers.models.nat.modeling_nat.NatOutput with Nat->Dinat
+class DinatOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
         self.dense = nn.Linear(int(config.mlp_ratio * dim), dim)
@@ -430,7 +447,7 @@ class DiNATOutput(nn.Module):
         return hidden_states
 
 
-class DiNATLayer(nn.Module):
+class DinatLayer(nn.Module):
     def __init__(self, config, dim, num_heads, dilation, drop_path_rate=0.0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -441,10 +458,10 @@ class DiNATLayer(nn.Module):
         self.attention = NeighborhoodAttentionModule(
             config, dim, num_heads, kernel_size=self.kernel_size, dilation=self.dilation
         )
-        self.drop_path = DiNATDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = DinatDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.intermediate = DiNATIntermediate(config, dim)
-        self.output = DiNATOutput(config, dim)
+        self.intermediate = DinatIntermediate(config, dim)
+        self.output = DinatOutput(config, dim)
 
     def maybe_pad(self, hidden_states, height, width):
         window_size = self.window_size
@@ -489,14 +506,14 @@ class DiNATLayer(nn.Module):
         return layer_outputs
 
 
-class DiNATStage(nn.Module):
+class DinatStage(nn.Module):
     def __init__(self, config, dim, depth, num_heads, dilations, drop_path_rate, downsample):
         super().__init__()
         self.config = config
         self.dim = dim
         self.layers = nn.ModuleList(
             [
-                DiNATLayer(
+                DinatLayer(
                     config=config,
                     dim=dim,
                     num_heads=num_heads,
@@ -515,6 +532,7 @@ class DiNATStage(nn.Module):
 
         self.pointing = False
 
+    # Copied from transformers.models.nat.modeling_nat.NatStage.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -539,7 +557,7 @@ class DiNATStage(nn.Module):
         return stage_outputs
 
 
-class DiNATEncoder(nn.Module):
+class DinatEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_levels = len(config.depths)
@@ -547,26 +565,27 @@ class DiNATEncoder(nn.Module):
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
         self.levels = nn.ModuleList(
             [
-                DiNATStage(
+                DinatStage(
                     config=config,
                     dim=int(config.embed_dim * 2**i_layer),
                     depth=config.depths[i_layer],
                     num_heads=config.num_heads[i_layer],
                     dilations=config.dilations[i_layer],
                     drop_path_rate=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                    downsample=DiNATDownsampler if (i_layer < self.num_levels - 1) else None,
+                    downsample=DinatDownsampler if (i_layer < self.num_levels - 1) else None,
                 )
                 for i_layer in range(self.num_levels)
             ]
         )
 
+    # Copied from transformers.models.nat.modeling_nat.NatEncoder.forward with Nat->Dinat
     def forward(
         self,
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, DiNATEncoderOutput]:
+    ) -> Union[Tuple, DinatEncoderOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_reshaped_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -594,7 +613,7 @@ class DiNATEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
 
-        return DiNATEncoderOutput(
+        return DinatEncoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
@@ -602,13 +621,13 @@ class DiNATEncoder(nn.Module):
         )
 
 
-class DiNATPreTrainedModel(PreTrainedModel):
+class DinatPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = DiNATConfig
+    config_class = DinatConfig
     base_model_prefix = "dinat"
     main_input_name = "pixel_values"
 
@@ -624,7 +643,7 @@ class DiNATPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module: DiNATEncoder, value: bool = False) -> None:
+    def _set_gradient_checkpointing(self, module: DinatEncoder, value: bool = False) -> None:
         pass
 
 
@@ -634,7 +653,7 @@ DINAT_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`DiNATConfig`]): Model configuration class with all the parameters of the model.
+        config ([`DinatConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -642,8 +661,8 @@ DINAT_START_DOCSTRING = r"""
 DINAT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`AutoImageProcessor.__call__`] for details.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -657,18 +676,22 @@ DINAT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare DiNAT Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare Dinat Model transformer outputting raw hidden-states without any specific head on top.",
     DINAT_START_DOCSTRING,
 )
-class DiNATModel(DiNATPreTrainedModel):
+# Copied from transformers.models.nat.modeling_nat.NatModel with Nat->Dinat, NAT->DINAT
+class DinatModel(DinatPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
+
+        requires_backends(self, ["natten"])
+
         self.config = config
         self.num_levels = len(config.depths)
         self.num_features = int(config.embed_dim * 2 ** (self.num_levels - 1))
 
-        self.embeddings = DiNATEmbeddings(config)
-        self.encoder = DiNATEncoder(config)
+        self.embeddings = DinatEmbeddings(config)
+        self.encoder = DinatEncoder(config)
 
         self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
         self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
@@ -691,7 +714,7 @@ class DiNATModel(DiNATPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=DiNATModelOutput,
+        output_type=DinatModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -702,7 +725,7 @@ class DiNATModel(DiNATPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, DiNATModelOutput]:
+    ) -> Union[Tuple, DinatModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -734,7 +757,7 @@ class DiNATModel(DiNATPreTrainedModel):
 
             return output
 
-        return DiNATModelOutput(
+        return DinatModelOutput(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
@@ -745,17 +768,19 @@ class DiNATModel(DiNATPreTrainedModel):
 
 @add_start_docstrings(
     """
-    DiNAT Model transformer with an image classification head on top (a linear layer on top of the final hidden state
+    Dinat Model transformer with an image classification head on top (a linear layer on top of the final hidden state
     of the [CLS] token) e.g. for ImageNet.
     """,
     DINAT_START_DOCSTRING,
 )
-class DiNATForImageClassification(DiNATPreTrainedModel):
+class DinatForImageClassification(DinatPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        requires_backends(self, ["natten"])
+
         self.num_labels = config.num_labels
-        self.dinat = DiNATModel(config)
+        self.dinat = DinatModel(config)
 
         # Classifier head
         self.classifier = (
@@ -769,7 +794,7 @@ class DiNATForImageClassification(DiNATPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=DiNATImageClassifierOutput,
+        output_type=DinatImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
@@ -780,7 +805,7 @@ class DiNATForImageClassification(DiNATPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, DiNATImageClassifierOutput]:
+    ) -> Union[Tuple, DinatImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -827,7 +852,7 @@ class DiNATForImageClassification(DiNATPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return DiNATImageClassifierOutput(
+        return DinatImageClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,

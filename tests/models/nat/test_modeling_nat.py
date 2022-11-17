@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch NAT model. """
+""" Testing suite for the PyTorch Nat model. """
 
 import collections
 import inspect
 import unittest
 
-from transformers import NATConfig
+from transformers import NatConfig
 from transformers.testing_utils import require_natten, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -30,16 +30,16 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import NATForImageClassification, NATModel
+    from transformers import NatForImageClassification, NatModel
     from transformers.models.nat.modeling_nat import NAT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
+    from transformers import AutoImageProcessor
 
 
-class NATModelTester:
+class NatModelTester:
     def __init__(
         self,
         parent,
@@ -102,7 +102,7 @@ class NATModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return NATConfig(
+        return NatConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -123,7 +123,7 @@ class NATModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = NATModel(config=config)
+        model = NatModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -137,7 +137,7 @@ class NATModelTester:
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
-        model = NATForImageClassification(config)
+        model = NatForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
@@ -145,7 +145,7 @@ class NATModelTester:
 
         # test greyscale images
         config.num_channels = 1
-        model = NATForImageClassification(config)
+        model = NatForImageClassification(config)
         model.to(torch_device)
         model.eval()
 
@@ -166,16 +166,9 @@ class NATModelTester:
 
 @require_natten
 @require_torch
-class NATModelTest(ModelTesterMixin, unittest.TestCase):
+class NatModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (
-        (
-            NATModel,
-            NATForImageClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (NatModel, NatForImageClassification) if is_torch_available() else ()
     fx_compatible = False
 
     test_torchscript = False
@@ -184,8 +177,8 @@ class NATModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = NATModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=NATConfig, embed_dim=37)
+        self.model_tester = NatModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=NatConfig, embed_dim=37)
 
     def test_config(self):
         self.create_and_test_config_common_properties()
@@ -208,7 +201,7 @@ class NATModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
     def test_inputs_embeds(self):
-        # NAT does not use inputs_embeds
+        # Nat does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):
@@ -233,7 +226,7 @@ class NATModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_attention_outputs(self):
-        self.skipTest("NAT's attention operation is handled entirely by NATTEN.")
+        self.skipTest("Nat's attention operation is handled entirely by NATTEN.")
 
     def check_hidden_states_output(self, inputs_dict, config, model_class, image_size):
         model = model_class(config)
@@ -250,7 +243,7 @@ class NATModelTest(ModelTesterMixin, unittest.TestCase):
         )
         self.assertEqual(len(hidden_states), expected_num_layers)
 
-        # NAT has a different seq_length
+        # Nat has a different seq_length
         patch_size = (
             config.patch_size
             if isinstance(config.patch_size, collections.abc.Iterable)
@@ -299,7 +292,7 @@ class NATModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in NAT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = NATModel.from_pretrained(model_name)
+            model = NatModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     def test_initialization(self):
@@ -320,14 +313,14 @@ class NATModelTest(ModelTesterMixin, unittest.TestCase):
 @require_natten
 @require_vision
 @require_torch
-class NATModelIntegrationTest(unittest.TestCase):
+class NatModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained("shi-labs/nat-mini-in1k-224") if is_vision_available() else None
+        return AutoImageProcessor.from_pretrained("shi-labs/nat-mini-in1k-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = NATForImageClassification.from_pretrained("shi-labs/nat-mini-in1k-224").to(torch_device)
+        model = NatForImageClassification.from_pretrained("shi-labs/nat-mini-in1k-224").to(torch_device)
         feature_extractor = self.default_feature_extractor
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")

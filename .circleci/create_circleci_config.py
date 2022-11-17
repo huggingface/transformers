@@ -308,6 +308,7 @@ layoutlm_job = CircleCIJob(
         "pip install 'git+https://github.com/facebookresearch/detectron2.git'",
         "sudo apt install tesseract-ocr",
         "pip install pytesseract",
+        "pip install natten",
     ],
     tests_to_run="tests/models/*layoutlmv*",
     pytest_num_workers=1,

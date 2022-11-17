@@ -22,15 +22,15 @@ logger = logging.get_logger(__name__)
 
 NAT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "shi-labs/nat-mini-in1k-224": "https://huggingface.co/shi-labs/nat-mini-in1k-224/resolve/main/config.json",
-    # See all NAT models at https://huggingface.co/models?filter=nat
+    # See all Nat models at https://huggingface.co/models?filter=nat
 }
 
 
-class NATConfig(PretrainedConfig):
+class NatConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`NATModel`]. It is used to instantiate a NAT model
+    This is the configuration class to store the configuration of a [`NatModel`]. It is used to instantiate a Nat model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the NAT
+    defaults will yield a similar configuration to that of the Nat
     [shi-labs/nat-mini-in1k-224](https://huggingface.co/shi-labs/nat-mini-in1k-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -43,9 +43,9 @@ class NATConfig(PretrainedConfig):
             The number of input channels.
         embed_dim (`int`, *optional*, defaults to 64):
             Dimensionality of patch embedding.
-        depths (`list(int)`, *optional*, defaults to [2, 2, 6, 2]):
+        depths (`List[int]`, *optional*, defaults to [2, 2, 6, 2]):
             Number of layers in each level of the encoder.
-        num_heads (`list(int)`, *optional*, defaults to [3, 6, 12, 24]):
+        num_heads (`List[int]`, *optional*, defaults to [3, 6, 12, 24]):
             Number of attention heads in each layer of the Transformer encoder.
         kernel_size (`int`, *optional*, defaults to 7):
             Neighborhood Attention kernel size.
@@ -68,19 +68,17 @@ class NATConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        encoder_stride (`int`, `optional`, defaults to 32):
-            Factor to increase the spatial resolution by in the decoder head for masked image modeling.
 
-        Example:
+    Example:
 
     ```python
-    >>> from transformers import NATConfig, NATModel
+    >>> from transformers import NatConfig, NatModel
 
-    >>> # Initializing a NAT shi-labs/nat-mini-in1k-224 style configuration
-    >>> configuration = NATConfig()
+    >>> # Initializing a Nat shi-labs/nat-mini-in1k-224 style configuration
+    >>> configuration = NatConfig()
 
     >>> # Initializing a model (with random weights) from the shi-labs/nat-mini-in1k-224 style configuration
-    >>> model = NATModel(configuration)
+    >>> model = NatModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -109,7 +107,6 @@ class NATConfig(PretrainedConfig):
         patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
-        encoder_stride=32,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -130,7 +127,6 @@ class NATConfig(PretrainedConfig):
         self.path_norm = patch_norm
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
-        self.encoder_stride = encoder_stride
-        # we set the hidden_size attribute in order to make NAT work with VisionEncoderDecoderModel
+        # we set the hidden_size attribute in order to make Nat work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))

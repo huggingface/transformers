@@ -22,15 +22,15 @@ logger = logging.get_logger(__name__)
 
 DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "shi-labs/dinat-mini-in1k-224": "https://huggingface.co/shi-labs/dinat-mini-in1k-224/resolve/main/config.json",
-    # See all DiNAT models at https://huggingface.co/models?filter=dinat
+    # See all Dinat models at https://huggingface.co/models?filter=dinat
 }
 
 
-class DiNATConfig(PretrainedConfig):
+class DinatConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DiNATModel`]. It is used to instantiate a DiNAT
+    This is the configuration class to store the configuration of a [`DinatModel`]. It is used to instantiate a Dinat
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the DiNAT
+    defaults will yield a similar configuration to that of the Dinat
     [shi-labs/dinat-mini-in1k-224](https://huggingface.co/shi-labs/dinat-mini-in1k-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -43,13 +43,13 @@ class DiNATConfig(PretrainedConfig):
             The number of input channels.
         embed_dim (`int`, *optional*, defaults to 64):
             Dimensionality of patch embedding.
-        depths (`list(int)`, *optional*, defaults to [2, 2, 6, 2]):
+        depths (`List[int]`, *optional*, defaults to [2, 2, 6, 2]):
             Number of layers in each level of the encoder.
-        num_heads (`list(int)`, *optional*, defaults to [3, 6, 12, 24]):
+        num_heads (`List[int]`, *optional*, defaults to [3, 6, 12, 24]):
             Number of attention heads in each layer of the Transformer encoder.
         kernel_size (`int`, *optional*, defaults to 7):
             Neighborhood Attention kernel size.
-        dilations (`list(list(int))`, *optional*, defaults to [[1, 8, 1], [1, 4, 1, 4], [1, 2, 1, 2, 1, 2], [1, 1, 1, 1, 1]]):
+        dilations (`List[List[int]]`, *optional*, defaults to [[1, 8, 1], [1, 4, 1, 4], [1, 2, 1, 2, 1, 2], [1, 1, 1, 1, 1]]):
             Dilation value of each NA layer in the Transformer encoder.
         mlp_ratio (`float`, *optional*, defaults to 3.0):
             Ratio of MLP hidden dimensionality to embedding dimensionality.
@@ -70,19 +70,17 @@ class DiNATConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        encoder_stride (`int`, `optional`, defaults to 32):
-            Factor to increase the spatial resolution by in the decoder head for masked image modeling.
 
-        Example:
+    Example:
 
     ```python
-    >>> from transformers import DiNATConfig, DiNATModel
+    >>> from transformers import DinatConfig, DinatModel
 
-    >>> # Initializing a DiNAT shi-labs/dinat-mini-in1k-224 style configuration
-    >>> configuration = DiNATConfig()
+    >>> # Initializing a Dinat shi-labs/dinat-mini-in1k-224 style configuration
+    >>> configuration = DinatConfig()
 
     >>> # Initializing a model (with random weights) from the shi-labs/dinat-mini-in1k-224 style configuration
-    >>> model = DiNATModel(configuration)
+    >>> model = DinatModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -112,7 +110,6 @@ class DiNATConfig(PretrainedConfig):
         patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
-        encoder_stride=32,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -134,7 +131,6 @@ class DiNATConfig(PretrainedConfig):
         self.path_norm = patch_norm
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
-        self.encoder_stride = encoder_stride
-        # we set the hidden_size attribute in order to make DiNAT work with VisionEncoderDecoderModel
+        # we set the hidden_size attribute in order to make Dinat work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))

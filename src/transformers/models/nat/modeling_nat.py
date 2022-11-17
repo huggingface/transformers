@@ -35,8 +35,9 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_natten_available,
     logging,
+    requires_backends,
 )
-from .configuration_nat import NATConfig
+from .configuration_nat import NatConfig
 
 
 if is_natten_available():
@@ -53,8 +54,8 @@ else:
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "NATConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
+_CONFIG_FOR_DOC = "NatConfig"
+_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "shi-labs/nat-mini-in1k-224"
@@ -67,16 +68,16 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
 
 NAT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "shi-labs/nat-mini-in1k-224",
-    # See all NAT models at https://huggingface.co/models?filter=nat
+    # See all Nat models at https://huggingface.co/models?filter=nat
 ]
 
-# drop_path and NATDropPath are from the timm library.
+# drop_path and NatDropPath are from the timm library.
 
 
 @dataclass
-class NATEncoderOutput(ModelOutput):
+class NatEncoderOutput(ModelOutput):
     """
-    NAT encoder's outputs, with potential hidden states and attentions.
+    Nat encoder's outputs, with potential hidden states and attentions.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -107,9 +108,9 @@ class NATEncoderOutput(ModelOutput):
 
 
 @dataclass
-class NATModelOutput(ModelOutput):
+class NatModelOutput(ModelOutput):
     """
-    NAT model's outputs that also contains a pooling of the last hidden states.
+    Nat model's outputs that also contains a pooling of the last hidden states.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -143,9 +144,9 @@ class NATModelOutput(ModelOutput):
 
 
 @dataclass
-class NATImageClassifierOutput(ModelOutput):
+class NatImageClassifierOutput(ModelOutput):
     """
-    NAT outputs for image classification.
+    Nat outputs for image classification.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -178,7 +179,7 @@ class NATImageClassifierOutput(ModelOutput):
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class NATEmbeddings(nn.Module):
+class NatEmbeddings(nn.Module):
     """
     Construct the patch and position embeddings.
     """
@@ -186,7 +187,7 @@ class NATEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.patch_embeddings = NATTokenizer(config)
+        self.patch_embeddings = NatPatchEmbeddings(config)
 
         self.norm = nn.LayerNorm(config.embed_dim)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -200,7 +201,7 @@ class NATEmbeddings(nn.Module):
         return embeddings
 
 
-class NATTokenizer(nn.Module):
+class NatPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, height, width, hidden_size)` to be consumed by a
@@ -213,8 +214,11 @@ class NATTokenizer(nn.Module):
         num_channels, hidden_size = config.num_channels, config.embed_dim
         self.num_channels = num_channels
 
-        assert patch_size == 4, "NAT only supports patch size of 4 at the moment."
-        # TODO: Support arbitrary patch sizes.
+        if patch_size == 4:
+            pass
+        else:
+            # TODO: Support arbitrary patch sizes.
+            raise ValueError("Dinat only supports patch size of 4 at the moment.")
 
         self.projection = nn.Sequential(
             nn.Conv2d(self.num_channels, hidden_size // 2, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1)),
@@ -233,7 +237,7 @@ class NATTokenizer(nn.Module):
         return embeddings
 
 
-class NATDownsampler(nn.Module):
+class NatDownsampler(nn.Module):
     """
     Convolutional Downsampling Layer.
 
@@ -277,8 +281,8 @@ def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
     return output
 
 
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->NAT
-class NATDropPath(nn.Module):
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Nat
+class NatDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
@@ -305,6 +309,7 @@ class NeighborhoodAttention(nn.Module):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.kernel_size = kernel_size
 
+        # rpb is learnable relative positional biases; same concept is used Swin.
         self.rpb = nn.Parameter(torch.zeros(num_heads, (2 * self.kernel_size - 1), (2 * self.kernel_size - 1)))
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
@@ -402,7 +407,7 @@ class NeighborhoodAttentionModule(nn.Module):
         return outputs
 
 
-class NATIntermediate(nn.Module):
+class NatIntermediate(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
         self.dense = nn.Linear(dim, int(config.mlp_ratio * dim))
@@ -417,7 +422,7 @@ class NATIntermediate(nn.Module):
         return hidden_states
 
 
-class NATOutput(nn.Module):
+class NatOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
         self.dense = nn.Linear(int(config.mlp_ratio * dim), dim)
@@ -429,17 +434,17 @@ class NATOutput(nn.Module):
         return hidden_states
 
 
-class NATLayer(nn.Module):
+class NatLayer(nn.Module):
     def __init__(self, config, dim, num_heads, drop_path_rate=0.0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.kernel_size = config.kernel_size
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = NeighborhoodAttentionModule(config, dim, num_heads, kernel_size=self.kernel_size)
-        self.drop_path = NATDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = NatDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.intermediate = NATIntermediate(config, dim)
-        self.output = NATOutput(config, dim)
+        self.intermediate = NatIntermediate(config, dim)
+        self.output = NatOutput(config, dim)
 
     def maybe_pad(self, hidden_states, height, width):
         window_size = self.kernel_size
@@ -484,14 +489,14 @@ class NATLayer(nn.Module):
         return layer_outputs
 
 
-class NATStage(nn.Module):
+class NatStage(nn.Module):
     def __init__(self, config, dim, depth, num_heads, drop_path_rate, downsample):
         super().__init__()
         self.config = config
         self.dim = dim
         self.layers = nn.ModuleList(
             [
-                NATLayer(
+                NatLayer(
                     config=config,
                     dim=dim,
                     num_heads=num_heads,
@@ -533,7 +538,7 @@ class NATStage(nn.Module):
         return stage_outputs
 
 
-class NATEncoder(nn.Module):
+class NatEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_levels = len(config.depths)
@@ -541,13 +546,13 @@ class NATEncoder(nn.Module):
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
         self.levels = nn.ModuleList(
             [
-                NATStage(
+                NatStage(
                     config=config,
                     dim=int(config.embed_dim * 2**i_layer),
                     depth=config.depths[i_layer],
                     num_heads=config.num_heads[i_layer],
                     drop_path_rate=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                    downsample=NATDownsampler if (i_layer < self.num_levels - 1) else None,
+                    downsample=NatDownsampler if (i_layer < self.num_levels - 1) else None,
                 )
                 for i_layer in range(self.num_levels)
             ]
@@ -559,7 +564,7 @@ class NATEncoder(nn.Module):
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, NATEncoderOutput]:
+    ) -> Union[Tuple, NatEncoderOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_reshaped_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -587,7 +592,7 @@ class NATEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
 
-        return NATEncoderOutput(
+        return NatEncoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
@@ -595,13 +600,13 @@ class NATEncoder(nn.Module):
         )
 
 
-class NATPreTrainedModel(PreTrainedModel):
+class NatPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = NATConfig
+    config_class = NatConfig
     base_model_prefix = "nat"
     main_input_name = "pixel_values"
 
@@ -617,7 +622,7 @@ class NATPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module: NATEncoder, value: bool = False) -> None:
+    def _set_gradient_checkpointing(self, module: NatEncoder, value: bool = False) -> None:
         pass
 
 
@@ -627,7 +632,7 @@ NAT_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`NATConfig`]): Model configuration class with all the parameters of the model.
+        config ([`NatConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -635,8 +640,8 @@ NAT_START_DOCSTRING = r"""
 NAT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`AutoImageProcessor.__call__`] for details.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -650,18 +655,21 @@ NAT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare NAT Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare Nat Model transformer outputting raw hidden-states without any specific head on top.",
     NAT_START_DOCSTRING,
 )
-class NATModel(NATPreTrainedModel):
+class NatModel(NatPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
+
+        requires_backends(self, ["natten"])
+
         self.config = config
         self.num_levels = len(config.depths)
         self.num_features = int(config.embed_dim * 2 ** (self.num_levels - 1))
 
-        self.embeddings = NATEmbeddings(config)
-        self.encoder = NATEncoder(config)
+        self.embeddings = NatEmbeddings(config)
+        self.encoder = NatEncoder(config)
 
         self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
         self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
@@ -684,7 +692,7 @@ class NATModel(NATPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=NATModelOutput,
+        output_type=NatModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -695,7 +703,7 @@ class NATModel(NATPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, NATModelOutput]:
+    ) -> Union[Tuple, NatModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -727,7 +735,7 @@ class NATModel(NATPreTrainedModel):
 
             return output
 
-        return NATModelOutput(
+        return NatModelOutput(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
@@ -738,17 +746,19 @@ class NATModel(NATPreTrainedModel):
 
 @add_start_docstrings(
     """
-    NAT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
+    Nat Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
     the [CLS] token) e.g. for ImageNet.
     """,
     NAT_START_DOCSTRING,
 )
-class NATForImageClassification(NATPreTrainedModel):
+class NatForImageClassification(NatPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        requires_backends(self, ["natten"])
+
         self.num_labels = config.num_labels
-        self.nat = NATModel(config)
+        self.nat = NatModel(config)
 
         # Classifier head
         self.classifier = (
@@ -762,7 +772,7 @@ class NATForImageClassification(NATPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=NATImageClassifierOutput,
+        output_type=NatImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
@@ -773,7 +783,7 @@ class NATForImageClassification(NATPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, NATImageClassifierOutput]:
+    ) -> Union[Tuple, NatImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -820,7 +830,7 @@ class NATForImageClassification(NATPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return NATImageClassifierOutput(
+        return NatImageClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
