@@ -17,7 +17,6 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 FAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -142,36 +141,36 @@ class FANConfig(PretrainedConfig):
 
     def __init__(
         self,
-        patch_size=16,  # HASCOMMENTS
-        hidden_size=384,  # HASCOMMENTS
-        num_hidden_layers=12,  # HASCOMMENTS
-        num_attention_heads=8,  # HASCOMMENTS
-        depths=None,  # HASCOMMENTS
-        eta=1.0,  # HASCOMMENTS
-        tokens_norm=True,  # HASCOMMENTS
-        se_mlp=False,  # HASCOMMENTS
-        initializer_range=1.0,  # HASCOMMENTS
-        img_size=[224, 224],  # HASCOMMENTS
-        num_channels=3,  # HASCOMMENTS
-        backbone=None,  # HASCOMMENTS
-        use_pos_embed=True,  # HASCOMMENTS
-        mlp_ratio=4.0,  # HASCOMMENTS
-        qkv_bias=True,  # HASCOMMENTS
-        hidden_dropout_prob=0.0,  # HASCOMMENTS
-        attention_probs_dropout_prob=0.0,  # HASCOMMENTS
-        drop_path_rate=0.0,  # HASCOMMENTS
-        decoder_dropout=0.1,  # HASCOMMENTS
-        hidden_act="gelu",  # HASCOMMENTS
-        cls_attn_layers=2,  # HASCOMMENTS
-        hybrid_patch_size=2,  # HASCOMMENTS
-        channel_dims=None,  # HASCOMMENTS
-        feat_downsample=False,  # HASCOMMENTS
-        out_index=-1,  # HASCOMMENTS
-        rounding_mode="floor",  # HASCOMMENTS
-        segmentation_in_channels=[128, 256, 480, 480],  # HASCOMMENTS
-        decoder_hidden_size=768,  # HASCOMMENTS
-        semantic_loss_ignore_index=-100,  # HASCOMMENTS
-        layer_norm_eps=1e-6,  # HASCOMMENTS
+        patch_size=16,
+        hidden_size=384,
+        num_hidden_layers=12,
+        num_attention_heads=8,
+        depths=None,
+        eta=1.0,
+        tokens_norm=True,
+        se_mlp=False,
+        initializer_range=1.0,
+        img_size=[224, 224],
+        num_channels=3,
+        backbone=None,
+        use_pos_embed=True,
+        mlp_ratio=4.0,
+        qkv_bias=True,
+        hidden_dropout_prob=0.0,
+        attention_probs_dropout_prob=0.0,
+        drop_path_rate=0.0,
+        decoder_dropout=0.1,
+        hidden_act="gelu",
+        cls_attn_layers=2,
+        hybrid_patch_size=2,
+        channel_dims=None,
+        feat_downsample=False,
+        out_index=-1,
+        rounding_mode="floor",
+        segmentation_in_channels=[128, 256, 480, 480],
+        decoder_hidden_size=768,
+        semantic_loss_ignore_index=-100,
+        layer_norm_eps=1e-6,
         **kwargs,
     ):
 
