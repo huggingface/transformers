@@ -1347,9 +1347,8 @@ class LongformerEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         # undo padding
-        if (
-            padding_len > 0
-        ):  # this path should be recorded in the ONNX export, it is fine with padding_len == 0 as well
+        # this path should be recorded in the ONNX export, it is fine with padding_len == 0 as well
+        if padding_len > 0:
             # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
             hidden_states = hidden_states[:, : hidden_states.shape[2] - padding_len]
             if output_hidden_states:
@@ -1611,9 +1610,9 @@ class LongformerModel(LongformerPreTrainedModel):
         batch_size, seq_len = input_shape[:2]
 
         padding_len = (attention_window - seq_len % attention_window) % attention_window
-        if (
-            padding_len > 0
-        ):  # this path should be recorded in the ONNX export, it is fine with padding_len == 0 as well
+
+        # this path should be recorded in the ONNX export, it is fine with padding_len == 0 as well
+        if padding_len > 0:
             logger.info(
                 f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
                 f"`config.attention_window`: {attention_window}"
