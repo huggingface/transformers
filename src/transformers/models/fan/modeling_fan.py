@@ -42,7 +42,6 @@ from ...utils import (
 )
 from .configuration_fan import FANConfig
 
-
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "ksmcg/fan_base_18_p16_224"
@@ -1265,7 +1264,7 @@ FAN_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`FANFeatureExtractor`]. See [`FANFeatureExtractor.__call__`] for
+            Pixel values can be obtained using [`FANImageProcessor`]. See [`FANImageProcessor.__call__`] for
             details.
 
         output_attentions (`bool`, *optional*):
@@ -1655,12 +1654,12 @@ class FANForImageClassification(FANPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import FANForImageClassification, FANFeatureExtractor
+        >>> from transformers import FANForImageClassification, FANImageProcessor
 
         >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> feature_extractor = FANFeatureExtractor.from_pretrained("ksmcg/fan_base_18_p16_224")
+        >>> feature_extractor = FANImageProcessor.from_pretrained("ksmcg/fan_base_18_p16_224")
         >>> model = FANForImageClassification.from_pretrained("ksmcg/fan_base_18_p16_224")
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1850,11 +1849,11 @@ class FANForSemanticSegmentation(FANPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import FANForSemanticSegmentation, FANFeatureExtractor
+        >>> from transformers import FANForSemanticSegmentation, FANImageProcessor
         >>> from PIL import Image
         >>> import requests
 
-        >>> feature_extractor = FANFeatureExtractor.from_pretrained("ksmcg/fan_base_16_p4_hybrid")
+        >>> feature_extractor = FANImageProcessor.from_pretrained("ksmcg/fan_base_16_p4_hybrid")
         >>> # note: we are loading a FANForSemanticSegmentation from the hub here,
         >>> # so the head will be randomly initialized, hence the predictions will be random
         >>> model = FANForSemanticSegmentation.from_pretrained("ksmcg/fan_base_16_p4_hybrid")

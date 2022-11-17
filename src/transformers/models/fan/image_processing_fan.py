@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for DeiT."""
+"""Image processor class for FAN."""
 
 from typing import Dict, List, Optional, Union
 
@@ -34,7 +34,6 @@ from ...image_utils import (
     valid_images,
 )
 from ...utils import logging
-
 
 if is_vision_available():
     import PIL
