@@ -286,28 +286,35 @@ class PipelineTestCaseMeta(type):
                         repo_name = f"tiny-random-{model_arch_name}"
                         repo_id = f"hf-internal-testing/{repo_name}"
 
-                        tokenizer_name = None
-                        processor_name = None
-
+                        tokenizer_names = []
+                        processor_names = []
                         if model_arch_name in tiny_model_summary:
                             # Avoid requesting from Hub too many times
-                            tokenizer_name = tiny_model_summary[model_arch_name]["tokenizer_class"]
-                            processor_name = tiny_model_summary[model_arch_name]["processor_class"]
-                        else:
-                            try:
-                                tokenizer_name = AutoTokenizer.from_pretrained(repo_id).__class__.__name__
-                            except:
-                                pass
+                            tokenizer_names = tiny_model_summary[model_arch_name]["tokenizer_classes"]
+                            processor_names = tiny_model_summary[model_arch_name]["processor_classes"]
+                        tokenizer_names = [None] if not tokenizer_names else tokenizer_names
+                        processor_names = [None] if not processor_names else processor_names
 
-                            for auto_class in [AutoImageProcessor, AutoFeatureExtractor]:
-                                try:
-                                    processor_name = auto_class.from_pretrained(repo_id).__class__.__name__
-                                    break
-                                except:
-                                    continue
+                        for tokenizer_name in tokenizer_names:
+                            for processor_name in processor_names:
+                                test_name = f"test_{prefix}_{config_class.__name__}_{model_architecture.__name__}_{tokenizer_name}_{processor_name}"
+                                dct[test_name] = gen_test(repo_name, model_architecture, tokenizer_name, processor_name)
 
-                        test_name = f"test_{prefix}_{config_class.__name__}_{model_architecture.__name__}_{tokenizer_name}_{processor_name}"
-                        dct[test_name] = gen_test(repo_name, model_architecture, tokenizer_name, processor_name)
+                        # else:
+                        #     try:
+                        #         tokenizer_name = AutoTokenizer.from_pretrained(repo_id).__class__.__name__
+                        #     except:
+                        #         pass
+                        #
+                        #     for auto_class in [AutoImageProcessor, AutoFeatureExtractor]:
+                        #         try:
+                        #             processor_name = auto_class.from_pretrained(repo_id).__class__.__name__
+                        #             break
+                        #         except:
+                        #             continue
+
+                        # test_name = f"test_{prefix}_{config_class.__name__}_{model_architecture.__name__}_{tokenizer_name}_{processor_name}"
+                        # dct[test_name] = gen_test(repo_name, model_architecture, tokenizer_name, processor_name)
 
         @abstractmethod
         def inner(self):
