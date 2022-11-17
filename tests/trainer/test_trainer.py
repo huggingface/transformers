@@ -2354,7 +2354,7 @@ if is_torch_available():
 
         optim_test_params.append(
             (
-                TrainingArguments(optim=OptimizerNames.ANYPRECISION_ADAMW, output_dir="None"),
+                TrainingArguments(optim=OptimizerNames.ADAMW_ANYPRECISION, output_dir="None"),
                 torchdistx.optimizers.AnyPrecisionAdamW,
                 dict(default_adam_kwargs, **default_anyprecision_kwargs),
             )
@@ -2448,13 +2448,13 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         }
         with patch.dict("sys.modules", modules):
             self.check_optim_and_kwargs(
-                TrainingArguments(optim=OptimizerNames.ANYPRECISION_ADAMW, output_dir="None"),
+                TrainingArguments(optim=OptimizerNames.ADAMW_ANYPRECISION, output_dir="None"),
                 mock.optimizers.AnyPrecisionAdamW,
                 dict(default_adam_kwargs, **default_anyprecision_kwargs),
             )
 
     def test_no_torchdistx_anyprecision_adamw(self):
-        args = TrainingArguments(optim=OptimizerNames.ANYPRECISION_ADAMW, output_dir="None")
+        args = TrainingArguments(optim=OptimizerNames.ADAMW_ANYPRECISION, output_dir="None")
 
         # Pretend that torchdistx does not exist, even if installed. By setting torchdistx to None, importing
         # torchdistx.optimizers will fail even if torchdistx is installed.
