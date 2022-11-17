@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    fan,
     albert,
     auto,
     bart,
@@ -64,6 +63,7 @@ from . import (
     encoder_decoder,
     ernie,
     esm,
+    fan,
     flaubert,
     flava,
     fnet,

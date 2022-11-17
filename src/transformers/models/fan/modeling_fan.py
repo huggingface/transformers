@@ -55,6 +55,7 @@ from ...utils import (
 )
 from .configuration_fan import FANConfig
 
+
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "ksmcg/fan_base_18_p16_224"
