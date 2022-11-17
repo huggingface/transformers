@@ -483,9 +483,9 @@ class ResNetBackbone(ResNetPreTrainedModel):
 
         hidden_states = outputs.hidden_states
 
-        feature_maps = []
+        feature_maps = ()
         for idx, stage in enumerate(self.stage_names):
             if stage in self.out_features:
-                feature_maps.append(hidden_states[idx])
+                feature_maps += (hidden_states[idx],)
 
         return BackboneOutput(feature_maps=feature_maps)
