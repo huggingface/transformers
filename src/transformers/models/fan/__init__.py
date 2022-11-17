@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING
 # rely on isort to merge the imports
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
-
 _import_structure = {
     "configuration_fan": ["FAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "FANConfig"],
     "feature_extraction_fan": ["FANFeatureExtractor"],
@@ -44,10 +43,8 @@ else:
         "FAN_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FANForImageClassification",
         "FANForSemanticSegmentation",
-        "FANLayer",
         "FANModel",
         "FANPreTrainedModel",
-        "load_tf_weights_in_fan",
     ]
 
 
