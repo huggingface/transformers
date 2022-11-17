@@ -95,7 +95,8 @@ class TokenClassificationPipeline(Pipeline):
 
     >>> token_classifier = pipeline(model="Jean-Baptiste/camembert-ner", aggregation_strategy="simple")
     >>> sentence = "Je m'appelle jean-baptiste et je vis à montréal"
-    >>> token_classifier(sentence)
+    >>> tokens = token_classifier(sentence)
+    >>> tokens
     [{'entity_group': 'PER', 'score': 0.9931, 'word': 'jean-baptiste', 'start': 12, 'end': 26}, {'entity_group': 'LOC', 'score': 0.998, 'word': 'montréal', 'start': 38, 'end': 47}]
 
     >>> token = tokens[0]
