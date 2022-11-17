@@ -598,9 +598,9 @@ def pad(
             The image to pad.
         padding (`int` or `Tuple[int, int]` or `Iterable[Tuple[int, int]]`):
             Padding to apply to the edges of the height, width axes. Can be one of three formats:
-            - ((before_height, after_height), (before_width, after_width)) unique pad widths for each axis.
-            - ((before, after),) yields same before and after pad for height and width.
-            - (pad,) or int is a shortcut for before = after = pad width for all axes.
+            - `((before_height, after_height), (before_width, after_width))` unique pad widths for each axis.
+            - `((before, after),)` yields same before and after pad for height and width.
+            - `(pad,)` or int is a shortcut for before = after = pad width for all axes.
         mode (`PaddingMode`):
             The padding mode to use. Can be one of:
                 - `"constant"`: pads with a constant value.
