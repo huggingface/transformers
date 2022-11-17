@@ -1,4 +1,4 @@
-from typing import Dict, List, Union
+from typing import Any, Dict, List, Union
 
 from transformers.modeling_outputs import BaseModelOutput
 
@@ -35,14 +35,13 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
     ...     "http://images.cocodataset.org/val2017/000000039769.jpg",
     ...     candidate_labels=["cat", "couch"],
     ... )
-    [[{'score': 0.287, 'label': 'cat', 'box': {'xmin': 324, 'ymin': 20, 'xmax': 640, 'ymax': 373}}, {'score': 0.254, 'label': 'cat', 'box': {'xmin': 1, 'ymin': 55, 'xmax': 315, 'ymax': 472}}, {'score': 0.121, 'label': 'couch', 'box': {'xmin': 4, 'ymin': 0, 'xmax': 642, 'ymax': 476}}]]
+    [{'score': 0.287, 'label': 'cat', 'box': {'xmin': 324, 'ymin': 20, 'xmax': 640, 'ymax': 373}}, {'score': 0.254, 'label': 'cat', 'box': {'xmin': 1, 'ymin': 55, 'xmax': 315, 'ymax': 472}}, {'score': 0.121, 'label': 'couch', 'box': {'xmin': 4, 'ymin': 0, 'xmax': 642, 'ymax': 476}}]
 
     >>> detector(
     ...     "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png",
     ...     candidate_labels=["head", "bird"],
     ... )
     [{'score': 0.119, 'label': 'bird', 'box': {'xmin': 71, 'ymin': 170, 'xmax': 410, 'ymax': 508}}]
-
     ```
 
     [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
@@ -65,22 +64,45 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
 
     def __call__(
         self,
-        image: Union[str, List[str], "Image.Image", List["Image.Image"]],
-        candidate_labels: Union[str, List[str], List[List[str]]] = None,
+        image: Union[str, "Image.Image", List[Dict[str, Any]]],
+        candidate_labels: Union[str, List[str]] = None,
         **kwargs
     ):
         """
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
 
         Args:
-            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            image (`str`, `PIL.Image` or `List[Dict[str, Any]]`):
                 The pipeline handles three types of images:
 
                 - A string containing an http url pointing to an image
                 - A string containing a local path to an image
                 - An image loaded in PIL directly
 
-            candidate_labels (`str` or `List[str]` or `List[List[str]]`): What the model should recognize in the image.
+                You can use this parameter to send directly a list of images, or a dataset or a generator like so:
+
+                ```python
+                >>> from transformers import pipeline
+
+                >>> detector = pipeline(model="google/owlvit-base-patch32", task="zero-shot-object-detection")
+                >>> detector(
+                ...     [
+                ...         {
+                ...             "image": "http://images.cocodataset.org/val2017/000000039769.jpg",
+                ...             "candidate_labels": ["cat", "couch"],
+                ...         },
+                ...         {
+                ...             "image": "http://images.cocodataset.org/val2017/000000039769.jpg",
+                ...             "candidate_labels": ["cat", "couch"],
+                ...         },
+                ...     ]
+                ... )
+                [[{'score': 0.286811888217926, 'label': 'cat', 'box': {'xmin': 324, 'ymin': 20, 'xmax': 640, 'ymax': 373}}, {'score': 0.2537279725074768, 'label': 'cat', 'box': {'xmin': 1, 'ymin': 55, 'xmax': 315, 'ymax': 472}}, {'score': 0.12082888185977936, 'label': 'couch', 'box': {'xmin': 4, 'ymin': 0, 'xmax': 642, 'ymax': 476}}], [{'score': 0.286811888217926, 'label': 'cat', 'box': {'xmin': 324, 'ymin': 20, 'xmax': 640, 'ymax': 373}}, {'score': 0.2537279725074768, 'label': 'cat', 'box': {'xmin': 1, 'ymin': 55, 'xmax': 315, 'ymax': 472}}, {'score': 0.12082888185977936, 'label': 'couch', 'box': {'xmin': 4, 'ymin': 0, 'xmax': 642, 'ymax': 476}}]]
+                ```
+
+
+            candidate_labels (`str` or `List[str]` or `List[List[str]]`):
+                What the model should recognize in the image.
 
             threshold (`float`, *optional*, defaults to 0.1):
                 The probability necessary to make a prediction.
@@ -118,17 +140,12 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         return {}, {}, postprocess_params
 
     def preprocess(self, inputs):
-        try:
-            image = load_image(inputs["image"])
-        except Exception:
-            import ipdb
-
-            ipdb.set_trace()
+        image = load_image(inputs["image"])
         candidate_labels = inputs["candidate_labels"]
         if isinstance(candidate_labels, str):
             candidate_labels = candidate_labels.split(",")
 
-        target_size = torch.IntTensor([[image.height, image.width]])
+        target_size = torch.tensor([[image.height, image.width]], dtype=torch.int32)
         for i, candidate_label in enumerate(candidate_labels):
             text_inputs = self.tokenizer(candidate_label, return_tensors=self.framework)
             image_features = self.feature_extractor(image, return_tensors=self.framework)
