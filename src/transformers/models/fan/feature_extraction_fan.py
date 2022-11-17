@@ -17,6 +17,7 @@
 from ...utils import logging
 from .image_processing_fan import FANImageProcessor
 
+
 logger = logging.get_logger(__name__)
 
 FANFeatureExtractor = FANImageProcessor

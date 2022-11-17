@@ -26,6 +26,7 @@ from ...utils import (
     is_vision_available,
 )
 
+
 _import_structure = {"configuration_fan": ["FAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "FANConfig"]}
 
 try:
