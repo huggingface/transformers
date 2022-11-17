@@ -31,10 +31,15 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_vision_available,
     logging,
     replace_return_docstrings,
 )
 from .configuration_owlvit import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
+
+
+if is_vision_available():
+    from transformers.image_transforms import center_to_corners_format
 
 
 logger = logging.get_logger(__name__)
@@ -112,17 +117,6 @@ class OwlViTOutput(ModelOutput):
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
         )
-
-
-# Copied from transformers.models.detr.feature_extraction_detr.center_to_corners_format
-def center_to_corners_format(x):
-    """
-    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
-    (x_0, y_0, x_1, y_1).
-    """
-    center_x, center_y, width, height = x.unbind(-1)
-    b = [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)]
-    return torch.stack(b, dim=-1)
 
 
 # Copied from transformers.models.detr.modeling_detr._upcast
