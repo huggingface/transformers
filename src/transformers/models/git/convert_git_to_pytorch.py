@@ -42,7 +42,7 @@ logger = logging.get_logger(__name__)
 
 
 def get_git_config(model_name):
-    config = GITConfig(vision_config=GITVisionConfig())
+    config = GITConfig()
 
     return config
 

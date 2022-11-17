@@ -181,8 +181,7 @@ class GITConfig(PretrainedConfig):
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
             with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
         use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
+            Whether or not the model should return the last key/values attentions (not used by all models).
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
 
