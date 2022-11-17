@@ -22,12 +22,11 @@ from pathlib import Path
 
 import torch
 from PIL import Image
+from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
 
 import requests
-from transformers import GITConfig, GITForCausalLM, GITVisionConfig
+from transformers import GITConfig, GITForCausalLM, GITVisionConfig, AutoTokenizer
 from transformers.utils import logging
-
-from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
 
 
 logging.set_verbosity_info()
@@ -152,11 +151,12 @@ def prepare_img():
     return image
 
 
-image_transforms = Compose([
-    Resize(224, interpolation=Image.BICUBIC),
-    CenterCrop(224),
-    ToTensor(),
-    Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
+image_transforms = Compose(
+    [
+        Resize(224, interpolation=Image.BICUBIC),
+        CenterCrop(224),
+        ToTensor(),
+        Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
     ]
 )
 
@@ -189,22 +189,40 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     model.eval()
 
-    assert missing_keys == ['git.embeddings.position_ids', 'git.image_encoder.vision_model.embeddings.position_ids']
+    assert missing_keys == ["git.embeddings.position_ids", "git.image_encoder.vision_model.embeddings.position_ids"]
     assert len(unexpected_keys) == 0
 
-    # TODO verify results
+    # verify results
     image = prepare_img()
     pixel_values = image_transforms(image).unsqueeze(0)
     input_ids = torch.tensor([[101]])
 
     logits = model(input_ids, pixel_values=pixel_values).logits
-    assert torch.allclose(logits[0,-1,:3], torch.tensor([-1.2832, -1.2835, -1.2840]), atol=1e-4)
+    assert torch.allclose(logits[0, -1, :3], torch.tensor([-1.2832, -1.2835, -1.2840]), atol=1e-4)
     print("Looks ok!")
+
+    print("Generating caption...")
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+    predicted_ids = []
+    for i in range(20): 
+        outputs = model(pixel_values=pixel_values, input_ids=input_ids)
+        logits = outputs.logits[:,-1,:]
+        # perform argmax on the last dimension (i.e. greedy decoding)
+        predicted_id = logits.argmax(-1)
+        predicted_ids.append(predicted_id.item())
+        print(tokenizer.decode([predicted_id.squeeze()]))
+        # print("Predicted id:", predicted_id)
+        # add predicted id to input_ids
+        input_ids = torch.cat([input_ids, predicted_id.unsqueeze(0)], dim=1)
+    # generated_ids = model.generate(pixel_values, max_length=20)
+    # tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+    # print("Generated caption:", tokenizer.batch_decode(generated_ids, skip_special_tokens=True))
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         print(f"Saving model to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
+        # TODO create feature extractor
         # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
         # feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
