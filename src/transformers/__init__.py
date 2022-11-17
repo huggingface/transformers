@@ -920,6 +920,7 @@ else:
             "MODEL_WITH_LM_HEAD_MAPPING",
             "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
             "AutoModel",
+            "AutoBackbone",
             "AutoModelForAudioClassification",
             "AutoModelForAudioFrameClassification",
             "AutoModelForAudioXVector",
@@ -1877,6 +1878,7 @@ else:
             "ResNetForImageClassification",
             "ResNetModel",
             "ResNetPreTrainedModel",
+            "ResNetBackbone",
         ]
     )
     _import_structure["models.retribert"].extend(
@@ -3946,6 +3948,7 @@ if TYPE_CHECKING:
             MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
+            AutoBackbone,
             AutoModel,
             AutoModelForAudioClassification,
             AutoModelForAudioFrameClassification,
@@ -4730,6 +4733,7 @@ if TYPE_CHECKING:
         )
         from .models.resnet import (
             RESNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ResNetBackbone,
             ResNetForImageClassification,
             ResNetModel,
             ResNetPreTrainedModel,
