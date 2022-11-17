@@ -135,7 +135,6 @@ class GITEmbeddings(nn.Module):
 
 
 class GITSelfAttention(nn.Module):
-    # Copied from transformers.models.bert.modeling_bert.BertSelfAttention.__init__ with Bert->GIT
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -159,8 +158,6 @@ class GITSelfAttention(nn.Module):
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
-
-        self.is_decoder = config.is_decoder
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -189,15 +186,14 @@ class GITSelfAttention(nn.Module):
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
         use_cache = past_key_value is not None
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_layer, value_layer)
+        # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+        # Further calls to cross_attention layer can then reuse all cross-attention
+        # key/value_states (first "if" case)
+        # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+        # all previous decoder key/value_states. Further calls to uni-directional self-attention
+        # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+        # if encoder bi-directional self-attention `past_key_value` is always `None`
+        past_key_value = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -248,8 +244,7 @@ class GITSelfAttention(nn.Module):
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
-        if self.is_decoder:
-            outputs = outputs + (past_key_value,)
+        outputs = outputs + (past_key_value,)
         return outputs
 
 
@@ -352,7 +347,6 @@ class GITLayer(nn.Module):
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.attention = GITAttention(config)
-        self.is_decoder = config.is_decoder
         self.intermediate = GITIntermediate(config)
         self.output = GITOutput(config)
 
@@ -376,11 +370,8 @@ class GITLayer(nn.Module):
         attention_output = self_attention_outputs[0]
 
         # if decoder, the last output is tuple of self-attn cache
-        if self.is_decoder:
-            outputs = self_attention_outputs[1:-1]
-            present_key_value = self_attention_outputs[-1]
-        else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[1:-1]
+        present_key_value = self_attention_outputs[-1]
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
@@ -388,8 +379,7 @@ class GITLayer(nn.Module):
         outputs = (layer_output,) + outputs
 
         # if decoder, return the attn key/values as the last output
-        if self.is_decoder:
-            outputs = outputs + (present_key_value,)
+        outputs = outputs + (present_key_value,)
 
         return outputs
 
@@ -1212,12 +1202,8 @@ class GITModel(GITPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if self.config.is_decoder:
-            use_cache = use_cache if use_cache is not None else self.config.use_cache
-        else:
-            use_cache = False
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1311,9 +1297,6 @@ class GITModel(GITPreTrainedModel):
 class GITForCausalLM(GITPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-
-        if not config.is_decoder:
-            logger.warning("If you want to use `GITForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.git = GITModel(config, add_pooling_layer=False)
         self.output = nn.Linear(config.hidden_size, config.vocab_size)
