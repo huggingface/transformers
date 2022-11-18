@@ -153,6 +153,7 @@ from .import_utils import (
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
+    is_torchdistx_available,
     is_torchdynamo_available,
     is_training_run_on_sagemaker,
     is_vision_available,
