@@ -48,7 +48,7 @@ Start by loading a smaller subset of the [MInDS-14](https://huggingface.co/datas
 ```py
 >>> from datasets import load_dataset, Audio
 
->>> minds = load_dataset("PolyAI/minds14", name="en-US", split="train[:20]")
+>>> minds = load_dataset("PolyAI/minds14", name="en-US", split="train[:100]")
 ```
 
 Split the dataset's `train` split into a train and test set with the [`~Dataset.train_test_split`] method:
@@ -119,6 +119,15 @@ The MInDS-14 dataset has a sampling rate of 8000khz (you can find this informati
  'transcription': "hi I'm trying to use the banking app on my phone and currently my checking and savings account balance is not refreshing"}
 ```
 
+As you can see in the `transcription` above, the text contains a mix of upper and lowercase characters. The Wav2Vec2 tokenizer is only trained on uppercase characters so you'll need to make sure the text matches the tokenizer's vocabulary:
+
+```py
+>>> def uppercase(example):
+...     return {"transcription": example["transcription"].upper()}
+
+>>> minds = minds.map(uppercase)
+```
+
 Now create a preprocessing function that:
 
 1. Calls the `audio` column to load and resample the audio file.
@@ -153,7 +162,7 @@ Unlike other data collators, this specific data collator needs to apply a differ
 ... class DataCollatorCTCWithPadding:
 
 ...     processor: AutoProcessor
-...     padding: Union[bool, str] = True
+...     padding: Union[bool, str] = "longest"
 
 ...     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
 ...         # split inputs and labels since they have to be of different lengths and need
@@ -176,7 +185,7 @@ Unlike other data collators, this specific data collator needs to apply a differ
 Now instantiate your `DataCollatorForCTCWithPadding`:
 
 ```py
->>> data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
+>>> data_collator = DataCollatorCTCWithPadding(processor=processor, padding="longest")
 ```
 
 ## Evaluate
@@ -242,18 +251,22 @@ At this point, only three steps remain:
 ```py
 >>> training_args = TrainingArguments(
 ...     output_dir="my_awesome_asr_mind_model",
-...     evaluation_strategy="epoch",
-...     save_strategy="epoch",
-...     learning_rate=1e-4,
-...     group_by_length=True,
 ...     per_device_train_batch_size=8,
+...     gradient_accumulation_steps=2,
+...     learning_rate=1e-5,
+...     warmup_steps=500,
+...     max_steps=2000,
 ...     gradient_checkpointing=True,
-...     per_device_eval_batch_size=8,
 ...     fp16=True,
-...     num_train_epochs=3,
-...     warmup_ratio=0.1,
-...     logging_steps=10,
+...     group_by_length=True,
+...     evaluation_strategy="steps",
+...     per_device_eval_batch_size=8,
+...     save_steps=1000,
+...     eval_steps=1000,
+...     logging_steps=25,
 ...     load_best_model_at_end=True,
+...     metric_for_best_model="wer",
+...     greater_is_better=False,
 ...     push_to_hub=True,
 ... )
 
@@ -301,19 +314,19 @@ Load an audio file you'd like to run inference on. Remember to resample the samp
 
 The simplest way to try out your finetuned model for inference is to use it in a [`pipeline`]. Instantiate a `pipeline` for automatic speech recognition with your model, and pass your audio file to it:
 
-<Tip>
-
-The results aren't very good because the model was only trained on a few examples to quickly demonstrate the process. Try finetuning your own model on the full dataset to get better results!
-
-</Tip>
-
 ```py
 >>> from transformers import pipeline
 
 >>> transcriber = pipeline("automatic-speech-recognition", model="stevhliu/my_awesome_asr_minds_model")
 >>> transcriber(audio_file)
-{'text': "ALDCBC</s>COCB</s>DCBDBCBRBCDCTCRWKDBK<s></s>KODT</s>C</s>T</s>C</s>OD<s>B</s>BCTOR</s>AKDOBODTCTEDQOATDVDKCDSKL<unk>KEKEPKNPKPADSRDSCLCQ<unk>ED<s>BDXAXDP<unk>KQDPWDKLEPRPKDTDRDPDNFRTADPLDSRDPDKDX<unk>XLXCXLCL</s>LCXLCLDT</s>TBLDLBLTLCB</s>BXTLTBLDTM</s>BLBLCLBLCLDT</s>LXCDTB</s>L</s>T</s>LTDK</s>TDTDTLOKDADPDSDT</s><unk>RDQTDDADSNDN</s>KD</s>T'DPNVPHKDPDRDRKRKD</s>PKDCQS<unk>X<unk>LTAQDXLXCTBCLBTQBCXBDQDTXM<unk>LCXL</s>CXT"}
+{'text': 'I WOUD LIKE O SET UP JOINT ACOUNT WTH Y PARTNER'}
 ```
+
+<Tip>
+
+The transcription is decent, but it could be better! Try finetuning your model on more examples to get even better results!
+
+</Tip>
 
 You can also manually replicate the results of the `pipeline` if you'd like:
 
@@ -346,7 +359,7 @@ Get the predicted `input_ids` with the highest probability, and use the processo
 >>> predicted_ids = torch.argmax(logits, dim=-1)
 >>> transcription = processor.batch_decode(predicted_ids)
 >>> transcription
-['ADCBC</s>COCBCODCBDBCBRBQCBC<unk>CDOQ<s>XOTC<unk>BT</s>C</s>ODCO</s>BCODOC</s>OKDOBNDTCT<unk>TOATDVDKCRDSKL<unk>NEKEPKPADSRDMDSCQ<unk>E<unk><s>BDX<unk>XDPLKQDPWDKLEDR</s>KDTDTCPDNFRTADPL<unk>DSRDPDKDO<unk>TLTALCTALCLT</s>TBLTCTBCBCBXTALTBLTBLTLTLBTBTLAL</s>TBTDOTDTDTLON<s>DADPDSDT</s><unk>EDBTKDDSNQDPNPNKD</s><unk>T<s>DPNVPEKRDPDRKRKPLPKDCQS<unk>TNQTDXLC<unk>TBTBTCXCTCTOXATCTC</s>CT']
+['I WOUL LIKE O SET UP JOINT ACOUNT WTH Y PARTNER']
 ```
 </pt>
 </frameworkcontent>
