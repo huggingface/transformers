@@ -16,8 +16,8 @@
 
 
 import math
-from multiprocessing import pool
 import warnings
+from multiprocessing import pool
 from typing import Optional, Tuple, Union
 
 import torch
@@ -26,12 +26,21 @@ from torch.nn import CrossEntropyLoss
 from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutput,
-    Seq2SeqLMOutput,
-    Seq2SeqModelOutput,
-)
+from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...models.longformer import LongformerConfig, LongformerModel
+from ...models.t5.configuration_t5 import T5Config
+from ...models.t5.modeling_t5 import (
+    __HEAD_MASK_WARNING_MSG,
+    T5Attention,
+    T5DenseActDense,
+    T5DenseGatedActDense,
+    T5EncoderModel,
+    T5ForConditionalGeneration,
+    T5LayerNorm,
+    T5Model,
+    T5Stack,
+)
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -41,22 +50,6 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_manta import MantaConfig
-from ...models.t5.configuration_t5 import T5Config
-from ...models.t5.modeling_t5 import (
-    T5LayerNorm,
-    T5Model,
-    T5ForConditionalGeneration,
-    T5EncoderModel,
-    T5DenseActDense,
-    T5DenseGatedActDense,
-    T5Attention,
-    T5Stack,
-    __HEAD_MASK_WARNING_MSG,
-)
-from ...models.longformer import (
-    LongformerConfig,
-    LongformerModel
-)
 
 
 logger = logging.get_logger(__name__)
@@ -69,6 +62,7 @@ MANTA_PRETRAINED_MODEL_ARCHIVE_LIST = []
 
 def gaussian_pdf(x):
     return torch.exp(-x * x / 2.0)
+
 
 def pad_block_embeddings(block_embeddings, pad_length):
     if not pad_length:
@@ -83,53 +77,6 @@ def pad_block_embeddings(block_embeddings, pad_length):
     )
     return torch.cat([block_embeddings[:, :pad_length, :], padding_tensor], dim=1)
 
-class MantaHighway(torch.nn.Module):
-    """
-    A [Highway layer](https://arxiv.org/abs/1505.00387) does a gated combination of a linear
-    transformation and a non-linear transformation of its input.  :math:`y = g * x + (1 - g) *
-    f(A(x))`, where :math:`A` is a linear transformation, :math:`f` is an element-wise
-    non-linearity, and :math:`g` is an element-wise gate, computed as :math:`sigmoid(B(x))`.
-    This module will apply a fixed number of highway layers to its input, returning the final
-    result.
-    # Parameters
-    input_dim : `int`, required
-        The dimensionality of :math:`x`.  We assume the input has shape `(batch_size, ...,
-        input_dim)`.
-    num_layers : `int`, optional (default=`1`)
-        The number of highway layers to apply to the input.
-    activation : `Callable[[torch.Tensor], torch.Tensor]`, optional (default=`torch.nn.functional.relu`)
-        The non-linearity to use in the highway layers.
-    """
-
-    def __init__(
-        self,
-        input_dim,
-        num_layers=1,
-        activation="relu",
-    ) -> None:
-        super().__init__()
-        self._input_dim = input_dim
-        self._layers = torch.nn.ModuleList([torch.nn.Linear(input_dim, input_dim * 2) for _ in range(num_layers)])
-        self._activation = getattr(torch.nn.functional, activation)
-        for layer in self._layers:
-            # We should bias the highway layer to just carry its input forward.  We do that by
-            # setting the bias on `B(x)` to be positive, because that means `g` will be biased to
-            # be high, so we will carry the input forward.  The bias on `B(x)` is the second half
-            # of the bias vector in each Linear layer.
-            layer.bias[input_dim:].data.fill_(1)
-
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        current_input = inputs
-        for layer in self._layers:
-            projected_input = layer(current_input)
-            linear_part = current_input
-            # NOTE: if you modify this, think about whether you should modify the initialization
-            # above, too.
-            nonlinear_part, gate = projected_input.chunk(2, dim=-1)
-            nonlinear_part = self._activation(nonlinear_part)
-            gate = torch.sigmoid(gate)
-            current_input = gate * linear_part + (1 - gate) * nonlinear_part
-        return current_input
 
 class MantaFrontierPredictor(nn.Module):
     def __init__(
@@ -175,6 +122,7 @@ class MantaFrontierPredictor(nn.Module):
 
         return frontier_predictions
 
+
 class MantaConvFeatures(nn.Module):
     def __init__(
         self,
@@ -207,9 +155,9 @@ class MantaConvFeatures(nn.Module):
 
         left_pad = (kernel_size - 1) // 2
         self.pad = (left_pad, kernel_size - 1 - left_pad)
-        
+
         self.reset_parameters()
-    
+
     def reset_parameters(self):
         """
         See https://pytorch.org/docs/stable/_modules/torch/nn/modules/conv.html#Conv1d, in the `_ConvNd` class :
@@ -279,6 +227,7 @@ class MantaConvFeatures(nn.Module):
             self.in_channels, self.out_channels, self.kernel_size, self.groups
         )
 
+
 class MantaCachedConvolutionPooling(nn.Module):
     def __init__(
         self,
@@ -288,32 +237,25 @@ class MantaCachedConvolutionPooling(nn.Module):
         hidden_dim,
         depthwise_convolution,
         variance_regularization,
-        n_highway_layers,
-        highway_activation,
         mean_pool,
     ):
         super().__init__()
         self.padding_length = padding_length
-
+        self.output_dim = output_dim
         self.kernel_size = kernel_size
         self.hidden_dim = hidden_dim
-        self.conv_output_dim = hidden_dim if isinstance(kernel_size, int) else sum([k_dim[1] for k_dim in kernel_size])
-
-        self.eps = None
+        self.depthwise_convolution = depthwise_convolution
         self.variance_regularization = variance_regularization
-
-        self.conv_layer = None
-        self.highway = MantaHighway(self.conv_output_dim, n_highway_layers, highway_activation)
-        # Since the sum of the hidden dimensions of all the filters might not match the language model hidden size, we
-        # specify it here
-        self.out_projection = nn.Linear(self.conv_output_dim, output_dim, bias=True)
-
         self.mean_pool = mean_pool
 
-        self.depthwise_convolution = depthwise_convolution
+        if isinstance(self.kernel_size, int):
+            self.kernel_size = [[self.kernel_size, hidden_dim]]
 
-        if isinstance(kernel_size, int):
-            kernel_size = [[kernel_size, hidden_dim]]
+        self.conv_output_dim = sum([k_dim[1] for k_dim in self.kernel_size])
+
+        # Since the sum of the hidden dimensions of all the filters might not match the language model hidden size, we
+        # specify it here
+        self.out_projection = nn.Linear(self.conv_output_dim, self.output_dim, bias=True)
 
         self.conv_layers = nn.Sequential(
             *[
@@ -321,7 +263,9 @@ class MantaCachedConvolutionPooling(nn.Module):
                 for (k, h) in kernel_size
             ]
         )
-        self.mean_pool = mean_pool
+
+        self.eps = None
+        self.conv_layer = None
 
     def forward(self, unconstrained_separation_probs: torch.Tensor, byte_embeddings: torch.Tensor):
         device = unconstrained_separation_probs.device
@@ -331,7 +275,7 @@ class MantaCachedConvolutionPooling(nn.Module):
 
         if self.conv_layer is not None:
             self.conv_layer = self.conv_layer.to(device)
-        batch_size, seq_len, emb_dims = byte_embeddings.shape
+        batch_size, seq_len = byte_embeddings.shape[:2]
 
         # We set the probability of the first token to be 0 therwise the cumsum will not work
         separation_probs = unconstrained_separation_probs.clone()
@@ -373,7 +317,6 @@ class MantaCachedConvolutionPooling(nn.Module):
         pad_length = min(self.padding_length, max_nb_blocks)
 
         block_embeddings = pad_block_embeddings(block_embeddings, pad_length)
-        block_embeddings = self.highway(block_embeddings)
         block_embeddings = self.out_projection(block_embeddings)
 
         return block_embeddings
@@ -490,6 +433,7 @@ class MantaPreTrainedModel(PreTrainedModel):
             module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (T5Attention, T5Stack)):
             module.gradient_checkpointing = value
@@ -543,15 +487,13 @@ class MantaModel(MantaPreTrainedModel):
         )
 
         self.pooler = MantaCachedConvolutionPooling(
-            variance_regularization=config.pooling_variance_regularization,
-            kernel_size=config.pooling_kernel_size,
-            n_highway_layers=config.pooling_n_highway_layers,
-            highway_activation=config.pooling_highway_activation,
-            depthwise_convolution=config.pooling_depthwise_convolution,
-            mean_pool=config.pooling_mean_pool,
-            output_dim=config.d_model,
             padding_length=config.max_length_encoder_decoder,
+            output_dim=config.d_model,
+            kernel_size=config.pooling_kernel_size,
             hidden_dim=config.byte_embedding_dim,
+            depthwise_convolution=config.pooling_depthwise_convolution,
+            variance_regularization=config.pooling_variance_regularization,
+            mean_pool=config.pooling_mean_pool,
         )
 
         self.encoder_decoder = T5Model(
@@ -598,7 +540,7 @@ class MantaModel(MantaPreTrainedModel):
         """
         for layer, heads in heads_to_prune.items():
             self.encoder_decoder.encoder.layer[layer].attention.prune_heads(heads)
-    
+
     def _compute_pooled_representations(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -607,11 +549,11 @@ class MantaModel(MantaPreTrainedModel):
     ):
         if inputs_embeds is None and input_ids is None:
             return None
-        
+
         byte_embeddings = inputs_embeds if inputs_embeds is not None else self.byte_embeddings(input_ids)
-        
+
         frontier_predictions = self.frontier_predictor(byte_embeddings, attention_mask)
-        
+
         pooled_representations = self.pooler(frontier_predictions, byte_embeddings)
 
         return pooled_representations
@@ -666,16 +608,10 @@ class MantaModel(MantaPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        pooled_representations = self._compute_pooled_representations(
-            input_ids,
-            attention_mask,
-            inputs_embeds
-        )
+        pooled_representations = self._compute_pooled_representations(input_ids, attention_mask, inputs_embeds)
 
         decoder_pooled_representations = self._compute_pooled_representations(
-            decoder_input_ids,
-            decoder_attention_mask,
-            decoder_inputs_embeds
+            decoder_input_ids, decoder_attention_mask, decoder_inputs_embeds
         )
 
         return self.encoder_decoder(
@@ -691,6 +627,7 @@ class MantaModel(MantaPreTrainedModel):
             return_dict=return_dict,
             encoder_outputs=encoder_outputs,
         )
+
 
 @add_start_docstrings("""Manta Model with a `language modeling` head on top.""")
 class MantaForConditionalGeneration(MantaPreTrainedModel):
@@ -717,15 +654,13 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
         )
 
         self.pooler = MantaCachedConvolutionPooling(
-            variance_regularization=config.pooling_variance_regularization,
-            kernel_size=config.pooling_kernel_size,
-            n_highway_layers=config.pooling_n_highway_layers,
-            highway_activation=config.pooling_highway_activation,
-            depthwise_convolution=config.pooling_depthwise_convolution,
-            mean_pool=config.pooling_mean_pool,
-            output_dim=config.d_model,
             padding_length=config.max_length_encoder_decoder,
+            output_dim=config.d_model,
+            kernel_size=config.pooling_kernel_size,
             hidden_dim=config.byte_embedding_dim,
+            depthwise_convolution=config.pooling_depthwise_convolution,
+            variance_regularization=config.pooling_variance_regularization,
+            mean_pool=config.pooling_mean_pool,
         )
 
         self.encoder_decoder = T5Model(
@@ -772,7 +707,7 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
 
     def get_decoder(self):
         return self.encoder_decoder.decoder
-    
+
     def _compute_pooled_representations(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -781,15 +716,15 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
     ):
         if inputs_embeds is None and input_ids is None:
             return None
-        
+
         byte_embeddings = inputs_embeds if inputs_embeds is not None else self.byte_embeddings(input_ids)
-        
+
         frontier_predictions = self.frontier_predictor(byte_embeddings, attention_mask)
-        
+
         pooled_representations = self.pooler(frontier_predictions, byte_embeddings)
 
         return pooled_representations
-    
+
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -857,11 +792,7 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
 
-            pooled_representations = self._compute_pooled_representations(
-                input_ids,
-                attention_mask,
-                inputs_embeds
-            )
+            pooled_representations = self._compute_pooled_representations(input_ids, attention_mask, inputs_embeds)
             # Convert encoder inputs in embeddings if needed
             encoder_outputs = self.encoder_decoder.encoder(
                 inputs_embeds=pooled_representations,
@@ -882,7 +813,6 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
             # get decoder inputs from shifting lm labels to the right
             decoder_input_ids = self._shift_right(labels)
-        
 
         # Decode
         decoder_outputs = self.encoder_decoder.decoder(
@@ -1003,15 +933,13 @@ class MantaEncoderModel(MantaPreTrainedModel):
         )
 
         self.pooler = MantaCachedConvolutionPooling(
-            variance_regularization=config.pooling_variance_regularization,
-            kernel_size=config.pooling_kernel_size,
-            n_highway_layers=config.pooling_n_highway_layers,
-            highway_activation=config.pooling_highway_activation,
-            depthwise_convolution=config.pooling_depthwise_convolution,
-            mean_pool=config.pooling_mean_pool,
-            output_dim=config.d_model,
             padding_length=config.max_length_encoder_decoder,
+            output_dim=config.d_model,
+            kernel_size=config.pooling_kernel_size,
             hidden_dim=config.byte_embedding_dim,
+            depthwise_convolution=config.pooling_depthwise_convolution,
+            variance_regularization=config.pooling_variance_regularization,
+            mean_pool=config.pooling_mean_pool,
         )
 
         self.encoder = T5EncoderModel(
@@ -1056,7 +984,7 @@ class MantaEncoderModel(MantaPreTrainedModel):
         """
         for layer, heads in heads_to_prune.items():
             self.encoder_decoder.encoder.block[layer].layer[0].SelfAttention.prune_heads(heads)
-    
+
     def _compute_pooled_representations(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1067,9 +995,9 @@ class MantaEncoderModel(MantaPreTrainedModel):
             return None
 
         byte_embeddings = inputs_embeds if inputs_embeds is not None else self.byte_embeddings(input_ids)
-        
+
         frontier_predictions = self.frontier_predictor(byte_embeddings, attention_mask)
-        
+
         pooled_representations = self.pooler(frontier_predictions, byte_embeddings)
 
         return pooled_representations
@@ -1107,11 +1035,7 @@ class MantaEncoderModel(MantaPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        pooled_representations = self._compute_pooled_representations(
-            input_ids,
-            attention_mask,
-            inputs_embeds
-        )
+        pooled_representations = self._compute_pooled_representations(input_ids, attention_mask, inputs_embeds)
 
         encoder_outputs = self.encoder(
             inputs_embeds=pooled_representations,

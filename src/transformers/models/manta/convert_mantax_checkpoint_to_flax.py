@@ -39,7 +39,9 @@ def convert_mantax_checkpoint_to_flax(mantax_checkpoint_path, config_name, flax_
         mantax_attention_value = mantax_model["target"]["encoder"][layer_name]["attention"]["value"]["kernel"]
 
         # Layer Normalization
-        mantax_attention_layer_norm = mantax_model["target"]["encoder"][layer_name]["pre_attention_layer_norm"]["scale"]
+        mantax_attention_layer_norm = mantax_model["target"]["encoder"][layer_name]["pre_attention_layer_norm"][
+            "scale"
+        ]
 
         if split_mlp_wi:
             mantax_mlp_wi_0 = mantax_model["target"]["encoder"][layer_name]["mlp"]["wi_0"]["kernel"]
@@ -110,26 +112,28 @@ def convert_mantax_checkpoint_to_flax(mantax_checkpoint_path, config_name, flax_
         mantax_attention_value = mantax_model["target"]["decoder"][layer_name]["self_attention"]["value"]["kernel"]
 
         # Layer Normalization
-        mantax_pre_attention_layer_norm = mantax_model["target"]["decoder"][layer_name]["pre_self_attention_layer_norm"][
-            "scale"
-        ]
+        mantax_pre_attention_layer_norm = mantax_model["target"]["decoder"][layer_name][
+            "pre_self_attention_layer_norm"
+        ]["scale"]
 
         # Encoder-Decoder-Attention
-        mantax_enc_dec_attention_key = mantax_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["key"][
-            "kernel"
-        ]
-        mantax_enc_dec_attention_out = mantax_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["out"][
-            "kernel"
-        ]
-        mantax_enc_dec_attention_query = mantax_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["query"][
-            "kernel"
-        ]
-        mantax_enc_dec_attention_value = mantax_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["value"][
-            "kernel"
-        ]
+        mantax_enc_dec_attention_key = mantax_model["target"]["decoder"][layer_name]["encoder_decoder_attention"][
+            "key"
+        ]["kernel"]
+        mantax_enc_dec_attention_out = mantax_model["target"]["decoder"][layer_name]["encoder_decoder_attention"][
+            "out"
+        ]["kernel"]
+        mantax_enc_dec_attention_query = mantax_model["target"]["decoder"][layer_name]["encoder_decoder_attention"][
+            "query"
+        ]["kernel"]
+        mantax_enc_dec_attention_value = mantax_model["target"]["decoder"][layer_name]["encoder_decoder_attention"][
+            "value"
+        ]["kernel"]
 
         # Layer Normalization
-        mantax_cross_layer_norm = mantax_model["target"]["decoder"][layer_name]["pre_cross_attention_layer_norm"]["scale"]
+        mantax_cross_layer_norm = mantax_model["target"]["decoder"][layer_name]["pre_cross_attention_layer_norm"][
+            "scale"
+        ]
 
         # MLP
         if split_mlp_wi:

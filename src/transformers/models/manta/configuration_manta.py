@@ -27,7 +27,6 @@ MANTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class MantaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MantaModel`] or a [`TFMantaModel`]. It is used to
@@ -55,11 +54,6 @@ class MantaConfig(PretrainedConfig):
             Size(s) of the 1D-convolution kernel(s) used for the byte pooling operation in the tokenization module. Providing an integer
             will imply using a convolution filter of `(pooling_kernel_size, byte_embedding_dim)`. Several kernel sizes can be provided
             in the form `[(kernel_size, num_channels), ...]`. These will be concatenated in the style of [Character BERT](https://arxiv.org/pdf/2010.10392.pdf).
-        pooling_n_highway_layers (`int`, *optional*, defaults to 0):
-            Number of highway layers after the convolution in the pooling operation.
-            This allows to mimic the pooling operation of [Character BERT](https://arxiv.org/pdf/2010.10392.pdf).
-        pooling_highway_activation (`string`, *optional*, defaults to `"relu"`):
-            Activation function used for the highway layers in the pooling operation. Any function name from `torch.nn.functional` can be used.
         pooling_depthwise_convolution (`bool`, *optional*, defaults to `True`):
             Activates depthwise convolution in the pooling operation of the tokenization module. Depthwise convolution will be faster, but might be
             less powerful than normal convolution, and impedes using different number of channels.
@@ -110,8 +104,6 @@ class MantaConfig(PretrainedConfig):
         frontier_predictor_attention_window=16,
         pooling_variance_regularization=1.0e-6,
         pooling_kernel_size=3,
-        pooling_n_highway_layers=0,
-        pooling_highway_activation="relu",
         pooling_depthwise_convolution=True,
         pooling_mean_pool=False,
         max_length_encoder_decoder=256,
@@ -134,17 +126,15 @@ class MantaConfig(PretrainedConfig):
         **kwargs
     ):
         self.vocab_size = vocab_size
-        self.byte_embedding_dim=byte_embedding_dim
-        self.frontier_predictor_num_layers=frontier_predictor_num_layers
-        self.frontier_predictor_num_attention_heads=frontier_predictor_num_attention_heads
-        self.frontier_predictor_attention_window=frontier_predictor_attention_window
-        self.pooling_variance_regularization=pooling_variance_regularization
-        self.pooling_kernel_size=pooling_kernel_size
-        self.pooling_n_highway_layers=pooling_n_highway_layers
-        self.pooling_highway_activation=pooling_highway_activation
-        self.pooling_depthwise_convolution=pooling_depthwise_convolution
-        self.pooling_mean_pool=pooling_mean_pool
-        self.max_length_encoder_decoder=max_length_encoder_decoder
+        self.byte_embedding_dim = byte_embedding_dim
+        self.frontier_predictor_num_layers = frontier_predictor_num_layers
+        self.frontier_predictor_num_attention_heads = frontier_predictor_num_attention_heads
+        self.frontier_predictor_attention_window = frontier_predictor_attention_window
+        self.pooling_variance_regularization = pooling_variance_regularization
+        self.pooling_kernel_size = pooling_kernel_size
+        self.pooling_depthwise_convolution = pooling_depthwise_convolution
+        self.pooling_mean_pool = pooling_mean_pool
+        self.max_length_encoder_decoder = max_length_encoder_decoder
         self.d_model = d_model
         self.d_kv = d_kv
         self.d_ff = d_ff
@@ -171,8 +161,12 @@ class MantaConfig(PretrainedConfig):
                 "Please make sure `feed_forward_proj` is of the format `gated-{ACT_FN}` or `{ACT_FN}`, e.g. "
                 "'gated-gelu' or 'relu'"
             )
-        
-        if pooling_depthwise_convolution and isinstance(pooling_kernel_size, list) and any(size!=byte_embedding_dim for _, size in pooling_kernel_size):
+
+        if (
+            pooling_depthwise_convolution
+            and isinstance(pooling_kernel_size, list)
+            and any(size != byte_embedding_dim for _, size in pooling_kernel_size)
+        ):
             raise ValueError(
                 f"`pooling_kernel_size`: {pooling_kernel_size} is not a valid list of kernels when `pooling_depthwise_convolution` is True. Please set all"
                 f"kernel dimensions to {byte_embedding_dim} (=`byte_embedding_dim`) or `pooling_depthwise_convolution` to False."

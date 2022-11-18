@@ -50,7 +50,8 @@ if __name__ == "__main__":
         type=str,
         required=True,
         help=(
-            "The config json file corresponding to the pre-trained Manta model. \nThis specifies the model architecture."
+            "The config json file corresponding to the pre-trained Manta model. "
+            "\nThis specifies the model architecture."
         ),
     )
     parser.add_argument(
