@@ -40,19 +40,19 @@ class GenerationConfig(PushToHubMixin):
 
     <Tip>
 
-    A configuration file can be loaded and saved to disk. Loading and using a generation configuration file does
+    A generation configuration file can be loaded and saved to disk. Loading and using a generation configuration file does
     **not** change a model configuration or weights. It only affects the model's behavior at generation time.
 
     </Tip>
 
     Arg:
-        max_length (`int`, *optional*, defaults to `20`):
+        max_length (`int`, *optional*, defaults to 20):
             The maximum length the generated tokens can have. Corresponds to the length of the input prompt +
             `max_new_tokens`. In general, prefer the use of `max_new_tokens`, which ignores the number of tokens in the
             prompt.
         max_new_tokens (`int`, *optional*):
             The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
-        min_length (`int`, *optional*, defaults to `0`):
+        min_length (`int`, *optional*, defaults to 0):
             The minimum length of the sequence to be generated.
         early_stopping (`bool`, *optional*, defaults to `False`):
             Whether to stop the beam search when at least `num_beams` sentences are finished per batch or not.
@@ -61,35 +61,35 @@ class GenerationConfig(PushToHubMixin):
             the current pass after allocated time has been passed.
         do_sample (`bool`, *optional*, defaults to `False`):
             Whether or not to use sampling ; use greedy decoding otherwise.
-        num_beams (`int`, *optional*, defaults to `1`):
+        num_beams (`int`, *optional*, defaults to 1):
             Number of beams for beam search. 1 means no beam search.
-        num_beam_groups (`int`, *optional*, defaults to `1`):
+        num_beam_groups (`int`, *optional*, defaults to 1):
             Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
             [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
         penalty_alpha (`float`, *optional*):
             The values balance the model confidence and the degeneration penalty in contrastive search decoding.
-        temperature (`float`, *optional*, defaults to `1.0`):
+        temperature (`float`, *optional*, defaults to 1.0):
             The value used to module the next token probabilities.
-        top_k (`int`, *optional*, defaults to `50`):
+        top_k (`int`, *optional*, defaults to 50):
             The number of highest probability vocabulary tokens to keep for top-k-filtering.
-        top_p (`float`, *optional*, defaults to `1.0`):
+        top_p (`float`, *optional*, defaults to 1.0):
             If set to float < 1, only the smallest set of most probable tokens with probabilities that add up to
             `top_p` or higher are kept for generation.
-        typical_p (`float`, *optional*, defaults to `1.0`):
+        typical_p (`float`, *optional*, defaults to 1.0):
             The amount of probability mass from the original distribution to be considered in typical decoding. If set
             to 1.0 it takes no effect. See [this paper](https://arxiv.org/pdf/2202.00666.pdf) for more details.
-        diversity_penalty (`float`, *optional*, defaults to `0.0`):
+        diversity_penalty (`float`, *optional*, defaults to 0.0):
             This value is subtracted from a beam's score if it generates a token same as any beam from other group at a
             particular time. Note that `diversity_penalty` is only effective if `group beam search` is enabled.
-        repetition_penalty (`float`, *optional*, defaults to `1.0`):
+        repetition_penalty (`float`, *optional*, defaults to 1.0):
             The parameter for repetition penalty. 1.0 means no penalty. See [this
             paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
-        length_penalty (`float`, *optional*, defaults to `1.0`):
+        length_penalty (`float`, *optional*, defaults to 1.0):
             Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent to
             the sequence length, which in turn is used to divide the score of the sequence. Since the score is the log
             likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences, while
             `length_penalty` < 0.0 encourages shorter sequences.
-        no_repeat_ngram_size (`int`, *optional*, defaults to `0`):
+        no_repeat_ngram_size (`int`, *optional*, defaults to 0):
             If set to int > 0, all ngrams of that size can only occur once.
         bad_words_ids(`List[List[int]]`, *optional*):
             List of token ids that are not allowed to be generated. In order to get the token ids of the words that
@@ -130,7 +130,7 @@ class GenerationConfig(PushToHubMixin):
             A list of pairs of integers which indicates a mapping from generation indices to token indices that will be
             forced before sampling. For example, `[[1, 123]]` means the second generated token will always be a token
             of index 123.
-        num_return_sequences(`int`, *optional*, defaults to `1`):
+        num_return_sequences(`int`, *optional*, defaults to 1):
             The number of independently computed returned sequences for each element in the batch.
         output_attentions (`bool`, *optional*, defaults to `False`):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -148,7 +148,7 @@ class GenerationConfig(PushToHubMixin):
             The id of the *beginning-of-sequence* token.
         eos_token_id (`int`, *optional*):
             The id of the *end-of-sequence* token.
-        encoder_no_repeat_ngram_size (`int`, *optional*, defaults to `0`):
+        encoder_no_repeat_ngram_size (`int`, *optional*, defaults to 0):
             If set to int > 0, all ngrams of that size that occur in the `encoder_input_ids` cannot occur in the
             `decoder_input_ids`.
         decoder_start_token_id (`int`, *optional*):
