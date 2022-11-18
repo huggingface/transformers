@@ -31,6 +31,7 @@ deps = {
     "jieba": "jieba",
     "kenlm": "kenlm",
     "nltk": "nltk",
+    "natten": "natten>=0.14.4",
     "numpy": "numpy>=1.17",
     "onnxconverter-common": "onnxconverter-common",
     "onnxruntime-tools": "onnxruntime-tools>=1.4.2",
