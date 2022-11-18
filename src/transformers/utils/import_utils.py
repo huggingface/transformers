@@ -508,6 +508,10 @@ def is_bitsandbytes_available():
     return importlib.util.find_spec("bitsandbytes") is not None
 
 
+def is_torchdistx_available():
+    return importlib.util.find_spec("torchdistx") is not None
+
+
 def is_faiss_available():
     return _faiss_available
 
