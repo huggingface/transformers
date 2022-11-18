@@ -39,7 +39,7 @@ class Text2TextGenerationPipeline(Pipeline):
     [{'generated_text': 'question: Who created the RuPERTa-base?'}]
     ```
 
-    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
 
     This Text2TextGenerationPipeline pipeline can currently be loaded from [`pipeline`] using the following task

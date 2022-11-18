@@ -40,7 +40,7 @@ class ImageToTextPipeline(Pipeline):
     [{'generated_text': 'two birds are standing next to each other '}]
     ```
 
-    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     This image to text pipeline can currently be loaded from pipeline() using the following task identifier:
     "image-to-text".

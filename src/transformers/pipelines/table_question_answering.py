@@ -107,7 +107,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
     {'answer': 'AVERAGE > 36542', 'coordinates': [(0, 1)], 'cells': ['36542'], 'aggregator': 'AVERAGE'}
     ```
 
-    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     This tabular question answering pipeline can currently be loaded from [`pipeline`] using the following task
     identifier: `"table-question-answering"`.

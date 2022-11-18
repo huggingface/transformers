@@ -236,7 +236,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
     {'score': 0.9191, 'start': 34, 'end': 40, 'answer': 'Berlin'}
     ```
 
-    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     This question answering pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"question-answering"`.
