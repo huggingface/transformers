@@ -2288,20 +2288,7 @@ def generalized_box_iou(boxes1, boxes2):
     return iou - (area - union) / area
 
 
-# Copied from transformers.image_transforms._center_to_corners_format_torch -> center_to_corners_format
-def center_to_corners_format(bboxes_center):
-    """
-    Converts bounding boxes from center format (center_x, center_y, width, height) to corners format (x_0, y_1, x_1,
-    y_1).
-    """
-    x_c, y_c, w, h = bboxes_center.unbind(-1)
-    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
-    return torch.stack(b, dim=-1)
-
-
 # below: taken from https://github.com/facebookresearch/detr/blob/master/util/misc.py#L306
-
-
 def _max_by_axis(the_list):
     # type: (List[List[int]]) -> List[int]
     maxes = the_list[0]

@@ -1933,14 +1933,3 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     else:
         raise ValueError("Only 3-dimensional tensors are supported")
     return NestedTensor(tensor, mask)
-
-
-# Copied from transformers.image_transforms._center_to_corners_format_torch -> center_to_corners_format
-def center_to_corners_format(bboxes_center):
-    """
-    Converts bounding boxes from center format (center_x, center_y, width, height) to corners format (x_0, y_1, x_1,
-    y_1).
-    """
-    x_c, y_c, w, h = bboxes_center.unbind(-1)
-    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
-    return torch.stack(b, dim=-1)
