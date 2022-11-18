@@ -612,7 +612,11 @@ def _load_state_dict_into_meta_model(
             param_device = device_map[module_name]
         if param_device == "disk":
             if shard_file is not None and shard_file.endswith(".safetensors"):
-                offload_index[param_name] = {"safetensors_file": shard_file, "weight_name": param_name, "dtype": str_dtype}
+                offload_index[param_name] = {
+                    "safetensors_file": shard_file,
+                    "weight_name": param_name,
+                    "dtype": str_dtype,
+                }
             else:
                 offload_index = offload_weight(param, param_name, offload_folder, offload_index)
         elif param_device == "cpu" and state_dict_index is not None:
@@ -2336,7 +2340,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
 
-            model, missing_keys, unexpected_keys, mismatched_keys, offload_files, error_msgs = cls._load_pretrained_model(
+            (
+                model,
+                missing_keys,
+                unexpected_keys,
+                mismatched_keys,
+                offload_files,
+                error_msgs,
+            ) = cls._load_pretrained_model(
                 model,
                 state_dict,
                 loaded_state_dict_keys,  # XXX: rename?
@@ -2399,7 +2410,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             from .utils.bitsandbytes import set_module_8bit_tensor_to_device
 
         if device_map is not None and "disk" in device_map.values():
-            archive_file = resolved_archive_file[0] if isinstance(resolved_archive_file, (list, tuple)) else resolved_archive_file
+            archive_file = (
+                resolved_archive_file[0] if isinstance(resolved_archive_file, (list, tuple)) else resolved_archive_file
+            )
             is_safetensors = archive_file.endswith(".safetensors")
             if offload_folder is None and not is_safetensors:
                 raise ValueError(
