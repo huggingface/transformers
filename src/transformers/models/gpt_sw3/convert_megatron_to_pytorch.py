@@ -172,16 +172,9 @@ def copy_config(config_hf, config_megatron):
     config_hf.scale_attn_weights = config_megatron["apply_query_key_layer_scaling"]  # True
     config_hf.normalize_attention_scores = True
     config_hf.use_cache = False
-    config_hf.bos_token_id = 1  # TODO: check this
-    config_hf.eos_token_id = 1  # TODO: check this
-    config_hf.pad_token_id = 1  # TODO: check this
-
-    # TODO: FIGURE OUT WHAT THIS IS!
-    config_hf.summary_type = "cls_index"
-    config_hf.summary_use_proj = True
-    config_hf.summary_activation = None
-    config_hf.summary_proj_to_labels = True
-    config_hf.summary_first_dropout = 0.1
+    config_hf.bos_token_id = 1
+    config_hf.eos_token_id = 1
+    config_hf.pad_token_id = 1
 
     return config_hf
 
@@ -209,18 +202,14 @@ def main(args):
     if args.print_checkpoint_structure:
         recursive_print(None, sd_hf)
 
-    tokenizer_model_name = "gpt2"
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_model_name)
-    tokenizer_class = type(tokenizer).__name__
-    config_hf.tokenizer_class = tokenizer_class
+    config_hf.tokenizer_class = "GptSw3Tokenizer"
 
+    # TODO: investigate what should be saved here, especially considering we only use spiece.model as tokenizer
+    #  1. config is probably correct
+    #  2. torch.save for model is probably correct
     # Store the config to file.
     print("Saving config")
     config_hf.save_pretrained(save_path)
-
-    # Save tokenizer based on args
-    print(f"Adding {tokenizer_class} tokenizer files")
-    tokenizer.save_pretrained(save_path)
 
     # Store the state_dict to file.
     output_checkpoint_file = os.path.join(save_path, "pytorch_model.bin")
