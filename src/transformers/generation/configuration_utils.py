@@ -40,12 +40,14 @@ class GenerationConfig(PushToHubMixin):
 
     <Tip>
 
-    A generation configuration file can be loaded and saved to disk. Loading and using a generation configuration file does
-    **not** change a model configuration or weights. It only affects the model's behavior at generation time.
+    A generation configuration file can be loaded and saved to disk. Loading and using a generation configuration file
+    does **not** change a model configuration or weights. It only affects the model's behavior at generation time.
 
     </Tip>
 
     Arg:
+        > Parameters that control the length of the output
+
         max_length (`int`, *optional*, defaults to 20):
             The maximum length the generated tokens can have. Corresponds to the length of the input prompt +
             `max_new_tokens`. In general, prefer the use of `max_new_tokens`, which ignores the number of tokens in the
@@ -59,6 +61,9 @@ class GenerationConfig(PushToHubMixin):
         max_time(`float`, *optional*):
             The maximum amount of time you allow the computation to run for in seconds. generation will still finish
             the current pass after allocated time has been passed.
+
+        > Parameters that control the generation strategy used
+
         do_sample (`bool`, *optional*, defaults to `False`):
             Whether or not to use sampling ; use greedy decoding otherwise.
         num_beams (`int`, *optional*, defaults to 1):
@@ -68,6 +73,9 @@ class GenerationConfig(PushToHubMixin):
             [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
         penalty_alpha (`float`, *optional*):
             The values balance the model confidence and the degeneration penalty in contrastive search decoding.
+
+        > Parameters for manipulation of the model output logits
+
         temperature (`float`, *optional*, defaults to 1.0):
             The value used to module the next token probabilities.
         top_k (`int`, *optional*, defaults to 50):
@@ -130,6 +138,9 @@ class GenerationConfig(PushToHubMixin):
             A list of pairs of integers which indicates a mapping from generation indices to token indices that will be
             forced before sampling. For example, `[[1, 123]]` means the second generated token will always be a token
             of index 123.
+
+        > Parameters that define the output variables of `generate`
+
         num_return_sequences(`int`, *optional*, defaults to 1):
             The number of independently computed returned sequences for each element in the batch.
         output_attentions (`bool`, *optional*, defaults to `False`):
@@ -142,17 +153,26 @@ class GenerationConfig(PushToHubMixin):
             Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
         return_dict_in_generate (`bool`, *optional*, defaults to `False`):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+
+        > Special tokens that can be used at generation time
+
         pad_token_id (`int`, *optional*):
             The id of the *padding* token.
         bos_token_id (`int`, *optional*):
             The id of the *beginning-of-sequence* token.
         eos_token_id (`int`, *optional*):
             The id of the *end-of-sequence* token.
+
+        > Generation parameters exclusive to encoder-decoder models
+
         encoder_no_repeat_ngram_size (`int`, *optional*, defaults to 0):
             If set to int > 0, all ngrams of that size that occur in the `encoder_input_ids` cannot occur in the
             `decoder_input_ids`.
         decoder_start_token_id (`int`, *optional*):
             If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
+
+        > Wild card
+
         generation_kwargs:
             Additional generation kwargs will be forwarded to the `generate` function of the model. Kwargs that are not
             present in `generate`'s signature will be used in the model forward pass.
@@ -212,19 +232,21 @@ class GenerationConfig(PushToHubMixin):
 
         # The remaining attributes do not parametrize `.generate()`, but are informative and/or used by the the hub interface.
         self._commit_hash = kwargs.pop("_commit_hash", None)
-        self.transformers_version = kwargs.pop("transformers_version", None)
+        self.transformers_version = kwargs.pop("transformers_version", __version__)
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
+
+    def __repr__(self):
+        return f"{self.__class__.__name__} {self.to_json_string()}"
 
     def save_pretrained(
         self,
         save_directory: Union[str, os.PathLike],
-        config_name: Optional[str] = None,
+        config_file_name: Optional[Union[str, os.PathLike]] = None,
         push_to_hub: bool = False,
         **kwargs
     ):
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # REVIEWERS: As discussed on Slack, this config file has an argument to specify the file name (`config_name`),
-        # to facilitate the creation of multiple generation config files in the root directory of a model.
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         r"""
         Save a generation configuration object to the directory `save_directory`, so that it can be re-loaded using the
         [`~GenerationConfig.from_pretrained`] class method.
@@ -232,7 +254,7 @@ class GenerationConfig(PushToHubMixin):
         Args:
             save_directory (`str` or `os.PathLike`):
                 Directory where the configuration JSON file will be saved (will be created if it does not exist).
-            config_name (`str`, *optional*, defaults to `"generation_config.json"`):
+            config_file_name (`str` or `os.PathLike`, *optional*, defaults to `"generation_config.json"`):
                 Name of the generation configuration JSON file to be saved in `save_directory`.
             push_to_hub (`bool`, *optional*, defaults to `False`):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
@@ -241,7 +263,7 @@ class GenerationConfig(PushToHubMixin):
             kwargs:
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        config_name = config_name if config_name is not None else GENERATION_CONFIG_NAME
+        config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
 
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -254,12 +276,8 @@ class GenerationConfig(PushToHubMixin):
             repo_id, token = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
-        output_config_file = os.path.join(save_directory, config_name)
+        output_config_file = os.path.join(save_directory, config_file_name)
 
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # REVIEWERS: maybe we want to store all generation attributes that are non-None (and not just the diff)?
-        # That seems more robust against future changes.
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         self.to_json_file(output_config_file, use_diff=True)
         logger.info(f"Configuration saved in {output_config_file}")
 
@@ -270,15 +288,11 @@ class GenerationConfig(PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-        cls, pretrained_model_name: Union[str, os.PathLike], config_name: Optional[str] = None, **kwargs
+        cls,
+        pretrained_model_name: Union[str, os.PathLike],
+        config_file_name: Optional[Union[str, os.PathLike]] = None,
+        **kwargs
     ) -> "GenerationConfig":
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # REVIEWERS: Contrarily to the model config, the first argument is a folder (as opposed to a folder OR a
-        # file). This is because saving the generation config expects two arguments as well: the folder and the file
-        # name.
-
-        # I think maintaing consistency with its save function is more important than with other config classes.
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         r"""
         Instantiate a [`GenerationConfig`] from a generation configuration file.
 
@@ -291,7 +305,7 @@ class GenerationConfig(PushToHubMixin):
                   namespaced under a user or organization name, like `dbmdz/bert-base-german-cased`.
                 - a path to a *directory* containing a configuration file saved using the
                   [`~GenerationConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
-            config_name (`str`, *optional*, defaults to `"generation_config.json"`):
+            config_file_name (`str` or `os.PathLike`, *optional*, defaults to `"generation_config.json"`):
                 Name of the generation configuration JSON file to be loaded from `pretrained_model_name`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
@@ -339,21 +353,31 @@ class GenerationConfig(PushToHubMixin):
         Examples:
 
         ```python
-        generation_config = GenerationConfig.from_pretrained(
-            "gpt2"
-        )  # Download configuration from huggingface.co and cache.
-        generation_config = GenerationConfig.from_pretrained(
-            "./test/saved_model/"
-        )  # E.g. config was saved using *save_pretrained('./test/saved_model/')*
-        generation_config = GenerationConfig.from_pretrained("./test/saved_model/", "my_configuration.json")
-        config = GenerationConfig.from_pretrained("gpt2", top_k=1)
-        assert config.top_k == 1
-        config, unused_kwargs = GenerationConfig.from_pretrained("gpt2", top_k=1, foo=False, return_unused_kwargs=True)
-        assert config.top_k == 1
-        assert unused_kwargs == {"foo": False}
+        >>> from transformers import GenerationConfig
+
+        >>> # Download configuration from huggingface.co and cache.
+        >>> generation_config = GenerationConfig.from_pretrained("gpt2")
+
+        >>> # E.g. config was saved using *save_pretrained('./test/saved_model/')*
+        >>> generation_config.save_pretrained("./test/saved_model/")
+        >>> generation_config = GenerationConfig.from_pretrained("./test/saved_model/")
+
+        >>> # You can also specify configuration names to your generation configuration file
+        >>> generation_config.save_pretrained("./test/saved_model/", config_file_name="my_configuration.json")
+        >>> generation_config = GenerationConfig.from_pretrained("./test/saved_model/", "my_configuration.json")
+
+        >>> # If you'd like to try a minor variation to an existing configuration, you can also pass generation
+        >>> # arguments to `.from_pretrained()`. Be mindful that typos and unused arguments will be ignored
+        >>> generation_config, unused_kwargs = GenerationConfig.from_pretrained(
+        ...     "gpt2", top_k=1, foo=False, return_unused_kwargs=True
+        ... )
+        >>> generation_config.top_k
+        1
+
+        >>> unused_kwargs
+        {'foo': False}
         ```"""
-        # TODO: convert the examples above to doctest when we have public examples on the hub
-        config_name = config_name if config_name is not None else GENERATION_CONFIG_NAME
+        config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
 
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
@@ -371,7 +395,7 @@ class GenerationConfig(PushToHubMixin):
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
 
-        config_path = os.path.join(pretrained_model_name, config_name)
+        config_path = os.path.join(pretrained_model_name, config_file_name)
         config_path = str(config_path)
 
         is_local = os.path.exists(config_path)
@@ -383,7 +407,7 @@ class GenerationConfig(PushToHubMixin):
             configuration_file = config_path
             resolved_config_file = download_url(config_path)
         else:
-            configuration_file = config_name
+            configuration_file = config_file_name
             try:
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_config_file = cached_file(
