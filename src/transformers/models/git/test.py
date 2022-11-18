@@ -1,3 +1,5 @@
+import torch
+
 from transformers import GITConfig, GITForCausalLM
 
 
@@ -6,9 +8,6 @@ configuration = GITConfig()
 
 # Initializing a model (with random weights) from the microsoft/git-base style configuration
 model = GITForCausalLM(configuration)
-
-import torch
-
 
 pixel_values = torch.randn(1, 3, 224, 224)
 input_ids = torch.tensor([[101]])

@@ -18,7 +18,6 @@ from transformers import GITConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
@@ -179,7 +178,7 @@ class GITModelTester:
 
 
 @require_torch
-class GITModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class GITModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (GITModel, GITForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GITForCausalLM,) if is_torch_available() else ()
