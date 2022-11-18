@@ -396,6 +396,8 @@
         title: DeiT
       - local: model_doc/detr
         title: DETR
+      - local: model_doc/dinat
+        title: DiNAT
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt
@@ -412,6 +414,8 @@
         title: MobileNetV2
       - local: model_doc/mobilevit
         title: MobileViT
+      - local: model_doc/nat
+        title: NAT
       - local: model_doc/poolformer
         title: PoolFormer
       - local: model_doc/regnet

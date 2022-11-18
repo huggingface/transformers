@@ -218,6 +218,14 @@ except importlib_metadata.PackageNotFoundError:
     _timm_available = False
 
 
+_natten_available = importlib.util.find_spec("natten") is not None
+try:
+    _natten_version = importlib_metadata.version("natten")
+    logger.debug(f"Successfully imported natten version {_natten_version}")
+except importlib_metadata.PackageNotFoundError:
+    _natten_available = False
+
+
 _torchaudio_available = importlib.util.find_spec("torchaudio") is not None
 try:
     _torchaudio_version = importlib_metadata.version("torchaudio")
@@ -644,6 +652,10 @@ def is_timm_available():
     return _timm_available
 
 
+def is_natten_available():
+    return _natten_available
+
+
 def is_torchaudio_available():
     return _torchaudio_available
 
@@ -883,6 +895,13 @@ TIMM_IMPORT_ERROR = """
 """
 
 # docstyle-ignore
+NATTEN_IMPORT_ERROR = """
+{0} requires the natten library but it was not found in your environment. You can install it by referring to:
+shi-labs.com/natten . You can also install it with pip (may take longer to build):
+`pip install natten`. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 VISION_IMPORT_ERROR = """
 {0} requires the PIL library but it was not found in your environment. You can install it with pip:
 `pip install pillow`. Please note that you may need to restart your runtime after installation.
@@ -936,6 +955,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
         ("tensorflow_text", (is_tensorflow_text_available, TENSORFLOW_TEXT_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
+        ("natten", (is_natten_available, NATTEN_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
