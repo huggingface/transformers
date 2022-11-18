@@ -43,17 +43,17 @@ class DinatConfig(PretrainedConfig):
             The number of input channels.
         embed_dim (`int`, *optional*, defaults to 64):
             Dimensionality of patch embedding.
-        depths (`List[int]`, *optional*, defaults to [2, 2, 6, 2]):
+        depths (`List[int]`, *optional*, defaults to `[2, 2, 6, 2]`):
             Number of layers in each level of the encoder.
-        num_heads (`List[int]`, *optional*, defaults to [3, 6, 12, 24]):
+        num_heads (`List[int]`, *optional*, defaults to `[3, 6, 12, 24]`):
             Number of attention heads in each layer of the Transformer encoder.
         kernel_size (`int`, *optional*, defaults to 7):
             Neighborhood Attention kernel size.
-        dilations (`List[List[int]]`, *optional*, defaults to [[1, 8, 1], [1, 4, 1, 4], [1, 2, 1, 2, 1, 2], [1, 1, 1, 1, 1]]):
+        dilations (`List[List[int]]`, *optional*, defaults to `[[1, 8, 1], [1, 4, 1, 4], [1, 2, 1, 2, 1, 2], [1, 1, 1, 1, 1]]`):
             Dilation value of each NA layer in the Transformer encoder.
         mlp_ratio (`float`, *optional*, defaults to 3.0):
             Ratio of MLP hidden dimensionality to embedding dimensionality.
-        qkv_bias (`bool`, *optional*, defaults to True):
+        qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether or not a learnable bias should be added to the queries, keys and values.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings and encoder.
@@ -64,7 +64,7 @@ class DinatConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder. If string, `"gelu"`, `"relu"`,
             `"selu"` and `"gelu_new"` are supported.
-        patch_norm (`bool`, *optional*, defaults to True):
+        patch_norm (`bool`, *optional*, defaults to `True`):
             Whether or not to add layer normalization after patch embedding.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.

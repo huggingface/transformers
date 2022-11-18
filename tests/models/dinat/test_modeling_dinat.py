@@ -36,7 +36,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
+    from transformers import AutoImageProcessor
 
 
 class DinatModelTester:
@@ -158,11 +158,7 @@ class DinatModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        config, pixel_values, labels = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -319,7 +315,7 @@ class DinatModelTest(ModelTesterMixin, unittest.TestCase):
 class DinatModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained("shi-labs/dinat-mini-in1k-224") if is_vision_available() else None
+        return AutoImageProcessor.from_pretrained("shi-labs/dinat-mini-in1k-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
