@@ -1381,13 +1381,15 @@ class GITForCausalLM(GITPreTrainedModel):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
+        # TODO support use_cache=True
         # cut decoder_input_ids if past is used
-        if past is not None:
-            input_ids = input_ids[:, -1:]
+        # if past is not None:
+        #     input_ids = input_ids[:, -1:]
 
         return {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "pixel_values": model_kwargs["model_kwargs"]["pixel_values"],
             "past_key_values": past,
             "use_cache": use_cache,
         }
