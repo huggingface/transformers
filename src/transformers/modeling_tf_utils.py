@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 import h5py
 import numpy as np
 import tensorflow as tf
+from packaging.version import parse
 
 from huggingface_hub import Repository, list_repo_files
 from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
@@ -63,7 +64,7 @@ from .utils import (
 )
 
 
-if tf.__version__ >= "2.11.0":
+if parse(tf.__version__) >= parse("2.11.0"):
     from keras import backend as K
     from keras.engine import data_adapter
     from keras.engine.keras_tensor import KerasTensor

@@ -217,8 +217,9 @@ def load_pytorch_state_dict_in_tf2_model(
 ):
     """Load a pytorch state_dict in a TF 2.0 model."""
     import tensorflow as tf
+    from packaging.version import parse
 
-    if tf.__version__ >= "2.11.0":
+    if parse(tf.__version__) >= parse("2.11.0"):
         from keras import backend as K
     else:
         from tensorflow.python.keras import backend as K
