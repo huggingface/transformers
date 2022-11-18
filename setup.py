@@ -156,7 +156,7 @@ _deps = [
     "sigopt",
     "librosa",
     "starlette",
-    "tensorflow-cpu>=2.3",
+    "tensorflow-cpu>=2.4,<2.11",
     "tensorflow>=2.4,<2.11",
     "tensorflow-text",
     "tf2onnx",

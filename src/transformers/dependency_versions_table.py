@@ -62,7 +62,7 @@ deps = {
     "sigopt": "sigopt",
     "librosa": "librosa",
     "starlette": "starlette",
-    "tensorflow-cpu": "tensorflow-cpu>=2.3",
+    "tensorflow-cpu": "tensorflow-cpu>=2.4,<2.11",
     "tensorflow": "tensorflow>=2.4,<2.11",
     "tensorflow-text": "tensorflow-text",
     "tf2onnx": "tf2onnx",
