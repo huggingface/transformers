@@ -55,6 +55,7 @@ from transformers.image_utils import (
 from transformers.utils import (
     is_flax_available,
     is_jax_tensor,
+    is_scipy_available,
     is_tf_available,
     is_tf_tensor,
     is_torch_available,
@@ -71,6 +72,10 @@ if is_torch_available():
 
 if is_vision_available():
     import PIL
+
+if is_scipy_available():
+    import scipy.special
+    import scipy.stats
 
 
 class AnnotionFormat(ExplicitEnum):
