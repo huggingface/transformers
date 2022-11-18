@@ -44,7 +44,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
     [{'score': 0.119, 'label': 'bird', 'box': {'xmin': 71, 'ymin': 170, 'xmax': 410, 'ymax': 508}}]
     ```
 
-    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     This object detection pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"zero-shot-object-detection"`.

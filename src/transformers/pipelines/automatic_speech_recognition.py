@@ -118,7 +118,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     {'text': ' He hoped there would be stew for dinner, turnips and carrots and bruised potatoes and fat mutton pieces to be ladled out in thick, peppered flour fat and sauce.'}
     ```
 
-    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     Arguments:
         model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):

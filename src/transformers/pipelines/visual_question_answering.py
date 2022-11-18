@@ -41,7 +41,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
     [{'score': 0.996, 'answer': 'no'}]
     ```
 
-    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     This visual question answering pipeline can currently be loaded from [`pipeline`] using the following task
     identifiers: `"visual-question-answering", "vqa"`.

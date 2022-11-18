@@ -119,7 +119,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
     [{'score': 0.425, 'answer': 'us-001', 'start': 16, 'end': 16}]
     ```
 
-    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     This document question answering pipeline can currently be loaded from [`pipeline`] using the following task
     identifier: `"document-question-answering"`.
