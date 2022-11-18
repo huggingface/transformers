@@ -52,7 +52,7 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
     [{'score': 0.996, 'label': 'black and white'}, {'score': 0.003, 'label': 'photorealist'}, {'score': 0.0, 'label': 'painting'}]
     ```
 
-    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     This image classification pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"zero-shot-image-classification"`.
