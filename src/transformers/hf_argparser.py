@@ -20,9 +20,21 @@ from copy import copy
 from enum import Enum
 from inspect import isclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, Literal, NewType, Optional, Tuple, Union, get_type_hints
+from typing import Any, Callable, Dict, Iterable, List, NewType, Optional, Tuple, Union, get_type_hints
 
 import yaml
+
+
+try:
+    # For Python versions <3.8, Literal is not in typing: https://peps.python.org/pep-0586/
+    from typing import Literal
+except ImportError:
+    try:
+        # For Python 3.7
+        from typing_extensions import Literal
+    except ImportError:
+        # On older Python versions, we cannot use Literal
+        Literal = "LiteralNotAvailable"
 
 
 DataClass = NewType("DataClass", Any)
@@ -45,7 +57,7 @@ def string_to_bool(v):
 
 def HfArg(
     *,
-    aliases: Union[str, list[str]] = None,
+    aliases: Union[str, List[str]] = None,
     help: str = None,
     default: Any = dataclasses.MISSING,
     default_factory: Callable[[], Any] = dataclasses.MISSING,
@@ -53,13 +65,13 @@ def HfArg(
     **kwargs,
 ):
     """
-    Argument helper enabling a concise syntax to create dataclass fields for parsing with HfArgumentParser.
+    Argument helper enabling a concise syntax to create dataclass fields for parsing with `HfArgumentParser`.
 
     Example comparing the use of `HfArg` and `dataclasses.field`:
     ```
     @dataclass
     class Args:
-        regular_arg: str = dataclasses.field(default="Huggingface", metadata={"aliases"=["--example", "-e"], "help"="This syntax could be better!"})
+        regular_arg: str = dataclasses.field(default="Huggingface", metadata={"aliases": ["--example", "-e"], "help": "This syntax could be better!"})
         hf_arg: str = HfArg(default="Huggingface", aliases=["--example", "-e"], help="What a nice syntax!")
     ```
 
@@ -83,7 +95,7 @@ def HfArg(
     """
     if metadata is None:
         # Important, don't use as default param in function signature because dict is mutable and shared across function calls
-        metadata = dict()
+        metadata = {}
     if aliases is not None:
         metadata["aliases"] = aliases
     if help is not None:
@@ -295,7 +307,6 @@ class HfArgumentParser(ArgumentParser):
 
             file_args = []
             for args_file in args_files:
-                # TODO: print warning if file does not exist?
                 if args_file.exists():
                     file_args += args_file.read_text().split()
 
