@@ -157,7 +157,7 @@ _deps = [
     "librosa",
     "starlette",
     "tensorflow-cpu>=2.3",
-    "tensorflow>=2.4,<2.10",
+    "tensorflow>=2.4,<2.11",
     "tensorflow-text",
     "tf2onnx",
     "timeout-decorator",
