@@ -44,6 +44,28 @@ _CONFIG_FOR_DOC = "LukeConfig"
 _TOKENIZER_FOR_DOC = "LukeTokenizer"
 _CHECKPOINT_FOR_DOC = "studio-ousia/luke-base"
 
+# Multiple choice model output
+_CHECKPOINT_FOR_MULTIPLE_CHOICE = "hf-internal-testing/tiny-random-LukeForMultipleChoice"
+
+# TokenClassification docstring
+_CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "hf-internal-testing/tiny-random-LukeForTokenClassification"
+_TOKEN_CLASS_EXPECTED_OUTPUT = (
+    "['LABEL_0', 'LABEL_0', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1',"
+    " 'LABEL_1', 'LABEL_1']"
+)
+_TOKEN_CLASS_EXPECTED_LOSS = 0.64
+
+# QuestionAnswering docstring
+_CHECKPOINT_FOR_QA = "hf-internal-testing/tiny-random-LukeForQuestionAnswering"
+_QA_EXPECTED_OUTPUT = "' was a nice puppet'"
+_QA_EXPECTED_LOSS = 2.81
+
+# SequenceClassification docstring
+_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "hf-internal-testing/tiny-random-LukeForSequenceClassification"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
+_SEQ_CLASS_EXPECTED_LOSS = "0.7"
+
+
 LUKE_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "studio-ousia/luke-base",
     "studio-ousia/luke-large",
@@ -1083,7 +1105,7 @@ class LukeModel(LukePreTrainedModel):
 
         >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
         >>> model = LukeModel.from_pretrained("studio-ousia/luke-base")
-        # Compute the contextualized entity representation corresponding to the entity mention "Beyoncé"
+        >>> # Compute the contextualized entity representation corresponding to the entity mention "Beyoncé"
 
         >>> text = "Beyoncé lives in Los Angeles."
         >>> entity_spans = [(0, 7)]  # character-based entity span corresponding to "Beyoncé"
@@ -1092,7 +1114,7 @@ class LukeModel(LukePreTrainedModel):
         >>> outputs = model(**encoding)
         >>> word_last_hidden_state = outputs.last_hidden_state
         >>> entity_last_hidden_state = outputs.entity_last_hidden_state
-        # Input Wikipedia entities to obtain enriched contextualized representations of word tokens
+        >>> # Input Wikipedia entities to obtain enriched contextualized representations of word tokens
 
         >>> text = "Beyoncé lives in Los Angeles."
         >>> entities = [
@@ -1109,7 +1131,6 @@ class LukeModel(LukePreTrainedModel):
         ... )
         >>> outputs = model(**encoding)
         >>> word_last_hidden_state = outputs.last_hidden_state
-        >>> entity_last_hidden_state = outputs.entity_last_hidden_state
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1479,7 +1500,6 @@ class LukeForEntityClassification(LukePreTrainedModel):
         >>> logits = outputs.logits
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        Predicted class: person
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1595,7 +1615,6 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
         >>> logits = outputs.logits
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        Predicted class: per:cities_of_residence
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1712,7 +1731,7 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         >>> model = LukeForEntitySpanClassification.from_pretrained("studio-ousia/luke-large-finetuned-conll-2003")
 
         >>> text = "Beyoncé lives in Los Angeles"
-        # List all possible entity spans in the text
+        >>> # List all possible entity spans in the text
 
         >>> word_start_positions = [0, 8, 14, 17, 21]  # character-based start positions of word tokens
         >>> word_end_positions = [7, 13, 16, 20, 28]  # character-based end positions of word tokens
@@ -1729,7 +1748,6 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         ...     if predicted_class_idx != 0:
         ...         print(text[span[0] : span[1]], model.config.id2label[predicted_class_idx])
         Beyoncé PER
-        Los Angeles LOC
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1813,9 +1831,11 @@ class LukeForSequenceClassification(LukePreTrainedModel):
     @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=LukeSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1927,9 +1947,11 @@ class LukeForTokenClassification(LukePreTrainedModel):
     @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_TOKEN_CLASSIFICATION,
         output_type=LukeTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_TOKEN_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_TOKEN_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -2020,9 +2042,11 @@ class LukeForQuestionAnswering(LukePreTrainedModel):
     @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_QA,
         output_type=LukeQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_QA_EXPECTED_OUTPUT,
+        expected_loss=_QA_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -2141,7 +2165,7 @@ class LukeForMultipleChoice(LukePreTrainedModel):
     @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_MULTIPLE_CHOICE,
         output_type=LukeMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
