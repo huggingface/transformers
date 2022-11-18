@@ -22,8 +22,10 @@ import numpy as np
 
 from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from transformers.image_transforms import (
+    PaddingMode,
     get_resize_output_image_size,
     normalize,
+    pad,
     rescale,
     resize,
     to_channel_dimension_format,
@@ -82,52 +84,6 @@ def get_max_height_width(images: List[np.ndarray]) -> List[int]:
     else:
         raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
     return (max_height, max_width)
-
-
-# Copied from transformers.models.detr.image_processing_detr.pad
-def pad(
-    image: np.ndarray,
-    output_size: Tuple[int, int],
-    constant_values: Union[float, Tuple[float, float], Iterable[Tuple[float, float]]] = 0,
-    input_channel_dimension: Optional[ChannelDimension] = None,
-    data_format: Optional[ChannelDimension] = None,
-) -> np.ndarray:
-    """
-    Pad the bottom and right of the image with zeros to the output size.
-
-    Args:
-        image (`np.ndarray`):
-            Image to pad.
-        output_size (`Tuple[int, int]`):
-            Output size of the image.
-        input_channel_dimension (`ChannelDimension`, *optional*):
-            The channel dimension format of the image. If not provided, it will be inferred from the input image.
-        data_format (`str` or `ChannelDimension`, *optional*):
-            The channel dimension format of the image. If not provided, it will be the same as the input image.
-    """
-    if input_channel_dimension is None:
-        input_channel_dimension = infer_channel_dimension_format(image)
-
-    output_height, output_width = output_size
-    input_height, input_width = get_image_size(image)
-    pad_bottom = output_height - input_height
-    pad_right = output_width - input_width
-
-    if input_channel_dimension == ChannelDimension.FIRST:
-        padded_image = np.pad(
-            image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=constant_values
-        )
-    elif input_channel_dimension == ChannelDimension.LAST:
-        padded_image = np.pad(
-            image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=constant_values
-        )
-    else:
-        raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
-
-    if data_format is not None:
-        padded_image = to_channel_dimension_format(padded_image, data_format)
-
-    return padded_image
 
 
 # Copied from transformers.models.detr.image_processing_detr.make_pixel_mask
@@ -737,6 +693,59 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         )
         return encoded_inputs
 
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._pad_image
+    def _pad_image(
+        self,
+        image: np.ndarray,
+        output_size: Tuple[int, int],
+        data_format: Optional[ChannelDimension] = None,
+    ) -> np.ndarray:
+        """
+        Pad an image with zeros to the given size.
+        """
+        input_height, input_width = get_image_size(image)
+        output_height, output_width = output_size
+
+        pad_bottom = output_height - input_height
+        pad_right = output_width - input_width
+        padding = ((0, pad_bottom), (0, pad_right))
+        padded_image = pad(image, padding, mode=PaddingMode.CONSTANT, constant_values=0, data_format=data_format)
+        return padded_image
+
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
+    def pad(
+        self,
+        images: List[np.ndarray],
+        return_pixel_mask: bool = True,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: Optional[ChannelDimension] = None,
+    ) -> np.ndarray:
+        """
+        Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
+        in the batch and optionally returns their corresponding pixel mask.
+
+        Args:
+        Pad the bottom and right of the image with zeros to the output size.
+            image (`np.ndarray`):
+                Image to pad.
+            return_pixel_mask (`bool`, *optional*, defaults to `True`):
+                Whether to return a pixel mask.
+            input_channel_dimension (`ChannelDimension`, *optional*, defaults to `None`):
+                The channel dimension format of the image. If not provided, it will be inferred from the input image.
+            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+                The channel dimension format of the image. If not provided, it will be the same as the input image.
+        """
+        pad_size = get_max_height_width(images)
+
+        padded_images = [self._pad_image(image, pad_size, data_format=data_format) for image in images]
+        data = {"pixel_values": padded_images}
+
+        if return_pixel_mask:
+            masks = [make_pixel_mask(image=image, output_size=pad_size) for image in images]
+            data["pixel_mask"] = masks
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
+
     def encode_inputs(
         self,
         pixel_values_list: List[ImageInput],
@@ -801,17 +810,12 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             )
 
         pixel_values_list = [to_numpy_array(pixel_values) for pixel_values in pixel_values_list]
-
-        pad_size = get_max_height_width(pixel_values_list)
-        pixel_values = [pad(image=image, output_size=pad_size) for image in pixel_values_list]
-        pixel_mask = [make_pixel_mask(image=image, output_size=pad_size) for image in pixel_values_list]
-
-        data = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
-        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
+        encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors)
 
         if segmentation_maps is not None:
             mask_labels = []
             class_labels = []
+            pad_size = get_max_height_width(pixel_values_list)
             # Convert to list of binary masks and labels
             for idx, segmentation_map in enumerate(segmentation_maps):
                 segmentation_map = to_numpy_array(segmentation_map)

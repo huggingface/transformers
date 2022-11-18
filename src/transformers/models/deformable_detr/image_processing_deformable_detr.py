@@ -27,10 +27,12 @@ import scipy.stats
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_processing_utils import BaseImageProcessor, get_size_dict
 from transformers.image_transforms import (
+    PaddingMode,
     center_to_corners_format,
     corners_to_center_format,
     id_to_rgb,
     normalize,
+    pad,
     rescale,
     resize,
     rgb_to_id,
@@ -211,52 +213,6 @@ def get_max_height_width(images: List[np.ndarray]) -> List[int]:
     else:
         raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
     return (max_height, max_width)
-
-
-# Copied from transformers.models.detr.image_processing_detr.pad
-def pad(
-    image: np.ndarray,
-    output_size: Tuple[int, int],
-    constant_values: Union[float, Tuple[float, float], Iterable[Tuple[float, float]]] = 0,
-    input_channel_dimension: Optional[ChannelDimension] = None,
-    data_format: Optional[ChannelDimension] = None,
-) -> np.ndarray:
-    """
-    Pad the bottom and right of the image with zeros to the output size.
-
-    Args:
-        image (`np.ndarray`):
-            Image to pad.
-        output_size (`Tuple[int, int]`):
-            Output size of the image.
-        input_channel_dimension (`ChannelDimension`, *optional*):
-            The channel dimension format of the image. If not provided, it will be inferred from the input image.
-        data_format (`str` or `ChannelDimension`, *optional*):
-            The channel dimension format of the image. If not provided, it will be the same as the input image.
-    """
-    if input_channel_dimension is None:
-        input_channel_dimension = infer_channel_dimension_format(image)
-
-    output_height, output_width = output_size
-    input_height, input_width = get_image_size(image)
-    pad_bottom = output_height - input_height
-    pad_right = output_width - input_width
-
-    if input_channel_dimension == ChannelDimension.FIRST:
-        padded_image = np.pad(
-            image, [(0, 0), (0, pad_bottom), (0, pad_right)], mode="constant", constant_values=constant_values
-        )
-    elif input_channel_dimension == ChannelDimension.LAST:
-        padded_image = np.pad(
-            image, [(0, pad_bottom), (0, pad_right), (0, 0)], mode="constant", constant_values=constant_values
-        )
-    else:
-        raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
-
-    if data_format is not None:
-        padded_image = to_channel_dimension_format(padded_image, data_format)
-
-    return padded_image
 
 
 # Copied from transformers.models.detr.image_processing_detr.make_pixel_mask
@@ -1006,6 +962,25 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
             data_format=data_format,
         )
 
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._pad_image
+    def _pad_image(
+        self,
+        image: np.ndarray,
+        output_size: Tuple[int, int],
+        data_format: Optional[ChannelDimension] = None,
+    ) -> np.ndarray:
+        """
+        Pad an image with zeros to the given size.
+        """
+        input_height, input_width = get_image_size(image)
+        output_height, output_width = output_size
+
+        pad_bottom = output_height - input_height
+        pad_right = output_width - input_width
+        padding = ((0, pad_bottom), (0, pad_right))
+        padded_image = pad(image, padding, mode=PaddingMode.CONSTANT, constant_values=0, data_format=data_format)
+        return padded_image
+
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
     def pad(
         self,
@@ -1015,8 +990,8 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         data_format: Optional[ChannelDimension] = None,
     ) -> np.ndarray:
         """
-        Pads a batch of images with zeros to the size of largest height and width in the batch and optionally returns
-        their corresponding pixel mask.
+        Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
+        in the batch and optionally returns their corresponding pixel mask.
 
         Args:
         Pad the bottom and right of the image with zeros to the output size.
@@ -1030,8 +1005,10 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         pad_size = get_max_height_width(images)
-        padded_images = [pad(image=image, output_size=pad_size, data_format=data_format) for image in images]
+
+        padded_images = [self._pad_image(image, pad_size, data_format=data_format) for image in images]
         data = {"pixel_values": padded_images}
+
         if return_pixel_mask:
             masks = [make_pixel_mask(image=image, output_size=pad_size) for image in images]
             data["pixel_mask"] = masks
