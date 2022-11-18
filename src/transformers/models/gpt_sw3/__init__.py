@@ -37,7 +37,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_gpt_sw3_fast"] = ["GptSw3TokenizerFast"]
+    pass
 
 try:
     if not is_torch_available():
@@ -66,7 +66,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_gpt_sw3_fast import GptSw3TokenizerFast
+        pass
 
     try:
         if not is_torch_available():
