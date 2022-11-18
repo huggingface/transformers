@@ -1,32 +1,30 @@
 import os
 import unicodedata
+import re
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
-# TODO: rename spm.model -> spiece.model?
-VOCAB_FILES_NAMES = {"vocab_file": "spm.model"}
+VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-# TODO: rename spm.model -> spiece.model?
-# TODO: This does not seem to be used at all though except for some unit testing? The file is found with the above:
+# This does not seem to be used at all except for some unit testing? The file is found with the above:
 #  VOCAB_FILES_NAMES, which is sufficient to find the tokenizer since there is one per model size
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "AI-Sweden/gpt-sw3-126m": "https://huggingface.co/AI-Sweden/gpt-sw3-126m/resolve/main/spm.model",
-        "AI-Sweden/gpt-sw3-350m": "https://huggingface.co/AI-Sweden/gpt-sw3-350m/resolve/main/spm.model",
-        "AI-Sweden/gpt-sw3-1.6b": "https://huggingface.co/AI-Sweden/gpt-sw3-1.6b/resolve/main/spm.model",
-        "AI-Sweden/gpt-sw3-6.7b": "https://huggingface.co/AI-Sweden/gpt-sw3-6.7b/resolve/main/spm.model",
-        "AI-Sweden/gpt-sw3-20b": "https://huggingface.co/AI-Sweden/gpt-sw3-20b/resolve/main/spm.model",
+        "AI-Sweden/gpt-sw3-126m": "https://huggingface.co/AI-Sweden/gpt-sw3-126m/resolve/main/spiece.model",
+        "AI-Sweden/gpt-sw3-350m": "https://huggingface.co/AI-Sweden/gpt-sw3-350m/resolve/main/spiece.model",
+        "AI-Sweden/gpt-sw3-1.6b": "https://huggingface.co/AI-Sweden/gpt-sw3-1.6b/resolve/main/spiece.model",
+        "AI-Sweden/gpt-sw3-6.7b": "https://huggingface.co/AI-Sweden/gpt-sw3-6.7b/resolve/main/spiece.model",
+        "AI-Sweden/gpt-sw3-20b": "https://huggingface.co/AI-Sweden/gpt-sw3-20b/resolve/main/spiece.model",
     }
 }
 
-# TODO: This does not seem to be used except for prompting a warning when tokenizing sequences longer than these
+# This does not seem to be used except for prompting a warning when tokenizing sequences longer than these
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "AI-Sweden/gpt-sw3-126m": 2048,
     "AI-Sweden/gpt-sw3-350m": 2048,
@@ -34,8 +32,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "AI-Sweden/gpt-sw3-6.7b": 2048,
     "AI-Sweden/gpt-sw3-20b": 2048,
 }
-
-# SPIECE_UNDERLINE = "▁"
 
 
 class GptSw3Tokenizer(PreTrainedTokenizer):
@@ -74,20 +70,45 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
         self.keep_accents = keep_accents
         self.vocab_file = vocab_file
 
-        # print("MODEL NAME OR PATH")
-        # print(self.name_or_path)
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
+
+        self.whitespaces = {
+            " ",
+            " ",
+            " ",
+            " ",
+            " ",
+            "　",
+            " ",
+            " ",
+            " ",
+            " ",
+            "￼",
+            "",
+        }
+
+        # Control chars except newlines and tabs, soft-hyphens, and non-breaking space, zero-width space
+        additional_chars_to_remove = [160, 173, 8203]
+        self.non_printing_characters_re = re.compile(
+            f"[{''.join(map(chr, list(range(0, 9)) + list(range(11, 32)) + list(range(127, 160)) + additional_chars_to_remove))}]"
+        )
 
     @property
     def vocab_size(self) -> int:
         return len(self.sp_model)
 
     def preprocess_text(self, inputs):
-        outputs = inputs
-        # TODO: other normalization we used in data pipeline
-        # outputs = outputs.replace("``", '"').replace("''", '"')
-        # outputs = unicodedata.normalize("NFC", outputs)
+        # Remove non-printing characters
+        outputs = self.non_printing_characters_re.sub("", inputs)
+
+        # Normalize whitespaces
+        outputs = "".join(
+            [char if char not in self.whitespaces else " " for char in outputs]
+        )
+
+        # NFC Unicode normalization
+        outputs = unicodedata.normalize("NFC", outputs)
         return outputs
 
     def _tokenize(self, text, **kwargs):
@@ -109,15 +130,12 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.sp_model.IdToPiece(index)
 
-    # NOT ABSTRACT!
+    # This method is not abstract, but is required to function correctly
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        print(tokens)
         return self.sp_model.decode(tokens)
 
-    # NOT ABSTRACT!
-    # TODO: directly overriding decode() removes checks for datatype (e.g. if token_ids is a numpy array, TF/PT tensor
-    #  etc) but instead gives a speedup of factor 4. Meaning that its faster but does not support anything but python
-    #  lists
+    # This method is not abstract, but overriding this ensures that e.g. bytes gets represented as intended
+    # Overriding decode instead of _decode yields significant speedup but removes some functionality
     def _decode(
             self,
             token_ids: List[int],
