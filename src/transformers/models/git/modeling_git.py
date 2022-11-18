@@ -1375,7 +1375,7 @@ class GITForCausalLM(GITPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=True, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=True, **kwargs):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
@@ -1389,7 +1389,7 @@ class GITForCausalLM(GITPreTrainedModel):
         return {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "pixel_values": model_kwargs["model_kwargs"]["pixel_values"],
+            "pixel_values": kwargs.get("pixel_values", None),
             "past_key_values": past,
             "use_cache": use_cache,
         }

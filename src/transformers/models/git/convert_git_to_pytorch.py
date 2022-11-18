@@ -206,6 +206,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     read_in_q_k_v(state_dict, config, prefix=prefix)
 
     # load HuggingFace model
+    # TODO: support use_cache
     config.use_cache = False
     model = GITForCausalLM(config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
@@ -240,19 +241,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
 
     print("Generating caption...")
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-    # predicted_ids = []
-    # for i in range(20):
-    #     outputs = model(pixel_values=pixel_values, input_ids=input_ids)
-    #     logits = outputs.logits[:, -1, :]
-    #     # perform argmax on the last dimension (i.e. greedy decoding)
-    #     predicted_id = logits.argmax(-1)
-    #     predicted_ids.append(predicted_id.item())
-    #     print(tokenizer.decode([predicted_id.squeeze()]))
-    #     # print("Predicted id:", predicted_id)
-    #     # add predicted id to input_ids
-    #     input_ids = torch.cat([input_ids, predicted_id.unsqueeze(0)], dim=1)
-    generated_ids = model.generate(input_ids, model_kwargs={"pixel_values":pixel_values}, max_length=20)
-    # tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+    generated_ids = model.generate(input_ids, pixel_values=pixel_values, max_length=20)
     print("Generated caption:", tokenizer.batch_decode(generated_ids, skip_special_tokens=True))
 
     if pytorch_dump_folder_path is not None:
