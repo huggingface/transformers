@@ -507,12 +507,12 @@ class DinatLayer(nn.Module):
         hidden_states = shortcut + self.drop_path(attention_output)
 
         layer_output = self.layernorm_after(hidden_states)
-        layer_output = self.intermediate(layer_output)
+        layer_output = self.output(self.intermediate(layer_output))
 
         if self.layer_scale_parameters is not None:
             layer_output = self.layer_scale_parameters[1] * layer_output
 
-        layer_output = hidden_states + self.output(self.drop_path(layer_output))
+        layer_output = hidden_states + self.drop_path(layer_output)
 
         layer_outputs = (layer_output, attention_outputs[1]) if output_attentions else (layer_output,)
         return layer_outputs
