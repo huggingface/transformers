@@ -104,7 +104,7 @@ class TimeSformerConfig(PretrainedConfig):
         qkv_bias=True,
         use_mean_pooling=False,
         attention_type="divided_space_time",
-        drop_path_prob=0,
+        drop_path_rate=0,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -127,4 +127,4 @@ class TimeSformerConfig(PretrainedConfig):
         self.use_mean_pooling = use_mean_pooling
 
         self.attention_type = attention_type
-        self.drop_path_prob = drop_path_prob
+        self.drop_path_rate = drop_path_rate

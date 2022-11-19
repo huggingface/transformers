@@ -383,11 +383,11 @@ class TimeSformerLayer(nn.Module):
         attention_type = config.attention_type
 
         dpr = [
-            x.item() for x in torch.linspace(0, config.drop_path_prob, config.num_hidden_layers)
+            x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)
         ]  # stochastic depth decay rule
-        drop_path_prob = dpr[layer_index]
+        drop_path_rate = dpr[layer_index]
 
-        self.drop_path = TimeSformerDropPath(config.drop_path_prob) if drop_path_prob > 0.0 else nn.Identity()
+        self.drop_path = TimeSformerDropPath(config.drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.attention = TimeSformerAttention(config)
         self.intermediate = TimeSformerIntermediate(config)
         self.output = TimeSformerOutput(config)
