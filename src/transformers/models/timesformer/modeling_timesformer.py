@@ -258,16 +258,15 @@ class TimeSformerSelfAttention(nn.Module):
     def __init__(self, config: TimeSformerConfig):
         super().__init__()
 
-        dim = config.hidden_size
         num_heads = config.num_attention_heads
         qkv_bias = config.qkv_bias
-        attn_drop = config.attention_probs_dropout_prob
+        attention_dropout_prob = config.attention_probs_dropout_prob
 
         self.num_heads = num_heads
-        head_dim = dim // num_heads
+        head_dim = config.hidden_size // num_heads
         self.scale = head_dim**-0.5
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.attn_drop = nn.Dropout(attn_drop)
+        self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attention_dropout_prob)
 
     def forward(self, hidden_states, output_attentions: bool = False):
         batch_size, hidden_size, num_channels = hidden_states.shape
@@ -369,7 +368,6 @@ class TimeSformerLayer(nn.Module):
     def __init__(self, config: TimeSformerConfig, layer_index: int) -> None:
         super().__init__()
 
-        dim = config.hidden_size
         attention_type = config.attention_type
 
         drop_path_rates = [
@@ -393,7 +391,7 @@ class TimeSformerLayer(nn.Module):
         if self.attention_type == "divided_space_time":
             self.temporal_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
             self.temporal_attention = TimeSformerAttention(config)
-            self.temporal_dense = nn.Linear(dim, dim)
+            self.temporal_dense = nn.Linear(config.hidden_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False):
         num_frames = self.config.num_frames
