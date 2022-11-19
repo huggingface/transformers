@@ -34,8 +34,7 @@ except ImportError:
         from typing_extensions import Literal
     except ImportError:
         # On older Python versions, we cannot use Literal
-        Literal = "LiteralNotAvailable"
-
+        Literal = None
 
 DataClass = NewType("DataClass", Any)
 DataClassType = NewType("DataClassType", Any)
@@ -53,6 +52,11 @@ def string_to_bool(v):
         raise ArgumentTypeError(
             f"Truthy value expected: got {v} but expected one of yes/no, true/false, t/f, y/n, 1/0 (case insensitive)."
         )
+
+
+def make_choice_type_function(choices):
+    str_to_choice = {str(choice): choice for choice in choices}
+    return lambda arg: str_to_choice.get(arg, arg)
 
 
 def HfArg(
@@ -83,8 +87,8 @@ def HfArg(
         default:
             Default value. If not default or default_factory is specified, the argument is required.
         default_factory:
-            The default_factory is a 0-argument function called to initialize a field's value.
-            It is useful to provide default values for mutable types, e.g. lists: `default_factory=list`
+            The default_factory is a 0-argument function called to initialize a field's value. It is useful to provide
+            default values for mutable types, e.g. lists: `default_factory=list`
         metadata:
             Further metadata to pass on to `dataclasses.field`.
         kwargs:
@@ -173,14 +177,14 @@ class HfArgumentParser(ArgumentParser):
         # A variable to store kwargs for a boolean field, if needed
         # so that we can init a `no_*` complement argument (see below)
         bool_kwargs = {}
-        if origin_type is Literal or isinstance(field.type, type) and issubclass(field.type, Enum):
+        if origin_type is Literal or (isinstance(field.type, type) and issubclass(field.type, Enum)):
             if origin_type is Literal:
                 kwargs["choices"] = field.type.__args__
             else:
                 kwargs["choices"] = [x.value for x in field.type]
-            # This allows mixed types between the choices
-            str_to_choice = {str(choice): choice for choice in kwargs["choices"]}
-            kwargs["type"] = lambda arg: str_to_choice.get(arg, arg)
+
+            kwargs["type"] = make_choice_type_function(kwargs["choices"])
+
             if field.default is not dataclasses.MISSING:
                 kwargs["default"] = field.default
             else:
@@ -272,8 +276,8 @@ class HfArgumentParser(ArgumentParser):
             args_filename:
                 If not None, will uses this file instead of the ".args" file specified in the previous argument.
             args_file_flag:
-                If not None, will look for a file in the command-line args specified with this flag.
-                The flag can be specified multiple times and precedence is determined by the order (last one wins).
+                If not None, will look for a file in the command-line args specified with this flag. The flag can be
+                specified multiple times and precedence is determined by the order (last one wins).
 
         Returns:
             Tuple consisting of:
