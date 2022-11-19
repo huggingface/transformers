@@ -62,6 +62,7 @@ _TOKENIZER_FOR_DOC = "BartTokenizer"
 
 LARGE_NEGATIVE = -1e8
 
+
 def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
     pad_token_id = tf.cast(pad_token_id, input_ids.dtype)
     decoder_start_token_id = tf.cast(decoder_start_token_id, input_ids.dtype)
@@ -463,14 +464,8 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
 
 class TFBartClassificationHead(tf.keras.layers.Layer):
     """Head for sentence-level classification tasks."""
-    def __init__(
-        self,
-        inner_dim: int,
-        num_classes: int,
-        pooler_dropout: float,
-        name: str,
-        **kwargs
-    ):
+
+    def __init__(self, inner_dim: int, num_classes: int, pooler_dropout: float, name: str, **kwargs):
         super().__init__(name=name, **kwargs)
         self.dense = tf.keras.layers.Dense(inner_dim, name="dense")
         self.dropout = tf.keras.layers.Dropout(pooler_dropout)
@@ -810,7 +805,6 @@ class TFBartEncoder(tf.keras.layers.Layer):
 
         # encoder layers
         for idx, encoder_layer in enumerate(self.layers):
-
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -1118,7 +1112,6 @@ class TFBartMainLayer(tf.keras.layers.Layer):
         training: Optional[bool] = False,
         **kwargs
     ) -> Union[TFSeq2SeqModelOutput, Tuple[tf.Tensor]]:
-
         # different to other models, Bart automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
         if decoder_input_ids is None and decoder_inputs_embeds is None:
@@ -1192,7 +1185,6 @@ class TFBartMainLayer(tf.keras.layers.Layer):
     BART_START_DOCSTRING,
 )
 class TFBartModel(TFBartPretrainedModel):
-
     _requires_load_weight_prefix = True
 
     def __init__(self, config: BartConfig, load_weight_prefix=None, *inputs, **kwargs):
@@ -1235,7 +1227,6 @@ class TFBartModel(TFBartPretrainedModel):
         training: Optional[bool] = False,
         **kwargs
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
-
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1452,7 +1443,6 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         encoder_outputs=None,
         **kwargs
     ):
-
         # cut decoder_input_ids if past is used
         if past is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
@@ -1498,16 +1488,15 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         Bart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE
     tasks.
     """,
-   BART_START_DOCSTRING,
+    BART_START_DOCSTRING,
 )
 class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassificationLoss):
-
     @property
     def dummy_inputs(self):
         pad_token = self.config.pad_token_id
         input_ids = tf.constant([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]])
         dummy_inputs = {
-            "attention_mask": tf.cast(tf.math.not_equal(input_ids,(pad_token)), dtype=tf.int32),
+            "attention_mask": tf.cast(tf.math.not_equal(input_ids, (pad_token)), dtype=tf.int32),
             "input_ids": input_ids,
         }
         return dummy_inputs
@@ -1516,10 +1505,7 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
         super().__init__(config, *inputs, **kwargs)
         self.model = TFBartMainLayer(config, load_weight_prefix=load_weight_prefix, name="model")
         self.classification_head = TFBartClassificationHead(
-            config.d_model,
-            config.num_labels,
-            config.classifier_dropout,
-            name="classification_head"
+            config.d_model, config.num_labels, config.classifier_dropout, name="classification_head"
         )
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
@@ -1585,34 +1571,17 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
             training=training,
         )
 
-        # last_hidden_state = outputs["last_hidden_state"]
         last_hidden_state = outputs[0]
         eos_mask = tf.equal(input_ids, self.config.eos_token_id)
-        print(f"FOUND >>>> {tf.math.greater(tf.shape(tf.unique(tf.reduce_sum(tf.cast(eos_mask, dtype=tf.int32), axis=1)).y)[0], tf.constant([1]))}")
-        # if tf.math.greater(tf.shape(tf.unique(tf.reduce_sum(tf.cast(eos_mask, dtype=tf.int32), axis=1)).y), tf.constant([1])):
-        #     raise ValueError("All examples must have the same number of <eos> tokens.")
-        print(f"EOS MASK: {eos_mask}")
-        print(f"EOS MASK SHAPE: {eos_mask.shape}")
-        # TODO boolean mask is casting to a single row
-        # masked = tf.boolean_mask(last_hidden_state, eos_mask)
         masked = tf.ragged.boolean_mask(last_hidden_state, eos_mask)
-        print(f"Masked shape: {masked.shape}")
         self_masked = tf.ragged.boolean_mask(eos_mask, eos_mask).to_tensor()
-        print(f"self masked: {self_masked}")
-        print(f"self masked sliced: {self_masked[:,-1]}")
-        # if not tf.reduce_all(self_masked[:,-1]):
-        #     print(">>>> ", tf.reduce_all(self_masked[:,-1]))
-        #     print("FAIL")
-        #     raise
-        tf.Assert(tf.reduce_all(self_masked[:,-1]), ["All examples must have the same number of <eos> tokens."])
+        # tf.ragged maintains the masked shape and to_tensor pads
+        # out the rows with False where present.  Then verify all the final
+        # entries are True
+        tf.Assert(tf.reduce_all(self_masked[:, -1]), ["All examples must have the same number of <eos> tokens."])
         masked = tf.ragged.boolean_mask(last_hidden_state, eos_mask).to_tensor()
-        # masked = tf.reshape(masked, (-1, masked.shape[0], masked.shape[1]))
 
-        print(f"Last hidden state shape: {last_hidden_state.shape}")
-        print(f"Masked shape: {masked.shape}")
-        # sentence_representation = tf.reshape(masked, (-1, masked, last_hidden_state.shape[-1]))[:, -1, :]
         sentence_representation = masked[:, -1, :]
-        print(f"Sent rep: ", sentence_representation.shape)
         logits = self.classification_head(sentence_representation)
         reshaped_logits = tf.reshape(tensor=logits, shape=(-1, self.config.num_labels))
         loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=reshaped_logits)
@@ -1635,7 +1604,7 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
 
     def serving_output(self, output):
         logits = tf.convert_to_tensor(output.logits)
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None # TODO
+        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None  # TODO
         pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
