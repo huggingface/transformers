@@ -367,10 +367,10 @@ class TimeSformerLayer(nn.Module):
         dim = config.hidden_size
         attention_type = config.attention_type
 
-        dpr = [
+        drop_path_rates = [
             x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)
         ]  # stochastic depth decay rule
-        drop_path_rate = dpr[layer_index]
+        drop_path_rate = drop_path_rates[layer_index]
 
         self.drop_path = TimeSformerDropPath(config.drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.attention = TimeSformerAttention(config)
@@ -381,7 +381,8 @@ class TimeSformerLayer(nn.Module):
 
         self.config = config
         self.attention_type = attention_type
-        assert attention_type in ["divided_space_time", "space_only", "joint_space_time"]
+        if attention_type not in ["divided_space_time", "space_only", "joint_space_time"]:
+            raise ValueError("Unknown attention type: {}".format(attention_type))
 
         # Temporal Attention Parameters
         if self.attention_type == "divided_space_time":
