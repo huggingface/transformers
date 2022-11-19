@@ -115,10 +115,12 @@ class TimeSformerEmbeddings(nn.Module):
             position_embeddings = self.position_embeddings
             cls_pos_embed = position_embeddings[0, 0, :].unsqueeze(0).unsqueeze(1)
             other_pos_embed = position_embeddings[0, 1:, :].unsqueeze(0).transpose(1, 2)
-            P = int(other_pos_embed.size(2) ** 0.5)
-            H = embeddings.size(1) // patch_width
-            other_pos_embed = other_pos_embed.reshape(1, embeddings.size(2), P, P)
-            new_pos_embed = nn.functional.interpolate(other_pos_embed, size=(H, patch_width), mode="nearest")
+            patch_num = int(other_pos_embed.size(2) ** 0.5)
+            patch_height = embeddings.size(1) // patch_width
+            other_pos_embed = other_pos_embed.reshape(1, embeddings.size(2), patch_num, patch_num)
+            new_pos_embed = nn.functional.interpolate(
+                other_pos_embed, size=(patch_height, patch_width), mode="nearest"
+            )
             new_pos_embed = new_pos_embed.flatten(2)
             new_pos_embed = new_pos_embed.transpose(1, 2)
             new_pos_embed = torch.cat((cls_pos_embed, new_pos_embed), 1)
@@ -146,7 +148,6 @@ class TimeSformerEmbeddings(nn.Module):
             else:
                 embeddings = embeddings + self.time_embeddings
             embeddings = self.time_drop(embeddings)
-            # embeddings = rearrange(embeddings, "(b n) t m -> b (n t) m", b=batch_size, t=num_frames)
             embeddings = embeddings.view(batch_size, patch_height, num_frames, patch_width).reshape(
                 batch_size, patch_height * num_frames, patch_width
             )
@@ -269,15 +270,19 @@ class TimeSformerSelfAttention(nn.Module):
         self.attn_drop = nn.Dropout(attn_drop)
 
     def forward(self, hidden_states, output_attentions: bool = False):
-        B, N, C = hidden_states.shape
-        qkv = self.qkv(hidden_states).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv[0], qkv[1], qkv[2]
+        batch_size, hidden_size, num_channels = hidden_states.shape
+        qkv = (
+            self.qkv(hidden_states)
+            .reshape(batch_size, hidden_size, 3, self.num_heads, num_channels // self.num_heads)
+            .permute(2, 0, 3, 1, 4)
+        )
+        query, key, value = qkv[0], qkv[1], qkv[2]
 
-        attention_probs = (q @ k.transpose(-2, -1)) * self.scale
+        attention_probs = (query @ key.transpose(-2, -1)) * self.scale
         attention_probs = attention_probs.softmax(dim=-1)
         attention_probs = self.attn_drop(attention_probs)
 
-        context_layer = (attention_probs @ v).transpose(1, 2).reshape(B, N, C)
+        context_layer = (attention_probs @ value).transpose(1, 2).reshape(batch_size, hidden_size, num_channels)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
@@ -391,11 +396,11 @@ class TimeSformerLayer(nn.Module):
             self.temporal_dense = nn.Linear(dim, dim)
 
     def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False):
-        T = self.config.num_frames
-        W = self.config.image_size // self.config.patch_size
-        B = hidden_states.shape[0]
-        num_spatial_tokens = (hidden_states.size(1) - 1) // T
-        H = num_spatial_tokens // W
+        num_frames = self.config.num_frames
+        num_patch_width = self.config.image_size // self.config.patch_size
+        batch_size = hidden_states.shape[0]
+        num_spatial_tokens = (hidden_states.size(1) - 1) // num_frames
+        num_patch_height = num_spatial_tokens // num_patch_width
 
         if self.attention_type in ["space_only", "joint_space_time"]:
             self_attention_outputs = self.attention(
@@ -417,51 +422,63 @@ class TimeSformerLayer(nn.Module):
 
         elif self.attention_type == "divided_space_time":
             # Temporal
-            xt = hidden_states[:, 1:, :]
-            xt = xt.reshape(B, H, W, T, xt.shape[2]).reshape(B * H * W, T, xt.shape[2])
+            temporal_embedding = hidden_states[:, 1:, :]
+            temporal_embedding = temporal_embedding.reshape(
+                batch_size, num_patch_height, num_patch_width, num_frames, temporal_embedding.shape[2]
+            ).reshape(batch_size * num_patch_height * num_patch_width, num_frames, temporal_embedding.shape[2])
 
             temporal_attention_outputs = self.temporal_attention(
-                self.temporal_layernorm(xt),
+                self.temporal_layernorm(temporal_embedding),
             )
             attention_output = temporal_attention_outputs[0]
 
-            res_temporal = self.drop_path(attention_output)
+            residual_temporal = self.drop_path(attention_output)
 
-            res_temporal = res_temporal.reshape(B, H, W, T, res_temporal.shape[2]).reshape(
-                B, H * W * T, res_temporal.shape[2]
-            )
-            res_temporal = self.temporal_dense(res_temporal)
-            xt = hidden_states[:, 1:, :] + res_temporal
+            residual_temporal = residual_temporal.reshape(
+                batch_size, num_patch_height, num_patch_width, num_frames, residual_temporal.shape[2]
+            ).reshape(batch_size, num_patch_height * num_patch_width * num_frames, residual_temporal.shape[2])
+            residual_temporal = self.temporal_dense(residual_temporal)
+            temporal_embedding = hidden_states[:, 1:, :] + residual_temporal
 
             # Spatial
             init_cls_token = hidden_states[:, 0, :].unsqueeze(1)
-            cls_token = init_cls_token.repeat(1, T, 1)
-            cls_token = cls_token.reshape(B * T, 1, cls_token.shape[2])
-            xs = xt
-            xs = xs.reshape(B, H, W, T, xs.shape[2]).permute(0, 3, 1, 2, 4).reshape(B * T, H * W, xs.shape[2])
-            xs = torch.cat((cls_token, xs), 1)
+            cls_token = init_cls_token.repeat(1, num_frames, 1)
+            cls_token = cls_token.reshape(batch_size * num_frames, 1, cls_token.shape[2])
+            spatial_embedding = temporal_embedding
+            spatial_embedding = (
+                spatial_embedding.reshape(
+                    batch_size, num_patch_height, num_patch_width, num_frames, spatial_embedding.shape[2]
+                )
+                .permute(0, 3, 1, 2, 4)
+                .reshape(batch_size * num_frames, num_patch_height * num_patch_width, spatial_embedding.shape[2])
+            )
+            spatial_embedding = torch.cat((cls_token, spatial_embedding), 1)
 
-            spatial_attention_outputs = self.attention(self.layernorm_before(xs), output_attentions=output_attentions)
+            spatial_attention_outputs = self.attention(
+                self.layernorm_before(spatial_embedding), output_attentions=output_attentions
+            )
             attention_output = spatial_attention_outputs[0]
             outputs = spatial_attention_outputs[1:]  # add self attentions if we output attention weights
 
-            res_spatial = self.drop_path(attention_output)
+            residual_spatial = self.drop_path(attention_output)
 
             # Taking care of CLS token
-            cls_token = res_spatial[:, 0, :]
-            cls_token = cls_token.reshape(B, T, cls_token.shape[1])
+            cls_token = residual_spatial[:, 0, :]
+            cls_token = cls_token.reshape(batch_size, num_frames, cls_token.shape[1])
             cls_token = torch.mean(cls_token, 1, True)  # averaging for every frame
-            res_spatial = res_spatial[:, 1:, :]
-            res_spatial = (
-                res_spatial.reshape(B, T, H, W, res_spatial.shape[2])
+            residual_spatial = residual_spatial[:, 1:, :]
+            residual_spatial = (
+                residual_spatial.reshape(
+                    batch_size, num_frames, num_patch_height, num_patch_width, residual_spatial.shape[2]
+                )
                 .permute(0, 2, 3, 1, 4)
-                .reshape(B, H * W * T, res_spatial.shape[2])
+                .reshape(batch_size, num_patch_height * num_patch_width * num_frames, residual_spatial.shape[2])
             )
-            res = res_spatial
-            hidden_states = xt
+            residual = residual_spatial
+            hidden_states = temporal_embedding
 
             # Mlp
-            hidden_states = torch.cat((init_cls_token, hidden_states), 1) + torch.cat((cls_token, res), 1)
+            hidden_states = torch.cat((init_cls_token, hidden_states), 1) + torch.cat((cls_token, residual), 1)
             layer_output = self.layernorm_after(hidden_states)
             layer_output = self.intermediate(layer_output)
             layer_output = self.output(layer_output)
