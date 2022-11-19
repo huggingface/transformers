@@ -21,7 +21,7 @@ import warnings
 from typing import Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
+import torch.nn.functional
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -118,7 +118,7 @@ class TimeSformerEmbeddings(nn.Module):
             P = int(other_pos_embed.size(2) ** 0.5)
             H = embeddings.size(1) // patch_width
             other_pos_embed = other_pos_embed.reshape(1, embeddings.size(2), P, P)
-            new_pos_embed = F.interpolate(other_pos_embed, size=(H, patch_width), mode="nearest")
+            new_pos_embed = nn.functional.interpolate(other_pos_embed, size=(H, patch_width), mode="nearest")
             new_pos_embed = new_pos_embed.flatten(2)
             new_pos_embed = new_pos_embed.transpose(1, 2)
             new_pos_embed = torch.cat((cls_pos_embed, new_pos_embed), 1)
@@ -140,7 +140,7 @@ class TimeSformerEmbeddings(nn.Module):
             # Resizing time embeddings in case they don't match
             if num_frames != self.time_embeddings.size(1):
                 time_embeddings = self.time_embeddings.transpose(1, 2)
-                new_time_embeddings = F.interpolate(time_embeddings, size=(num_frames), mode="nearest")
+                new_time_embeddings = nn.functional.interpolate(time_embeddings, size=(num_frames), mode="nearest")
                 new_time_embeddings = new_time_embeddings.transpose(1, 2)
                 embeddings = embeddings + new_time_embeddings
             else:
