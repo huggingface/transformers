@@ -489,6 +489,7 @@ class TimeSformerLayer(nn.Module):
             return outputs
 
 
+# Adapted from transformers.models.videomae.modeling_videomae.VideoMAEEncoder with VideoMAE->TimeSformer
 class TimeSformerEncoder(nn.Module):
     def __init__(self, config: TimeSformerConfig) -> None:
         super().__init__()
@@ -542,6 +543,7 @@ class TimeSformerEncoder(nn.Module):
         )
 
 
+# Adapted from transformers.models.videomae.modeling_videomae.VideoMAEPreTrainedModel with VideoMAE->TimeSformer
 class TimeSformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -599,6 +601,7 @@ TIMESFORMER_INPUTS_DOCSTRING = r"""
     "The bare TimeSformer Model transformer outputting raw hidden-states without any specific head on top.",
     TIMESFORMER_START_DOCSTRING,
 )
+# Adapted from transformers.models.videomae.modeling_videomae.VideoMAEModel with VideoMAE->TimeSformer
 class TimeSformerModel(TimeSformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
