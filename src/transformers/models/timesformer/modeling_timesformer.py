@@ -548,11 +548,6 @@ class TimeSformerPreTrainedModel(PreTrainedModel):
         if isinstance(module, TimeSformerEncoder):
             module.gradient_checkpointing = value
 
-    config_class = TimeSformerConfig
-    base_model_prefix = "timesformer"
-    main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
-
 
 TIMESFORMER_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
@@ -594,12 +589,12 @@ class TimeSformerModel(TimeSformerPreTrainedModel):
         self.embeddings = TimeSformerEmbeddings(config)
         self.encoder = TimeSformerEncoder(config)
 
-        if config.use_mean_pooling:
-            self.layernorm = None
-        else:
-            self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
+        # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L214
+        trunc_normal_(self.embeddings.position_embeddings, std=0.02)
+        trunc_normal_(self.embeddings.cls_token, std=0.02)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -699,8 +694,7 @@ class TimeSformerModel(TimeSformerPreTrainedModel):
 
 
 @add_start_docstrings(
-    """TimeSformer Model transformer with a video classification head on top (a linear layer on top of the final hidden state
-of
+    """TimeSformer Model transformer with a video classification head on top (a linear layer on top of the final hidden state of
     the [CLS] token) e.g. for ImageNet.""",
     TIMESFORMER_START_DOCSTRING,
 )
@@ -713,11 +707,12 @@ class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
         self.timesformer = TimeSformerModel(config)
 
         # Classifier head
-        self.fc_norm = nn.LayerNorm(config.hidden_size) if config.use_mean_pooling else None
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
         # Initialize weights and apply final processing
-        self.post_init()
+        # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L214
+        trunc_normal_(self.timesformer.embeddings.position_embeddings, std=0.02)
+        trunc_normal_(self.timesformer.embeddings.cls_token, std=0.02)
 
     @add_start_docstrings_to_model_forward(TIMESFORMER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
@@ -744,7 +739,7 @@ class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
         >>> import torch
         >>> import numpy as np
 
-        >>> from transformers import TimeSformerFeatureExtractor, TimeSformerForVideoClassification
+        >>> from transformers import VideoMAEFeatureExtractor, TimeSformerForVideoClassification
         >>> from huggingface_hub import hf_hub_download
 
         >>> np.random.seed(0)
@@ -793,12 +788,7 @@ class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
-
-        if self.fc_norm is not None:
-            sequence_output = self.fc_norm(sequence_output.mean(1))
-        else:
-            sequence_output = sequence_output[:, 0]
+        sequence_output = outputs[0][:, 0]
 
         logits = self.classifier(sequence_output)
 

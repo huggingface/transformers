@@ -104,7 +104,6 @@ class TimeSformerConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-6,
         qkv_bias=True,
-        use_mean_pooling=False,
         attention_type="divided_space_time",
         drop_path_rate=0,
         **kwargs
@@ -126,7 +125,6 @@ class TimeSformerConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.qkv_bias = qkv_bias
-        self.use_mean_pooling = use_mean_pooling
 
         self.attention_type = attention_type
         self.drop_path_rate = drop_path_rate
