@@ -554,13 +554,17 @@ class TimeSformerPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
-        if isinstance(module, nn.Linear):
-            trunc_normal_(module.weight, std=0.02)
-            if isinstance(module, nn.Linear) and module.bias is not None:
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            nn.init.trunc_normal_(module.weight, std=self.config.initializer_range)
+            if module.bias is not None:
                 nn.init.constant_(module.bias, 0)
         elif isinstance(module, nn.LayerNorm):
             nn.init.constant_(module.bias, 0)
             nn.init.constant_(module.weight, 1.0)
+        elif isinstance(module, TimeSformerEmbeddings):
+            nn.init.trunc_normal_(module.cls_token, std=self.config.initializer_range)
+            nn.init.trunc_normal_(module.position_embeddings, std=self.config.initializer_range)
+            module.patch_embeddings.apply(self._init_weights)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, TimeSformerEncoder):
@@ -611,9 +615,6 @@ class TimeSformerModel(TimeSformerPreTrainedModel):
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
-        # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L214
-        trunc_normal_(self.embeddings.position_embeddings, std=0.02)
-        trunc_normal_(self.embeddings.cls_token, std=0.02)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -729,9 +730,6 @@ class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
         # Initialize weights and apply final processing
-        # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L214
-        trunc_normal_(self.timesformer.embeddings.position_embeddings, std=0.02)
-        trunc_normal_(self.timesformer.embeddings.cls_token, std=0.02)
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TIMESFORMER_INPUTS_DOCSTRING)
