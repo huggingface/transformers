@@ -255,9 +255,9 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class TimeSformerDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, config: TimeSformerConfig):
+    def __init__(self, drop_prob: Optional[float] = None) -> None:
         super().__init__()
-        self.drop_prob = config.drop_path_prob
+        self.drop_prob = drop_prob
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return drop_path(x, self.drop_prob, self.training)
@@ -299,7 +299,7 @@ class TimeSformerSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.videomae.modeling_videomae.VideoMAESelfOutput with VideoMAE->TimeSformer
+# Adapted from transformers.models.videomae.modeling_videomae.VideoMAESelfOutput with VideoMAE->TimeSformer
 class TimeSformerSelfOutput(nn.Module):
     """
     The residual connection is defined in TimeSformerLayer instead of here (as is the case with other models), due to
@@ -319,7 +319,7 @@ class TimeSformerSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.videomae.modeling_videomae.VideoMAEAttention with VideoMAE->TimeSformer
+# Adapted from transformers.models.videomae.modeling_videomae.VideoMAEAttention with VideoMAE->TimeSformer
 class TimeSformerAttention(nn.Module):
     def __init__(self, config: TimeSformerConfig) -> None:
         super().__init__()
@@ -387,7 +387,7 @@ class TimeSformerLayer(nn.Module):
         ]  # stochastic depth decay rule
         drop_path_prob = dpr[layer_index]
 
-        self.drop_path = TimeSformerDropPath(config) if drop_path_prob > 0.0 else nn.Identity()
+        self.drop_path = TimeSformerDropPath(config.drop_path_prob) if drop_path_prob > 0.0 else nn.Identity()
         self.attention = TimeSformerAttention(config)
         self.intermediate = TimeSformerIntermediate(config)
         self.output = TimeSformerOutput(config)
@@ -586,12 +586,6 @@ TIMESFORMER_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using [`VideoMAEFeatureExtractor`]. See
             [`VideoMAEFeatureExtractor.__call__`] for details.
 
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -725,7 +719,7 @@ of
     the [CLS] token) e.g. for ImageNet.""",
     TIMESFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.videomae.modeling_videomae.VideoMAEForVideoClassification with VideoMAE->TimeSformer
+# Adapted from transformers.models.videomae.modeling_videomae.VideoMAEForVideoClassification with VideoMAE->TimeSformer
 class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -749,7 +743,7 @@ class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple, ImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -788,10 +782,10 @@ class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
 
         >>> # sample 8 frames
         >>> videoreader.seek(0)
-        >>> indices = sample_frame_indices(clip_len=8, seg_len=len(videoreader))
+        >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=4, seg_len=len(videoreader))
         >>> video = videoreader.get_batch(indices).asnumpy()
 
-        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base")
+        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
         >>> model = TimeSformerForVideoClassification.from_pretrained("facebook/timesformer-base-finetuned-k400")
 
         >>> inputs = feature_extractor(list(video), return_tensors="pt")
