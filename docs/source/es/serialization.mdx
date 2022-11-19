@@ -18,7 +18,7 @@ en tiempos de ejecución y hardware especializados. En esta guía, te mostraremo
 exportar modelos 🤗 Transformers en dos formatos ampliamente utilizados: ONNX y TorchScript.
 
 Una vez exportado, un modelo puede optimizarse para la inferencia a través de técnicas 
-como la cuantificación y _pruning_. Si estás interesado en optimizar tus modelos para 
+como la cuantización y _pruning_. Si estás interesado en optimizar tus modelos para
 que funcionen con la máxima eficiencia, consulta la 
 [biblioteca de 🤗 Optimum](https://github.com/huggingface/optimum).
 
@@ -29,15 +29,15 @@ estándar abierto que define un conjunto común de operadores y un formato
 de archivo común para representar modelos de aprendizaje profundo en una 
 amplia variedad de _frameworks_, incluidos PyTorch y TensorFlow. Cuando un modelo 
 se exporta al formato ONNX, estos operadores se usan para construir un 
-gráfico computacional (a menudo llamado _representación intermedia_) que 
+grafo computacional (a menudo llamado _representación intermedia_) que 
 representa el flujo de datos a través de la red neuronal.
 
-Al exponer un gráfico con operadores y tipos de datos estandarizados, ONNX facilita 
+Al exponer un grafo con operadores y tipos de datos estandarizados, ONNX facilita 
 el cambio entre frameworks. Por ejemplo, un modelo entrenado en PyTorch se puede 
 exportar a formato ONNX y luego importar en TensorFlow (y viceversa).
 
 🤗 Transformers proporciona un paquete llamado `transformers.onnx`, el cual permite convertir 
-puntos de control de un modelo en un gráfico ONNX aprovechando los objetos de configuración. 
+los checkpoints de un modelo en un grafo ONNX aprovechando los objetos de configuración. 
 Estos objetos de configuración están hechos a la medida de diferentes arquitecturas de modelos
 y están diseñados para ser fácilmente extensibles a otras arquitecturas.
 
@@ -102,7 +102,7 @@ En las próximas dos secciones, te mostraremos cómo:
 
 ### Exportar un model a ONNX
 
-Para exportar un modelo 🤗 Transformers a ONNX, tienes que instalar primer algunas
+Para exportar un modelo 🤗 Transformers a ONNX, tienes que instalar primero algunas
 dependencias extra:
 
 ```bash
@@ -129,7 +129,7 @@ optional arguments:
   --atol ATOL           Absolute difference tolerence when validating the model.
 ```
 
-Exportar un punto de control usando una configuración a la medida se puede hacer de la siguiente manera:
+Exportar un checkpoint usando una configuración a la medida se puede hacer de la siguiente manera:
 
 ```bash
 python -m transformers.onnx --model=distilbert-base-uncased onnx/
@@ -146,9 +146,9 @@ Validating ONNX model...
 All good, model saved at: onnx/model.onnx
 ```
 
-Esto exporta un gráfico ONNX del punto de control definido por el argumento `--model`. 
-En este ejemplo, es un modelo `distilbert-base-uncased`, pero puede ser cualquier punto 
-de control en Hugging Face Hub o que esté almacenado localmente.
+Esto exporta un grafo ONNX del checkpoint definido por el argumento `--model`. 
+En este ejemplo, es un modelo `distilbert-base-uncased`, pero puede ser cualquier
+checkpoint en Hugging Face Hub o que esté almacenado localmente.
 
 El archivo `model.onnx` resultante se puede ejecutar en uno de los 
 [muchos aceleradores](https://onnx.ai/supported-tools.html#deployModel) 
@@ -178,8 +178,8 @@ echando un vistazo a la configuración ONNX de cada modelo. Por ejemplo, para Di
 ["last_hidden_state"]s
 ```
 
-El proceso es idéntico para los puntos de control de TensorFlow en Hub. 
-Por ejemplo, podemos exportar un punto de control puro de TensorFlow desde 
+El proceso es idéntico para los checkpoints de TensorFlow en Hub. 
+Por ejemplo, podemos exportar un checkpoint puro de TensorFlow desde 
 [Keras](https://huggingface.co/keras-io) de la siguiente manera:
 
 ```bash
@@ -188,7 +188,7 @@ python -m transformers.onnx --model=keras-io/transformers-qa onnx/
 
 Para exportar un modelo que está almacenado localmente, deberás tener los pesos 
 y tokenizadores del modelo almacenados en un directorio. Por ejemplo, podemos cargar 
-y guardar un punto de control de la siguiente manera:
+y guardar un checkpoint de la siguiente manera:
 
 <frameworkcontent>
 <pt>
@@ -203,7 +203,7 @@ y guardar un punto de control de la siguiente manera:
 >>> pt_model.save_pretrained("local-pt-checkpoint")
 ```
 
-Una vez que se guarda el punto de control, podemos exportarlo a ONNX usando el argumento `--model` 
+Una vez que se guarda el checkpoint, podemos exportarlo a ONNX usando el argumento `--model` 
 del paquete `transformers.onnx` al directorio deseado:
 
 ```bash
@@ -222,7 +222,7 @@ python -m transformers.onnx --model=local-pt-checkpoint onnx/
 >>> tf_model.save_pretrained("local-tf-checkpoint")
 ```
 
-Una vez que se guarda el punto de control, podemos exportarlo a ONNX usando el argumento `--model` 
+Una vez que se guarda el checkpoint, podemos exportarlo a ONNX usando el argumento `--model` 
 del paquete `transformers.onnx` al directorio deseado:
 
 ```bash
@@ -278,7 +278,7 @@ All good, model saved at: onnx/model.onnx
 ```
 
 Ten en cuenta que, en este caso, los nombres de salida del modelo ajustado son `logits` en lugar de `last_hidden_state` 
-que vimos anteriormente con el punto de control `distilbert-base-uncased`. Esto es de esperarse ya que el modelo ajustado 
+que vimos anteriormente con el checkpoint `distilbert-base-uncased`. Esto es de esperarse ya que el modelo ajustado 
 tiene un cabezal de clasificación secuencial.
 
 <Tip>
@@ -318,7 +318,7 @@ existente en el archivo `configuration_<model_name>.py` de una arquitectura simi
 
 </Tip>
 
-Dado que DistilBERT es un modelo de tipo _encoder-decoder_, su configuración se hereda de `OnnxConfig`:
+Dado que DistilBERT es un modelo de tipo _encoder_, su configuración se hereda de `OnnxConfig`:
 
 ```python
 >>> from typing import Mapping, OrderedDict
@@ -337,7 +337,7 @@ Dado que DistilBERT es un modelo de tipo _encoder-decoder_, su configuración se
 ```
 
 Cada objeto de configuración debe implementar la propiedad `inputs` y devolver un mapeo, 
-donde cada clave corresponde a una entrada esperada y cada valor indica el eje de esa entrada. 
+donde cada llave corresponde a una entrada esperada y cada valor indica el eje de esa entrada. 
 Para DistilBERT, podemos ver que se requieren dos entradas: `input_ids` y `attention_mask`. 
 Estas entradas tienen la misma forma de `(batch_size, sequence_length)`, es por lo que vemos 
 los mismos ejes utilizados en la configuración.
@@ -346,7 +346,7 @@ los mismos ejes utilizados en la configuración.
 
 Observa que la propiedad `inputs` para `DistilBertOnnxConfig` devuelve un `OrderedDict`.
 Esto nos asegura que las entradas coincidan con su posición relativa dentro del método 
-`PreTrainedModel.forward()` al rastrear el gráfico. Recomendamos usar un `OrderedDict` 
+`PreTrainedModel.forward()` al rastrear el grafo. Recomendamos usar un `OrderedDict` 
 para las propiedades `inputs` y `outputs` al implementar configuraciones ONNX personalizadas.
 
 </Tip>
@@ -478,18 +478,18 @@ y así tener una idea de lo que necesito.
 <Tip>
 
 Este es el comienzo de nuestros experimentos con TorchScript y todavía estamos explorando sus capacidades con modelos de 
-tamaño de entrada variable. Es un tema de interés para nosotros y profundizaremos nuestro análisis en las próximas 
-versiones,  con más ejemplos de código, una implementación más  flexible y puntos de referencia que comparen códigos 
+tamaño de entrada variable. Es un tema de interés y profundizaremos nuestro análisis en las próximas 
+versiones,  con más ejemplos de código, una implementación más flexible y puntos de referencia que comparen códigos 
 basados en Python con TorchScript compilado.
 
 </Tip>
 
-Según la documentación de Pytorch: "TorchScript es una forma de crear modelos serializables y optimizables a partir del 
+Según la documentación de PyTorch: "TorchScript es una forma de crear modelos serializables y optimizables a partir del 
 código de PyTorch". Los dos módulos de Pytorch [JIT y TRACE](https://pytorch.org/docs/stable/jit.html) permiten al 
 desarrollador exportar su modelo para reutilizarlo  en otros programas, como los programas C++ orientados a la eficiencia.
 
 Hemos proporcionado una interfaz que permite exportar modelos de 🤗 Transformers a TorchScript para que puedan reutilizarse 
-en un entorno diferente  al de un programa Python basado en Pytorch. Aquí explicamos cómo exportar y usar nuestros modelos 
+en un entorno diferente  al de un programa Python basado en PyTorch. Aquí explicamos cómo exportar y usar nuestros modelos 
 usando TorchScript.
 
 Exportar un modelo requiere de dos cosas:
@@ -515,7 +515,7 @@ Estos modelos se pueden exportar de forma segura sin el indicador `torchscript`.
 ### Entradas ficticias y longitudes estándar
 
 Las entradas ficticias se utilizan para crear un modelo de pase hacia adelante. Mientras los valores de las entradas se 
-propagan a través de las capas, Pytorch realiza un seguimiento de las diferentes operaciones ejecutadas en cada tensor.
+propagan a través de las capas, PyTorch realiza un seguimiento de las diferentes operaciones ejecutadas en cada tensor.
 Estas operaciones registradas se utilizan luego para crear el "rastro" del modelo.
 
 El rastro se crea en relación con las dimensiones de las entradas. Por lo tanto, está limitado por las dimensiones de la 
@@ -642,7 +642,7 @@ que viene preconfigurado en [AWS Deep Learning AMI](https://docs.aws.amazon.com/
 
 #### Convertir un modelo a AWS Neuron
 
-Con el mismo script usado en [Uso de TorchScript en Python](https://huggingface.co/docs/transformers/main/es/serialization#using-torchscript-in-python) ç
+Con el mismo script usado en [Uso de TorchScript en Python](https://huggingface.co/docs/transformers/main/es/serialization#using-torchscript-in-python)
 para rastrear un "BertModel", puedes importar la extensión del _framework_ `torch.neuron` para acceder a los componentes 
 del SDK de Neuron a través de una API de Python.
 
