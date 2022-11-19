@@ -694,8 +694,8 @@ class TimeSformerModel(TimeSformerPreTrainedModel):
 
 
 @add_start_docstrings(
-    """TimeSformer Model transformer with a video classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.""",
+    """TimeSformer Model transformer with a video classification head on top (a linear layer on top of the final hidden state
+of the [CLS] token) e.g. for ImageNet.""",
     TIMESFORMER_START_DOCSTRING,
 )
 # Adapted from transformers.models.videomae.modeling_videomae.VideoMAEForVideoClassification with VideoMAE->TimeSformer
