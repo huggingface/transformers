@@ -15,7 +15,7 @@ specific language governing permissions and limitations under the License.
 ## Overview
 
 The TimeSformer model was proposed in [TimeSformer: Is Space-Time Attention All You Need for Video Understanding?](https://arxiv.org/abs/2102.05095) by Facebook Research.
-<INSERT SHORT SUMMARY HERE>
+This work is a milestone in action-recognition field being the first video transformer. It inspired many transformer based video understanding and classification papers.
 
 The abstract from the paper is the following:
 
@@ -23,7 +23,7 @@ We present a convolution-free approach to video classification built exclusively
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+There are many pretrained variants. Select your pretrained model based on the dataset it is trained on. Moreover, number of input frames per clip changes based on the model size so you can consider this parameter while selecting your pretrained model.
 
 This model was contributed by [fcakyon](https://huggingface.co/fcakyon).
 The original code can be found [here](https://github.com/facebookresearch/TimeSformer).
@@ -40,5 +40,5 @@ The original code can be found [here](https://github.com/facebookresearch/TimeSf
 
 ## TimeSformerForVideoClassification
 
-[[autodoc]] transformers.TimeSformerForVideoClassification
+[[autodoc]] TimeSformerForVideoClassification
     - forward
