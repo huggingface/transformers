@@ -69,6 +69,8 @@ class TimeSformerConfig(PretrainedConfig):
             Whether to mean pool the final hidden states instead of using the final hidden state of the [CLS] token.
         attention_type (`str`, *optional*, defaults to `"divided_space_time"`):
             The attention type to use. Must be one of `"divided_space_time"`, `"space_only"`, `"joint_space_time"`.
+        drop_path_rate (`float`, *optional*, defaults to 0):
+            The dropout ratio for stochastic depth.
 
     Example:
 
