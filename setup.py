@@ -125,6 +125,7 @@ _deps = [
     "jieba",
     "kenlm",
     "nltk",
+    "natten>=0.14.4",
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
@@ -156,8 +157,8 @@ _deps = [
     "sigopt",
     "librosa",
     "starlette",
-    "tensorflow-cpu>=2.3",
-    "tensorflow>=2.4",
+    "tensorflow-cpu>=2.4,<2.11",
+    "tensorflow>=2.4,<2.11",
     "tensorflow-text",
     "tf2onnx",
     "timeout-decorator",
@@ -283,6 +284,7 @@ extras["tf-speech"] = extras["audio"]
 extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
+extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
 
 

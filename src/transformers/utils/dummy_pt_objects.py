@@ -437,6 +437,13 @@ MODEL_MAPPING = None
 MODEL_WITH_LM_HEAD_MAPPING = None
 
 
+class AutoBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class AutoModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -1727,6 +1734,30 @@ class DeiTModel(metaclass=DummyObject):
 
 
 class DeiTPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+DINAT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class DinatForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DinatModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DinatPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -3731,6 +3762,30 @@ class MvpPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+NAT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class NatForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class NatModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class NatPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 NEZHA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -4521,6 +4576,13 @@ def load_tf_weights_in_rembert(*args, **kwargs):
 
 
 RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class ResNetBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class ResNetForImageClassification(metaclass=DummyObject):

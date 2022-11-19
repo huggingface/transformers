@@ -58,6 +58,7 @@ from .utils import (
     is_ipex_available,
     is_jumanpp_available,
     is_librosa_available,
+    is_natten_available,
     is_onnx_available,
     is_pandas_available,
     is_phonemizer_available,
@@ -280,6 +281,16 @@ def require_timm(test_case):
 
     """
     return unittest.skipUnless(is_timm_available(), "test requires Timm")(test_case)
+
+
+def require_natten(test_case):
+    """
+    Decorator marking a test that requires NATTEN.
+
+    These tests are skipped when NATTEN isn't installed.
+
+    """
+    return unittest.skipUnless(is_natten_available(), "test requires natten")(test_case)
 
 
 def require_torch(test_case):
