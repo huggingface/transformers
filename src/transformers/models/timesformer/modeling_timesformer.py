@@ -104,6 +104,9 @@ class TimeSformerEmbeddings(nn.Module):
     def forward(self, pixel_values):
         batch_size = pixel_values.shape[0]
 
+        # timesformer expects (batch_size, num_channels, num_frames, height, width)
+        pixel_values = pixel_values.permute(0, 2, 1, 3, 4)
+
         # create patch embeddings
         embeddings, num_frames, patch_width = self.patch_embeddings(pixel_values)
 
@@ -687,9 +690,6 @@ class TimeSformerModel(TimeSformerPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # timesformer expects (batch_size, num_channels, num_frames, ,eight, width)
-        pixel_values = pixel_values.permute(0, 2, 1, 3, 4)
 
         embedding_output = self.embeddings(pixel_values)
 
