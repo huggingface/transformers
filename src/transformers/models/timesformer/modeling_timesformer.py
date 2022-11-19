@@ -155,7 +155,7 @@ class TimeSformerEmbeddings(nn.Module):
         return embeddings
 
 
-# Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit_utils.py#L31
+# Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit_utils.py#L24
 def _no_grad_trunc_normal_(tensor, mean, std, a, b):
     def norm_cdf(x):
         # Computes standard normal cumulative distribution function
@@ -192,16 +192,23 @@ def _no_grad_trunc_normal_(tensor, mean, std, a, b):
         return tensor
 
 
-# Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit_utils.py#L64
-def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
-    # type: (tensor, float, float, float, float) -> tensor
-    r"""Fills the input Tensor with values drawn from a truncated
+# Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit_utils.py#L57
+def trunc_normal_(
+    tensor: torch.Tensor, mean: float = 0.0, std: float = 1.0, a: float = -2.0, b: float = 2.0
+) -> torch.Tensor:
+    """
+    Fills the input Tensor with values drawn from a truncated normal distribution. The values are effectively drawn
+    from the normal distribution :math:`\mathcal{N}(\text{mean}, \text{std}^2)` with values outside :math:`[a, b]`
+    redrawn until they are within the bounds. The method used for generating the random values works best when :math:`a
+    \leq \text{mean} \leq b`.
+
     Args:
-    normal distribution. The values are effectively drawn from the normal distribution :math:`\mathcal{N}(\text{mean},
-    \text{std}^2)` with values outside :math:`[a, b]` redrawn until they are within the bounds. The method used for
-    generating the random values works best when :math:`a \leq \text{mean} \leq b`.
-        tensor: an n-dimensional `torch.Tensor` mean: the mean of the normal distribution std: the standard deviation
-        of the normal distribution a: the minimum cutoff value b: the maximum cutoff value
+        tensor: an n-dimensional `torch.Tensor`
+        mean: the mean of the normal distribution
+        std: the standard deviation of the normal distribution
+        a: the minimum cutoff value
+        b: the maximum cutoff value
+
     Examples:
         >>> w = torch.empty(3, 5) >>> nn.init.trunc_normal_(w)
     """
@@ -528,14 +535,14 @@ class TimeSformerPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=0.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            trunc_normal_(module.weight, std=0.02)
+            if isinstance(module, nn.Linear) and module.bias is not None:
+                nn.init.constant_(module.bias, 0)
+        elif isinstance(module, nn.LayerNorm):
+            nn.init.constant_(module.bias, 0)
+            nn.init.constant_(module.weight, 1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, TimeSformerEncoder):
