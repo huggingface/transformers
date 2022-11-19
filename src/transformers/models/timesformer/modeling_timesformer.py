@@ -164,7 +164,7 @@ class TimeSformerEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit_utils.py#L78
+# Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit_utils.py#L78
 def _ntuple(n):
     def parse(x):
         if isinstance(x, container_abcs.Iterable):
@@ -177,7 +177,7 @@ def _ntuple(n):
 to_2tuple = _ntuple(2)
 
 
-# Copied from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit_utils.py#L31
+# Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit_utils.py#L31
 def _no_grad_trunc_normal_(tensor, mean, std, a, b):
     def norm_cdf(x):
         # Computes standard normal cumulative distribution function
@@ -214,7 +214,7 @@ def _no_grad_trunc_normal_(tensor, mean, std, a, b):
         return tensor
 
 
-# Copied from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit_utils.py#L64
+# Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit_utils.py#L64
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
     # type: (tensor, float, float, float, float) -> tensor
     r"""Fills the input Tensor with values drawn from a truncated
@@ -251,6 +251,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     return output
 
 
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->TimeSformer
 class TimeSformerDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
@@ -298,7 +299,7 @@ class TimeSformerSelfAttention(nn.Module):
         return outputs
 
 
-# copied from transformers.models.videomae.modeling_videomae.VideoMAESelfOutput
+# Copied from transformers.models.videomae.modeling_videomae.VideoMAESelfOutput with VideoMAE->TimeSformer
 class TimeSformerSelfOutput(nn.Module):
     """
     The residual connection is defined in TimeSformerLayer instead of here (as is the case with other models), due to
@@ -318,7 +319,7 @@ class TimeSformerSelfOutput(nn.Module):
         return hidden_states
 
 
-# copied from transformers.models.videomae.modeling_videomae.VideoMAEAttention
+# Copied from transformers.models.videomae.modeling_videomae.VideoMAEAttention with VideoMAE->TimeSformer
 class TimeSformerAttention(nn.Module):
     def __init__(self, config: TimeSformerConfig) -> None:
         super().__init__()
@@ -724,6 +725,7 @@ of
     the [CLS] token) e.g. for ImageNet.""",
     TIMESFORMER_START_DOCSTRING,
 )
+# Copied from transformers.models.videomae.modeling_videomae.VideoMAEForVideoClassification with VideoMAE->TimeSformer
 class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

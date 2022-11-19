@@ -210,7 +210,6 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("switch_transformers", "SwitchTransformersForConditionalGeneration"),
         ("t5", "T5ForConditionalGeneration"),
         ("tapas", "TapasForMaskedLM"),
-        ("timesformer", "TimeSformerForPreTraining"),
         ("transfo-xl", "TransfoXLLMHeadModel"),
         ("unispeech", "UniSpeechForPreTraining"),
         ("unispeech-sat", "UniSpeechSatForPreTraining"),
