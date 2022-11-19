@@ -280,7 +280,6 @@ class TFModelTesterMixin:
             model = model_class(config)
             inputs = self._prepare_for_class(inputs_dict, model_class)
             outputs = model(inputs)
-            print("<<< ", len(outputs[0]))
             serving_outputs = model.serving_output(outputs)
 
             for k, v in serving_outputs.items():
@@ -796,7 +795,6 @@ class TFModelTesterMixin:
                 inputs = tf.keras.Input(batch_shape=(4, 2, max_input), name="input_ids", dtype="int32")
             else:
                 inputs = tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32")
-
             # Prepare our model
             model = model_class(config)
             model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
@@ -1918,10 +1916,6 @@ def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):
     values = []
     for _ in range(total_dims):
         values.append(rng.randint(0, vocab_size - 1))
-        # x = rng.randint(0, vocab_size - 1)
-        # if x == 2:
-        #     x = 9
-        # values.append(x)
 
     output = tf.constant(values, shape=shape, dtype=dtype if dtype is not None else tf.int32)
 

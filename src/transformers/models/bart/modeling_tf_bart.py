@@ -1588,38 +1588,35 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
         # last_hidden_state = outputs["last_hidden_state"]
         last_hidden_state = outputs[0]
         eos_mask = tf.equal(input_ids, self.config.eos_token_id)
-        masked = tf.boolean_mask(last_hidden_state, eos_mask)
+        print(f"FOUND >>>> {tf.math.greater(tf.shape(tf.unique(tf.reduce_sum(tf.cast(eos_mask, dtype=tf.int32), axis=1)).y)[0], tf.constant([1]))}")
+        # if tf.math.greater(tf.shape(tf.unique(tf.reduce_sum(tf.cast(eos_mask, dtype=tf.int32), axis=1)).y), tf.constant([1])):
+        #     raise ValueError("All examples must have the same number of <eos> tokens.")
+        print(f"EOS MASK: {eos_mask}")
+        print(f"EOS MASK SHAPE: {eos_mask.shape}")
+        # TODO boolean mask is casting to a single row
+        # masked = tf.boolean_mask(last_hidden_state, eos_mask)
+        masked = tf.ragged.boolean_mask(last_hidden_state, eos_mask)
+        print(f"Masked shape: {masked.shape}")
+        self_masked = tf.ragged.boolean_mask(eos_mask, eos_mask).to_tensor()
+        print(f"self masked: {self_masked}")
+        print(f"self masked sliced: {self_masked[:,-1]}")
+        # if not tf.reduce_all(self_masked[:,-1]):
+        #     print(">>>> ", tf.reduce_all(self_masked[:,-1]))
+        #     print("FAIL")
+        #     raise
+        tf.Assert(tf.reduce_all(self_masked[:,-1]), ["All examples must have the same number of <eos> tokens."])
+        masked = tf.ragged.boolean_mask(last_hidden_state, eos_mask).to_tensor()
+        # masked = tf.reshape(masked, (-1, masked.shape[0], masked.shape[1]))
 
-        # print(f"FOUND >>>> {tf.math.greater(tf.shape(tf.unique(tf.reduce_sum(tf.cast(eos_mask, dtype=tf.int32), axis=1)).y), 1)}")
-        # if tf.math.greater(tf.shape(tf.unique(tf.reduce_sum(tf.cast(eos_mask, dtype=tf.int32), axis=1)).y)[0], 1):
-        #     # raise ValueError("All examples must have the same number of <eos> tokens.")
-        #     raise NotImplementedError("All examples must have the same number of <eos> tokens.")
-
-        sentence_representation = tf.reshape(masked, (-1, 1, last_hidden_state.shape[-1]))[:, -1, :]
+        print(f"Last hidden state shape: {last_hidden_state.shape}")
+        print(f"Masked shape: {masked.shape}")
+        # sentence_representation = tf.reshape(masked, (-1, masked, last_hidden_state.shape[-1]))[:, -1, :]
+        sentence_representation = masked[:, -1, :]
+        print(f"Sent rep: ", sentence_representation.shape)
         logits = self.classification_head(sentence_representation)
         reshaped_logits = tf.reshape(tensor=logits, shape=(-1, self.config.num_labels))
         loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=reshaped_logits)
-        # if labels is not None:
-        #     if self.config.problem_type is None:
-        #         if self.config.num_labels == 1:
-        #             self.config.problem_type = "regression"
-        #         elif self.config.num_labels > 1 and (labels.dtype == tf.int64 or labels.dtype == tf.int32):
-        #             self.config.problem_type = "single_label_classification"
-        #         else:
-        #             self.config.problem_type = "multi_label_classification"
 
-        #     if self.config.problem_type == "regression":
-        #         loss_fct = tf.keras.losses.MSE
-        #         if self.config.num_labels == 1:
-        #             loss = loss_fct(labels.squeeze(), logits.squeeze(), from_logits=True)
-        #         else:
-        #             loss = loss_fct(labels, logits, from_logits=True)
-        #     elif self.config.problem_type == "single_label_classification":
-        #         loss_fct = tf.keras.losses.sparse_categorical_crossentropy
-        #         loss = loss_fct(tf.reshape(labels, (-1, 1)), tf.reshape(logits, (-1, self.config.num_labels)), from_logits=True)
-        #     elif self.config.problem_type == "multi_label_classification":
-        #         loss_fct = tf.keras.losses.binary_crossentropy
-        #         loss = loss_fct(labels, logits, from_logits=True)
         if not return_dict:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
@@ -1627,6 +1624,7 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
         return TFSeq2SeqSequenceClassifierOutput(
             loss=loss,
             logits=logits,
+            cross_attentions=outputs.cross_attentions,
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
@@ -1637,15 +1635,16 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
 
     def serving_output(self, output):
         logits = tf.convert_to_tensor(output.logits)
+        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None # TODO
         pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
-        # cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None # TODO
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
         enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
 
         return TFSeq2SeqSequenceClassifierOutput(
             logits=logits,
+            cross_attentions=cross_attns,
             past_key_values=pkv,
             decoder_hidden_states=dec_hs,
             decoder_attentions=dec_attns,
