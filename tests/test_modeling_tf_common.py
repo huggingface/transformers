@@ -1107,7 +1107,6 @@ class TFModelTesterMixin:
                         model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
                     )
 
-    # BartForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
