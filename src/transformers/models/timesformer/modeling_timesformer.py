@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Multimedia Computing Group, Nanjing University and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Meta and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -54,7 +54,7 @@ TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L155
-class TimeSformerPatchEmbed(nn.Module):
+class TimeSformerPatchEmbeddings(nn.Module):
     """Image to Patch Embedding"""
 
     def __init__(self, config):
@@ -99,7 +99,7 @@ class TimeSformerEmbeddings(nn.Module):
         attention_type = config.attention_type
 
         self.attention_type = attention_type
-        self.patch_embeddings = TimeSformerPatchEmbed(config)
+        self.patch_embeddings = TimeSformerPatchEmbeddings(config)
         self.num_patches = self.patch_embeddings.num_patches
 
         # Positional Embeddings
