@@ -713,6 +713,7 @@ class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
         # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L214
         trunc_normal_(self.timesformer.embeddings.position_embeddings, std=0.02)
         trunc_normal_(self.timesformer.embeddings.cls_token, std=0.02)
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(TIMESFORMER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
