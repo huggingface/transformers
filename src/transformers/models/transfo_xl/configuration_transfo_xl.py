@@ -97,7 +97,7 @@ class TransfoXLConfig(PretrainedConfig):
     >>> # Initializing a Transformer XL configuration
     >>> configuration = TransfoXLConfig()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = TransfoXLModel(configuration)
 
     >>> # Accessing the model configuration

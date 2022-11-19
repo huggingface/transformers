@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
 from PIL import Image
 
+from transformers.image_utils import PILImageResampling
+
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...image_utils import ImageFeatureExtractionMixin, ImageInput, is_torch_tensor
 from ...utils import TensorType, is_torch_available, logging
@@ -35,15 +37,14 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+# Copied from transformers.models.detr.feature_extraction_detr.binary_mask_to_rle
 def binary_mask_to_rle(mask):
     """
-    Converts given binary mask of shape (height, width) to the run-length encoding (RLE) format.
-
     Args:
+    Converts given binary mask of shape (height, width) to the run-length encoding (RLE) format.
         mask (`torch.Tensor` or `numpy.array`):
             A binary mask tensor of shape `(height, width)` where 0 denotes background and 1 denotes the target
             segment_id or class_id.
-
     Returns:
         `List`: Run-length encoded list of the binary mask. Refer to COCO API for more information about the RLE
         format.
@@ -58,6 +59,7 @@ def binary_mask_to_rle(mask):
     return [x for x in runs]
 
 
+# Copied from transformers.models.detr.feature_extraction_detr.convert_segmentation_to_rle
 def convert_segmentation_to_rle(segmentation):
     """
     Converts given segmentation map of shape (height, width) to the run-length encoding (RLE) format.
@@ -65,7 +67,6 @@ def convert_segmentation_to_rle(segmentation):
     Args:
         segmentation (`torch.Tensor` or `numpy.array`):
             A segmentation map of shape `(height, width)` where each value denotes a segment or class id.
-
     Returns:
         `List[List]`: A list of lists, where each list is the run-length encoding of a segment / class id.
     """
@@ -80,6 +81,7 @@ def convert_segmentation_to_rle(segmentation):
     return run_length_encodings
 
 
+# Copied from transformers.models.detr.feature_extraction_detr.remove_low_and_no_objects
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
     """
     Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
@@ -94,10 +96,8 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
             A tensor of shape `(num_queries)`.
         object_mask_threshold (`float`):
             A number between 0 and 1 used to binarize the masks.
-
     Raises:
         `ValueError`: Raised when the first dimension doesn't match in all input tensors.
-
     Returns:
         `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
         < `object_mask_threshold`.
@@ -106,16 +106,18 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
         raise ValueError("mask, scores and labels must have the same shape!")
 
     to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
+
     return masks[to_keep], scores[to_keep], labels[to_keep]
 
 
-def check_segment_validity(mask_labels, mask_probs, k, overlap_mask_area_threshold=0.8):
+# Copied from transformers.models.detr.feature_extraction_detr.check_segment_validity
+def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
     # Get the mask associated with the k class
     mask_k = mask_labels == k
     mask_k_area = mask_k.sum()
 
     # Compute the area of all the stuff in query k
-    original_area = (mask_probs[k] >= 0.5).sum()
+    original_area = (mask_probs[k] >= mask_threshold).sum()
     mask_exists = mask_k_area > 0 and original_area > 0
 
     # Eliminate disconnected tiny segments
@@ -127,10 +129,12 @@ def check_segment_validity(mask_labels, mask_probs, k, overlap_mask_area_thresho
     return mask_exists, mask_k
 
 
+# Copied from transformers.models.detr.feature_extraction_detr.compute_segments
 def compute_segments(
     mask_probs,
     pred_scores,
     pred_labels,
+    mask_threshold: float = 0.5,
     overlap_mask_area_threshold: float = 0.8,
     label_ids_to_fuse: Optional[Set[int]] = None,
     target_size: Tuple[int, int] = None,
@@ -142,7 +146,9 @@ def compute_segments(
     segments: List[Dict] = []
 
     if target_size is not None:
-        mask_probs = interpolate(mask_probs.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False)[0]
+        mask_probs = nn.functional.interpolate(
+            mask_probs.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
+        )[0]
 
     current_segment_id = 0
 
@@ -157,7 +163,9 @@ def compute_segments(
         should_fuse = pred_class in label_ids_to_fuse
 
         # Check if mask exists and large enough to be a segment
-        mask_exists, mask_k = check_segment_validity(mask_labels, mask_probs, k, overlap_mask_area_threshold)
+        mask_exists, mask_k = check_segment_validity(
+            mask_labels, mask_probs, k, mask_threshold, overlap_mask_area_threshold
+        )
 
         if mask_exists:
             if pred_class in stuff_memory_list:
@@ -201,10 +209,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         max_size (`int`, *optional*, defaults to 1333):
             The largest size an image dimension can have (otherwise it's capped). Only has an effect if `do_resize` is
             set to `True`.
-        resample (`int`, *optional*, defaults to `PIL.Image.BILINEAR`):
-            An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
-            `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
-            if `do_resize` is set to `True`.
+        resample (`int`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+            An optional resampling filter. This can be one of `PILImageResampling.NEAREST`, `PILImageResampling.BOX`,
+            `PILImageResampling.BILINEAR`, `PILImageResampling.HAMMING`, `PILImageResampling.BICUBIC` or
+            `PILImageResampling.LANCZOS`. Only has an effect if `do_resize` is set to `True`.
         size_divisibility (`int`, *optional*, defaults to 32):
             Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
             Swin Transformer.
@@ -217,7 +225,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             ImageNet std.
         ignore_index (`int`, *optional*):
             Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
-            denoted with 0 (background) will be replaced with `ignore_index`.
+            denoted with 0 (background) will be replaced with `ignore_index`. The ignore index of the loss function of
+            the model should then correspond to this ignore index.
         reduce_labels (`bool`, *optional*, defaults to `False`):
             Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
             is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
@@ -232,7 +241,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         do_resize=True,
         size=800,
         max_size=1333,
-        resample=Image.BILINEAR,
+        resample=PILImageResampling.BILINEAR,
         size_divisibility=32,
         do_normalize=True,
         image_mean=None,
@@ -319,11 +328,23 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         padded up to the largest image in a batch, and a pixel mask is created that indicates which pixels are
         real/which are padding.
 
-        MaskFormer addresses semantic segmentation with a mask classification paradigm, thus input segmentation maps
-        will be converted to lists of binary masks and their respective labels. Let's see an example, assuming
-        `segmentation_maps = [[2,6,7,9]]`, the output will contain `mask_labels =
+        Segmentation maps can be instance, semantic or panoptic segmentation maps. In case of instance and panoptic
+        segmentation, one needs to provide `instance_id_to_semantic_id`, which is a mapping from instance/segment ids
+        to semantic category ids.
+
+        MaskFormer addresses all 3 forms of segmentation (instance, semantic and panoptic) in the same way, namely by
+        converting the segmentation maps to a set of binary masks with corresponding classes.
+
+        In case of instance segmentation, the segmentation maps contain the instance ids, and
+        `instance_id_to_semantic_id` maps instance IDs to their corresponding semantic category.
+
+        In case of semantic segmentation, the segmentation maps contain the semantic category ids. Let's see an
+        example, assuming `segmentation_maps = [[2,6,7,9]]`, the output will contain `mask_labels =
         [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]` (four binary masks) and `class_labels = [2,6,7,9]`, the labels for
         each mask.
+
+        In case of panoptic segmentation, the segmentation maps contain the segment ids, and
+        `instance_id_to_semantic_id` maps segment IDs to their corresponding semantic category.
 
         <Tip warning={true}>
 
@@ -339,9 +360,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 number of channels, H and W are image height and width.
 
             segmentation_maps (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
-                The corresponding semantic segmentation maps with the pixel-wise class id annotations or instance
-                segmentation maps with pixel-wise instance id annotations. Assumed to be semantic segmentation maps if
-                no `instance_id_to_semantic_id map` is provided.
+                The corresponding segmentation maps with the pixel-wise instance id, semantic id or segment id
+                annotations. Assumed to be semantic segmentation maps if no `instance_id_to_semantic_id map` is
+                provided.
 
             pad_and_return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.
@@ -352,10 +373,11 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 - 0 for pixels that are padding (i.e. **masked**).
 
             instance_id_to_semantic_id (`List[Dict[int, int]]` or `Dict[int, int]`, *optional*):
-                A mapping between object instance ids and class ids. If passed, `segmentation_maps` is treated as an
-                instance segmentation map where each pixel represents an instance id. Can be provided as a single
-                dictionary with a global / dataset-level mapping or as a list of dictionaries (one per image), to map
-                instance ids in each image separately.
+                A mapping between instance/segment ids and semantic category ids. If passed, `segmentation_maps` is
+                treated as an instance or panoptic segmentation map where each pixel represents an instance or segment
+                id. Can be provided as a single dictionary with a global / dataset-level mapping or as a list of
+                dictionaries (one per image), to map instance ids in each image separately. Note that this assumes a
+                mapping before reduction of labels.
 
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
@@ -470,57 +492,81 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         segmentation_map: "np.ndarray",
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
     ):
-        # Get unique ids (class or instance ids based on input)
+        # Reduce labels, if requested
+        if self.reduce_labels:
+            if self.ignore_index is None:
+                raise ValueError("`ignore_index` must be set when `reduce_labels` is `True`.")
+            segmentation_map[segmentation_map == 0] = self.ignore_index
+            segmentation_map -= 1
+            segmentation_map[segmentation_map == self.ignore_index - 1] = self.ignore_index
+
+        # Get unique ids (instance, class ids or segment ids based on input)
         all_labels = np.unique(segmentation_map)
 
-        # Drop background label if applicable
-        if self.reduce_labels:
-            all_labels = all_labels[all_labels != 0]
+        # Remove ignored label
+        if self.ignore_index is not None:
+            all_labels = all_labels[all_labels != self.ignore_index]
 
         # Generate a binary mask for each object instance
-        binary_masks = [np.ma.masked_where(segmentation_map == i, segmentation_map) for i in all_labels]
+        binary_masks = [(segmentation_map == i) for i in all_labels]
         binary_masks = np.stack(binary_masks, axis=0)  # (num_labels, height, width)
 
-        # Convert instance ids to class ids
+        # Convert instance/segment ids to class ids
         if instance_id_to_semantic_id is not None:
             labels = np.zeros(all_labels.shape[0])
 
             for label in all_labels:
-                class_id = instance_id_to_semantic_id[label]
-                labels[all_labels == label] = class_id
+                class_id = instance_id_to_semantic_id[label + 1 if self.reduce_labels else label]
+                labels[all_labels == label] = class_id - 1 if self.reduce_labels else class_id
         else:
             labels = all_labels
-
-        # Decrement labels by 1
-        if self.reduce_labels:
-            labels -= 1
 
         return binary_masks.astype(np.float32), labels.astype(np.int64)
 
     def encode_inputs(
         self,
-        pixel_values_list: List["np.ndarray"],
+        pixel_values_list: Union[List["np.ndarray"], List["torch.Tensor"]],
         segmentation_maps: ImageInput = None,
         pad_and_return_pixel_mask: bool = True,
         instance_id_to_semantic_id: Optional[Union[List[Dict[int, int]], Dict[int, int]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ):
         """
-        Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
+        Encode a list of pixel values and an optional list of corresponding segmentation maps.
 
-        MaskFormer addresses semantic segmentation with a mask classification paradigm, thus input segmentation maps
-        will be converted to lists of binary masks and their respective labels. Let's see an example, assuming
-        `segmentation_maps = [[2,6,7,9]]`, the output will contain `mask_labels =
+        This method is useful if you have resized and normalized your images and segmentation maps yourself, using a
+        library like [torchvision](https://pytorch.org/vision/stable/transforms.html) or
+        [albumentations](https://albumentations.ai/).
+
+        Images are padded up to the largest image in a batch, and a corresponding `pixel_mask` is created.
+
+        Segmentation maps can be instance, semantic or panoptic segmentation maps. In case of instance and panoptic
+        segmentation, one needs to provide `instance_id_to_semantic_id`, which is a mapping from instance/segment ids
+        to semantic category ids.
+
+        MaskFormer addresses all 3 forms of segmentation (instance, semantic and panoptic) in the same way, namely by
+        converting the segmentation maps to a set of binary masks with corresponding classes.
+
+        In case of instance segmentation, the segmentation maps contain the instance ids, and
+        `instance_id_to_semantic_id` maps instance IDs to their corresponding semantic category.
+
+        In case of semantic segmentation, the segmentation maps contain the semantic category ids. Let's see an
+        example, assuming `segmentation_maps = [[2,6,7,9]]`, the output will contain `mask_labels =
         [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]` (four binary masks) and `class_labels = [2,6,7,9]`, the labels for
         each mask.
 
+        In case of panoptic segmentation, the segmentation maps contain the segment ids, and
+        `instance_id_to_semantic_id` maps segment IDs to their corresponding semantic category.
+
         Args:
-            pixel_values_list (`List[torch.Tensor]`):
+            pixel_values_list (`List[np.ndarray]` or `List[torch.Tensor]`):
                 List of images (pixel values) to be padded. Each image should be a tensor of shape `(channels, height,
                 width)`.
 
             segmentation_maps (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
-                The corresponding semantic segmentation maps with the pixel-wise annotations.
+                The corresponding segmentation maps with the pixel-wise instance id, semantic id or segment id
+                annotations. Assumed to be semantic segmentation maps if no `instance_id_to_semantic_id map` is
+                provided.
 
             pad_and_return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.
@@ -531,10 +577,11 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 - 0 for pixels that are padding (i.e. **masked**).
 
             instance_id_to_semantic_id (`List[Dict[int, int]]` or `Dict[int, int]`, *optional*):
-                A mapping between object instance ids and class ids. If passed, `segmentation_maps` is treated as an
-                instance segmentation map where each pixel represents an instance id. Can be provided as a single
-                dictionary with a global/dataset-level mapping or as a list of dictionaries (one per image), to map
-                instance ids in each image separately.
+                A mapping between instance/segment ids and semantic category ids. If passed, `segmentation_maps` is
+                treated as an instance or panoptic segmentation map where each pixel represents an instance or segment
+                id. Can be provided as a single dictionary with a global / dataset-level mapping or as a list of
+                dictionaries (one per image), to map instance ids in each image separately. Note that this assumes a
+                mapping before reduction of labels.
 
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
@@ -719,6 +766,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         self,
         outputs,
         threshold: float = 0.5,
+        mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
         target_sizes: Optional[List[Tuple[int, int]]] = None,
         return_coco_annotation: Optional[bool] = False,
@@ -732,6 +780,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
                 The overlap mask area threshold to merge or discard small disconnected parts within each binary
                 instance mask.
@@ -783,6 +833,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 mask_probs_item,
                 pred_scores_item,
                 pred_labels_item,
+                mask_threshold,
                 overlap_mask_area_threshold,
                 target_size,
             )
@@ -798,6 +849,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         self,
         outputs,
         threshold: float = 0.5,
+        mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
         label_ids_to_fuse: Optional[Set[int]] = None,
         target_sizes: Optional[List[Tuple[int, int]]] = None,
@@ -811,6 +863,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 The outputs from [`MaskFormerForInstanceSegmentation`].
             threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Threshold to use when turning the predicted masks into binary values.
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
                 The overlap mask area threshold to merge or discard small disconnected parts within each binary
                 instance mask.
@@ -872,6 +926,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 mask_probs_item,
                 pred_scores_item,
                 pred_labels_item,
+                mask_threshold,
                 overlap_mask_area_threshold,
                 label_ids_to_fuse,
                 target_size,

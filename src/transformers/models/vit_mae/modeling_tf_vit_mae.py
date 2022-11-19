@@ -254,7 +254,7 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
 
         # keep the first subset
         ids_keep = ids_shuffle[:, :len_keep]
-        sequence_masked = tf.gather(
+        sequence_unmasked = tf.gather(
             sequence,
             axis=1,
             batch_dims=1,
@@ -271,7 +271,7 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
         # unshuffle to get the binary mask
         mask = tf.gather(mask, axis=1, batch_dims=1, indices=ids_restore)
 
-        return sequence_masked, mask, ids_restore
+        return sequence_unmasked, mask, ids_restore
 
     def call(self, pixel_values: tf.Tensor, noise: tf.Tensor = None) -> tf.Tensor:
         embeddings = self.patch_embeddings(pixel_values)

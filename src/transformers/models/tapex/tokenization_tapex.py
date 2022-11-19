@@ -342,6 +342,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         adding special tokens. A TAPEX sequence has the following format:
         - single sequence: `<s> X </s>`
         - pair of sequences: `<s> A </s></s> B </s>`
+
         Args:
             token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
@@ -518,7 +519,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         answer: Union[str, List[str]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
@@ -595,7 +596,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         answer: Union[str, List[str]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
@@ -683,7 +684,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         answer: List[str] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str] = False,
+        truncation: Union[bool, str] = None,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -871,7 +872,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         answer: Optional[str] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy, TapexTruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy, TapexTruncationStrategy] = None,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs
@@ -903,7 +904,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         answer: Optional[str] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str] = False,
+        truncation: Union[bool, str] = None,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -1007,7 +1008,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         answer: Union[str, List[str]],
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
@@ -1072,7 +1073,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         answer: List[str],
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str] = False,
+        truncation: Union[bool, str] = None,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -1187,7 +1188,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         answer: str,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy, TapexTruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy, TapexTruncationStrategy] = None,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs
@@ -1218,7 +1219,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         answer: str,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str] = False,
+        truncation: Union[bool, str] = None,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,

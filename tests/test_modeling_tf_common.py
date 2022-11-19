@@ -43,13 +43,14 @@ from transformers.testing_utils import (  # noqa: F401
     _tf_gpu_memory_limit,
     is_pt_tf_cross_test,
     is_staging_test,
+    require_safetensors,
     require_tf,
     require_tf2onnx,
     slow,
     tooslow,
     torch_device,
 )
-from transformers.utils import logging
+from transformers.utils import SAFE_WEIGHTS_NAME, TF2_WEIGHTS_INDEX_NAME, TF2_WEIGHTS_NAME, logging
 from transformers.utils.generic import ModelOutput
 
 
@@ -77,12 +78,16 @@ if is_tf_available():
         TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         BertConfig,
+        PushToHubCallback,
+        RagRetriever,
         TFAutoModel,
         TFAutoModelForSequenceClassification,
+        TFBertForMaskedLM,
         TFBertModel,
+        TFRagModel,
         TFSharedEmbeddings,
     )
-    from transformers.generation_tf_utils import (
+    from transformers.generation import (
         TFBeamSampleDecoderOnlyOutput,
         TFBeamSampleEncoderDecoderOutput,
         TFBeamSearchDecoderOnlyOutput,
@@ -92,12 +97,7 @@ if is_tf_available():
         TFSampleDecoderOnlyOutput,
         TFSampleEncoderDecoderOutput,
     )
-    from transformers.modeling_tf_utils import (
-        TF2_WEIGHTS_INDEX_NAME,
-        TF2_WEIGHTS_NAME,
-        tf_shard_checkpoint,
-        unpack_inputs,
-    )
+    from transformers.modeling_tf_utils import tf_shard_checkpoint, unpack_inputs
     from transformers.tf_utils import stable_softmax
 
     if _tf_gpu_memory_limit is not None:
@@ -116,6 +116,8 @@ if is_tf_available():
 
 if is_torch_available():
     import torch
+
+    from transformers import BertModel
 
 
 def _config_zero_init(config):
@@ -736,6 +738,23 @@ class TFModelTesterMixin:
                         dtype="float32",
                     ),
                 }
+            elif model_class.__name__ in ["TFWhisperModel", "TFWhisperForConditionalGeneration"]:
+                inputs = {
+                    "decoder_input_ids": tf.keras.Input(
+                        batch_shape=(2, max_input),
+                        name="decoder_input_ids",
+                        dtype="int32",
+                    ),
+                    "input_features": tf.keras.Input(
+                        batch_shape=(
+                            2,
+                            self.model_tester.num_mel_bins,
+                            self.model_tester.seq_length,
+                        ),
+                        name="input_features",
+                        dtype="float32",
+                    ),
+                }
             elif self.is_encoder_decoder:
                 inputs = {
                     "decoder_input_ids": tf.keras.Input(
@@ -1223,8 +1242,17 @@ class TFModelTesterMixin:
 
             # fetch the output for an input exclusively made of new members of the vocabulary
             inputs_dict = copy.deepcopy(original_inputs_dict)
-            new_vocab_input_ids = ids_tensor(inputs_dict["input_ids"].shape, new_tokens_size)
+            ids_feat_name = None
+            if "input_ids" in inputs_dict:
+                ids_feat_name = "input_ids"
+            elif "decoder_input_ids" in inputs_dict:
+                ids_feat_name = "decoder_input_ids"
+            else:
+                assert False, "No input ids feature found in the inputs dict"
+
+            new_vocab_input_ids = ids_tensor(inputs_dict[ids_feat_name].shape, new_tokens_size)
             new_vocab_input_ids += old_total_size
+            inputs_dict[ids_feat_name] = new_vocab_input_ids
             if "input_ids" in inputs_dict:
                 inputs_dict["input_ids"] = new_vocab_input_ids
             if "decoder_input_ids" in inputs_dict:
@@ -1518,6 +1546,11 @@ class TFModelTesterMixin:
             else:
                 metrics = []
 
+            if hasattr(self.model_tester, "batch_size"):
+                sample_weight = tf.convert_to_tensor([0.5] * self.model_tester.batch_size, dtype=tf.float32)
+            else:
+                sample_weight = None
+
             model(model.dummy_inputs)  # Build the model so we can get some constant weights
             model_weights = model.get_weights()
 
@@ -1527,6 +1560,7 @@ class TFModelTesterMixin:
             history1 = model.fit(
                 prepared_for_class,
                 validation_data=prepared_for_class,
+                sample_weight=sample_weight,
                 steps_per_epoch=1,
                 validation_steps=1,
                 shuffle=False,
@@ -1562,6 +1596,7 @@ class TFModelTesterMixin:
                 inputs_minus_labels,
                 labels,
                 validation_data=(inputs_minus_labels, labels),
+                sample_weight=sample_weight,
                 steps_per_epoch=1,
                 validation_steps=1,
                 shuffle=False,
@@ -1579,14 +1614,22 @@ class TFModelTesterMixin:
 
             # Make sure fit works with tf.data.Dataset and results are consistent
             dataset = tf.data.Dataset.from_tensor_slices(prepared_for_class)
+
+            if sample_weight is not None:
+                # Add in the sample weight
+                weighted_dataset = dataset.map(lambda x: (x, None, tf.convert_to_tensor(0.5, dtype=tf.float32)))
+            else:
+                weighted_dataset = dataset
             # Pass in all samples as a batch to match other `fit` calls
+            weighted_dataset = weighted_dataset.batch(len(dataset))
             dataset = dataset.batch(len(dataset))
 
             # Reinitialize to fix batchnorm again
             model.set_weights(model_weights)
 
+            # To match the other calls, don't pass sample weights in the validation data
             history3 = model.fit(
-                dataset,
+                weighted_dataset,
                 validation_data=dataset,
                 steps_per_epoch=1,
                 validation_steps=1,
@@ -1757,7 +1800,7 @@ class TFModelTesterMixin:
                 model.compile(optimizer="sgd", run_eagerly=True)
                 model.train_on_batch(test_batch, test_batch_labels)
 
-    def _test_xla_generate(self, num_beams, num_return_sequences, max_length):
+    def _test_xla_generate(self, **generate_kwargs):
         def _generate_and_check_results(model, config, inputs_dict):
             if "input_ids" in inputs_dict:
                 inputs = inputs_dict["input_ids"]
@@ -1775,28 +1818,15 @@ class TFModelTesterMixin:
             else:
                 raise ValueError("No valid generate input found in inputs_dict")
 
-            generated = model.generate(inputs).numpy()
+            generated = model.generate(inputs, **generate_kwargs).numpy()
             generate_xla = tf.function(model.generate, jit_compile=True)
-            generated_xla = generate_xla(inputs).numpy()
+            generated_xla = generate_xla(inputs, **generate_kwargs).numpy()
             self.assertListEqual(generated.tolist(), generated_xla.tolist())
 
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.eos_token_id = None  # Generate until max length
-            config.max_length = max_length
             config.do_sample = False
-            config.num_beams = num_beams
-            config.num_return_sequences = num_return_sequences
-
-            # fix config for models with additional sequence-length limiting settings
-            for var_name in ["max_position_embeddings", "max_target_positions"]:
-                if hasattr(config, var_name):
-                    try:
-                        setattr(config, var_name, max_length)
-                    except NotImplementedError:
-                        # xlnet will raise an exception when trying to set
-                        # max_position_embeddings.
-                        pass
 
             model = model_class(config)
 
@@ -1813,10 +1843,18 @@ class TFModelTesterMixin:
 
         Either the model supports XLA generation and passes the inner test, or it raises an appropriate exception
         """
-        num_beams = 1
-        num_return_sequences = 1
-        max_length = 10
-        self._test_xla_generate(num_beams, num_return_sequences, max_length)
+        self._test_xla_generate(num_beams=1, num_return_sequences=1, max_new_tokens=3)
+
+    @slow
+    def test_xla_generate_contrastive(self):
+        """
+        Slow and challenging version of `test_xla_generate_fast` for contrastive search -- contrastive search directly
+        manipulates the model cache and other outputs, and this test ensures that they are in a valid format that is
+        also supported by XLA.
+
+        Either the model supports XLA generation and passes the inner test, or it raises an appropriate exception
+        """
+        self._test_xla_generate(num_beams=1, num_return_sequences=1, max_new_tokens=64, penalty_alpha=0.5, top_k=4)
 
     @slow
     def test_xla_generate_slow(self):
@@ -1827,10 +1865,7 @@ class TFModelTesterMixin:
 
         Either the model supports XLA generation and passes the inner test, or it raises an appropriate exception
         """
-        num_beams = 8
-        num_return_sequences = 2
-        max_length = 128
-        self._test_xla_generate(num_beams, num_return_sequences, max_length)
+        self._test_xla_generate(num_beams=8, num_return_sequences=2, max_new_tokens=128)
 
     def _generate_random_bad_tokens(self, num_bad_tokens, model):
         # special tokens cannot be bad tokens
@@ -1956,9 +1991,14 @@ class UtilsFunctionsTest(unittest.TestCase):
 
             @unpack_inputs
             def call(
-                self, input_ids=None, past=None, output_attentions=None, output_hidden_states=None, return_dict=None
+                self,
+                input_ids=None,
+                past_key_values=None,
+                output_attentions=None,
+                output_hidden_states=None,
+                return_dict=None,
             ):
-                return input_ids, past, output_attentions, output_hidden_states, return_dict
+                return input_ids, past_key_values, output_attentions, output_hidden_states, return_dict
 
             @unpack_inputs
             def foo(self, pixel_values, output_attentions=None, output_hidden_states=None, return_dict=None):
@@ -1966,55 +2006,48 @@ class UtilsFunctionsTest(unittest.TestCase):
 
         dummy_model = DummyModel()
         input_ids = tf.constant([0, 1, 2, 3], dtype=tf.int64)
-        past = tf.constant([4, 5, 6, 7], dtype=tf.int64)
+        past_key_values = tf.constant([4, 5, 6, 7], dtype=tf.int64)
         pixel_values = tf.constant([8, 9, 10, 11], dtype=tf.int64)
 
         # test case 1: Pass inputs as keyword arguments; Booleans are inherited from the config.
-        output = dummy_model.call(input_ids=input_ids, past=past)
+        output = dummy_model.call(input_ids=input_ids, past_key_values=past_key_values)
         tf.debugging.assert_equal(output[0], input_ids)
-        tf.debugging.assert_equal(output[1], past)
+        tf.debugging.assert_equal(output[1], past_key_values)
         self.assertFalse(output[2])
         self.assertFalse(output[3])
         self.assertFalse(output[4])
 
         # test case 2: Same as above, but with positional arguments.
-        output = dummy_model.call(input_ids, past)
+        output = dummy_model.call(input_ids, past_key_values)
         tf.debugging.assert_equal(output[0], input_ids)
-        tf.debugging.assert_equal(output[1], past)
+        tf.debugging.assert_equal(output[1], past_key_values)
         self.assertFalse(output[2])
         self.assertFalse(output[3])
         self.assertFalse(output[4])
 
         # test case 3: We can also pack everything in the first input.
-        output = dummy_model.call(input_ids={"input_ids": input_ids, "past": past})
+        output = dummy_model.call(input_ids={"input_ids": input_ids, "past_key_values": past_key_values})
         tf.debugging.assert_equal(output[0], input_ids)
-        tf.debugging.assert_equal(output[1], past)
+        tf.debugging.assert_equal(output[1], past_key_values)
         self.assertFalse(output[2])
         self.assertFalse(output[3])
         self.assertFalse(output[4])
 
         # test case 4: Explicit boolean arguments should override the config.
-        output = dummy_model.call(input_ids=input_ids, past=past, output_attentions=False, return_dict=True)
+        output = dummy_model.call(
+            input_ids=input_ids, past_key_values=past_key_values, output_attentions=False, return_dict=True
+        )
         tf.debugging.assert_equal(output[0], input_ids)
-        tf.debugging.assert_equal(output[1], past)
+        tf.debugging.assert_equal(output[1], past_key_values)
         self.assertFalse(output[2])
         self.assertFalse(output[3])
         self.assertTrue(output[4])
 
         # test case 5: Unexpected arguments should raise an exception.
         with self.assertRaises(ValueError):
-            output = dummy_model.call(input_ids=input_ids, past=past, foo="bar")
+            output = dummy_model.call(input_ids=input_ids, past_key_values=past_key_values, foo="bar")
 
-        # test case 6: Despite the above, `past_key_values` should be interchangeable with `past`
-        # (the decorator moves it to `past`, or vice-versa, depending on the signature).
-        output = dummy_model.call(input_ids=input_ids, past_key_values=past)
-        tf.debugging.assert_equal(output[0], input_ids)
-        tf.debugging.assert_equal(output[1], past)
-        self.assertFalse(output[2])
-        self.assertFalse(output[3])
-        self.assertFalse(output[4])
-
-        # test case 7: the decorator is independent from `main_input_name` -- it treats the first argument of the
+        # test case 6: the decorator is independent from `main_input_name` -- it treats the first argument of the
         # decorated function as its main input.
         output = dummy_model.foo(pixel_values=pixel_values)
         tf.debugging.assert_equal(output[0], pixel_values)
@@ -2141,6 +2174,18 @@ class UtilsFunctionsTest(unittest.TestCase):
                 },
             )
 
+    @slow
+    def test_special_layer_name_sharding(self):
+        retriever = RagRetriever.from_pretrained("facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True)
+        model = TFRagModel.from_pretrained("facebook/rag-token-nq", retriever=retriever)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for max_size in ["150kB", "150kiB", "200kB", "200kiB"]:
+                model.save_pretrained(tmp_dir, max_shard_size=max_size)
+                ref_model = TFRagModel.from_pretrained(tmp_dir, retriever=retriever)
+                for p1, p2 in zip(model.weights, ref_model.weights):
+                    assert np.allclose(p1.numpy(), p2.numpy())
+
     def test_checkpoint_sharding_local(self):
         model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
@@ -2190,6 +2235,94 @@ class UtilsFunctionsTest(unittest.TestCase):
                 for p1, p2 in zip(model.weights, new_model.weights):
                     self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
 
+    def test_save_pretrained_signatures(self):
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # Short custom TF signature function.
+        # `input_signature` is specific to BERT.
+        @tf.function(
+            input_signature=[
+                [
+                    tf.TensorSpec([None, None], tf.int32, name="input_ids"),
+                    tf.TensorSpec([None, None], tf.int32, name="token_type_ids"),
+                    tf.TensorSpec([None, None], tf.int32, name="attention_mask"),
+                ]
+            ]
+        )
+        def serving_fn(input):
+            return model(input)
+
+        # Using default signature (default behavior) overrides 'serving_default'
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, saved_model=True, signatures=None)
+            model_loaded = tf.keras.models.load_model(f"{tmp_dir}/saved_model/1")
+            self.assertTrue("serving_default" in list(model_loaded.signatures.keys()))
+
+        # Providing custom signature function
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, saved_model=True, signatures={"custom_signature": serving_fn})
+            model_loaded = tf.keras.models.load_model(f"{tmp_dir}/saved_model/1")
+            self.assertTrue("custom_signature" in list(model_loaded.signatures.keys()))
+
+        # Providing multiple custom signature function
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(
+                tmp_dir,
+                saved_model=True,
+                signatures={"custom_signature_1": serving_fn, "custom_signature_2": serving_fn},
+            )
+            model_loaded = tf.keras.models.load_model(f"{tmp_dir}/saved_model/1")
+            self.assertTrue("custom_signature_1" in list(model_loaded.signatures.keys()))
+            self.assertTrue("custom_signature_2" in list(model_loaded.signatures.keys()))
+
+    @require_safetensors
+    def test_safetensors_save_and_load(self):
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True)
+            # No tf_model.h5 file, only a model.safetensors
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, TF2_WEIGHTS_NAME)))
+
+            new_model = TFBertModel.from_pretrained(tmp_dir)
+
+            # Check models are equal
+            for p1, p2 in zip(model.weights, new_model.weights):
+                self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
+    @is_pt_tf_cross_test
+    def test_safetensors_save_and_load_pt_to_tf(self):
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        pt_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            pt_model.save_pretrained(tmp_dir, safe_serialization=True)
+            # Check we have a model.safetensors file
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+
+            new_model = TFBertModel.from_pretrained(tmp_dir)
+
+            # Check models are equal
+            for p1, p2 in zip(model.weights, new_model.weights):
+                self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
+    @require_safetensors
+    def test_safetensors_load_from_hub(self):
+        tf_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # Can load from the TF-formatted checkpoint
+        safetensors_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert-safetensors-tf")
+
+        # Check models are equal
+        for p1, p2 in zip(safetensors_model.weights, tf_model.weights):
+            self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
+        # Can load from the PyTorch-formatted checkpoint
+        safetensors_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert-safetensors")
+
+        # Check models are equal
+        for p1, p2 in zip(safetensors_model.weights, tf_model.weights):
+            self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+
 
 @require_tf
 @is_staging_test
@@ -2204,6 +2337,11 @@ class TFModelPushToHubTester(unittest.TestCase):
     def tearDownClass(cls):
         try:
             delete_repo(token=cls._token, repo_id="test-model-tf")
+        except HTTPError:
+            pass
+
+        try:
+            delete_repo(token=cls._token, repo_id="test-model-tf-callback")
         except HTTPError:
             pass
 
@@ -2226,13 +2364,14 @@ class TFModelPushToHubTester(unittest.TestCase):
             model.push_to_hub("test-model-tf", use_auth_token=self._token)
         logging.set_verbosity_warning()
         # Check the model card was created and uploaded.
-        self.assertIn("Uploading README.md to __DUMMY_TRANSFORMERS_USER__/test-model-tf", cl.out)
+        self.assertIn("Uploading the following files to __DUMMY_TRANSFORMERS_USER__/test-model-tf", cl.out)
 
         new_model = TFBertModel.from_pretrained(f"{USER}/test-model-tf")
         models_equal = True
         for p1, p2 in zip(model.weights, new_model.weights):
-            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+            if not tf.math.reduce_all(p1 == p2):
                 models_equal = False
+                break
         self.assertTrue(models_equal)
 
         # Reset repo
@@ -2245,8 +2384,32 @@ class TFModelPushToHubTester(unittest.TestCase):
         new_model = TFBertModel.from_pretrained(f"{USER}/test-model-tf")
         models_equal = True
         for p1, p2 in zip(model.weights, new_model.weights):
-            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+            if not tf.math.reduce_all(p1 == p2):
                 models_equal = False
+                break
+        self.assertTrue(models_equal)
+
+    def test_push_to_hub_callback(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = TFBertForMaskedLM(config)
+        model.compile()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            push_to_hub_callback = PushToHubCallback(
+                output_dir=tmp_dir,
+                hub_model_id="test-model-tf-callback",
+                hub_token=self._token,
+            )
+            model.fit(model.dummy_inputs, model.dummy_inputs, epochs=1, callbacks=[push_to_hub_callback])
+
+        new_model = TFBertForMaskedLM.from_pretrained(f"{USER}/test-model-tf-callback")
+        models_equal = True
+        for p1, p2 in zip(model.weights, new_model.weights):
+            if not tf.math.reduce_all(p1 == p2):
+                models_equal = False
+                break
         self.assertTrue(models_equal)
 
     def test_push_to_hub_in_organization(self):
@@ -2262,8 +2425,9 @@ class TFModelPushToHubTester(unittest.TestCase):
         new_model = TFBertModel.from_pretrained("valid_org/test-model-tf-org")
         models_equal = True
         for p1, p2 in zip(model.weights, new_model.weights):
-            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+            if not tf.math.reduce_all(p1 == p2):
                 models_equal = False
+                break
         self.assertTrue(models_equal)
 
         # Reset repo
@@ -2278,6 +2442,7 @@ class TFModelPushToHubTester(unittest.TestCase):
         new_model = TFBertModel.from_pretrained("valid_org/test-model-tf-org")
         models_equal = True
         for p1, p2 in zip(model.weights, new_model.weights):
-            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+            if not tf.math.reduce_all(p1 == p2):
                 models_equal = False
+                break
         self.assertTrue(models_equal)

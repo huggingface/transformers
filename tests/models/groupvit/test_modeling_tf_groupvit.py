@@ -26,7 +26,13 @@ import numpy as np
 
 import requests
 from transformers import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
-from transformers.testing_utils import is_pt_tf_cross_test, require_tf, require_vision, slow
+from transformers.testing_utils import (
+    is_pt_tf_cross_test,
+    require_tensorflow_probability,
+    require_tf,
+    require_vision,
+    slow,
+)
 from transformers.utils import is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -154,6 +160,16 @@ class TFGroupViTVisionModelTest(TFModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="GroupViT does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
+
+    """
+    During saving, TensorFlow will also run with `training=True` which trigger `gumbel_softmax` that requires
+    `tensorflow-probability`.
+    """
+
+    @require_tensorflow_probability
+    @slow
+    def test_saved_model_creation(self):
+        super().test_saved_model_creation()
 
     @unittest.skip(reason="GroupViT does not use inputs_embeds")
     def test_graph_mode_with_inputs_embeds(self):
@@ -295,6 +311,10 @@ class TFGroupViTVisionModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFGroupViTVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @unittest.skip(
+        "TFGroupViTVisionModel does not convert `hidden_states` and `attentions` to tensors as they are all of"
+        " different dimensions, and we get `Got a non-Tensor value` error when saving the model."
+    )
     @slow
     def test_saved_model_creation_extended(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -577,6 +597,10 @@ class TFGroupViTModelTest(TFModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="CLIPModel does not have input/output embeddings")
     def test_model_common_attributes(self):
         pass
+
+    @require_tensorflow_probability
+    def test_keras_fit(self):
+        super().test_keras_fit()
 
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):

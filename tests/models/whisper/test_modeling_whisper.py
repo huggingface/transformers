@@ -25,7 +25,7 @@ from transformers.testing_utils import is_torch_available, require_torch, requir
 from transformers.utils import cached_property
 from transformers.utils.import_utils import is_datasets_available
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 
@@ -182,8 +182,11 @@ class WhisperModelTester:
 
         return input_lengths
 
-    def create_and_check_model_forward(self, config, inputs_dict):
+    def create_and_check_model_forward(self, config, inputs_dict, freeze_encoder=False):
         model = WhisperModel(config=config).to(torch_device).eval()
+
+        if freeze_encoder:
+            model.freeze_encoder()
 
         input_features = inputs_dict["input_features"]
         decoder_input_ids = inputs_dict["decoder_input_ids"]
@@ -288,6 +291,26 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
+
+    def test_model_forward_with_frozen_encoder(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_forward(*config_and_inputs, freeze_encoder=True)
+
+    def test_requires_grad_with_frozen_encoder(self):
+        config = self.model_tester.get_config()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.freeze_encoder()
+
+            try:
+                encoder_grads = [param.requires_grad for param in model.encoder.parameters()]
+                decoder_grads = [param.requires_grad for param in model.decoder.parameters()]
+            except AttributeError:
+                encoder_grads = [param.requires_grad for param in model.model.encoder.parameters()]
+                decoder_grads = [param.requires_grad for param in model.model.decoder.parameters()]
+
+            self.assertFalse(all(encoder_grads))
+            self.assertTrue(all(decoder_grads))
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -830,13 +853,15 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_speech = self._load_datasamples(1)
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        processed_inputs = processor(audio=input_speech, text="This part of the speech", return_tensors="pt")
+        processed_inputs = processor(
+            audio=input_speech, text="This part of the speech", add_special_tokens=False, return_tensors="pt"
+        )
         input_features = processed_inputs.input_features.to(torch_device)
-        labels = processed_inputs.labels.to(torch_device)
+        decoder_input_ids = processed_inputs.labels.to(torch_device)
 
         logits = model(
             input_features,
-            decoder_input_ids=labels,
+            decoder_input_ids=decoder_input_ids,
             output_hidden_states=False,
             output_attentions=False,
             use_cache=False,
@@ -872,7 +897,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             torch_device
         )
 
-        generated_ids = model.generate(input_features, num_beams=5)
+        generated_ids = model.generate(input_features, num_beams=5, max_length=20)
         transcript = processor.tokenizer.batch_decode(generated_ids)[0]
 
         EXPECTED_TRANSCRIPT = (
@@ -895,7 +920,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             torch_device
         )
 
-        generated_ids = model.generate(input_features, num_beams=5)
+        generated_ids = model.generate(input_features, num_beams=5, max_length=20)
         transcript = processor.tokenizer.decode(generated_ids[0])
 
         EXPECTED_TRANSCRIPT = (
@@ -921,6 +946,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(
             input_features,
             do_sample=False,
+            max_length=20,
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
@@ -943,7 +969,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
 
         model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="transcribe")
-        generated_ids = model.generate(input_features, do_sample=False)
+        generated_ids = model.generate(input_features, do_sample=False, max_length=20)
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
         EXPECTED_TRANSCRIPT = "木村さんに電話を貸してもらいました"
@@ -953,6 +979,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(
             input_features,
             do_sample=False,
+            max_length=20,
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
@@ -960,7 +987,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
         model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="translate")
-        generated_ids = model.generate(input_features, do_sample=False)
+        generated_ids = model.generate(input_features, do_sample=False, max_length=20)
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
         EXPECTED_TRANSCRIPT = " I borrowed a phone from Kimura san"
@@ -974,7 +1001,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = self._load_datasamples(4)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features
-        generated_ids = model.generate(input_features)
+        generated_ids = model.generate(input_features, max_length=20)
 
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
@@ -991,10 +1018,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # fmt: off
         EXPECTED_TRANSCRIPT = [
-            ' Mr. Quilter is the apostle of the middle classes, and we are glad to',
+            " Mr. Quilter is the apostle of the middle classes and we are glad to",
             " Nor is Mr. Quilter's manner less interesting than his matter.",
             " He tells us that at this festive season of the year, with Christmas and roast beef",
-            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all,"
+            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all,",
         ]
         # fmt: on
 
@@ -1013,7 +1040,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
             torch_device
         )
-        generated_ids = model.generate(input_features).to("cpu")
+        generated_ids = model.generate(input_features, max_length=20).to("cpu")
 
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(

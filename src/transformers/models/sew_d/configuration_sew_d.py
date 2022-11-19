@@ -158,12 +158,12 @@ class SEWDConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import SEWDModel, SEWDConfig
+    >>> from transformers import SEWDConfig, SEWDModel
 
     >>> # Initializing a SEW-D asapp/sew-d-tiny-100k style configuration
     >>> configuration = SEWDConfig()
 
-    >>> # Initializing a model from the asapp/sew-d-tiny-100k style configuration
+    >>> # Initializing a model (with random weights) from the asapp/sew-d-tiny-100k style configuration
     >>> model = SEWDModel(configuration)
 
     >>> # Accessing the model configuration

@@ -1412,7 +1412,11 @@ class LongformerLMHead(nn.Module):
 
     def _tie_weights(self):
         # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-        self.bias = self.decoder.bias
+        # For accelerate compatibility and to not break backward compatibility
+        if self.decoder.bias.device.type == "meta":
+            self.decoder.bias = self.bias
+        else:
+            self.bias = self.decoder.bias
 
 
 class LongformerPreTrainedModel(PreTrainedModel):
@@ -1425,6 +1429,7 @@ class LongformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "longformer"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_unexpected = [r"position_ids"]
+    _no_split_modules = ["LongformerSelfAttention"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1770,7 +1775,7 @@ class LongformerModel(LongformerPreTrainedModel):
 
 @add_start_docstrings("""Longformer Model with a `language modeling` head on top.""", LONGFORMER_START_DOCSTRING)
 class LongformerForMaskedLM(LongformerPreTrainedModel):
-
+    _keys_to_ignore_on_load_missing = ["lm_head.decoder"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):

@@ -72,16 +72,16 @@ class GPTNeoXConfig(PretrainedConfig):
         Example:
 
     ```python
-    >>> from transformers import GPTNeoXModel, GPTNeoXConfig
+    >>> from transformers import GPTNeoXConfig, GPTNeoXModel
 
     >>> # Initializing a GPTNeoX gpt-neox-20b style configuration
     >>> configuration = GPTNeoXConfig()
 
-    >>> # Initializing a model from the gpt-neox-20b style configuration
-    >>> model = GPTNeoXModel(configuration)
+    >>> # Initializing a model (with random weights) from the gpt-neox-20b style configuration
+    >>> model = GPTNeoXModel(configuration)  # doctest: +SKIP
 
     >>> # Accessing the model configuration
-    >>> configuration = model.config
+    >>> configuration = model.config  # doctest: +SKIP
     ```"""
     model_type = "gpt_neox"
 

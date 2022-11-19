@@ -96,12 +96,12 @@ class BartConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BartModel, BartConfig
+    >>> from transformers import BartConfig, BartModel
 
     >>> # Initializing a BART facebook/bart-large style configuration
     >>> configuration = BartConfig()
 
-    >>> # Initializing a model from the facebook/bart-large style configuration
+    >>> # Initializing a model (with random weights) from the facebook/bart-large style configuration
     >>> model = BartModel(configuration)
 
     >>> # Accessing the model configuration

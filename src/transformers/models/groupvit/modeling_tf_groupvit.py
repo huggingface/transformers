@@ -1253,13 +1253,13 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
 
         self.visual_projection = [
             tf.keras.layers.Dense(self.projection_intermediate_dim, name="visual_projection.0"),
-            tf.keras.layers.BatchNormalization(name="visual_projection.1", momentum=0.1, epsilon=1e-5),
+            tf.keras.layers.BatchNormalization(name="visual_projection.1", momentum=0.9, epsilon=1e-5),
             tf.keras.layers.ReLU(name="visual_projection.2"),
             tf.keras.layers.Dense(self.projection_dim, name="visual_projection.3"),
         ]
         self.text_projection = [
             tf.keras.layers.Dense(self.projection_intermediate_dim, name="text_projection.0"),
-            tf.keras.layers.BatchNormalization(name="text_projection.1", momentum=0.1, epsilon=1e-5),
+            tf.keras.layers.BatchNormalization(name="text_projection.1", momentum=0.9, epsilon=1e-5),
             tf.keras.layers.ReLU(name="text_projection.2"),
             tf.keras.layers.Dense(self.projection_dim, name="text_projection.3"),
         ]
@@ -1955,6 +1955,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
         >>> from transformers import AutoProcessor, TFGroupViTModel
+        >>> import tensorflow as tf
 
         >>> model = TFGroupViTModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
         >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
@@ -1968,7 +1969,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
 
         >>> outputs = model(**inputs)
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
-        >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
+        >>> probs = tf.math.softmax(logits_per_image, axis=1)  # we can take the softmax to get the label probabilities
         ```"""
 
         outputs = self.groupvit(

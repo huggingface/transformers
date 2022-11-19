@@ -102,7 +102,6 @@ from .utils import (
     is_rjieba_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
-    is_scatter_available,
     is_scipy_available,
     is_sentencepiece_available,
     is_sklearn_available,

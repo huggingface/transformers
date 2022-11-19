@@ -525,7 +525,7 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         Returns:
 
@@ -632,7 +632,7 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> torch.manual_seed(2)
+        >>> torch.manual_seed(2)  # doctest: +IGNORE_RESULT
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)

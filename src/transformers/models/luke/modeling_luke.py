@@ -902,6 +902,7 @@ class LukePreTrainedModel(PreTrainedModel):
     config_class = LukeConfig
     base_model_prefix = "luke"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["LukeAttention", "LukeEntityEmbeddings"]
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
@@ -1264,7 +1265,11 @@ class LukeLMHead(nn.Module):
 
     def _tie_weights(self):
         # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-        self.bias = self.decoder.bias
+        # For accelerate compatibility and to not break backward compatibility
+        if self.decoder.bias.device.type == "meta":
+            self.decoder.bias = self.bias
+        else:
+            self.bias = self.decoder.bias
 
 
 @add_start_docstrings(
@@ -1746,9 +1751,15 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         hidden_size = outputs.last_hidden_state.size(-1)
 
         entity_start_positions = entity_start_positions.unsqueeze(-1).expand(-1, -1, hidden_size)
+        if entity_start_positions.device != outputs.last_hidden_state.device:
+            entity_start_positions = entity_start_positions.to(outputs.last_hidden_state.device)
         start_states = torch.gather(outputs.last_hidden_state, -2, entity_start_positions)
+
         entity_end_positions = entity_end_positions.unsqueeze(-1).expand(-1, -1, hidden_size)
+        if entity_end_positions.device != outputs.last_hidden_state.device:
+            entity_end_positions = entity_end_positions.to(outputs.last_hidden_state.device)
         end_states = torch.gather(outputs.last_hidden_state, -2, entity_end_positions)
+
         feature_vector = torch.cat([start_states, end_states, outputs.entity_last_hidden_state], dim=2)
 
         feature_vector = self.dropout(feature_vector)

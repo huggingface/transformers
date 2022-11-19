@@ -74,6 +74,7 @@ Ready-made configurations include the following architectures:
 - GPT-J
 - GroupViT
 - I-BERT
+- ImageGPT
 - LayoutLM
 - LayoutLMv3
 - LeViT
@@ -83,6 +84,7 @@ Ready-made configurations include the following architectures:
 - Marian
 - mBART
 - MobileBERT
+- MobileNetV2
 - MobileViT
 - MT5
 - OpenAI GPT-2
@@ -96,7 +98,10 @@ Ready-made configurations include the following architectures:
 - SqueezeBERT
 - Swin Transformer
 - T5
+- Table Transformer
+- Vision Encoder decoder
 - ViT
+- Whisper
 - XLM
 - XLM-RoBERTa
 - XLM-RoBERTa-XL
@@ -133,7 +138,7 @@ optional arguments:
   --feature {causal-lm, ...}
                         The type of features to export the model with.
   --opset OPSET         ONNX opset version to export the model with.
-  --atol ATOL           Absolute difference tolerence when validating the model.
+  --atol ATOL           Absolute difference tolerance when validating the model.
 ```
 
 Exporting a checkpoint using a ready-made configuration can be done as follows:
@@ -294,6 +299,13 @@ that can be used for fast autoregressive decoding.
 
 </Tip>
 
+<Tip>
+
+For `VisionEncoderDecoder` type models, the encoder and decoder parts are
+exported separately as two ONNX files named `encoder_model.onnx` and `decoder_model.onnx` respectively.
+
+</Tip>
+
 
 ## Exporting a model for an unsupported architecture
 
@@ -404,7 +416,7 @@ OrderedDict([('logits', {0: 'batch'})])
 <Tip>
 
 All of the base properties and methods associated with [`~onnx.config.OnnxConfig`] and
-the other configuration classes can be overriden if needed. Check out [`BartOnnxConfig`]
+the other configuration classes can be overridden if needed. Check out [`BartOnnxConfig`]
 for an advanced example.
 
 </Tip>

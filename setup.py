@@ -123,7 +123,9 @@ _deps = [
     "jax>=0.2.8,!=0.3.2,<=0.3.6",
     "jaxlib>=0.1.65,<=0.3.6",
     "jieba",
+    "kenlm",
     "nltk",
+    "natten>=0.14.4",
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
@@ -155,8 +157,8 @@ _deps = [
     "sigopt",
     "librosa",
     "starlette",
-    "tensorflow-cpu>=2.3",
-    "tensorflow>=2.4",
+    "tensorflow-cpu>=2.4,<2.11",
+    "tensorflow>=2.4,<2.11",
     "tensorflow-text",
     "tf2onnx",
     "timeout-decorator",
@@ -164,7 +166,7 @@ _deps = [
     "tokenizers>=0.11.1,!=0.11.3,<0.14",
     "torch>=1.7,!=1.12.0",
     "torchaudio",
-    "pyctcdecode>=0.3.0",
+    "pyctcdecode>=0.4.0",
     "tqdm>=4.27",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
@@ -274,7 +276,7 @@ extras["sigopt"] = deps_list("sigopt")
 extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer")
+extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm")
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
@@ -282,6 +284,7 @@ extras["tf-speech"] = extras["audio"]
 extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
+extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
 
 
@@ -408,7 +411,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.23.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.25.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
