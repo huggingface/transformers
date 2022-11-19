@@ -15,9 +15,9 @@
 """ PyTorch TimeSformer model."""
 
 
+import collections
 import math
 import warnings
-from itertools import repeat
 from typing import Optional, Tuple, Union
 
 import torch
@@ -31,15 +31,6 @@ from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_timesformer import TimeSformerConfig
-
-
-TORCH_MAJOR = int(torch.__version__.split(".")[0])
-TORCH_MINOR = int(torch.__version__.split(".")[1])
-
-if TORCH_MAJOR == 1 and TORCH_MINOR < 8:
-    from torch._six import container_abcs
-else:
-    import collections.abc as container_abcs
 
 
 logger = logging.get_logger(__name__)
@@ -60,34 +51,34 @@ class TimeSformerPatchEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        img_size = config.image_size
+        image_size = config.image_size
         patch_size = config.patch_size
-        in_chans = config.num_channels
-        embed_dim = config.hidden_size
 
-        img_size = to_2tuple(img_size)
-        patch_size = to_2tuple(patch_size)
-        num_patches = (img_size[1] // patch_size[1]) * (img_size[0] // patch_size[0])
-        self.img_size = img_size
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.image_size = image_size
         self.patch_size = patch_size
         self.num_patches = num_patches
 
-        self.projection = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv2d(config.num_channels, config.hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, x):
-        B, C, num_frames, H, W = x.shape
-        x = x.permute(0, 2, 1, 3, 4).reshape(B * num_frames, C, H, W)
+    def forward(self, pixel_values):
+        batch_size, num_channels, num_frames, height, width = pixel_values.shape
+        pixel_values = pixel_values.permute(0, 2, 1, 3, 4).reshape(
+            batch_size * num_frames, num_channels, height, width
+        )
 
-        x = self.projection(x)
-        patch_width = x.size(-1)
-        embeddings = x.flatten(2).transpose(1, 2)
+        embeddings = self.projection(pixel_values)
+        patch_width = embeddings.size(-1)
+        embeddings = embeddings.flatten(2).transpose(1, 2)
         return embeddings, num_frames, patch_width
 
 
 class TimeSformerEmbeddings(nn.Module):
     """
     Construct the patch and position embeddings.
-
     """
 
     def __init__(self, config):
@@ -162,19 +153,6 @@ class TimeSformerEmbeddings(nn.Module):
             embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         return embeddings
-
-
-# Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit_utils.py#L78
-def _ntuple(n):
-    def parse(x):
-        if isinstance(x, container_abcs.Iterable):
-            return x
-        return tuple(repeat(x, n))
-
-    return parse
-
-
-to_2tuple = _ntuple(2)
 
 
 # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit_utils.py#L31
