@@ -5289,21 +5289,21 @@ class TimeSeriesTransformerPreTrainedModel(metaclass=DummyObject):
 TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class TimeSformerForVideoClassification(metaclass=DummyObject):
+class TimesformerForVideoClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class TimeSformerModel(metaclass=DummyObject):
+class TimesformerModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class TimeSformerPreTrainedModel(metaclass=DummyObject):
+class TimesformerPretrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

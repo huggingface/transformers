@@ -366,7 +366,7 @@ _import_structure = {
         "TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TimeSeriesTransformerConfig",
     ],
-    "models.timesformer": ["TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimeSformerConfig"],
+    "models.timesformer": ["TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimesformerConfig"],
     "models.trajectory_transformer": [
         "TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TrajectoryTransformerConfig",
@@ -2178,9 +2178,9 @@ else:
     _import_structure["models.timesformer"].extend(
         [
             "TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TimeSformerModel",
-            "TimeSformerPreTrainedModel",
-            "TimeSformerForVideoClassification",
+            "TimesformerModel",
+            "TimesformerPretrainedModel",
+            "TimesformerForVideoClassification",
         ]
     )
     _import_structure["models.wav2vec2"].extend(
@@ -3521,7 +3521,7 @@ if TYPE_CHECKING:
         TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TimeSeriesTransformerConfig,
     )
-    from .models.timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimeSformerConfig
+    from .models.timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimesformerConfig
     from .models.trajectory_transformer import (
         TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TrajectoryTransformerConfig,
@@ -4917,9 +4917,9 @@ if TYPE_CHECKING:
         )
         from .models.timesformer import (
             TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TimeSformerForVideoClassification,
-            TimeSformerModel,
-            TimeSformerPreTrainedModel,
+            TimesformerForVideoClassification,
+            TimesformerModel,
+            TimesformerPretrainedModel,
         )
         from .models.trajectory_transformer import (
             TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

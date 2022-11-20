@@ -21,7 +21,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_timesformer": ["TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimeSformerConfig"],
+    "configuration_timesformer": ["TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimesformerConfig"],
 }
 
 try:
@@ -32,13 +32,13 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_timesformer"] = [
         "TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TimeSformerModel",
-        "TimeSformerForVideoClassification",
-        "TimeSformerPreTrainedModel",
+        "TimesformerModel",
+        "TimesformerForVideoClassification",
+        "TimesformerPretrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimeSformerConfig
+    from .configuration_timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimesformerConfig
 
     try:
         if not is_torch_available():
@@ -48,9 +48,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_timesformer import (
             TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TimeSformerForVideoClassification,
-            TimeSformerModel,
-            TimeSformerPreTrainedModel,
+            TimesformerForVideoClassification,
+            TimesformerModel,
+            TimesformerPretrainedModel,
         )
 
 else:

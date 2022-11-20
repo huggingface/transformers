@@ -144,7 +144,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("table-transformer", "TableTransformerConfig"),
         ("tapas", "TapasConfig"),
         ("time_series_transformer", "TimeSeriesTransformerConfig"),
-        ("timesformer", "TimeSformerConfig"),
+        ("timesformer", "TimesformerConfig"),
         ("trajectory_transformer", "TrajectoryTransformerConfig"),
         ("transfo-xl", "TransfoXLConfig"),
         ("trocr", "TrOCRConfig"),

@@ -22,11 +22,11 @@ import torch
 
 import gdown
 from huggingface_hub import hf_hub_download
-from transformers import TimeSformerConfig, TimeSformerForVideoClassification, VideoMAEFeatureExtractor
+from transformers import TimesformerConfig, TimesformerForVideoClassification, VideoMAEFeatureExtractor
 
 
 def get_timesformer_config(model_name):
-    config = TimeSformerConfig()
+    config = TimesformerConfig()
 
     if "large" in model_name:
         config.num_frames = 96
@@ -138,7 +138,7 @@ def prepare_video():
 def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_name, push_to_hub):
     config = get_timesformer_config(model_name)
 
-    model = TimeSformerForVideoClassification(config)
+    model = TimesformerForVideoClassification(config)
 
     # download original checkpoint, hosted on Google Drive
     output = "pytorch_model.bin"

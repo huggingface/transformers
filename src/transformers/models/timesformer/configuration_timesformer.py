@@ -25,9 +25,9 @@ TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class TimeSformerConfig(PretrainedConfig):
+class TimesformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`TimeSformerModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`TimesformerModel`]. It is used to instantiate a
     TimeSformer model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the TimeSformer
     [facebook/timesformer](https://huggingface.co/facebook/timesformer) architecture.
@@ -73,13 +73,13 @@ class TimeSformerConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import TimeSformerConfig, TimeSformerModel
+    >>> from transformers import TimesformerConfig, TimesformerModel
 
     >>> # Initializing a TimeSformer timesformer-base style configuration
-    >>> configuration = TimeSformerConfig()
+    >>> configuration = TimesformerConfig()
 
     >>> # Randomly initializing a model from the configuration
-    >>> model = TimeSformerModel(configuration)
+    >>> model = TimesformerModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

@@ -22,7 +22,7 @@ import unittest
 import numpy as np
 
 from huggingface_hub import hf_hub_download
-from transformers import TimeSformerConfig
+from transformers import TimesformerConfig
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
@@ -37,8 +37,8 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
-        TimeSformerForVideoClassification,
-        TimeSformerModel,
+        TimesformerForVideoClassification,
+        TimesformerModel,
     )
     from transformers.models.timesformer.modeling_timesformer import TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -47,7 +47,7 @@ if is_vision_available():
     from transformers import VideoMAEFeatureExtractor
 
 
-class TimeSformerModelTester:
+class TimesformerModelTester:
     def __init__(
         self,
         parent,
@@ -108,7 +108,7 @@ class TimeSformerModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return TimeSformerConfig(
+        return TimesformerConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -125,7 +125,7 @@ class TimeSformerModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = TimeSformerModel(config=config)
+        model = TimesformerModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -139,13 +139,13 @@ class TimeSformerModelTester:
 
 
 @require_torch
-class TimeSformerModelTest(ModelTesterMixin, unittest.TestCase):
+class TimesformerModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as TimeSformer does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (TimeSformerModel, TimeSformerForVideoClassification) if is_torch_available() else ()
+    all_model_classes = (TimesformerModel, TimesformerForVideoClassification) if is_torch_available() else ()
 
     test_pruning = False
     test_torchscript = False
@@ -153,9 +153,9 @@ class TimeSformerModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = TimeSformerModelTester(self)
+        self.model_tester = TimesformerModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=TimeSformerConfig, has_text_modality=False, hidden_size=37
+            self, config_class=TimesformerConfig, has_text_modality=False, hidden_size=37
         )
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -206,7 +206,7 @@ class TimeSformerModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TimeSformerModel.from_pretrained(model_name)
+            model = TimesformerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
@@ -316,7 +316,7 @@ def prepare_video():
 
 @require_torch
 @require_vision
-class TimeSformerModelIntegrationTest(unittest.TestCase):
+class TimesformerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         # logits were tested with a different mean and std, so we use the same here
@@ -328,7 +328,7 @@ class TimeSformerModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_for_video_classification(self):
-        model = TimeSformerForVideoClassification.from_pretrained("fcakyon/timesformer-base-finetuned-k400").to(
+        model = TimesformerForVideoClassification.from_pretrained("fcakyon/timesformer-base-finetuned-k400").to(
             torch_device
         )
 
