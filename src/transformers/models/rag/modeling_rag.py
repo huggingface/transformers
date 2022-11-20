@@ -21,9 +21,7 @@ import torch
 from torch import nn
 
 from ...configuration_utils import PretrainedConfig
-from ...generation_beam_search import BeamSearchScorer
-from ...generation_logits_process import LogitsProcessorList
-from ...generation_stopping_criteria import StoppingCriteriaList
+from ...generation import BeamSearchScorer, LogitsProcessorList, StoppingCriteriaList
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -925,8 +923,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         **model_kwargs
     ) -> torch.LongTensor:
         """
-        Implements RAG sequence "thorough" decoding. Read the [`~generation_utils.GenerationMixin.generate`]`
-        documentation for more information on how to set other generate input parameters.
+        Implements RAG sequence "thorough" decoding. Read the [`~generation.GenerationMixin.generate`]` documentation
+        for more information on how to set other generate input parameters.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -960,14 +958,14 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 to be set to `False` if used while training with distributed backend.
             num_return_sequences(`int`, *optional*, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch. Note that this
-                is not the value we pass to the `generator`'s `[`~generation_utils.GenerationMixin.generate`]`
-                function, where we set `num_return_sequences` to `num_beams`.
+                is not the value we pass to the `generator`'s `[`~generation.GenerationMixin.generate`]` function,
+                where we set `num_return_sequences` to `num_beams`.
             num_beams (`int`, *optional*, defaults to 1):
                 Number of beams for beam search. 1 means no beam search.
             n_docs (`int`, *optional*, defaults to `config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
             kwargs:
-                Additional kwargs will be passed to [`~generation_utils.GenerationMixin.generate`].
+                Additional kwargs will be passed to [`~generation.GenerationMixin.generate`].
 
         Return:
             `torch.LongTensor` of shape `(batch_size * num_return_sequences, sequence_length)`: The generated
@@ -1463,10 +1461,10 @@ class RagTokenForGeneration(RagPreTrainedModel):
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
             length_penalty (`float`, *optional*, defaults to 1.0):
-                Exponential penalty to the length. 1.0 means no penalty.
-
-                Set to values < 1.0 in order to encourage the model to generate shorter sequences, to a value > 1.0 in
-                order to encourage the model to produce longer sequences.
+                Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent
+                to the sequence length, which in turn is used to divide the score of the sequence. Since the score is
+                the log likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences,
+                while `length_penalty` < 0.0 encourages shorter sequences.
             no_repeat_ngram_size (`int`, *optional*, defaults to 0):
                 If set to int > 0, all ngrams of that size can only occur once.
             encoder_no_repeat_ngram_size (`int`, *optional*, defaults to 0):
@@ -1486,8 +1484,8 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 enabled.
             num_return_sequences(`int`, *optional*, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch. Note that this
-                is not the value we pass to the `generator`'s `[`~generation_utils.GenerationMixin.generate`] function,
-                where we set `num_return_sequences` to `num_beams`. decoder_start_token_id (`int`, *optional*): If an
+                is not the value we pass to the `generator`'s `[`~generation.GenerationMixin.generate`] function, where
+                we set `num_return_sequences` to `num_beams`. decoder_start_token_id (`int`, *optional*): If an
                 encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
             n_docs (`int`, *optional*, defaults to `config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.

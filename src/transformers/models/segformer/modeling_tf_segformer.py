@@ -741,7 +741,7 @@ class TFSegformerDecodeHead(TFSegformerPreTrainedModel):
         self.linear_fuse = tf.keras.layers.Conv2D(
             filters=config.decoder_hidden_size, kernel_size=1, use_bias=False, name="linear_fuse"
         )
-        self.batch_norm = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.1, name="batch_norm")
+        self.batch_norm = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="batch_norm")
         self.activation = tf.keras.layers.Activation("relu")
 
         self.dropout = tf.keras.layers.Dropout(config.classifier_dropout_prob)
@@ -847,7 +847,7 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
 
         >>> inputs = feature_extractor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs, training=False)
-        >>> # logits are of shape (batch_size, num_labels, height, width)
+        >>> # logits are of shape (batch_size, num_labels, height/4, width/4)
         >>> logits = outputs.logits
         >>> list(logits.shape)
         [1, 150, 128, 128]

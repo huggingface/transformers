@@ -196,11 +196,11 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         attn_mask_g,
         r,
         seg_mat,
-        mems,
-        target_mapping,
-        head_mask,
-        output_attentions,
-        training=False,
+        mems: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        target_mapping: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = False,
+        training: bool = False,
     ):
         if g is not None:
             # Two-stream attention with relative positional encoding.
@@ -370,11 +370,11 @@ class TFXLNetLayer(tf.keras.layers.Layer):
         attn_mask,
         pos_emb,
         seg_mat,
-        mems,
-        target_mapping,
-        head_mask,
-        output_attentions,
-        training=False,
+        mems: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        target_mapping: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = False,
+        training: bool = False,
     ):
         outputs = self.rel_attn(
             output_h,
@@ -583,20 +583,20 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        mems=None,
-        perm_mask=None,
-        target_mapping=None,
-        token_type_ids=None,
-        input_mask=None,
-        head_mask=None,
-        inputs_embeds=None,
-        use_mems=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        mems: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        perm_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        target_mapping: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        use_mems: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
     ):
 
         if training and use_mems is None:
@@ -680,6 +680,16 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         if inputs_embeds is not None:
             word_emb_k = inputs_embeds
         else:
+            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+            tf.debugging.assert_less(
+                input_ids,
+                tf.cast(self.word_embedding.vocab_size, dtype=input_ids.dtype),
+                message=(
+                    "input_ids must be smaller than the embedding layer's input dimension (got"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.word_embedding.vocab_size})"
+                ),
+            )
             word_emb_k = self.word_embedding(input_ids)
         output_h = self.dropout(word_emb_k, training=training)
         if target_mapping is not None:
@@ -1020,22 +1030,27 @@ XLNET_START_DOCSTRING = r"""
 
     <Tip>
 
-    TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
     - having all inputs as keyword arguments (like PyTorch models), or
-    - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
-    tensors in the first argument of the model call function: `model(inputs)`.
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
-    first positional argument :
-
-    - a single Tensor with `input_ids` only and nothing else: `model(inputs_ids)`
+    - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
     `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
     `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
 
@@ -1137,21 +1152,21 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        mems=None,
-        perm_mask=None,
-        target_mapping=None,
-        token_type_ids=None,
-        input_mask=None,
-        head_mask=None,
-        inputs_embeds=None,
-        use_mems=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-    ):
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        mems: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        perm_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        target_mapping: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        use_mems: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
+    ) -> Union[TFXLNetModelOutput, Tuple[tf.Tensor]]:
         outputs = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1260,7 +1275,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> Union[TFXLNetLMHeadModelOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1391,7 +1406,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> Union[TFXLNetForSequenceClassificationOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1497,7 +1512,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> Union[TFXLNetForMultipleChoiceOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1558,9 +1573,9 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
+                "input_ids": tf.TensorSpec((None, None, None), tf.int64, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int64, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None, None), tf.int64, name="token_type_ids"),
             }
         ]
     )
@@ -1618,7 +1633,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> Union[TFXLNetForTokenClassificationOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1705,7 +1720,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
         return_dict: Optional[bool] = None,
         start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
         end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> Union[TFXLNetForQuestionAnsweringSimpleOutput, Tuple[tf.Tensor]]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):

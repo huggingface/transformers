@@ -32,7 +32,7 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import FlavaFeatureExtractor, FlavaProcessor
-    from transformers.models.flava.feature_extraction_flava import (
+    from transformers.models.flava.image_processing_flava import (
         FLAVA_CODEBOOK_MEAN,
         FLAVA_CODEBOOK_STD,
         FLAVA_IMAGE_MEAN,
@@ -69,7 +69,6 @@ class FlavaProcessorTest(unittest.TestCase):
             "mask_group_max_aspect_ratio": None,
             "codebook_do_resize": True,
             "codebook_size": 112,
-            "codebook_resample": None,
             "codebook_do_center_crop": True,
             "codebook_crop_size": 112,
             "codebook_do_map_pixels": True,
@@ -232,3 +231,16 @@ class FlavaProcessorTest(unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
+
+    def test_model_input_names(self):
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+
+        processor = FlavaProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input)
+
+        self.assertListEqual(list(inputs.keys()), processor.model_input_names)

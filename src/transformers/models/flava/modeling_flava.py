@@ -29,7 +29,6 @@ from transformers.utils.doc import add_code_sample_docstrings
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
-from ...pytorch_utils import is_torch_greater_than_1_6
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -392,12 +391,9 @@ class FlavaTextEmbeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        if is_torch_greater_than_1_6:
-            self.register_buffer(
-                "token_type_ids",
-                torch.zeros(self.position_ids.size(), dtype=torch.long),
-                persistent=False,
-            )
+        self.register_buffer(
+            "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
+        )
 
     def forward(
         self,
@@ -947,7 +943,7 @@ class FlavaImageModel(FlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1043,7 +1039,7 @@ class FlavaTextModel(FlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1146,7 +1142,7 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1733,6 +1729,14 @@ class FlavaGlobalContrastiveHead(nn.Module):
     FLAVA_START_DOCSTRING.format(config="FlavaConfig") + FLAVA_PRETRAINING_START_DOCSTRING_EXTRA,
 )
 class FlavaForPreTraining(FlavaPreTrainedModel):
+    # Those are linked to xxx.bias
+    _keys_to_ignore_on_load_missing = [
+        "mmm_text_head.decoder.bias",
+        "mmm_image_head.decoder.bias",
+        "mlm_head.decoder.bias",
+        "mim_head.decoder.bias",
+    ]
+
     def __init__(self, config: FlavaConfig, image_codebook: Optional[nn.Module] = None):
         super().__init__(config)
         self.flava = FlavaModel(config)
@@ -1791,7 +1795,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         output_hidden_states: bool = True,
         return_dict: Optional[bool] = None,
         return_loss: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple[torch.Tensor], FlavaForPreTrainingOutput]:
         """
         Examples:
         ```python

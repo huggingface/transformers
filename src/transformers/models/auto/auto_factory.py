@@ -555,7 +555,14 @@ def getattribute_from_module(module, attr):
     # Some of the mappings have entries model_type -> object of another model type. In that case we try to grab the
     # object at the top level.
     transformers_module = importlib.import_module("transformers")
-    return getattribute_from_module(transformers_module, attr)
+
+    if module != transformers_module:
+        try:
+            return getattribute_from_module(transformers_module, attr)
+        except ValueError:
+            raise ValueError(f"Could not find {attr} neither in {module} nor in {transformers_module}!")
+    else:
+        raise ValueError(f"Could not find {attr} in {transformers_module}!")
 
 
 class _LazyAutoMapping(OrderedDict):
@@ -563,7 +570,6 @@ class _LazyAutoMapping(OrderedDict):
     " A mapping config to object (model or tokenizer for instance) that will load keys and values when it is accessed.
 
     Args:
-
         - config_mapping: The map model type to config class
         - model_mapping: The map model type to model (or tokenizer) class
     """

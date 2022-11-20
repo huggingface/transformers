@@ -54,5 +54,4 @@ The fields you should add are `local` (with the name of the file containing the 
 
 Once you have translated the `_toctree.yml` file, you can start translating the [MDX](https://mdxjs.com/) files associated with your docs chapter.
 
-> 🙋 If you'd like others to help you with the translation, you can either [open an issue](https://github.com/huggingface/transformers/issues) or tag @[espejelomar](https://twitter.com/espejelomar)
- on Twitter to gain some visibility.
+> 🙋 If you'd like others to help you with the translation, you should [open an issue](https://github.com/huggingface/transformers/issues) and tag @sgugger.

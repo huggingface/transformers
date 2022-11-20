@@ -16,10 +16,17 @@
 
 import copy
 import os
-from typing import Union
+from collections import OrderedDict
+from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
+
+
+if TYPE_CHECKING:
+    from ...processing_utils import ProcessorMixin
+    from ...utils import TensorType
 
 
 logger = logging.get_logger(__name__)
@@ -155,7 +162,7 @@ class GroupViTVisionConfig(PretrainedConfig):
             The number of layers in each encoder block.
         num_group_tokens (`List[int]`, *optional*, defaults to [64, 8, 0]):
             The number of group tokens for each stage.
-        num_output_groups (`List[int]`, *optional*, defaults to [64, 8, 0]):
+        num_output_groups (`List[int]`, *optional*, defaults to [64, 8, 8]):
             The number of output groups for each stage, 0 means no group.
         num_attention_heads (`int`, *optional*, defaults to 6):
             Number of attention heads for each attention layer in the Transformer encoder.
@@ -266,15 +273,16 @@ class GroupViTConfig(PretrainedConfig):
     r"""
     [`GroupViTConfig`] is the configuration class to store the configuration of a [`GroupViTModel`]. It is used to
     instantiate a GroupViT model according to the specified arguments, defining the text model and vision model
-    configs.
+    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the GroupViT
+    [nvidia/groupvit-gcc-yfcc](https://huggingface.co/nvidia/groupvit-gcc-yfcc) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_config_dict (`dict`, *optional*):
+        text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`GroupViTTextConfig`].
-        vision_config_dict (`dict`, *optional*):
+        vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`GroupViTVisionConfig`].
         projection_dim (`int`, *optional*, defaults to 256):
             Dimentionality of text and vision projection layers.
@@ -292,25 +300,33 @@ class GroupViTConfig(PretrainedConfig):
 
     def __init__(
         self,
-        text_config_dict=None,
-        vision_config_dict=None,
+        text_config=None,
+        vision_config=None,
         projection_dim=256,
         projection_intermediate_dim=4096,
         logit_scale_init_value=2.6592,
         **kwargs
     ):
-        super().__init__(text_config_dict=text_config_dict, vision_config_dict=vision_config_dict, **kwargs)
+        super().__init__(**kwargs)
 
-        if text_config_dict is None:
-            text_config_dict = {}
-            logger.info("text_config_dict is None. Initializing the GroupViTTextConfig with default values.")
+        # If `_config_dict` exist, we use them for the backward compatibility.
+        text_config_dict = kwargs.pop("text_config_dict", None)
+        vision_config_dict = kwargs.pop("vision_config_dict", None)
+        if text_config_dict is not None:
+            text_config = text_config_dict
+        if vision_config_dict is not None:
+            vision_config = vision_config_dict
 
-        if vision_config_dict is None:
-            vision_config_dict = {}
-            logger.info("vision_config_dict is None. initializing the GroupViTVisionConfig with default values.")
+        if text_config is None:
+            text_config = {}
+            logger.info("text_config is None. Initializing the GroupViTTextConfig with default values.")
 
-        self.text_config = GroupViTTextConfig(**text_config_dict)
-        self.vision_config = GroupViTVisionConfig(**vision_config_dict)
+        if vision_config is None:
+            vision_config = {}
+            logger.info("vision_config is None. initializing the GroupViTVisionConfig with default values.")
+
+        self.text_config = GroupViTTextConfig(**text_config)
+        self.vision_config = GroupViTVisionConfig(**vision_config)
 
         self.projection_dim = projection_dim
         self.projection_intermediate_dim = projection_intermediate_dim
@@ -329,7 +345,7 @@ class GroupViTConfig(PretrainedConfig):
             [`GroupViTConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config_dict=text_config.to_dict(), vision_config_dict=vision_config.to_dict(), **kwargs)
+        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
     def to_dict(self):
         """
@@ -343,3 +359,50 @@ class GroupViTConfig(PretrainedConfig):
         output["vision_config"] = self.vision_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
+
+
+class GroupViTOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("input_ids", {0: "batch", 1: "sequence"}),
+                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
+                ("attention_mask", {0: "batch", 1: "sequence"}),
+            ]
+        )
+
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("logits_per_image", {0: "batch"}),
+                ("logits_per_text", {0: "batch"}),
+                ("text_embeds", {0: "batch"}),
+                ("image_embeds", {0: "batch"}),
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4
+
+    def generate_dummy_inputs(
+        self,
+        processor: "ProcessorMixin",
+        batch_size: int = -1,
+        seq_length: int = -1,
+        framework: Optional["TensorType"] = None,
+    ) -> Mapping[str, Any]:
+
+        text_input_dict = super().generate_dummy_inputs(
+            processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
+        )
+        image_input_dict = super().generate_dummy_inputs(
+            processor.feature_extractor, batch_size=batch_size, framework=framework
+        )
+        return {**text_input_dict, **image_input_dict}
+
+    @property
+    def default_onnx_opset(self) -> int:
+        return 14

@@ -523,7 +523,6 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
         weights embeddings afterwards if the model class has a *tie_weights()* method.
 
         Arguments:
-
             new_num_tokens: (*optional*) int:
                 New number of tokens in the embedding matrix. Increasing the size will add newly initialized vectors at
                 the end. Reducing the size will remove vectors from the end. If not provided or None: does nothing and
@@ -1007,6 +1006,8 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
     TRANSFO_XL_START_DOCSTRING,
 )
 class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"crit\.out_projs\.\d+", r"crit\.out_layers\.\d+\.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.transformer = TransfoXLModel(config)

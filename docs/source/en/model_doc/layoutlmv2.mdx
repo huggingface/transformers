@@ -45,7 +45,7 @@ RVL-CDIP (0.9443 -> 0.9564), and DocVQA (0.7295 -> 0.8672). The pre-trained Layo
 this https URL.*
 
 LayoutLMv2 depends on `detectron2`, `torchvision` and `tesseract`. Run the
-following to install them: 
+following to install them:
 ```
 python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
 python -m pip install torchvision tesseract
@@ -274,6 +274,11 @@ print(encoding.keys())
 
 [[autodoc]] LayoutLMv2FeatureExtractor
     - __call__
+
+## LayoutLMv2ImageProcessor
+
+[[autodoc]] LayoutLMv2ImageProcessor
+    - preprocess
 
 ## LayoutLMv2Tokenizer
 
