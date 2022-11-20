@@ -737,10 +737,10 @@ class TFVideoMAEModel(TFVideoMAEPreTrainedModel):
         >>> video = videoreader.get_batch(indices).asnumpy()
 
         >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base")
-        >>> model = VideoMAEModel.from_pretrained("MCG-NJU/videomae-base")
+        >>> model = TFVideoMAEModel.from_pretrained("MCG-NJU/videomae-base")
 
         >>> # prepare video for the model
-        >>> inputs = feature_extractor(list(video), return_tensors="pt")
+        >>> inputs = feature_extractor(list(video), return_tensors="tf")
 
         >>> # forward pass
         >>> outputs = model(**inputs)
@@ -748,45 +748,32 @@ class TFVideoMAEModel(TFVideoMAEPreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 1568, 768]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
-        embedding_output = self.embeddings(pixel_values, bool_masked_pos)
-
-        encoder_outputs = self.encoder(
-            embedding_output,
+        outputs = self.videomae(
+            pixel_values=pixel_values,
+            bool_masked_pos=bool_masked_pos,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-        )
-        sequence_output = encoder_outputs[0]
-        if self.layernorm is not None:
-            sequence_output = self.layernorm(sequence_output)
-
-        if not return_dict:
-            return (sequence_output,) + encoder_outputs[1:]
-
-        return BaseModelOutput(
-            last_hidden_state=sequence_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            training=training,
         )
 
+        return outputs
 
-class VideoMAEDecoder(nn.Module):
-    def __init__(self, config, num_patches):
-        super().__init__()
+    def serving_output(self, output: TFBaseModelOutput) -> TFBaseModelOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
+
+class TFVideoMAEDecoder(tf.keras.layers.Layer):
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
 
         decoder_num_labels = config.num_channels * config.tubelet_size * config.patch_size**2
 
@@ -795,19 +782,16 @@ class VideoMAEDecoder(nn.Module):
         decoder_config.num_hidden_layers = config.decoder_num_hidden_layers
         decoder_config.num_attention_heads = config.decoder_num_attention_heads
         decoder_config.intermediate_size = config.decoder_intermediate_size
-        self.decoder_layers = nn.ModuleList(
-            [VideoMAELayer(decoder_config) for _ in range(config.decoder_num_hidden_layers)]
-        )
+        self.decoder_layers = [
+            [TFVideoMAELayer(decoder_config, name=f"decoder_layers.{j}") for _ in range(config.decoder_num_hidden_layers)]
+        ]
 
-        self.norm = nn.LayerNorm(config.decoder_hidden_size)
+        self.norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="norm")
         self.head = (
-            nn.Linear(config.decoder_hidden_size, decoder_num_labels) if decoder_num_labels > 0 else nn.Identity()
+            tf.keras.layers.Dense(decoder_num_labels, name="head") if decoder_num_labels > 0 else tf.identity
         )
 
-        self.gradient_checkpointing = False
-        self.config = config
-
-    def forward(
+    def call(
         self,
         hidden_states,
         return_token_num,
@@ -822,21 +806,8 @@ class VideoMAEDecoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    None,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, head_mask=None, output_attentions=output_attentions)
+            
+            layer_outputs = layer_module(hidden_states, head_mask=None, output_attentions=output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -855,7 +826,7 @@ class VideoMAEDecoder(nn.Module):
 
         if not return_dict:
             return tuple(v for v in [logits, all_hidden_states, all_self_attentions] if v is not None)
-        return VideoMAEDecoderOutput(logits=logits, hidden_states=all_hidden_states, attentions=all_self_attentions)
+        return TFVideoMAEDecoderOutput(logits=logits, hidden_states=all_hidden_states, attentions=all_self_attentions)
 
 
 @add_start_docstrings(
