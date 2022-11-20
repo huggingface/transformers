@@ -256,8 +256,7 @@ class TFVideoMAESelfAttention(tf.keras.layers.Layer):
         return tf.transpose(tensor, perm=[0, 2, 1, 3])
 
     def linear_transformation(self, inputs, weight, bias=None):
-        weight_ = tf.constant(weight)
-        w_x = tf.matmul(inputs, weight_, transpose_b=True)
+        w_x = tf.matmul(inputs, weight, transpose_b=True)
         return w_x + bias if bias is not None else w_x
 
     def call(
@@ -275,9 +274,9 @@ class TFVideoMAESelfAttention(tf.keras.layers.Layer):
             _ = self.value(inputs=hidden_states)
             self.qkv_output_cache = tf.constant(1)
 
-        keys = self.linear_transformation(inputs=hidden_states, weight=self.key.trainable_weights[0], bias=k_bias)
-        values = self.linear_transformation(inputs=hidden_states, weight=self.value.trainable_weights[0], bias=self.v_bias)
-        queries = self.linear_transformation(inputs=hidden_states, weight=self.query.trainable_weights[0], bias=self.q_bias)
+        keys = self.linear_transformation(inputs=hidden_states, weight=self.key.kernel, bias=k_bias)
+        values = self.linear_transformation(inputs=hidden_states, weight=self.value.kernel, bias=self.v_bias)
+        queries = self.linear_transformation(inputs=hidden_states, weight=self.query.kernel, bias=self.q_bias)
 
         key_layer = self.transpose_for_scores(keys, batch_size)
         value_layer = self.transpose_for_scores(values, batch_size)
