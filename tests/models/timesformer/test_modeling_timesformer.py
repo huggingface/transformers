@@ -65,7 +65,7 @@ class TimesformerModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        type_sequence_label_size=10,
+        num_labels=10,
         initializer_range=0.02,
         attention_type="divided_space_time",
         scope=None,
@@ -88,7 +88,7 @@ class TimesformerModelTester:
         self.attention_type = attention_type
         self.initializer_range = initializer_range
         self.scope = scope
-        self.type_sequence_label_size = type_sequence_label_size
+        self.num_labels = num_labels
 
         # in TimeSformer, the number of spatial tokens equals num_frames * num_patches per frame + 1 CLS token
         self.num_patches_per_frame = (image_size // patch_size) ** 2
@@ -101,14 +101,14 @@ class TimesformerModelTester:
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            labels = ids_tensor([self.batch_size], self.num_labels)
 
         config = self.get_config()
 
         return config, pixel_values, labels
 
     def get_config(self):
-        return TimesformerConfig(
+        config = TimesformerConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -123,6 +123,8 @@ class TimesformerModelTester:
             initializer_range=self.initializer_range,
             attention_type=self.attention_type,
         )
+        config.num_labels = self.num_labels
+        return config
 
     def create_and_check_model(self, config, pixel_values, labels):
         model = TimesformerModel(config=config)
@@ -130,6 +132,17 @@ class TimesformerModelTester:
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+
+    def create_and_check_for_video_classification(self, config, pixel_values, labels):
+        model = TimesformerForVideoClassification(config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(pixel_values)
+
+        # verify the logits shape
+        expected_shape = torch.Size((self.batch_size, self.num_labels))
+        self.parent.assertEqual(result.logits.shape, expected_shape)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -202,6 +215,10 @@ class TimesformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_for_video_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_video_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
