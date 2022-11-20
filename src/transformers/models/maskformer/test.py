@@ -1,5 +1,7 @@
-from transformers import MaskFormerSwinConfig, MaskFormerSwinBackbone
 import torch
+
+from transformers import MaskFormerSwinBackbone, MaskFormerSwinConfig
+
 
 model = MaskFormerSwinBackbone(MaskFormerSwinConfig(out_features=["stage1", "stage2", "stage3", "stage4"]))
 

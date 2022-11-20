@@ -24,7 +24,7 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from transformers import AutoBackbone, SwinConfig, MaskFormerSwinConfig
+from transformers import AutoBackbone, MaskFormerSwinConfig, SwinConfig
 from transformers.utils import logging
 
 from ...activations import ACT2FN

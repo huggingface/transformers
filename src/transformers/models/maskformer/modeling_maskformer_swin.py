@@ -853,7 +853,11 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel):
     def __init__(self, config: MaskFormerSwinConfig):
         super().__init__(config)
 
-        self.stage_names = config.stage_names if isinstance(config, MaskFormerSwinConfig) else ["stage1", "stage2", "stage3", "stage4"]
+        self.stage_names = (
+            config.stage_names
+            if isinstance(config, MaskFormerSwinConfig)
+            else ["stage1", "stage2", "stage3", "stage4"]
+        )
         self.model = MaskFormerSwinModel(config)
 
         self.out_features = config.out_features
@@ -883,7 +887,9 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel):
         # we need to reshape the hidden states to their original spatial dimensions
         # spatial dimensions contains all the heights and widths of each stage, including after the embeddings
         spatial_dimensions: Tuple[Tuple[int, int]] = outputs.hidden_states_spatial_dimensions
-        for i, (hidden_state, stage, (height, width)) in enumerate(zip(hidden_states, self.stage_names, spatial_dimensions)):
+        for i, (hidden_state, stage, (height, width)) in enumerate(
+            zip(hidden_states, self.stage_names, spatial_dimensions)
+        ):
             norm = self.hidden_states_norms[i]
             # the last element corespond to the layer's last block output but before patch merging
             hidden_state_unpolled = hidden_state[-1]
