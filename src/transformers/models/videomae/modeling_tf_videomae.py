@@ -20,7 +20,7 @@ import collections.abc
 import math
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, Dict
 
 import numpy as np
 import tensorflow as tf
@@ -146,7 +146,7 @@ class TFVideoMAEEmbeddings(tf.keras.layers.Layer):
         if bool_masked_pos is not None:
             batch_size, _, num_channels = tf.shape(embeddings)
             embeddings = embeddings[~bool_masked_pos]
-            embeddings = tf.reshaoe(embeddings, (batch_size, -1, num_channels))
+            embeddings = tf.reshape(embeddings, (batch_size, -1, num_channels))
 
         return embeddings
 
@@ -497,7 +497,76 @@ class TFVideoMAEEncoder(tf.keras.layers.Layer):
         )
 
 
-class VideoMAEPreTrainedModel(PreTrainedModel):
+@keras_serializable
+class TFVideoMAEMainLayer(tf.keras.layers.Layer):
+    config_class = VideoMAEConfig
+
+    def __init__(self, config: VideoMAEConfig, **kwargs):
+        super().__init__(**kwargs)
+
+        self.config = config
+
+        self.embeddings = TFVideoMAEEmbeddings(config, name="embeddings")
+        self.encoder = TFVideoMAEEncoder(config, name="encoder")
+        
+        if config.use_mean_pooling:
+            self.layernorm = None
+        else:
+            self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
+
+    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+        return self.embeddings.patch_embeddings
+
+    def _prune_heads(self, heads_to_prune):
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
+        """
+        raise NotImplementedError
+
+    @unpack_inputs
+    def call(
+        self,
+        pixel_values: Optional[TFModelInputType] = None,
+        bool_masked_pos=None,
+        head_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training: bool = False,
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+
+        embedding_output = self.embeddings(pixel_values, bool_masked_pos)
+
+        encoder_outputs = self.encoder(
+            embedding_output,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training
+        )
+        sequence_output = encoder_outputs[0]
+        if self.layernorm is not None:
+            sequence_output = self.layernorm(sequence_output)
+
+        if not return_dict:
+            return (sequence_output,) + encoder_outputs[1:]
+
+        return TFBaseModelOutput(
+            last_hidden_state=sequence_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+class TFVideoMAEPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -506,43 +575,89 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
     config_class = VideoMAEConfig
     base_model_prefix = "videomae"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv3d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+    @property
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        """
+        Dummy inputs to build the network.
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, VideoMAEEncoder):
-            module.gradient_checkpointing = value
+        Returns:
+            `Dict[str, tf.Tensor]`: The dummy inputs.
+        """
+        VISION_DUMMY_INPUTS = tf.random.uniform(
+            shape=(3, self.config.num_frames, self.config.num_channels, self.config.image_size, self.config.image_size), dtype=tf.float32
+        )
+        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
+
+    @tf.function(
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None, None), tf.float32, name="pixel_values"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        """
+        Method used for serving the model.
+
+        Args:
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
 
 
 VIDEOMAE_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
-    Parameters:
-        config ([`VideoMAEConfig`]): Model configuration class with all the parameters of the model.
+    <Tip>
+
+    TensorFlow models and layers in `transformers` accept two formats as input:
+
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional argument.
+
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
+
+    - a single Tensor with `pixel_values` only and nothing else: `model(pixel_values)`
+    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+    `model([pixel_values, attention_mask])` or `model([pixel_values, attention_mask, token_type_ids])`
+    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+    `model({"pixel_values": pixel_values, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
+
+    </Tip>
+
+    Args:
+        config ([`ViTConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 VIDEOMAE_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`tf.Tensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`VideoMAEFeatureExtractor`]. See
-            [`VideoMAEFeatureExtractor.__call__`] for details.
+        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`ViTFeatureExtractor`]. See
+            [`ViTFeatureExtractor.__call__`] for details.
 
-        head_mask (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`np.ndarray` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
@@ -550,12 +665,18 @@ VIDEOMAE_INPUTS_DOCSTRING = r"""
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
+            eager mode, in graph mode the value will always be set to True.
+        training (`bool`, *optional*, defaults to `False``):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
 """
 
 
@@ -563,35 +684,15 @@ VIDEOMAE_INPUTS_DOCSTRING = r"""
     "The bare VideoMAE Model transformer outputting raw hidden-states without any specific head on top.",
     VIDEOMAE_START_DOCSTRING,
 )
-class VideoMAEModel(VideoMAEPreTrainedModel):
+class TFVideoMAEModel(TFVideoMAEPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = VideoMAEEmbeddings(config)
-        self.encoder = VideoMAEEncoder(config)
-
-        if config.use_mean_pooling:
-            self.layernorm = None
-        else:
-            self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
+        self.videomae = TFVideoMAEMainLayer(config, name="videomae")
 
     @add_start_docstrings_to_model_forward(VIDEOMAE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=TFBaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values,
@@ -600,7 +701,8 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-    ):
+        training=False
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         r"""
         Returns:
 
@@ -610,7 +712,7 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         >>> from decord import VideoReader, cpu
         >>> import numpy as np
 
-        >>> from transformers import VideoMAEFeatureExtractor, VideoMAEModel
+        >>> from transformers import TFVideoMAEFeatureExtractor, TFVideoMAEModel
         >>> from huggingface_hub import hf_hub_download
 
 
