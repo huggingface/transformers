@@ -78,6 +78,7 @@ def contrastive_loss(logits: tf.Tensor, dim) -> tf.Tensor:
     neg_ce = tf.linalg.diag(tf.nn.log_softmax(logits, axis=dim))
     return tf.math.reduce_mean(neg_ce)
 
+
 def clip_loss(similarity: tf.Tensor) -> tf.Tensor:
     caption_loss = contrastive_loss(similarity, dim=0)
     image_loss = contrastive_loss(similarity, dim=1)

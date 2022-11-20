@@ -665,6 +665,7 @@ from PIL import Image
 import requests
 from transformers import CLIPProcessor, TFCLIPModel
 
+
 def test():
     model = TFCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
     processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
@@ -672,9 +673,7 @@ def test():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
 
-    inputs = processor(
-        text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="tf", padding=True
-    )
+    inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="tf", padding=True)
 
     outputs = model(
         input_ids=inputs["input_ids"],
@@ -692,9 +691,7 @@ def test_group_vit():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
 
-    inputs = processor(
-        text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
-    )
+    inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
 
     outputs = model(
         input_ids=inputs["input_ids"],
@@ -718,9 +715,7 @@ def test_a():
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
     processor = VisionTextDualEncoderProcessor(feature_extractor, tokenizer)
-    model = VisionTextDualEncoderModel.from_vision_text_pretrained(
-        "google/vit-base-patch16-224", "bert-base-uncased"
-    )
+    model = VisionTextDualEncoderModel.from_vision_text_pretrained("google/vit-base-patch16-224", "bert-base-uncased")
 
     # contrastive training
     urls = [
@@ -728,9 +723,7 @@ def test_a():
         "https://farm3.staticflickr.com/2674/5850229113_4fe05d5265_z.jpg",
     ]
     images = [Image.open(requests.get(url, stream=True).raw) for url in urls]
-    inputs = processor(
-        text=["a photo of a cat", "a photo of a dog"], images=images, return_tensors="pt", padding=True
-    )
+    inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=images, return_tensors="pt", padding=True)
     outputs = model(
         input_ids=inputs.input_ids,
         attention_mask=inputs.attention_mask,
