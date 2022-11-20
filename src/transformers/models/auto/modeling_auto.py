@@ -97,6 +97,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("marian", "MarianModel"),
         ("markuplm", "MarkupLMModel"),
         ("maskformer", "MaskFormerModel"),
+        ("maskformer-swin", "MaskFormerSwinModel"),
         ("mbart", "MBartModel"),
         ("mctct", "MCTCTModel"),
         ("megatron-bert", "MegatronBertModel"),
@@ -849,7 +850,6 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         # Backbone mapping
         ("maskformer-swin", "MaskFormerSwinBackbone"),
         ("resnet", "ResNetBackbone"),
-        ("swin", "MaskFormerSwinBackbone"),
     ]
 )
 

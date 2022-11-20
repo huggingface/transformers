@@ -24,7 +24,7 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from transformers import AutoBackbone, SwinConfig
+from transformers import AutoBackbone, SwinConfig, MaskFormerSwinConfig
 from transformers.utils import logging
 
 from ...activations import ACT2FN
@@ -1379,8 +1379,8 @@ class MaskFormerPixelLevelModule(nn.Module):
         backbone_config = config.backbone_config
         if isinstance(backbone_config, SwinConfig):
             # for backwards compatibility
+            backbone_config = MaskFormerSwinConfig.from_dict(backbone_config.to_dict())
             backbone_config.out_features = ["stage1", "stage2", "stage3", "stage4"]
-            # backbone_config.model_type = "maskformer-swin"
         self.encoder = AutoBackbone.from_config(backbone_config)
 
         feature_channels = self.encoder.channels

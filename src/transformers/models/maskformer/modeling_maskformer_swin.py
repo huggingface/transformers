@@ -854,7 +854,7 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel):
         super().__init__(config)
 
         self.stage_names = config.stage_names if isinstance(config, MaskFormerSwinConfig) else ["stage1", "stage2", "stage3", "stage4"]
-        self.maskformer = MaskFormerSwinModel(config)
+        self.model = MaskFormerSwinModel(config)
 
         self.out_features = config.out_features
 
@@ -874,7 +874,7 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel):
         return [self.out_feature_channels[name] for name in self.out_features]
 
     def forward(self, pixel_values) -> List[Tensor]:
-        outputs = self.maskformer(pixel_values, output_hidden_states=True, return_dict=True)
+        outputs = self.model(pixel_values, output_hidden_states=True, return_dict=True)
 
         # we skip the stem
         hidden_states = outputs.hidden_states[1:]
