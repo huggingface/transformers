@@ -24,12 +24,19 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
+    BackboneOutput,
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_convnext import ConvNextConfig
 
 
@@ -465,3 +472,74 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
         )
+
+
+@add_start_docstrings(
+    """
+    ConvNeXt backbone, to be used with frameworks like DETR and MaskFormer.
+    """,
+    CONVNEXT_START_DOCSTRING,
+)
+class ConvNextBackbone(ConvNextPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.stage_names = config.stage_names
+        self.convnext = ConvNextModel(config)
+
+        self.out_features = config.out_features
+
+        self.out_feature_channels = {
+            "stem": config.hidden_sizes[0],
+            "stage1": config.hidden_sizes[0],
+            "stage2": config.hidden_sizes[1],
+            "stage3": config.hidden_sizes[2],
+            "stage4": config.hidden_sizes[3],
+        }
+
+        # TODO this assumes stem is not used
+        self.hidden_states_norms = nn.ModuleList(
+            [ConvNextLayerNorm(num_channels, data_format="channels_first") for num_channels in config.hidden_sizes]
+        )
+
+        # initialize weights and apply final processing
+        self.post_init()
+
+    @property
+    def channels(self):
+        return [self.out_feature_channels[name] for name in self.out_features]
+
+    @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(self, pixel_values: Optional[torch.FloatTensor] = None) -> BackboneOutput:
+        """
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoBackbone
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
+        >>> model = AutoBackbone.from_pretrained("microsoft/resnet-50")
+
+        >>> inputs = processor(image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        ```"""
+        outputs = self.convnext(pixel_values, output_hidden_states=True, return_dict=True)
+
+        hidden_states = outputs.hidden_states
+
+        feature_maps = ()
+        for idx, (stage, hidden_state) in enumerate(zip(self.stage_names[1:], hidden_states[1:])):
+            if stage in self.out_features:
+                hidden_state = self.hidden_states_norms[idx](hidden_state)
+                feature_maps += (hidden_states[idx],)
+
+        return BackboneOutput(feature_maps=feature_maps)
