@@ -2179,7 +2179,7 @@ else:
         [
             "TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TimesformerModel",
-            "TimesformerPretrainedModel",
+            "TimesformerPreTrainedModel",
             "TimesformerForVideoClassification",
         ]
     )
@@ -4919,7 +4919,7 @@ if TYPE_CHECKING:
             TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TimesformerForVideoClassification,
             TimesformerModel,
-            TimesformerPretrainedModel,
+            TimesformerPreTrainedModel,
         )
         from .models.trajectory_transformer import (
             TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

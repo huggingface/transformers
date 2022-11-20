@@ -483,7 +483,7 @@ class TimesformerEncoder(nn.Module):
 
 
 # Adapted from transformers.models.videomae.modeling_videomae.VideoMAEPreTrainedModel with VideoMAE->TimeSformer
-class TimesformerPretrainedModel(PreTrainedModel):
+class TimesformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -545,7 +545,7 @@ TIMESFORMER_INPUTS_DOCSTRING = r"""
     TIMESFORMER_START_DOCSTRING,
 )
 # Adapted from transformers.models.videomae.modeling_videomae.VideoMAEModel with VideoMAE->TimeSformer
-class TimesformerModel(TimesformerPretrainedModel):
+class TimesformerModel(TimesformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
@@ -657,7 +657,7 @@ of the [CLS] token) e.g. for ImageNet.""",
     TIMESFORMER_START_DOCSTRING,
 )
 # Adapted from transformers.models.videomae.modeling_videomae.VideoMAEForVideoClassification with VideoMAE->TimeSformer
-class TimesformerForVideoClassification(TimesformerPretrainedModel):
+class TimesformerForVideoClassification(TimesformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 

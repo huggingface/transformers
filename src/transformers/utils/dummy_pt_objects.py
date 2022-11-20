@@ -5303,7 +5303,7 @@ class TimesformerModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class TimesformerPretrainedModel(metaclass=DummyObject):
+class TimesformerPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

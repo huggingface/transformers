@@ -34,7 +34,7 @@ else:
         "TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TimesformerModel",
         "TimesformerForVideoClassification",
-        "TimesformerPretrainedModel",
+        "TimesformerPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -50,7 +50,7 @@ if TYPE_CHECKING:
             TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TimesformerForVideoClassification,
             TimesformerModel,
-            TimesformerPretrainedModel,
+            TimesformerPreTrainedModel,
         )
 
 else:
