@@ -853,11 +853,7 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel):
     def __init__(self, config: MaskFormerSwinConfig):
         super().__init__(config)
 
-        self.stage_names = (
-            config.stage_names
-            if isinstance(config, MaskFormerSwinConfig)
-            else ["stage1", "stage2", "stage3", "stage4"]
-        )
+        self.stage_names = config.stage_names
         self.model = MaskFormerSwinModel(config)
 
         self.out_features = config.out_features
