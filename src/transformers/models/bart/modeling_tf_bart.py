@@ -746,7 +746,6 @@ class TFBartEncoder(tf.keras.layers.Layer):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -1482,7 +1481,6 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         return reordered_past
 
 
-# TODO Fix global import
 @add_start_docstrings(
     """
         Bart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE
@@ -1573,12 +1571,12 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
 
         last_hidden_state = outputs[0]
         eos_mask = tf.equal(input_ids, self.config.eos_token_id)
-        masked = tf.ragged.boolean_mask(last_hidden_state, eos_mask)
-        self_masked = tf.ragged.boolean_mask(eos_mask, eos_mask).to_tensor()
         # tf.ragged maintains the masked shape and to_tensor pads
         # out the rows with False where present.  Then verify all the final
         # entries are True
+        self_masked = tf.ragged.boolean_mask(eos_mask, eos_mask).to_tensor()
         tf.Assert(tf.reduce_all(self_masked[:, -1]), ["All examples must have the same number of <eos> tokens."])
+
         masked = tf.ragged.boolean_mask(last_hidden_state, eos_mask).to_tensor()
 
         sentence_representation = masked[:, -1, :]

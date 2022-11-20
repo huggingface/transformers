@@ -321,6 +321,18 @@ class TFBartHeadTests(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
 
+@require_tf
+class TFBartForSequenceClassificationTest(unittest.TestCase):
+    def test_model_fails_for_uneven_eos_tokens(self):
+        config = BartConfig(eos_token_id=2)
+        model = TFBartForSequenceClassification(config)
+        inputs = {
+            "input_ids": tf.constant([[1, 2, 2, 2], [1, 3, 2, 2], [2, 2, 3, 3]]),
+            "attention_mask": tf.constant([[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]])
+            }
+        with self.assertRaises(tf.errors.InvalidArgumentError):
+            model(inputs)
+
 @slow
 @require_tf
 class TFBartModelIntegrationTest(unittest.TestCase):
