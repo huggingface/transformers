@@ -1050,7 +1050,6 @@ class PLBartDecoder(PLBartPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1075,7 +1074,6 @@ class PLBartDecoder(PLBartPreTrainedModel):
                     None,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
@@ -1488,9 +1486,7 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
             return_dict=return_dict,
         )
         hidden_states = outputs[0]  # last hidden state
-
         eos_mask = input_ids.eq(self.config.eos_token_id)
-
         if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
         sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[

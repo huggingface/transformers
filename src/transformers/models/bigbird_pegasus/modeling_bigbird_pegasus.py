@@ -2404,7 +2404,6 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Seq2SeqModelOutput]:
-
         # different to other models, BigBirdPegasus automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
         if decoder_input_ids is None and decoder_inputs_embeds is None:
@@ -2730,9 +2729,7 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
             return_dict=return_dict,
         )
         hidden_states = outputs[0]  # last hidden state
-
         eos_mask = input_ids.eq(self.config.eos_token_id)
-
         if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
         sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
