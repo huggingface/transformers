@@ -12,34 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Swin Transformer model configuration"""
-
-from collections import OrderedDict
-from typing import Mapping
-
-from packaging import version
+""" MaskFormer Swin Transformer model configuration"""
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/swin-tiny-patch4-window7-224": (
-        "https://huggingface.co/microsoft/swin-tiny-patch4-window7-224/resolve/main/config.json"
-    ),
-    # See all Swin models at https://huggingface.co/models?filter=swin
-}
 
-
-class SwinConfig(PretrainedConfig):
+class MaskFormerSwinConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SwinModel`]. It is used to instantiate a Swin
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Swin
-    [microsoft/swin-tiny-patch4-window7-224](https://huggingface.co/microsoft/swin-tiny-patch4-window7-224)
+    This is the configuration class to store the configuration of a [`MaskFormerSwinModel`]. It is used to instantiate
+    a Donut model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the Swin
+    [microsoft/swin-tiny-patch4-window7-224(https://huggingface.co/microsoft/swin-tiny-patch4-window7-224)
     architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -81,24 +68,24 @@ class SwinConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        encoder_stride (`int`, `optional`, defaults to 32):
-            Factor to increase the spatial resolution by in the decoder head for masked image modeling.
+        out_features (`List[str]`, *optional*):
+            If used as a backbone, list of feature names to output, e.g. ["stem", "stage1"].
 
-        Example:
+    Example:
 
     ```python
-    >>> from transformers import SwinConfig, SwinModel
+    >>> from transformers import MaskFormerSwinConfig, MaskFormerSwinModel
 
-    >>> # Initializing a Swin microsoft/swin-tiny-patch4-window7-224 style configuration
-    >>> configuration = SwinConfig()
+    >>> # Initializing a Donut naver-clova-ix/donut-base style configuration
+    >>> configuration = MaskFormerSwinConfig()
 
-    >>> # Initializing a model (with random weights) from the microsoft/swin-tiny-patch4-window7-224 style configuration
-    >>> model = SwinModel(configuration)
+    >>> # Randomly initializing a model from the naver-clova-ix/donut-base style configuration
+    >>> model = MaskFormerSwinModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "swin"
+    model_type = "maskformer-swin"
 
     attribute_map = {
         "num_attention_heads": "num_heads",
@@ -124,7 +111,6 @@ class SwinConfig(PretrainedConfig):
         patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
-        encoder_stride=32,
         out_features=None,
         **kwargs
     ):
@@ -148,25 +134,16 @@ class SwinConfig(PretrainedConfig):
         self.path_norm = patch_norm
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
-        self.encoder_stride = encoder_stride
         # we set the hidden_size attribute in order to make Swin work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
+        self.stage_names = [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+        if out_features is not None:
+            if not isinstance(out_features, list):
+                raise ValueError("out_features should be a list")
+            for feature in out_features:
+                if feature not in self.stage_names:
+                    raise ValueError(
+                        f"Feature {feature} is not a valid feature name. Valid names are {self.stage_names}"
+                    )
         self.out_features = out_features
-
-
-class SwinOnnxConfig(OnnxConfig):
-
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
