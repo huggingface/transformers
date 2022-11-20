@@ -1585,8 +1585,14 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         embedded_cat = self.embedder(static_categorical_features)
 
         # static features
-        log_loc = loc.abs().log1p() if self.config.input_size == 1 else loc.squeeze(1).abs().log1p()
-        log_scale = scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
+        if self.config.scaling == "std":
+            log_loc = loc.abs().log1p() if self.config.input_size == 1 else loc.squeeze(1).abs().log1p()
+            log_scale = scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
+        else:
+            log_loc = (
+                context.std(dim=1, keepdim=True).log1p() if self.config.input_size == 1 else context.std(dim=1).log1p()
+            )
+            log_scale = scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
 
         static_feat = torch.cat((embedded_cat, static_real_features, log_loc, log_scale), dim=1)
         expanded_static_feat = static_feat.unsqueeze(1).expand(-1, time_feat.shape[1], -1)
