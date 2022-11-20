@@ -14,15 +14,15 @@
 # limitations under the License.
 """ PyTorch UperNet model. Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation."""
 
-from typing import Union, Tuple, List
+from typing import List, Tuple, Union
 
 import torch
 from torch import nn
 
 from transformers import AutoBackbone
 
-from .configuration_upernet import UperNetConfig
 from ...modeling_utils import PreTrainedModel
+from .configuration_upernet import UperNetConfig
 
 
 class ConvModule(nn.Module):
@@ -80,7 +80,7 @@ class PyramidPoolingBlock(nn.Module):
 class PyramidPoolingModule(nn.Module):
     """
     Pyramid Pooling Module (PPM) used in PSPNet.
-    
+
     Args:
         pool_scales (tuple[int]):
             Pooling scales used in Pooling Pyramid Module.
@@ -202,7 +202,7 @@ class FCNHead(nn.Module):
     """
     Fully Convolution Networks for Semantic Segmentation. This head is the implementation of
     [FCNNet](https://arxiv.org/abs/1411.4038>).
-    
+
     Args:
         config:
             Configuration.
@@ -285,7 +285,7 @@ class UperNetPreTrainedModel(PreTrainedModel):
 class UperNetForSemanticSegmentatation(nn.Module):
     def __init__(self, config):
         self.backbone = AutoBackbone.from_config(config.backbone_config)
-        
+
         # Semantic segmentation head(s)
         self.decode_head = UperHead(config)
         self.auxiliary_head = FCNHead(config) if config.use_auxiliary_head else None

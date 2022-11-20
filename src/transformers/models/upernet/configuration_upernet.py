@@ -32,7 +32,20 @@ class UperNetConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        ...
+        pool_scales (`Tuple[int]`, *optional*, defaults to `[1, 2, 3, 6]`):
+            Pooling scales used in Pooling Pyramid Module applied on the last feature map.
+        use_auxiliary_head (`bool`, *optional*, defaults to `True`):
+            Whether to use an auxiliary head during training.
+        auxiliary_loss_weight (`float`, *optional*, defaults to 0.4):
+            Weight of the cross-entropy loss of the auxiliary head.
+        auxiliary_channels (`int`, *optional*, defaults to 256):
+            Number of channels to use in the auxiliary head.
+        auxiliary_num_convs (`int`, *optional*, defaults to 1):
+            Number of convolutional layers to use in the auxiliary head.
+        auxiliary_concat_input (`bool`, *optional*, defaults to `False`):
+            Whether to concatenate the output of the auxiliary head with the input before the classification layer.
+        loss_ignore_index (`int`, *optional*, defaults to 255):
+            The index that is ignored by the loss function.
 
     Examples:
 
@@ -48,10 +61,25 @@ class UperNetConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "bert"
+    model_type = "upernet"
 
     def __init__(
         self,
+        pool_scales=[1, 2, 3, 6],
+        use_auxiliary_head=True,
+        auxiliary_loss_weight=0.4,
+        auxiliary_channels=256,
+        auxiliary_num_convs=1,
+        auxiliary_concat_input=False,
+        loss_ignore_index=255,
         **kwargs
     ):
         super().__init__(**kwargs)
+
+        self.pool_scales = pool_scales
+        self.use_auxiliary_head = use_auxiliary_head
+        self.auxiliary_loss_weight = auxiliary_loss_weight
+        self.auxiliary_channels = auxiliary_channels
+        self.auxiliary_num_convs = auxiliary_num_convs
+        self.auxiliary_concat_input = auxiliary_concat_input
+        self.loss_ignore_index = loss_ignore_index

@@ -47,10 +47,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_upernet import (
-            UperNetForSemanticSegmentatation,
-            UperNetPreTrainedModel,
-        )
+        from .modeling_upernet import UperNetForSemanticSegmentatation, UperNetPreTrainedModel
 
 
 else:
