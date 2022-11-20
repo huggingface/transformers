@@ -254,6 +254,7 @@ def load_pytorch_state_dict_in_tf2_model(
     start_prefix_to_remove = ""
     if not any(s.startswith(tf_model.base_model_prefix) for s in pt_state_dict.keys()):
         start_prefix_to_remove = tf_model.base_model_prefix + "."
+
     symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
     tf_loaded_numel = 0
     weight_value_tuples = []
