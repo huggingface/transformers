@@ -44,7 +44,7 @@
   - local: converting_tensorflow_models
     title: Convertir checkpoints de TensorFlow
   - local: pr_checks
-    title: Checks on a Pull Request
+    title: Verificaciones en un Pull Request
   title: Guías prácticas
 - sections:
   - local: philosophy
