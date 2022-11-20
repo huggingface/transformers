@@ -74,17 +74,13 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
 
 # contrastive loss function, adapted from
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
-def contrastive_loss(logits: tf.Tensor) -> tf.Tensor:
-    return tf.math.reduce_mean(
-        tf.keras.metrics.sparse_categorical_crossentropy(
-            y_true=tf.range(shape_list(logits)[0]), y_pred=logits, from_logits=True
-        )
-    )
-
+def contrastive_loss(logits: tf.Tensor, dim) -> tf.Tensor:
+    neg_ce = tf.linalg.diag(tf.nn.log_softmax(logits, axis=dim))
+    return tf.math.reduce_mean(neg_ce)
 
 def clip_loss(similarity: tf.Tensor) -> tf.Tensor:
-    caption_loss = contrastive_loss(similarity)
-    image_loss = contrastive_loss(tf.transpose(similarity))
+    caption_loss = contrastive_loss(similarity, dim=0)
+    image_loss = contrastive_loss(similarity, dim=1)
     return (caption_loss + image_loss) / 2.0
 
 

@@ -47,7 +47,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_vision_text_dual_encoder import VisionTextDualEncoderConfig
-    from .processing_visiotn_text_dual_encoder import VisionTextDualEncoderProcessor
+    from .processing_vision_text_dual_encoder import VisionTextDualEncoderProcessor
 
     try:
         if not is_torch_available():

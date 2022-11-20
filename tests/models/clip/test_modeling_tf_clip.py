@@ -22,7 +22,7 @@ import unittest
 from importlib import import_module
 
 import requests
-from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
+from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig, GroupViTModel, AutoProcessor
 from transformers.testing_utils import require_tf, require_vision, slow
 from transformers.utils import is_tf_available, is_vision_available
 
@@ -658,3 +658,92 @@ class TFCLIPModelIntegrationTest(unittest.TestCase):
         expected_logits = tf.constant([[24.5701, 19.3049]])
 
         tf.debugging.assert_near(outputs.logits_per_image, expected_logits, atol=1e-3)
+
+
+import tensorflow as tf
+from PIL import Image
+import requests
+from transformers import CLIPProcessor, TFCLIPModel
+
+def test():
+    model = TFCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+    processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    image = Image.open(requests.get(url, stream=True).raw)
+
+    inputs = processor(
+        text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="tf", padding=True
+    )
+
+    outputs = model(
+        input_ids=inputs["input_ids"],
+        pixel_values=inputs["pixel_values"],
+        attention_mask=inputs["attention_mask"],
+        return_loss=True,
+        return_dict=True,
+    )
+
+
+def test_group_vit():
+    model = GroupViTModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
+    processor = AutoProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
+
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    image = Image.open(requests.get(url, stream=True).raw)
+
+    inputs = processor(
+        text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
+    )
+
+    outputs = model(
+        input_ids=inputs["input_ids"],
+        pixel_values=inputs["pixel_values"],
+        attention_mask=inputs["attention_mask"],
+        return_loss=True,
+        return_dict=True,
+    )
+
+
+def test_a():
+    from PIL import Image
+    import requests
+    from transformers import (
+        VisionTextDualEncoderModel,
+        VisionTextDualEncoderProcessor,
+        ViTFeatureExtractor,
+        BertTokenizer,
+    )
+
+    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
+    processor = VisionTextDualEncoderProcessor(feature_extractor, tokenizer)
+    model = VisionTextDualEncoderModel.from_vision_text_pretrained(
+        "google/vit-base-patch16-224", "bert-base-uncased"
+    )
+
+    # contrastive training
+    urls = [
+        "http://images.cocodataset.org/val2017/000000039769.jpg",
+        "https://farm3.staticflickr.com/2674/5850229113_4fe05d5265_z.jpg",
+    ]
+    images = [Image.open(requests.get(url, stream=True).raw) for url in urls]
+    inputs = processor(
+        text=["a photo of a cat", "a photo of a dog"], images=images, return_tensors="pt", padding=True
+    )
+    outputs = model(
+        input_ids=inputs.input_ids,
+        attention_mask=inputs.attention_mask,
+        pixel_values=inputs.pixel_values,
+        return_loss=True,
+    )
+    loss, logits_per_image = outputs.loss, outputs.logits_per_image  # this is the image-text similarity score
+
+    # save and load from pretrained
+    model.save_pretrained("vit-bert")
+    model = VisionTextDualEncoderModel.from_pretrained("vit-bert")
+
+    # inference
+    outputs = model(**inputs)
+    logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
+    probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
