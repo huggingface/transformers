@@ -1531,14 +1531,9 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
         training: Optional[bool] = False,
     ) -> Union[TFSeq2SeqSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
-        TODO UPDATE ME
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
-
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
@@ -1602,7 +1597,7 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
 
     def serving_output(self, output):
         logits = tf.convert_to_tensor(output.logits)
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None  # TODO
+        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None
         pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
