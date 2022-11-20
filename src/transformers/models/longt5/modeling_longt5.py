@@ -1265,6 +1265,7 @@ class LongT5PreTrainedModel(PreTrainedModel):
     config_class = LongT5Config
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["LongT5Block"]
 
     @property
     # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel.dummy_inputs
