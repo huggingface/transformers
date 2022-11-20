@@ -66,6 +66,8 @@ src/transformers/models/deit/modeling_deit.py
 src/transformers/models/deit/modeling_tf_deit.py
 src/transformers/models/detr/configuration_detr.py
 src/transformers/models/detr/modeling_detr.py
+src/transformers/models/dinat/configuration_dinat.py
+src/transformers/models/dinat/modeling_dinat.py
 src/transformers/models/distilbert/configuration_distilbert.py
 src/transformers/models/dpr/configuration_dpr.py
 src/transformers/models/dpt/modeling_dpt.py
@@ -113,6 +115,8 @@ src/transformers/models/mobilebert/modeling_tf_mobilebert.py
 src/transformers/models/mobilenet_v2/modeling_mobilenet_v2.py
 src/transformers/models/mobilevit/modeling_mobilevit.py
 src/transformers/models/mobilevit/modeling_tf_mobilevit.py
+src/transformers/models/nat/configuration_nat.py
+src/transformers/models/nat/modeling_nat.py
 src/transformers/models/nezha/configuration_nezha.py
 src/transformers/models/openai/configuration_openai.py
 src/transformers/models/opt/configuration_opt.py

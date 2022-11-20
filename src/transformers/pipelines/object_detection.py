@@ -38,7 +38,7 @@ class ObjectDetectionPipeline(Pipeline):
     >>> # x, y  are expressed relative to the top left hand corner.
     ```
 
-    [Learn more about the basics of using a pipeline in the [pipeline tutorial]](../pipeline_tutorial)
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     This object detection pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"object-detection"`.
