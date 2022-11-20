@@ -32,6 +32,10 @@ class UperNetConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        backbone_config (`PretrainedConfig`):
+            The configuration of the backbone model.
+        hidden_size (:obj:`int`, `optional`, defaults to 512):
+            The number of hidden units in the convolutional layers.
         pool_scales (`Tuple[int]`, *optional*, defaults to `[1, 2, 3, 6]`):
             Pooling scales used in Pooling Pyramid Module applied on the last feature map.
         use_auxiliary_head (`bool`, *optional*, defaults to `True`):
@@ -65,6 +69,8 @@ class UperNetConfig(PretrainedConfig):
 
     def __init__(
         self,
+        backbone_config,
+        hidden_size=512,
         pool_scales=[1, 2, 3, 6],
         use_auxiliary_head=True,
         auxiliary_loss_weight=0.4,
@@ -76,6 +82,8 @@ class UperNetConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
+        self.backbone_config = backbone_config
+        self.hidden_size = hidden_size
         self.pool_scales = pool_scales
         self.use_auxiliary_head = use_auxiliary_head
         self.auxiliary_loss_weight = auxiliary_loss_weight

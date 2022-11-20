@@ -1,5 +1,7 @@
-from transformers import ConvNextConfig, ConvNextBackbone
 import torch
+
+from transformers import ConvNextBackbone, ConvNextConfig
+
 
 model = ConvNextBackbone(ConvNextConfig(out_features=["stage1", "stage2", "stage3", "stage4"]))
 

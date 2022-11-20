@@ -121,11 +121,11 @@ class UperHead(nn.Module):
     [UPerNet](https://arxiv.org/abs/1807.10221).
     """
 
-    def __init__(self, config) -> None:
+    def __init__(self, config, in_channels):
         super().__init__()
 
         self.pool_scales = config.pool_scales  # e.g. (1, 2, 3, 6)
-        self.in_channels = [config.hidden_size] * 4  # e.g. [768, 768, 768, 768]
+        self.in_channels = in_channels
         self.channels = config.hidden_size
         self.align_corners = False
         self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
@@ -269,12 +269,12 @@ class UperNetPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
+        # if isinstance(module, nn.Linear):
+        #     # Slightly different from the TF version which uses truncated_normal for initialization
+        #     # cf https://github.com/pytorch/pytorch/pull/5617
+        #     module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        #     if module.bias is not None:
+        #         module.bias.data.zero_()
 
     # TODO look into weights initialization and gradient checkpointing
     # def _set_gradient_checkpointing(self, module, value=False):
@@ -282,12 +282,14 @@ class UperNetPreTrainedModel(PreTrainedModel):
     #         module.gradient_checkpointing = value
 
 
-class UperNetForSemanticSegmentatation(nn.Module):
+class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
     def __init__(self, config):
+        super().__init__(config)
+
         self.backbone = AutoBackbone.from_config(config.backbone_config)
 
         # Semantic segmentation head(s)
-        self.decode_head = UperHead(config)
+        self.decode_head = UperHead(config, in_channels=self.backbone.channels)
         self.auxiliary_head = FCNHead(config) if config.use_auxiliary_head else None
 
         # Initialize weights and apply final processing

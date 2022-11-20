@@ -22,7 +22,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_upernet": ["UPerNetConfig"],
+    "configuration_upernet": ["UperNetConfig"],
 }
 
 
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_upernet import UperNetForSemanticSegmentatation, UperNetPreTrainedModel
+        from .modeling_upernet import UperNetForSemanticSegmentation, UperNetPreTrainedModel
 
 
 else:
