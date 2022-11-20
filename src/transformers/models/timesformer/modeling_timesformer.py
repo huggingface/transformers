@@ -63,10 +63,8 @@ class TimesformerPatchEmbeddings(nn.Module):
         self.projection = nn.Conv2d(config.num_channels, config.hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, pixel_values):
-        batch_size, num_channels, num_frames, height, width = pixel_values.shape
-        pixel_values = pixel_values.permute(0, 2, 1, 3, 4).reshape(
-            batch_size * num_frames, num_channels, height, width
-        )
+        batch_size, num_frames, num_channels, height, width = pixel_values.shape
+        pixel_values = pixel_values.reshape(batch_size * num_frames, num_channels, height, width)
 
         embeddings = self.projection(pixel_values)
         patch_width = embeddings.size(-1)
@@ -101,9 +99,6 @@ class TimesformerEmbeddings(nn.Module):
 
     def forward(self, pixel_values):
         batch_size = pixel_values.shape[0]
-
-        # timesformer expects (batch_size, num_channels, num_frames, height, width)
-        pixel_values = pixel_values.permute(0, 2, 1, 3, 4)
 
         # create patch embeddings
         embeddings, num_frames, patch_width = self.patch_embeddings(pixel_values)
