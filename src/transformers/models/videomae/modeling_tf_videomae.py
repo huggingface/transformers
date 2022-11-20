@@ -310,198 +310,190 @@ class TFVideoMAESelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->VideoMAE
-class VideoMAESelfOutput(nn.Module):
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfOutput with ViT->VideoMAE
+class TFVideoMAESelfOutput(tf.keras.layers.Layer):
     """
-    The residual connection is defined in VideoMAELayer instead of here (as is the case with other models), due to the
+    The residual connection is defined in TFVideoMAELayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
     """
 
-    def __init__(self, config: VideoMAEConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+    def __init__(self, config: VideoMAEConfig, **kwargs):
+        super().__init__(**kwargs)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        self.dense = tf.keras.layers.Dense(
+            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        )
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
+        hidden_states = self.dense(inputs=hidden_states)
+        hidden_states = self.dropout(inputs=hidden_states, training=training)
 
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VideoMAE
-class VideoMAEAttention(nn.Module):
-    def __init__(self, config: VideoMAEConfig) -> None:
-        super().__init__()
-        self.attention = VideoMAESelfAttention(config)
-        self.output = VideoMAESelfOutput(config)
-        self.pruned_heads = set()
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTAttention with ViT->VideoMAE
+class TFViTAttention(tf.keras.layers.Layer):
+    def __init__(self, config: VideoMAEConfig, **kwargs):
+        super().__init__(**kwargs)
 
-    def prune_heads(self, heads: Set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
+        self.self_attention = TFVideoMAESelfAttention(config, name="attention")
+        self.dense_output = TFVideoMAESelfOutput(config, name="output")
 
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
+    def prune_heads(self, heads):
+        raise NotImplementedError
 
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(
+    def call(
         self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
-
-        attention_output = self.output(self_outputs[0], hidden_states)
-
+        input_tensor: tf.Tensor,
+        head_mask: tf.Tensor,
+        output_attentions: bool,
+        training: bool = False,
+    ) -> Tuple[tf.Tensor]:
+        self_outputs = self.self_attention(
+            hidden_states=input_tensor, head_mask=head_mask, output_attentions=output_attentions, training=training
+        )
+        attention_output = self.dense_output(
+            hidden_states=self_outputs[0], input_tensor=input_tensor, training=training
+        )
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate ViT->VideoMAE
-class VideoMAEIntermediate(nn.Module):
-    def __init__(self, config: VideoMAEConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTIntermediate ViT->VideoMAE
+class TFVideoMAEIntermediate(tf.keras.layers.Layer):
+    def __init__(self, config: VideoMAEConfig, **kwargs):
+        super().__init__(**kwargs)
+
+        self.dense = tf.keras.layers.Dense(
+            units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        )
+
         if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+            self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
-        hidden_states = self.dense(hidden_states)
+    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
+        hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput ViT->VideoMAE
-class VideoMAEOutput(nn.Module):
-    def __init__(self, config: VideoMAEConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTOutput ViT->VideoMAE
+class TFVideoMAEOutput(tf.keras.layers.Layer):
+    def __init__(self, config: VideoMAEConfig, **kwargs):
+        super().__init__(**kwargs)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        self.dense = tf.keras.layers.Dense(
+            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        )
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
+    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
+        hidden_states = self.dense(inputs=hidden_states)
+        hidden_states = self.dropout(inputs=hidden_states, training=training)
         hidden_states = hidden_states + input_tensor
 
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->VideoMAE
-class VideoMAELayer(nn.Module):
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTLayer with ViT->VideoMAE
+class TFVideoMAELayer(tf.keras.layers.Layer):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: VideoMAEConfig) -> None:
-        super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
-        self.attention = VideoMAEAttention(config)
-        self.intermediate = VideoMAEIntermediate(config)
-        self.output = VideoMAEOutput(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+    def __init__(self, config: VideoMAEConfig, **kwargs):
+        super().__init__(**kwargs)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in VideoMAE, layernorm is applied before self-attention
-            head_mask,
-            output_attentions=output_attentions,
+        self.attention = TFViTAttention(config, name="attention")
+        self.intermediate = TFVideoMAEIntermediate(config, name="intermediate")
+        self.vit_output = TFVideoMAEOutput(config, name="output")
+
+        self.layernorm_before = tf.keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="layernorm_before"
         )
-        attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        self.layernorm_after = tf.keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="layernorm_after"
+        )
+
+    def call(
+        self,
+        hidden_states: tf.Tensor,
+        head_mask: tf.Tensor,
+        output_attentions: bool,
+        training: bool = False,
+    ) -> Tuple[tf.Tensor]:
+        attention_outputs = self.attention(
+            # in ViT, layernorm is applied before self-attention
+            input_tensor=self.layernorm_before(inputs=hidden_states),
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            training=training,
+        )
+        attention_output = attention_outputs[0]
 
         # first residual connection
         hidden_states = attention_output + hidden_states
 
-        # in VideoMAE, layernorm is also applied after self-attention
-        layer_output = self.layernorm_after(hidden_states)
-        layer_output = self.intermediate(layer_output)
+        # in ViT, layernorm is also applied after self-attention
+        layer_output = self.layernorm_after(inputs=hidden_states)
+
+        intermediate_output = self.intermediate(hidden_states=layer_output)
 
         # second residual connection is done here
-        layer_output = self.output(layer_output, hidden_states)
-
-        outputs = (layer_output,) + outputs
+        layer_output = self.vit_output(
+            hidden_states=intermediate_output, input_tensor=hidden_states, training=training
+        )
+        outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
 
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->VideoMAE
-class VideoMAEEncoder(nn.Module):
-    def __init__(self, config: VideoMAEConfig) -> None:
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([VideoMAELayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
+# Copied from transformers.models.vit.modeling_tf_vit.TFViTEncoder with ViT->VideoMAE
+class TFVideoMAEEncoder(tf.keras.layers.Layer):
+    def __init__(self, config: VideoMAEConfig, **kwargs):
+        super().__init__(**kwargs)
 
-    def forward(
+        self.layer = [TFVideoMAELayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
+
+    def call(
         self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-    ) -> Union[tuple, BaseModelOutput]:
+        hidden_states: tf.Tensor,
+        head_mask: tf.Tensor,
+        output_attentions: bool,
+        output_hidden_states: bool,
+        return_dict: bool,
+        training: bool = False,
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
+        all_attentions = () if output_attentions else None
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    layer_head_mask,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
-
+            layer_outputs = layer_module(
+                hidden_states=hidden_states,
+                head_mask=head_mask[i],
+                output_attentions=output_attentions,
+                training=training,
+            )
             hidden_states = layer_outputs[0]
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+                all_attentions = all_attentions + (layer_outputs[1],)
 
+        # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
+            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+
+        return TFBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
 
 
