@@ -21,7 +21,6 @@ from transformers.utils import is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
-
 FRAMEWORK = "pt" if is_torch_available() else "tf"
 
 
