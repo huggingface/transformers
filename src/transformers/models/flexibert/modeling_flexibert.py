@@ -1611,14 +1611,14 @@ class FlexiBERTForPreTrainingOutput(ModelOutput):
             before SoftMax).
         hidden_states (:
             obj:*tuple(torch.FloatTensor)*, *optional*, returned when `output_hidden_states=True` is passed or when
-            `config.output_hidden_states=True`): Tuple of `torch.FloatTensor` (one for the output of the
-            embeddings + one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            `config.output_hidden_states=True`): Tuple of `torch.FloatTensor` (one for the output of the embeddings +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:
             obj:*tuple(torch.FloatTensor)*, *optional*, returned when `output_attentions=True` is passed or when
-            `config.output_attentions=True`): Tuple of `torch.FloatTensor` (one for each layer) of shape
-            `(batch_size, num_heads, sequence_length, sequence_length)`.
+            `config.output_attentions=True`): Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size,
+            num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -1704,10 +1704,9 @@ class FlexiBERTModel(FlexiBERTPreTrainedModel):
     all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
     Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
-    To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration
-    set to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder`
-    argument and `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an
-    input to the forward pass.
+    To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
+    to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
+    `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
     def __init__(self, config, add_pooling_layer=True, transfer_mode="OD"):
