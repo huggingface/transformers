@@ -167,16 +167,17 @@ jobs:
 
 workflows:
     version: 2
-    setup_and_quality:
-        when:
-            not: <<pipeline.parameters.nightly>>
-        jobs:
-            - check_code_quality
-            - check_repository_consistency
-            - fetch_tests
+#    setup_and_quality:
+#        when:
+#            not: <<pipeline.parameters.nightly>>
+#        jobs:
+#            - check_code_quality
+#            - check_repository_consistency
+#            - fetch_tests
 
     nightly:
-        when: <<pipeline.parameters.nightly>>
+        when:
+            not: <<pipeline.parameters.nightly>>
         jobs:
             - check_code_quality
             - check_repository_consistency
