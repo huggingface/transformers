@@ -125,8 +125,8 @@ class TFLevitPatchEmbeddings(tf.keras.layers.Layer):
     `TFLevitConvEmbeddings`.
     """
 
-    def __init__(self, config, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, config, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.embedding_layer_1 = TFLevitConvEmbeddings(
             in_channels=config.num_channels,
             out_channels=config.hidden_sizes[0] // 8,
@@ -167,7 +167,7 @@ class TFLevitPatchEmbeddings(tf.keras.layers.Layer):
         )
         self.num_channels = config.num_channels
 
-    def call(self, pixel_values, training=None):
+    def call(self, pixel_values: tf.Tensor, training: Optional[bool]=None):
         batch_size = tf.shape(pixel_values)[0]
         num_channels = tf.shape(pixel_values)[1]
         
@@ -183,6 +183,7 @@ class TFLevitPatchEmbeddings(tf.keras.layers.Layer):
         embeddings = self.embedding_layer_3(embeddings, training=training)
         embeddings = self.activation_layer_3(embeddings)
         embeddings = self.embedding_layer_4(embeddings, training=training)
+        
         # Flatten the embeddings
         num_channels = tf.shape(embeddings)[1]
         flattended_embeddings = tf.reshape(embeddings, shape=(batch_size, num_channels, -1))
@@ -192,23 +193,28 @@ class TFLevitPatchEmbeddings(tf.keras.layers.Layer):
 
 
 class TFMLPLayerWithBN(tf.keras.layers.Layer):
-    def __init__(self, input_dim, output_dim, bn_weight_init=1, **kwargs):
-        super().__init__(**kwargs)
-        self.linear = tf.keras.layers.Dense(units=output_dim, use_bias=False, name="linear")
+    def __init__(self, input_dim, output_dim, bn_weight_init=1, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.linear = tf.keras.layers.Dense(
+            units=output_dim,
+            use_bias=False,
+            name="linear"
+        )
         # The epsilon and momentum used here are the defaults in torch batch norm layer.
         self.batch_norm = tf.keras.layers.BatchNormalization(epsilon=1e-05, momentum=0.1, name="batch_norm")
 
-    def call(self, hidden_state, training=None):
-        num_channels = tf.shape(hidden_state)[2]
+    def call(self, hidden_state: tf.Tensor, training: Optional[bool]=None):
         hidden_state = self.linear(hidden_state, training=training)
         
         # Before sending the hidden state to the batch normalization layer, we would have to
-        # flatten the hidden states in the batch and seq len dimension
-        flattened_hidden_state = tf.reshape(hidden_state, shape=(-1, num_channels))
+        # flatten the hidden states with start=0 and end=1.
+        hidden_state_shape_list = shape_list(hidden_state)
+        hidden_state_reshape_list = [hidden_state_shape_list[0] * hidden_state_shape_list[1]] + hidden_state_shape_list[2:]
+        flattened_hidden_state = tf.reshape(hidden_state, shape=hidden_state_reshape_list)
         batch_norm_hidden_state = self.batch_norm(flattened_hidden_state, training=training)
         
         # Reshape the output of batch norm to have the same shape as the original hidden state
-        hidden_state = tf.reshape(batch_norm_hidden_state, shape=tf.shape(hidden_state))
+        hidden_state = tf.reshape(batch_norm_hidden_state, shape=shape_list(hidden_state))
         return hidden_state
 
 
