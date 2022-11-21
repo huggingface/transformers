@@ -386,7 +386,7 @@ def create_circleci_config(folder=None):
     if len(jobs) > 0:
         config = {"version": "2.1"}
         config["parameters"] = {
-            "nightly": {"type": "bool", "default": False},
+            "nightly": {"type": "boolean", "default": False},
             "tests_to_run": {"type": "string", "default": test_list},
         }
         config["jobs"] = {j.job_name: j.to_dict() for j in jobs}
