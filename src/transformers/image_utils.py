@@ -47,7 +47,6 @@ if is_vision_available():
     else:
         PILImageResampling = PIL.Image
 
-
 if TYPE_CHECKING:
     if is_torch_available():
         import torch

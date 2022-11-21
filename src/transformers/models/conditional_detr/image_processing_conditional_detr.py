@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for DETR."""
+"""Image processor class for Conditional DETR."""
 
 import io
 import pathlib
@@ -271,10 +271,10 @@ def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndar
     return masks
 
 
-# Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation
+# Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation with DETR->ConditionalDetr
 def prepare_coco_detection_annotation(image, target, return_segmentation_masks: bool = False):
     """
-    Convert the target in COCO format into the format expected by DETR.
+    Convert the target in COCO format into the format expected by ConditionalDetr.
     """
     image_height, image_width = get_image_size(image)
 
@@ -359,12 +359,12 @@ def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
     return np.stack([x_min, y_min, x_max, y_max], 1)
 
 
-# Copied from transformers.models.detr.image_processing_detr.prepare_coco_panoptic_annotation
+# Copied from transformers.models.detr.image_processing_detr.prepare_coco_panoptic_annotation with DETR->ConditionalDetr
 def prepare_coco_panoptic_annotation(
     image: np.ndarray, target: Dict, masks_path: Union[str, pathlib.Path], return_masks: bool = True
 ) -> Dict:
     """
-    Prepare a coco panoptic annotation for DETR.
+    Prepare a coco panoptic annotation for ConditionalDetr.
     """
     image_height, image_width = get_image_size(image)
     annotation_path = pathlib.Path(masks_path) / target["file_name"]
@@ -442,7 +442,7 @@ def score_labels_from_class_probabilities(logits: np.ndarray) -> Tuple[np.ndarra
     return scores, labels
 
 
-# Copied from transformers.models.detr.image_processing_detr.post_process_panoptic_sample
+# Copied from transformers.models.detr.image_processing_detr.post_process_panoptic_sample with DetrForSegmentation->ConditionalDetrForSegmentation
 def post_process_panoptic_sample(
     out_logits: np.ndarray,
     masks: np.ndarray,
@@ -453,7 +453,8 @@ def post_process_panoptic_sample(
     threshold=0.85,
 ) -> Dict:
     """
-    Converts the output of [*DetrForSegmentation*] into panoptic segmentation predictions for a single sample.
+    Converts the output of [*ConditionalDetrForSegmentation*] into panoptic segmentation predictions for a single
+    sample.
 
     Args:
         out_logits (`torch.Tensor`):
@@ -806,7 +807,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation with DETR->ConditionalDetr
     def prepare_annotation(
         self,
         image: np.ndarray,
@@ -816,7 +817,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         masks_path: Optional[Union[str, pathlib.Path]] = None,
     ) -> Dict:
         """
-        Prepare an annotation for feeding into DETR model.
+        Prepare an annotation for feeding into ConditionalDetr model.
         """
         format = format if format is not None else self.format
 
@@ -847,7 +848,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         warnings.warn("The `convert_coco_poly_to_mask` method is deprecated and will be removed in a future version. ")
         return convert_coco_poly_to_mask(*args, **kwargs)
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_detection with DETR->ConditionalDETR
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_detection with DETR->ConditionalDetr
     def prepare_coco_detection(self, *args, **kwargs):
         warnings.warn("The `prepare_coco_detection` method is deprecated and will be removed in a future version. ")
         return prepare_coco_detection_annotation(*args, **kwargs)

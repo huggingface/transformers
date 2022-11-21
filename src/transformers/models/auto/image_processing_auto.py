@@ -123,7 +123,7 @@ def get_image_processor_config(
     **kwargs,
 ):
     """
-    Loads the image processor configuration from a pretrained model imag processor configuration.
+    Loads the image processor configuration from a pretrained model image processor configuration.
 
     Args:
         pretrained_model_name_or_path (`str` or `os.PathLike`):

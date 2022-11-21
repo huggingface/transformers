@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for DETR."""
+"""Image processor class for Deformable DETR."""
 
 import io
 import pathlib
@@ -270,10 +270,10 @@ def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndar
     return masks
 
 
-# Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation
+# Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation with DETR->DeformableDetr
 def prepare_coco_detection_annotation(image, target, return_segmentation_masks: bool = False):
     """
-    Convert the target in COCO format into the format expected by DETR.
+    Convert the target in COCO format into the format expected by DeformableDetr.
     """
     image_height, image_width = get_image_size(image)
 
@@ -358,12 +358,12 @@ def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
     return np.stack([x_min, y_min, x_max, y_max], 1)
 
 
-# Copied from transformers.models.detr.image_processing_detr.prepare_coco_panoptic_annotation
+# Copied from transformers.models.detr.image_processing_detr.prepare_coco_panoptic_annotation with DETR->DeformableDetr
 def prepare_coco_panoptic_annotation(
     image: np.ndarray, target: Dict, masks_path: Union[str, pathlib.Path], return_masks: bool = True
 ) -> Dict:
     """
-    Prepare a coco panoptic annotation for DETR.
+    Prepare a coco panoptic annotation for DeformableDetr.
     """
     image_height, image_width = get_image_size(image)
     annotation_path = pathlib.Path(masks_path) / target["file_name"]
@@ -805,7 +805,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation with DETR->DeformableDetr
     def prepare_annotation(
         self,
         image: np.ndarray,
@@ -815,7 +815,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         masks_path: Optional[Union[str, pathlib.Path]] = None,
     ) -> Dict:
         """
-        Prepare an annotation for feeding into DETR model.
+        Prepare an annotation for feeding into DeformableDetr model.
         """
         format = format if format is not None else self.format
 
@@ -846,7 +846,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         warnings.warn("The `convert_coco_poly_to_mask` method is deprecated and will be removed in a future version. ")
         return convert_coco_poly_to_mask(*args, **kwargs)
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_detection with DETR->ConditionalDETR
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_detection
     def prepare_coco_detection(self, *args, **kwargs):
         warnings.warn("The `prepare_coco_detection` method is deprecated and will be removed in a future version. ")
         return prepare_coco_detection_annotation(*args, **kwargs)
