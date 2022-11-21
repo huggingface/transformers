@@ -2080,6 +2080,14 @@ else:
             "SwinPreTrainedModel",
         ]
     )
+    _import_structure["models.swin2sr"].extend(
+        [
+            "SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Swin2SRForImageSuperResolution",
+            "Swin2SRModel",
+            "Swin2SRPreTrainedModel",
+        ]
+    )
     _import_structure["models.swinv2"].extend(
         [
             "SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2096,16 +2104,8 @@ else:
             "SwitchTransformersForConditionalGeneration",
             "SwitchTransformersModel",
             "SwitchTransformersPreTrainedModel",
-            "SwitchTransformersSparseMLP",
             "SwitchTransformersTop1Router",
-        ]
-    )
-    _import_structure["models.swin2sr"].extend(
-        [
-            "SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "Swin2SRForImageSuperResolution",
-            "Swin2SRModel",
-            "Swin2SRPreTrainedModel",
+            "SwitchTransformersSparseMLP",
         ]
     )
     _import_structure["models.t5"].extend(
