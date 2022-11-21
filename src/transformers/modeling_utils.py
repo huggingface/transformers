@@ -2399,6 +2399,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         dtype=None,
         load_in_8bit=False,
     ):
+        is_safetensors = False
         if load_in_8bit:
             from .utils.bitsandbytes import set_module_8bit_tensor_to_device
 
