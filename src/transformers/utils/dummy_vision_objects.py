@@ -344,6 +344,13 @@ class PerceiverFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class PerceiverImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class PoolFormerFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -351,7 +358,21 @@ class PoolFormerFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class PoolFormerImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class SegformerFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class SegformerImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
@@ -372,7 +393,21 @@ class VideoMAEFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class VideoMAEImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class ViltFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class ViltImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
