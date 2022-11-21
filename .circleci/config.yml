@@ -6,7 +6,7 @@ orbs:
 parameters:
     nightly:
         type: boolean
-        default: false
+        default: true
 
 jobs:
     # Fetch the tests to run
@@ -176,8 +176,7 @@ workflows:
 #            - fetch_tests
 
     nightly:
-        when:
-            not: <<pipeline.parameters.nightly>>
+        when: <<pipeline.parameters.nightly>>
         jobs:
             - check_code_quality
             - check_repository_consistency
