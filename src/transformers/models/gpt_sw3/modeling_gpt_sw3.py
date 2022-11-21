@@ -15,10 +15,11 @@
 # limitations under the License.
 """PyTorch gpt-sw3 model."""
 
+import enum
 import math
 import os
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, List
 
 import torch
 import torch.utils.checkpoint
@@ -118,7 +119,555 @@ def load_tf_weights_in_gpt_sw3(model, config, gpt_sw3_checkpoint_path):
     return model
 
 
+class LayerType(enum.Enum):
+    encoder = 1
+    decoder = 2
+
+
+class AttnType(enum.Enum):
+    self_attn = 1
+    cross_attn = 2
+
+
+class AttnMaskType(enum.Enum):
+    padding = 1
+    causal = 2
+
+
+class ModelType(enum.Enum):
+    encoder_or_decoder = 1
+    encoder_and_decoder = 2
+
+
+def attention_mask_func(attention_scores, attention_mask):
+    attention_scores.masked_fill_(attention_mask, -10000.0)
+    return attention_scores
+
+
+class LinearSpecial(torch.autograd.Function):
+    """Linear layer execution with asynchronous communication and gradient accumulation fusion in backprop."""
+
+    @staticmethod
+    def forward(ctx, input: torch.Tensor, weight: torch.Tensor, bias: Optional[torch.Tensor],):
+        ctx.use_bias = bias is not None and weight.requires_grad
+        ctx.compute_weight_gradient = weight.requires_grad
+        if ctx.compute_weight_gradient:
+            ctx.save_for_backward(input, weight)
+        else:
+            ctx.save_for_backward(weight)
+        output = torch.matmul(input, weight.t())
+        if bias is not None:
+            output = output + bias
+        return output
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        if ctx.compute_weight_gradient:
+            input, weight = ctx.saved_tensors
+        else:
+            weight = ctx.saved_tensors[0]
+            input = None
+        use_bias = ctx.use_bias
+        if ctx.compute_weight_gradient:
+            total_input = input
+        grad_input = grad_output.matmul(weight)
+        #if no weight gradient, immediately return
+        if not ctx.compute_weight_gradient:
+            return grad_input, None, None, None, None, None, None
+        # Convert the tensor shapes to 2D for execution compatibility
+        grad_output = grad_output.view(
+            grad_output.shape[0] * grad_output.shape[1], grad_output.shape[2]
+        )
+        total_input = total_input.view(total_input.shape[0] * total_input.shape[1], total_input.shape[2])
+        grad_weight = grad_output.t().matmul(total_input)
+        grad_bias = grad_output.sum(dim=0) if use_bias else None
+        return grad_input, grad_weight, grad_bias, None, None, None, None
+
+
+class ColumnParallelLinear(torch.nn.Module):
+    """Linear layer with column parallelism.
+        Input is supposed to be three-dimensional and each dimension
+        is expected to be sequence, batch, and hidden feature, respectively.
+    Arguments:
+        input_size: first dimension of matrix A.
+        output_size: second dimension of matrix A.
+        bias: If true, add bias
+        init_method: method to initialize weights. Note that bias is always set to zero.
+        skip_bias_add: This was added to enable performance optimizations where bias
+                       can be fused with other elementwise operations. we skip
+                       adding bias but instead return it.
+    Keyword Arguments:
+        params_dtype:
+    """
+
+    def __init__(
+        self,
+        input_size,
+        output_size,
+        bias=True,
+        init_method=nn.init.xavier_normal_,
+        skip_bias_add=False,
+        params_dtype=torch.float32,
+    ):
+        super().__init__()
+
+        # Keep input parameters
+        self.input_size = input_size
+        self.output_size = output_size
+        self.skip_bias_add = skip_bias_add
+
+        # Parameters.
+        # Note: torch.nn.functional.linear performs XA^T + b and as a result we allocate the transpose.
+        # Initialize weight.
+        self.weight = nn.Parameter(
+            torch.empty(self.output_size, self.input_size, dtype=params_dtype)
+        )
+        init_method(self.weight)
+
+        if bias:
+            self.bias = nn.Parameter(torch.empty(self.output_size, dtype=params_dtype))
+            # set_tensor_model_parallel_attributes(self.bias, True, 0, stride)
+            # Always initialize bias to zero.
+            with torch.no_grad():
+                self.bias.zero_()
+        else:
+            self.register_parameter("bias", None)
+
+    def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """Forward of ColumnParallelLinear
+        Args:
+            input_: 3D tensor whose order of dimension is [sequence, batch, hidden]
+        Returns:
+            - output
+            - bias
+        """
+        bias = self.bias if not self.skip_bias_add else None
+        output_parallel = LinearSpecial.apply(
+            input,  # input=input,
+            self.weight,  # weight=self.weight,
+            bias,  # bias=bias,
+        )
+        output = output_parallel
+        output_bias = self.bias if self.skip_bias_add else None
+        return output, output_bias
+
+
+class RowParallelLinear(torch.nn.Module):
+    def __init__(
+        self,
+        input_size,
+        output_size,
+        bias=True,
+        init_method=nn.init.xavier_normal_,
+        skip_bias_add=False,
+        params_dtype=torch.float32,
+    ):
+        super().__init__()
+
+        # Keep input parameters
+        self.input_size = input_size
+        self.output_size = output_size
+        self.skip_bias_add = skip_bias_add
+
+        # Parameters.
+        # Note: torch.nn.functional.linear performs XA^T + b and as a result we allocate the transpose.
+        # Initialize weight.
+        self.weight = nn.Parameter(
+            torch.empty(self.output_size, self.input_size, dtype=params_dtype)
+        )
+        init_method(self.weight)
+        if bias:
+            self.bias = nn.Parameter(torch.empty(self.output_size, dtype=params_dtype))
+            # Always initialize bias to zero.
+            with torch.no_grad():
+                self.bias.zero_()
+        else:
+            self.register_parameter("bias", None)
+
+    def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        # Matrix multiply.
+        output = LinearSpecial.apply(
+            input,  # input=input,
+            self.weight,  # weight=self.weight,
+            None,  # bias=None,
+        )
+        if not self.skip_bias_add:
+            output = output + self.bias if self.bias is not None else output
+            output_bias = None
+        else:
+            output = output
+            output_bias = self.bias
+        return output, output_bias
+
+
+class ScaleMaskSoftmax(torch.nn.Module):
+    """
+    fused operation: scaling + mask + softmax
+    match the behavior of fused softmax and torch softmax.
+    This is a workaround for https://github.com/NVIDIA/apex/issues/1493.
+    Arguments:
+        input_in_fp16: flag to indicate if input in fp16 data format.
+        input_in_bf16: flag to indicate if input in bf16 data format.
+        attn_mask_type: attention mask type (pad or causal)
+        mask_func: mask function to be applied.
+        softmax_in_fp32: if true, softmax in performed at fp32 precision.
+        scale: scaling factor used in input tensor scaling.
+    """
+    def __init__(
+            self,
+            input_in_fp16,
+            input_in_bf16,
+            attn_mask_type,
+            mask_func,
+            softmax_in_fp32,
+            scale,
+    ):
+        super().__init__()
+        self.input_in_fp16 = input_in_fp16
+        self.input_in_bf16 = input_in_bf16
+        if self.input_in_fp16 and self.input_in_bf16:
+            raise RuntimeError(
+                "both fp16 and bf16 flags cannot be active at the same time."
+            )
+        self.input_in_float16 = self.input_in_fp16 or self.input_in_bf16
+        self.attn_mask_type = attn_mask_type
+        # self.mask_func = mask_func          # TODO: Figure out what goes on here
+        self.mask_func = attention_mask_func  # TODO: Figure out what goes on here
+        self.softmax_in_fp32 = softmax_in_fp32
+        self.scale = scale
+
+        if not (self.scale is None or softmax_in_fp32):
+            raise RuntimeError("softmax should be in fp32 when scaled")
+
+    def forward(self, input, mask):
+        # [b, np, sq, sk]
+        assert input.dim() == 4
+        if self.input_in_float16 and self.softmax_in_fp32:
+            input = input.float()
+
+        if self.scale is not None:
+            input = input * self.scale
+        mask_output = self.mask_func(input, mask) if mask is not None else input
+        probs = torch.nn.Softmax(dim=-1)(mask_output)
+        all_k_masked = mask.all(axis=-1)
+        zero_attention_mask = (1.0 - all_k_masked.float())[:, :, :, None]
+        probs = probs * zero_attention_mask
+
+        if self.input_in_float16 and self.softmax_in_fp32:
+            if self.input_in_fp16:
+                probs = probs.half()
+            else:
+                probs = probs.bfloat16()
+        return probs
+
+
+class CoreAttention(torch.nn.Module):
+    """ Region where selective activation recomputation is applied.
+        See Figure 3. in Reducing Activation Recomputation in Large Transformer Models
+        https://arxiv.org/pdf/2205.05198.pdf for more details.
+    """
+
+    def __init__(
+        self,
+        layer_number,
+        num_attention_heads,
+        hidden_size,
+        attn_mask_type=AttnMaskType.causal,
+        precision=32,
+        apply_query_key_layer_scaling=True,
+        attention_dropout=0.1,
+        normalize_attention_scores=True,
+    ):
+
+        super(CoreAttention, self).__init__()
+        self.hidden_size = hidden_size
+
+        self.precision = precision
+        self.fp16 = precision == 16
+        self.bf16 = precision == 'bf16'
+
+        self.apply_query_key_layer_scaling = apply_query_key_layer_scaling
+        self.attention_softmax_in_fp32 = False
+        if self.apply_query_key_layer_scaling:
+            self.attention_softmax_in_fp32 = True
+        self.layer_number = max(1, layer_number)
+        self.attn_mask_type = attn_mask_type
+        # If True, will scale attention scores by 1 / sqrt(hidden_size_per_attention_head).
+        # This arg has been provided mostly to support weight conversion of Huggingface models. (ex: T5v1.1)
+        self.normalize_attention_scores = normalize_attention_scores
+
+        # Per attention head and per partition values.
+        self.hidden_size_per_attention_head = hidden_size // num_attention_heads
+
+        coeff = None
+        self.norm_factor = math.sqrt(self.hidden_size_per_attention_head)
+        if self.apply_query_key_layer_scaling:
+            coeff = self.layer_number
+            self.norm_factor *= coeff
+
+        self.scale_mask_softmax = ScaleMaskSoftmax(
+            self.fp16,
+            self.bf16,
+            self.attn_mask_type,
+            attention_mask_func,
+            self.attention_softmax_in_fp32,
+            coeff,
+        )
+
+        self.attention_dropout = torch.nn.Dropout(attention_dropout)
+
+    def forward(
+        self,
+        query_layer,
+        key_layer,
+        value_layer,
+        attention_mask,
+        layer_past=None,
+        get_key_value=False,
+    ):
+
+        # ===================================
+        # Raw attention scores. [b, np, s, s]
+        # ===================================
+
+        # [b, np, sq, sk]
+        output_size = (query_layer.size(1), query_layer.size(2), query_layer.size(0), key_layer.size(0))
+
+        # [sq, b, np, hn] -> [sq, b * np, hn]
+        query_layer = query_layer.view(output_size[2], output_size[0] * output_size[1], -1)
+        # [sk, b, np, hn] -> [sk, b * np, hn]
+        key_layer = key_layer.view(output_size[3], output_size[0] * output_size[1], -1)
+
+        # preallocting input tensor: [b * np, sq, sk]
+        matmul_input_buffer = torch.empty(
+            output_size[0] * output_size[1],
+            output_size[2],
+            output_size[3],
+            dtype=query_layer.dtype,
+            # device=torch.cuda.current_device(), # TODO: figure out why this is needed
+        )
+
+        # Raw attention scores. [b * np, sq, sk]
+        matmul_result = torch.baddbmm(
+            matmul_input_buffer,
+            query_layer.transpose(0, 1),  # [b * np, sq, hn]
+            key_layer.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
+            beta=0.0,
+            alpha=(1.0 / self.norm_factor) if self.normalize_attention_scores else 1.0,
+        )
+
+        # change view to [b, np, sq, sk]
+        attention_scores = matmul_result.view(*output_size)
+
+        # ==================================================
+        # Update attention mask for inference. [b, np, sq, sk]
+        # ==================================================
+
+        if get_key_value:
+            with torch.no_grad():
+                if layer_past is not None:
+                    attention_mask = attention_mask[
+                        ..., attention_scores.size(3) - 1, : attention_scores.size(3)
+                    ].unsqueeze(2)
+                else:
+                    attention_mask = attention_mask[..., : attention_scores.size(3), : attention_scores.size(3)]
+
+        # ===========================
+        # Attention probs and dropout
+        # ===========================
+
+        # attention scores and attention mask [b, np, sq, sk]
+        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.attention_dropout(attention_probs)
+
+        # =========================
+        # Context layer. [sq, b, hp]
+        # =========================
+
+        # value_layer -> context layer.
+        # [sk, b, np, hn] --> [b, np, sq, hn]
+
+        # context layer shape: [b, np, sq, hn]
+        output_size = (value_layer.size(1), value_layer.size(2), query_layer.size(0), value_layer.size(3))
+
+        # change view [sk, b * np, hn]
+        value_layer = value_layer.view(value_layer.size(0), output_size[0] * output_size[1], -1)
+
+        # change view [b * np, sq, sk]
+        attention_probs = attention_probs.view(output_size[0] * output_size[1], output_size[2], -1)
+
+        # matmul: [b * np, sq, hn]
+        context_layer = torch.bmm(attention_probs.float(), value_layer.transpose(0, 1))  # TODO: Remove float() when bmm supports bfloat16
+
+        # change view [b, np, sq, hn]
+        context_layer = context_layer.view(*output_size)
+
+        # [b, np, sq, hn] --> [sq, b, np, hn]
+        context_layer = context_layer.permute(2, 0, 1, 3).contiguous()
+
+        # [sq, b, np, hn] --> [sq, b, hp]
+        new_context_layer_shape = context_layer.size()[:-2] + (self.hidden_size,)
+        context_layer = context_layer.view(*new_context_layer_shape)
+
+        return context_layer, attention_probs
+
+
 class GptSw3Attention(nn.Module):
+    def __init__(self, config, layer_idx=None):
+        super().__init__()
+        # attention_type = AttnType.self_attn               # This is verified correct
+        attn_mask_type = AttnMaskType.causal                # This is verified correct
+        normalize_attention_scores = True                   # This is verified correct
+        init_method = nn.init.xavier_normal_                # TODO: Verify that this is correct
+        output_layer_init_method = nn.init.xavier_normal_   # TODO: Verify that this is correct
+        precision = 32                                      # TODO: Verify that this is correct
+        apply_query_key_layer_scaling = True                # This is verified correct
+        # masked_softmax_fusion = True                      # This is verified default
+        attention_dropout = 0.1                             # TODO: Verify that this is correct
+        bias = True                                         # TODO: Verify that this is correct
+        self.get_key_value = True                           # TODO: Verify that this is correct
+
+        self.layer_number = layer_idx  # TODO: rename this to consistent naming
+
+        self.hidden_size = config.hidden_size
+        self.num_attention_heads = config.num_attention_heads
+
+        # In nemo megatron they use max(1, layer_number) as opposed to layer_number+1.
+        # See: https://github.com/NVIDIA/NeMo/blob/117029aef03b86359a0b777079f8f39515cacf0e/nemo/collections/nlp/modules/common/megatron/transformer.py#L322
+        self.layer_number = max(1, self.layer_number)
+        self.attn_mask_type = attn_mask_type
+
+        self.hidden_size_per_attention_head = self.hidden_size // self.num_attention_heads
+
+        # Linear layer
+        self.c_attn = ColumnParallelLinear(
+            self.hidden_size,
+            3 * self.hidden_size,
+            init_method=init_method,
+            bias=bias,
+        )
+
+        # self.c_attn = nn.Linear(self.hidden_size, 3 * self.hidden_size)
+        # self.c_proj = nn.Linear(self.hidden_size, self.hidden_size)
+
+        self.core_attention = CoreAttention(
+            layer_number=self.layer_number,
+            num_attention_heads=self.num_attention_heads,
+            hidden_size=self.hidden_size,
+            attn_mask_type=self.attn_mask_type,
+            precision=precision,
+            apply_query_key_layer_scaling=apply_query_key_layer_scaling,
+            # masked_softmax_fusion=masked_softmax_fusion, # TODO: Figure out if we can remove this!
+            attention_dropout=attention_dropout,
+            normalize_attention_scores=normalize_attention_scores,
+        )
+
+        # Output.
+        self.c_proj = RowParallelLinear(
+            self.hidden_size,
+            self.hidden_size,
+            init_method=output_layer_init_method,
+            skip_bias_add=True,
+            bias=bias,
+        )
+
+        # Inference key-value memory
+        self.inference_key_memory = None
+        self.inference_value_memory = None
+        self.inference_current_sequence_len = 0
+
+    def _split_tensor_along_last_dim(self, tensor, num_partitions):
+        """
+        Split a tensor along its last dimension.
+        """
+        # Get the size and dimension.
+        last_dim = tensor.dim() - 1
+        last_dim_size = tensor.size()[last_dim] // num_partitions
+        # Split.
+        tensor_list = torch.split(tensor, last_dim_size, dim=last_dim)
+        return tensor_list
+
+    def forward(
+        self,
+        hidden_states: Optional[Tuple[torch.FloatTensor]],
+        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,           # TODO: How does attention mask work in hf?
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,         # TODO: Figure out what this does!
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,   # TODO: Figure out what this does!
+        use_cache: Optional[bool] = False,                            # TODO: Enable caching once attention is working!
+        output_attentions: Optional[bool] = False,
+        get_key_value: Optional[bool] = False,
+    ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
+
+        seq_length, att_mask_batch, hidden_size = hidden_states.shape
+        attention_mask = torch.tril(torch.ones((att_mask_batch, seq_length, seq_length), device=hidden_states.device)).view(
+            att_mask_batch, 1, seq_length, seq_length
+        )
+
+        if head_mask is not None:
+            raise NotImplementedError("head_mask is not implemented for GPT-SW3 attention.")
+
+        # hidden_states: [sq, b, h]
+        # Attention heads [sq, b, h] --> [sq, b, (np * 3 * hn)]
+        # mixed_x_layer, _ = self.query_key_value(hidden_states)  # _ is the bias
+        mixed_x_layer, _ = self.c_attn(hidden_states)
+
+        # [sq, b, (np * 3 * hn)] --> [sq, b, np, 3 * hn]
+        new_tensor_shape = mixed_x_layer.size()[:-1] + (
+            self.num_attention_heads,
+            3 * self.hidden_size_per_attention_head,
+        )
+        mixed_x_layer = mixed_x_layer.view(*new_tensor_shape)
+
+        # [sq, b, np, 3 * hn] --> 3 [sq, b, np, hn]
+        (query_layer, key_layer, value_layer) = self._split_tensor_along_last_dim(mixed_x_layer, 3)
+
+        # TODO: Enable caching once we have attention working
+        # if layer_past is not None:
+        #     past_key, past_value = layer_past
+        #     key = torch.cat((past_key, key_layer), dim=-2)
+        #     value = torch.cat((past_value, value_layer), dim=-2)
+
+        # TODO: Enable caching once we have attention working
+        # if use_cache is True:
+        #     present = (key, value)
+        # else:
+        #     present = None
+        present = None
+
+        attn_output, attn_weights = self.core_attention(
+            query_layer,
+            key_layer,
+            value_layer,
+            attention_mask,
+            layer_past=layer_past,
+            get_key_value=get_key_value,
+        )
+
+        # TODO: Handle bias correctly!
+        # Might want to do something with the bias here.
+        # In Nemo Megatron they do some fused bias stuff that we probably don't want to do.
+        # But then maybe we should add the bias instead of skipping it?
+        # Solution might just be to change skip_add_bias to False in init.
+        # attn_output, bias = self.dense(attn_output)
+        attn_output, bias = self.c_proj(attn_output)
+
+        # TODO: Figure out what this does!
+        # if get_key_value:
+        #     output = [output, present]
+
+        outputs = (attn_output, present)
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs  # output, present, (attentions)
+
+
+class GptSw3AttentionOld(nn.Module):
     def __init__(self, config, is_cross_attention=False, layer_idx=None):
         super().__init__()
 
@@ -147,6 +696,7 @@ class GptSw3Attention(nn.Module):
         # Layer-wise attention scaling, reordering, and upcasting
         self.scale_attn_by_inverse_layer_idx = config.scale_attn_by_inverse_layer_idx
         self.layer_idx = layer_idx
+        self.layer_number = max(1, self.layer_idx)
         self.reorder_and_upcast_attn = config.reorder_and_upcast_attn
 
         if self.is_cross_attention:
@@ -203,14 +753,14 @@ class GptSw3Attention(nn.Module):
             # attn_weights = attn_weights / torch.full(
             #     [], value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device
             # )
-            scale_factor = math.sqrt(self.head_dim) ** 0.5
+            scale_factor = self.head_dim ** 0.5
             attn_weights = attn_weights / torch.full(
                  [], scale_factor, dtype=attn_weights.dtype, device=attn_weights.device
              )
 
         # Layer-wise attention scaling
         if self.scale_attn_by_inverse_layer_idx:
-            attn_weights = attn_weights / float(self.layer_idx + 1)
+            attn_weights = attn_weights / float(self.layer_number)
 
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
@@ -409,6 +959,11 @@ class GptSw3Block(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
 
+        if head_mask is not None:
+            raise NotImplementedError("head_mask is not implemented for GPT-SW3")
+        if encoder_hidden_states is not None or encoder_attention_mask is not None:
+            raise NotImplementedError("Only self-attention is currently supported.")
+
         # Pre-LN: x -> LN -> MHA -> Residual -> LN -> MLP -> Residual
 
         residual = hidden_states
@@ -417,7 +972,6 @@ class GptSw3Block(nn.Module):
             hidden_states,
             layer_past=layer_past,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
@@ -425,28 +979,6 @@ class GptSw3Block(nn.Module):
         outputs = attn_outputs[1:]
         # residual connection
         hidden_states = attn_output + residual
-
-        if encoder_hidden_states is not None:
-            # add one self-attention block for cross-attention
-            if not hasattr(self, "crossattention"):
-                raise ValueError(
-                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with "
-                    "cross-attention layers by setting `config.add_cross_attention=True`"
-                )
-            residual = hidden_states
-            hidden_states = self.ln_cross_attn(hidden_states)
-            cross_attn_outputs = self.crossattention(
-                hidden_states,
-                attention_mask=attention_mask,
-                head_mask=head_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-                output_attentions=output_attentions,
-            )
-            attn_output = cross_attn_outputs[0]
-            # residual connection
-            hidden_states = residual + attn_output
-            outputs = outputs + cross_attn_outputs[2:]  # add cross attentions if we output attention weights
 
         residual = hidden_states
         hidden_states = self.ln_2(hidden_states)

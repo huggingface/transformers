@@ -128,18 +128,18 @@ def convert_megatron_checkpoint(sd_megatron, config):
 
     pf = "model.language_model.encoder.layers."
     for i in range(layers):
-        causal_mask = torch.tril(torch.ones((n_positions, n_positions), dtype=torch.uint8))
-        causal_mask = causal_mask.view(1, 1, n_positions, n_positions)
+        # causal_mask = torch.tril(torch.ones((n_positions, n_positions), dtype=torch.uint8))
+        # causal_mask = causal_mask.view(1, 1, n_positions, n_positions)
         sd_hf[f"transformer.h.{i}.ln_1.weight"] = sd_megatron[f"{pf}{i}.input_layernorm.weight"]
         sd_hf[f"transformer.h.{i}.ln_1.bias"] = sd_megatron[f"{pf}{i}.input_layernorm.bias"]
-        sd_hf[f"transformer.h.{i}.attn.bias"] = causal_mask
-        sd_hf[f"transformer.h.{i}.attn.masked_bias"] = torch.tensor(-1e4, dtype=torch.bfloat16)
+        # sd_hf[f"transformer.h.{i}.attn.bias"] = causal_mask
+        # sd_hf[f"transformer.h.{i}.attn.masked_bias"] = torch.tensor(-1e4, dtype=torch.bfloat16)
         val = sd_megatron[f"{pf}{i}.self_attention.query_key_value.weight"]
-        out_val = fix_query_key_value_ordering(val, 3, heads, hidden_size_per_head)
-        sd_hf[f"transformer.h.{i}.attn.c_attn.weight"] = out_val
+        # out_val = fix_query_key_value_ordering(val, 3, heads, hidden_size_per_head)
+        sd_hf[f"transformer.h.{i}.attn.c_attn.weight"] = val # out_val
         val = sd_megatron[f"{pf}{i}.self_attention.query_key_value.bias"]
-        out_val = fix_query_key_value_ordering(val, 3, heads, hidden_size_per_head)
-        sd_hf[f"transformer.h.{i}.attn.c_attn.bias"] = out_val
+        # out_val = fix_query_key_value_ordering(val, 3, heads, hidden_size_per_head)
+        sd_hf[f"transformer.h.{i}.attn.c_attn.bias"] = val # out_val
         sd_hf[f"transformer.h.{i}.attn.c_proj.weight"] = sd_megatron[f"{pf}{i}.self_attention.dense.weight"]
         sd_hf[f"transformer.h.{i}.attn.c_proj.bias"] = sd_megatron[f"{pf}{i}.self_attention.dense.bias"]
         sd_hf[f"transformer.h.{i}.ln_2.weight"] = sd_megatron[f"{pf}{i}.post_attention_layernorm.weight"]
