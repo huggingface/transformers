@@ -1103,7 +1103,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             else:
                 img_h, img_w = target_sizes.unbind(1)
 
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
             boxes = boxes * scale_fct[:, None, :]
 
         results = []
