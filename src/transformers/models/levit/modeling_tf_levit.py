@@ -87,14 +87,15 @@ class TFLevitConvEmbeddings(tf.keras.layers.Layer):
     """
 
     def __init__(
-        self, in_channels, out_channels, kernel_size, stride, padding, dilation=1, groups=1, bn_weight_init=1, **kwargs,
+        self, in_channels, out_channels, kernel_size, stride, padding, dilation=1, groups=1, bn_weight_init=1, *args, **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(*args, **kwargs)
+        # The padding layer is built in order to pad the inputs before entering the convolution operation.
+        self.padding = tf.keras.layers.ZeroPadding2D(padding=padding)
         self.convolution = tf.keras.layers.Conv2D(
             filters=out_channels,
             kernel_size=kernel_size,
             strides=stride,
-            padding="SAME", # TODO @ariG23498: Make sure the padding is a tuple
             dilation_rate=dilation,
             groups=groups,
             use_bias=False,
@@ -104,8 +105,9 @@ class TFLevitConvEmbeddings(tf.keras.layers.Layer):
         # The epsilon and momentum used here are the defaults in torch batch norm layer.
         self.batch_norm = tf.keras.layers.BatchNormalization(epsilon=1e-05, momentum=0.1, name="batch_norm")
 
-    def call(self, embeddings, training=None):
+    def call(self, embeddings: tf.Tensor, training: Optional[bool]=None):
         embeddings = tf.transpose(embeddings, perm=(0, 2, 3, 1))
+        embeddings = self.padding(embeddings)
         embeddings = self.convolution(embeddings, training=training)
         embeddings = tf.transpose(embeddings, perm=(0, 3, 1, 2))
         embeddings = self.batch_norm(embeddings, training=training)
