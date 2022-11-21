@@ -1344,7 +1344,9 @@ class TFRobertaPreLayerNormClassificationHead(tf.keras.layers.Layer):
     """,
     ROBERTA_PRELAYERNORM_START_DOCSTRING,
 )
-class TFRobertaPreLayerNormForSequenceClassification(TFRobertaPreLayerNormPreTrainedModel, TFSequenceClassificationLoss):
+class TFRobertaPreLayerNormForSequenceClassification(
+    TFRobertaPreLayerNormPreTrainedModel, TFSequenceClassificationLoss
+):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
 
