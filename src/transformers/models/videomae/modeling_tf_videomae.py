@@ -15,12 +15,11 @@
 """ TF 2.0 VideoMAE (masked autoencoder) model."""
 
 
-
 import collections.abc
 import math
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union, Dict
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -41,8 +40,8 @@ from ...modeling_tf_utils import (
     unpack_inputs,
 )
 from ...tf_utils import stable_softmax
-from ...utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from ...utils import logging
+from ...utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from .configuration_videomae import VideoMAEConfig
 
 
@@ -66,9 +65,9 @@ class TFVideoMAEDecoderOutput(ModelOutput):
         logits (`tf.Tensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
             Pixel reconstruction logits.
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer plus
+            the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
@@ -91,9 +90,9 @@ class TFVideoMAEForPreTrainingOutput(ModelOutput):
         logits (`tf.Tensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
             Pixel reconstruction logits.
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer plus
+            the initial embedding outputs.
         attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
@@ -110,6 +109,7 @@ class TFVideoMAEForPreTrainingOutput(ModelOutput):
 # https://github.com/jadore801120/attention-is-all-you-need-pytorch/blob/master/transformer/Models.py#L31
 def get_sinusoid_encoding_table(n_position, d_hid):
     """Sinusoid position encoding table"""
+
     def get_position_angle_vec(position):
         return [position / np.power(10000, 2 * (hid_j // 2) / d_hid) for hid_j in range(d_hid)]
 
@@ -186,7 +186,7 @@ class TFVideoMAEPatchEmbeddings(tf.keras.layers.Layer):
             filters=hidden_size,
             kernel_size=(self.tubelet_size, patch_size[0], patch_size[1]),
             strides=(self.tubelet_size, patch_size[0], patch_size[1]),
-            name="projection"
+            name="projection",
         )
 
     def call(self, pixel_values):
@@ -201,7 +201,7 @@ class TFVideoMAEPatchEmbeddings(tf.keras.layers.Layer):
             )
         # TensorFlow's Conv3D layer (in the channels' last mode) has the following shape:
         # (batch_size, num_frames, height, width, num_channels). Also, in CPU mode,
-        # the Conv3D layer won't support the channels' first format. 
+        # the Conv3D layer won't support the channels' first format.
         # So, permute to (batch_size, num_frames, height, width, num_channels).
         pixel_values = tf.transpose(pixel_values, [0, 1, 3, 4, 2])
         embeddings = self.projection(pixel_values)
@@ -223,16 +223,10 @@ class TFVideoMAESelfAttention(tf.keras.layers.Layer):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
-        self.query = tf.keras.layers.Dense(
-            units=self.all_head_size, use_bias=False, name="query"
-        )
-        self.key = tf.keras.layers.Dense(
-            units=self.all_head_size, use_bias=False, name="key"
-        )
-        self.value = tf.keras.layers.Dense(
-            units=self.all_head_size, use_bias=False, name="value"
-        )
-        
+        self.query = tf.keras.layers.Dense(units=self.all_head_size, use_bias=False, name="query")
+        self.key = tf.keras.layers.Dense(units=self.all_head_size, use_bias=False, name="key")
+        self.value = tf.keras.layers.Dense(units=self.all_head_size, use_bias=False, name="value")
+
         self.qkv_bias = config.qkv_bias
 
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
@@ -314,8 +308,8 @@ class TFVideoMAESelfAttention(tf.keras.layers.Layer):
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfOutput with ViT->VideoMAE
 class TFVideoMAESelfOutput(tf.keras.layers.Layer):
     """
-    The residual connection is defined in TFVideoMAELayer instead of here (as is the case with other models), due to the
-    layernorm applied before each block.
+    The residual connection is defined in TFVideoMAELayer instead of here (as is the case with other models), due to
+    the layernorm applied before each block.
     """
 
     def __init__(self, config: VideoMAEConfig, **kwargs):
@@ -509,7 +503,7 @@ class TFVideoMAEMainLayer(tf.keras.layers.Layer):
 
         self.embeddings = TFVideoMAEEmbeddings(config, name="embeddings")
         self.encoder = TFVideoMAEEncoder(config, name="encoder")
-        
+
         if config.use_mean_pooling:
             self.layernorm = None
         else:
@@ -543,7 +537,6 @@ class TFVideoMAEMainLayer(tf.keras.layers.Layer):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-
         embedding_output = self.embeddings(pixel_values, bool_masked_pos)
 
         encoder_outputs = self.encoder(
@@ -552,7 +545,7 @@ class TFVideoMAEMainLayer(tf.keras.layers.Layer):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training=training
+            training=training,
         )
         sequence_output = encoder_outputs[0]
         if self.layernorm is not None:
@@ -566,6 +559,7 @@ class TFVideoMAEMainLayer(tf.keras.layers.Layer):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
 
 class TFVideoMAEPreTrainedModel(TFPreTrainedModel):
     """
@@ -586,7 +580,14 @@ class TFVideoMAEPreTrainedModel(TFPreTrainedModel):
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(3, self.config.num_frames, self.config.num_channels, self.config.image_size, self.config.image_size), dtype=tf.float32
+            shape=(
+                3,
+                self.config.num_frames,
+                self.config.num_channels,
+                self.config.image_size,
+                self.config.image_size,
+            ),
+            dtype=tf.float32,
         )
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
@@ -702,7 +703,7 @@ class TFVideoMAEModel(TFVideoMAEPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training: Optional[bool]=False
+        training: Optional[bool] = False,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         r"""
         Returns:
@@ -784,13 +785,14 @@ class TFVideoMAEDecoder(tf.keras.layers.Layer):
         decoder_config.num_attention_heads = config.decoder_num_attention_heads
         decoder_config.intermediate_size = config.decoder_intermediate_size
         self.decoder_layers = [
-            [TFVideoMAELayer(decoder_config, name=f"decoder_layers.{j}") for _ in range(config.decoder_num_hidden_layers)]
+            [
+                TFVideoMAELayer(decoder_config, name=f"decoder_layers.{j}")
+                for _ in range(config.decoder_num_hidden_layers)
+            ]
         ]
 
         self.norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="norm")
-        self.head = (
-            tf.keras.layers.Dense(decoder_num_labels, name="head") if decoder_num_labels > 0 else tf.identity
-        )
+        self.head = tf.keras.layers.Dense(decoder_num_labels, name="head") if decoder_num_labels > 0 else tf.identity
 
     def call(
         self,
@@ -807,7 +809,6 @@ class TFVideoMAEDecoder(tf.keras.layers.Layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            
             layer_outputs = layer_module(hidden_states, head_mask=None, output_attentions=output_attentions)
 
             hidden_states = layer_outputs[0]
@@ -841,7 +842,9 @@ class TFVideoMAEForPreTraining(TFVideoMAEPreTrainedModel):
 
         self.videomae = TFVideoMAEMainLayer(config, name="videomae")
 
-        self.encoder_to_decoder = tf.keras.layers.Dense(config.decoder_hidden_size, use_bias=False, name="encoder_to_decoder")
+        self.encoder_to_decoder = tf.keras.layers.Dense(
+            config.decoder_hidden_size, use_bias=False, name="encoder_to_decoder"
+        )
         self.position_embeddings = get_sinusoid_encoding_table(
             self.videomae.embeddings.num_patches, config.decoder_hidden_size
         )
@@ -849,10 +852,12 @@ class TFVideoMAEForPreTraining(TFVideoMAEPreTrainedModel):
         self.decoder = TFVideoMAEDecoder(config, name="decoder")
 
         self.mean = tf.convert_to_tensor(IMAGENET_DEFAULT_MEAN)[None, None, :, None, None]
-        self.std =tf.convert_to_tensor(IMAGENET_DEFAULT_STD)[None, None, :, None, None]
+        self.std = tf.convert_to_tensor(IMAGENET_DEFAULT_STD)[None, None, :, None, None]
 
     def build(self, input_shape):
-        self.mask_token = self.add_weight(shape=(1, 1, self.config.decoder_hidden_size), initializer="zeros", name="mask_token")
+        self.mask_token = self.add_weight(
+            shape=(1, 1, self.config.decoder_hidden_size), initializer="zeros", name="mask_token"
+        )
         super().build(input_shape)
 
     @unpack_inputs
@@ -874,7 +879,6 @@ class TFVideoMAEForPreTraining(TFVideoMAEPreTrainedModel):
         ```python
         >>> from transformers import VideoMAEFeatureExtractor, TFVideoMAEForPreTraining
         >>> import numpy as np
-        >>> import torch
 
         >>> num_frames = 16
         >>> video = list(np.random.randn(16, 3, 224, 224))
@@ -887,7 +891,7 @@ class TFVideoMAEForPreTraining(TFVideoMAEPreTrainedModel):
         >>> num_patches_per_frame = (model.config.image_size // model.config.patch_size) ** 2
         >>> seq_length = (num_frames // model.config.tubelet_size) * num_patches_per_frame
         >>> bool_masked_pos = tf.experimental.numpy.random.randint(0, 2, (1, seq_length))
-        >>> bool_masked_pos = tf.cast(bool_masked_pos, "bool)
+        >>> bool_masked_pos = tf.cast(bool_masked_pos, "bool")
 
         >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
         >>> loss = outputs.loss
@@ -934,55 +938,70 @@ class TFVideoMAEForPreTraining(TFVideoMAEPreTrainedModel):
         tubelet_size, patch_size = self.config.tubelet_size, self.config.patch_size
         if self.config.norm_pix_loss:
             # step 1: split up dimensions (time by tubelet_size, height by patch_size, width by patch_size)
-            frames = tf.reshape(frames, (
-                batch_size,
-                time // tubelet_size,
-                tubelet_size,
-                num_channels,
-                height // patch_size,
-                patch_size,
-                width // patch_size,
-                patch_size,
-            ))
+            frames = tf.reshape(
+                frames,
+                (
+                    batch_size,
+                    time // tubelet_size,
+                    tubelet_size,
+                    num_channels,
+                    height // patch_size,
+                    patch_size,
+                    width // patch_size,
+                    patch_size,
+                ),
+            )
             # step 2: move dimensions to concatenate:
             frames = tf.transpose(frames, perm=(0, 1, 4, 6, 2, 5, 7, 3))
             # step 3: concatenate:
-            frames = tf.transpose(frames, perm=(
-                batch_size,
-                time // tubelet_size * height // patch_size * width // patch_size,
-                tubelet_size * patch_size * patch_size,
-                num_channels,
-            ))
+            frames = tf.transpose(
+                frames,
+                perm=(
+                    batch_size,
+                    time // tubelet_size * height // patch_size * width // patch_size,
+                    tubelet_size * patch_size * patch_size,
+                    num_channels,
+                ),
+            )
             # step 4: normalize. The authors find that the mean is about 0.48 and standard deviation is about 0.08.
             frames_norm = (frames - tf.reduce_mean(frames, axis=-2, keepdims=True)) / (
                 tf.math.reduce_std(frames, axis=-2, keepdims=True) + 1e-6
             )
             # step 5: reshape to (batch_size, T//ts * H//ps * W//ps, ts * ps * ps * C)
-            videos_patch = tf.reshape(frames_norm, (
-                batch_size,
-                time // tubelet_size * height // patch_size * width // patch_size,
-                tubelet_size * patch_size * patch_size * num_channels,
-            ))
+            videos_patch = tf.reshape(
+                frames_norm,
+                (
+                    batch_size,
+                    time // tubelet_size * height // patch_size * width // patch_size,
+                    tubelet_size * patch_size * patch_size * num_channels,
+                ),
+            )
         else:
             # step 1: split up dimensions (time by tubelet_size, height by patch_size, width by patch_size)
-            frames = tf.reshape(frames, (
-                batch_size,
-                time // tubelet_size,
-                tubelet_size,
-                num_channels,
-                height // patch_size,
-                patch_size,
-                width // patch_size,
-                patch_size,
-            ))
+            frames = tf.reshape(
+                frames,
+                (
+                    batch_size,
+                    time // tubelet_size,
+                    tubelet_size,
+                    num_channels,
+                    height // patch_size,
+                    patch_size,
+                    width // patch_size,
+                    patch_size,
+                ),
+            )
             # step 2: move dimensions to concatenate: (batch_size, T//ts, H//ps, W//ps, ts, ps, ps, C)
             frames = tf.transpose(frames, perm=(0, 1, 4, 6, 2, 5, 7, 3))
             # step 3: concatenate
-            videos_patch = tf.reshape(frames, (
-                batch_size,
-                time // tubelet_size * height // patch_size * width // patch_size,
-                tubelet_size * patch_size * patch_size * num_channels,
-            ))
+            videos_patch = tf.reshape(
+                frames,
+                (
+                    batch_size,
+                    time // tubelet_size * height // patch_size * width // patch_size,
+                    tubelet_size * patch_size * patch_size * num_channels,
+                ),
+            )
 
             batch_size, _, num_channels = tf.shape(videos_patch)
             labels = tf.reshape(videos_patch[bool_masked_pos], (batch_size, -1, num_channels))
@@ -1015,8 +1034,14 @@ class TFVideoMAEForVideoClassification(TFVideoMAEPreTrainedModel):
         self.videomae = TFVideoMAEModel(config, name="videomae")
 
         # Classifier head
-        self.fc_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_before", name="fc_norm") if config.use_mean_pooling else None
-        self.classifier = tf.keras.layers.Dense(config.num_labels, name="classifier") if config.num_labels > 0 else tf.identity
+        self.fc_norm = (
+            tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="fc_norm")
+            if config.use_mean_pooling
+            else None
+        )
+        self.classifier = (
+            tf.keras.layers.Dense(config.num_labels, name="classifier") if config.num_labels > 0 else tf.identity
+        )
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(VIDEOMAE_INPUTS_DOCSTRING)
@@ -1093,7 +1118,7 @@ class TFVideoMAEForVideoClassification(TFVideoMAEPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training=training
+            training=training,
         )
 
         sequence_output = outputs[0]
@@ -1117,6 +1142,7 @@ class TFVideoMAEForVideoClassification(TFVideoMAEPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
     def serving_output(self, output: TFImageClassifierOutput) -> TFImageClassifierOutput:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
