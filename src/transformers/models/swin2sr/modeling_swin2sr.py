@@ -877,14 +877,18 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def pad(self, pixel_values):
+    def pad_and_normalize(self, pixel_values):
         _, _, height, width = pixel_values.size()
 
+        # 1. pad
         window_size = self.config.window_size
-
         modulo_pad_height = (window_size - height % window_size) % window_size
         modulo_pad_width = (window_size - width % window_size) % window_size
         pixel_values = nn.functional.pad(pixel_values, (0, modulo_pad_width, 0, modulo_pad_height), "reflect")
+
+        # 2. normalize
+        self.mean = self.mean.type_as(pixel_values)
+        pixel_values = (pixel_values - self.mean) * self.img_range
         return pixel_values
 
     @add_start_docstrings_to_model_forward(SWIN2SR_INPUTS_DOCSTRING)
@@ -920,11 +924,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         _, _, height, width = pixel_values.shape
 
         # some preprocessing: padding + normalization
-        # TODO make this prettier
-        pixel_values = self.pad(pixel_values)
-
-        self.mean = self.mean.type_as(pixel_values)
-        pixel_values = (pixel_values - self.mean) * self.img_range
+        pixel_values = self.pad_and_normalize(pixel_values)
 
         embeddings = self.conv_first(pixel_values)
         embedding_output, input_dimensions = self.embeddings(embeddings)
