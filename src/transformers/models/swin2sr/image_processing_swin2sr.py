@@ -14,14 +14,16 @@
 # limitations under the License.
 """Image processor class for Swin2SR."""
 
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
-import PIL.Image
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_utils import ChannelDimension, is_batched, to_numpy_array, valid_images
-from ...utils import TensorType, logging
+from transformers.utils.generic import TensorType
+
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_transforms import pad, rescale, to_channel_dimension_format
+from ...image_utils import ChannelDimension, ImageInput, is_batched, to_numpy_array, valid_images
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -32,12 +34,21 @@ class Swin2SRImageProcessor(BaseImageProcessor):
     Constructs a Swin2SR image processor.
 
     Args:
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
+            parameter in the `preprocess` method.
+        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
+            `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to resize the input to a certain `size`.
-        size (`int` or `Tuple(int)`, *optional*, defaults to 224):
-            Resize the input to the given size. If a tuple is provided, it should be (width, height). If only an
-            integer is provided, then the input will be resized to (size, size). Only has an effect if `do_resize` is
-            set to `True`.
+            Whether to resize the image's (height, width) dimensions to the specified `(size["height"],
+            size["width"])`. Can be overridden by the `do_resize` parameter in the `preprocess` method.
+        size (`dict`, *optional*, defaults to `{"height": 224, "width": 224}`):
+            Size of the output image after padding. Can be overridden by the `size` parameter in the `preprocess`
+            method.
+        do_normalize:
+            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
+            method.
         num_channels (`int`, *optional*, defaults to 3):
             Number of channels of the image.
         do_normalize (`bool`, *optional*, defaults to `True`):
@@ -46,78 +57,168 @@ class Swin2SRImageProcessor(BaseImageProcessor):
 
     model_input_names = ["pixel_values"]
 
-    def __init__(self, do_pad=True, size=8, num_channels=3, do_normalize=True, **kwargs):
+    def __init__(
+        self,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_pad: bool = True,
+        size: Optional[Dict[str, int]] = None,
+        num_channels: int = 3,
+        do_normalize: bool = True,
+        **kwargs
+    ) -> None:
         super().__init__(**kwargs)
+        size = size if size is not None else {"height": 224, "width": 224}
+        size = get_size_dict(size)
+
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
         self.do_pad = do_pad
         self.size = size
-        self.num_channels = num_channels
         self.do_normalize = do_normalize
         self.mean = (0.4488, 0.4371, 0.4040) if num_channels == 3 else (0.0, 0.0, 0.0)
         self.range = 1.0 if num_channels == 3 else 255.0
 
-    def pad(image: np.ndarray) -> np.ndarray:
+    def rescale(
+        self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
+    ) -> np.ndarray:
+        """
+        Rescale an image by a scale factor. image = image * scale.
+
+        Args:
+            image (`np.ndarray`):
+                Image to rescale.
+            scale (`float`):
+                The scaling factor to rescale pixel values by.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The rescaled image.
+        """
+        return rescale(image, scale=scale, data_format=data_format, **kwargs)
+
+    def pad(self, image):
         return -1
 
-    def normalize(self, image: np.ndarray) -> np.ndarray:
-        image = (image - self.mean) * self.range
+    def normalize(
+        self,
+        image: np.ndarray,
+        mean: Union[float, List[float]],
+        range: float,
+    ) -> np.ndarray:
+        """
+        Normalize an image. image = (image - mean) * range.
+
+        Args:
+            image (`np.ndarray`):
+                Image to normalize.
+            ...
+
+        Returns:
+            `np.ndarray`: The normalized image.
+        """
+        image = (image - mean) * range
 
         return image
 
     def preprocess(
         self,
-        images: Union["PIL.Image.Image", TensorType, List["PIL.Image.Image"], List[TensorType]],
-        return_tensors: Optional[Union[TensorType, str]] = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        **kwargs
-    ) -> BatchFeature:
+        images: ImageInput,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_pad: Optional[bool] = None,
+        size: Dict[str, int] = None,
+        num_channels: int = 3,
+        do_normalize: Optional[bool] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
+        **kwargs,
+    ):
         """
-        Main method to prepare for the model one or several image(s).
-
-        <Tip warning={true}>
-
-        NumPy arrays and PyTorch tensors are converted to PIL images when resizing, so the most efficient is to pass
-        PIL images.
-
-        </Tip>
+        Preprocess an image or batch of images.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
-
-            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
-              width).
+            images (`ImageInput`):
+                Image to preprocess.
+            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
+                Whether to resize the image.
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+                Dictionary in the format `{"height": h, "width": w}` specifying the size of the output image after
+                resizing.
+            resample (`PILImageResampling` filter, *optional*, defaults to `self.resample`):
+                `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
+                an effect if `do_resize` is set to `True`.
+            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+                Whether to rescale the image values between [0 - 1].
+            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
+                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
+                Whether to normalize the image.
+            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+                Image mean to use if `do_normalize` is set to `True`.
+            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+                Image standard deviation to use if `do_normalize` is set to `True`.
+            return_tensors (`str` or `TensorType`, *optional*):
+                The type of tensors to return. Can be one of:
+                - Unset: Return a list of `np.ndarray`.
+                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
+                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
+                The channel dimension format for the output image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - Unset: Use the channel dimension format of the input image.
         """
-        if not valid_images(images):
-            raise ValueError("Invalid image(s)")
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        do_pad = do_pad if do_pad is not None else self.do_pad
+        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        if self.mean is not None:
+            mean = self.mean
+        else:
+            mean = (0.4488, 0.4371, 0.4040) if num_channels == 3 else (0.0, 0.0, 0.0)
+        if self.range is not None:
+            range = self.range
+        else:
+            range = 1.0 if num_channels == 3 else 255.0
 
-        if not is_batched:
+        size = size if size is not None else self.size
+        size_dict = get_size_dict(size)
+
+        if not is_batched(images):
             images = [images]
 
+        if not valid_images(images):
+            raise ValueError(
+                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+
+        if do_rescale and rescale_factor is None:
+            raise ValueError("Rescale factor must be specified if do_rescale is True.")
+
+        if do_pad and size is None:
+            raise ValueError("Size must be specified if do_pad is True.")
+
         # All transformations expect numpy arrays.
-        images = [to_numpy_array(img) for img in images]
+        images = [to_numpy_array(image) for image in images]
 
-        # transformations (padding + normalization)
-        if self.do_pad and self.size is not None:
-            images = [self.pad(image=image, size=self.size) for image in images]
+        if do_rescale:
+            images = [self.rescale(image=image, scale=rescale_factor) for image in images]
 
-        if self.do_normalize:
-            images = [self.normalize(image=image) for image in images]
+        if do_pad:
+            images = [self.pad(image=image, size=size_dict) for image in images]
 
-        # return as BatchFeature
+        if do_normalize:
+            images = [self.normalize(image=image, mean=mean, range=range) for image in images]
+
+        images = [to_channel_dimension_format(image, data_format) for image in images]
+
         data = {"pixel_values": images}
-        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
-
-        return encoded_inputs
+        return BatchFeature(data=data, tensor_type=return_tensors)
