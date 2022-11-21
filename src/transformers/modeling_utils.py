@@ -28,7 +28,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 from packaging import version
-from torch import Tensor, device, nn
+from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
 from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
@@ -675,7 +675,7 @@ class ModuleUtilsMixin:
             module.mem_rss_pre_forward = 0
 
     @property
-    def device(self) -> device:
+    def device(self) -> torch.device:
         """
         `torch.device`: The device on which the module is (assuming that all the module parameters are on the same
         device).
@@ -3217,7 +3217,6 @@ def get_disk_only_shard_files(device_map, sharded_metadata):
     """
     files_content = collections.defaultdict(list)
     for weight_name, filename in sharded_metadata["weight_map"].items():
-        w = weight_name
         while len(weight_name) > 0 and weight_name not in device_map:
             weight_name = ".".join(weight_name.split(".")[:-1])
         files_content[filename].append(device_map[weight_name])
