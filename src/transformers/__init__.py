@@ -858,12 +858,29 @@ else:
 
     # PyTorch models structure
 
-    _import_structure["models.audio_spectrogram_transformer"].extend(
+    _import_structure["models.roc_bert"].extend(
         [
-            "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ASTForSequenceClassification",
-            "ASTModel",
-            "ASTPreTrainedModel",
+            "ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RoCBertForMaskedLM",
+            "RoCBertForCausalLM",
+            "RoCBertForMultipleChoice",
+            "RoCBertForQuestionAnswering",
+            "RoCBertForSequenceClassification",
+            "RoCBertForTokenClassification",
+            "RoCBertLayer",
+            "RoCBertModel",
+            "RoCBertForPreTraining",
+            "RoCBertPreTrainedModel",
+            "load_tf_weights_in_roc_bert",
+        ]
+    )
+
+    _import_structure["models.time_series_transformer"].extend(
+        [
+            "TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TimeSeriesTransformerForPrediction",
+            "TimeSeriesTransformerModel",
+            "TimeSeriesTransformerPreTrainedModel",
         ]
     )
     _import_structure["models.albert"].extend(
@@ -878,6 +895,14 @@ else:
             "AlbertModel",
             "AlbertPreTrainedModel",
             "load_tf_weights_in_albert",
+        ]
+    )
+    _import_structure["models.audio_spectrogram_transformer"].extend(
+        [
+            "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ASTModel",
+            "ASTPreTrainedModel",
+            "ASTForSequenceClassification",
         ]
     )
     _import_structure["models.auto"].extend(
@@ -1914,22 +1939,6 @@ else:
             "RobertaPreTrainedModel",
         ]
     )
-    _import_structure["models.roc_bert"].extend(
-        [
-            "ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "RoCBertForMaskedLM",
-            "RoCBertForCausalLM",
-            "RoCBertForMultipleChoice",
-            "RoCBertForQuestionAnswering",
-            "RoCBertForSequenceClassification",
-            "RoCBertForTokenClassification",
-            "RoCBertLayer",
-            "RoCBertModel",
-            "RoCBertForPreTraining",
-            "RoCBertPreTrainedModel",
-            "load_tf_weights_in_roc_bert",
-        ]
-    )
     _import_structure["models.lilt"].extend(
         [
             "LILT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2052,14 +2061,6 @@ else:
             "TapasModel",
             "TapasPreTrainedModel",
             "load_tf_weights_in_tapas",
-        ]
-    )
-    _import_structure["models.time_series_transformer"].extend(
-        [
-            "TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TimeSeriesTransformerForPrediction",
-            "TimeSeriesTransformerModel",
-            "TimeSeriesTransformerPreTrainedModel",
         ]
     )
     _import_structure["models.t5"].extend(
@@ -3957,6 +3958,8 @@ if TYPE_CHECKING:
             top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
+
+        # PyTorch model imports
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -3969,8 +3972,6 @@ if TYPE_CHECKING:
             AlbertPreTrainedModel,
             load_tf_weights_in_albert,
         )
-
-        # PyTorch model imports
         from .models.audio_spectrogram_transformer import (
             AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             ASTForSequenceClassification,
