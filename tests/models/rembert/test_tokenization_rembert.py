@@ -21,13 +21,14 @@ from transformers.utils import is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
+
 FRAMEWORK = "pt" if is_torch_available() else "tf"
 
 
 @require_sentencepiece
 @require_tokenizers
 class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    
+
     tokenizer_class = RemBertTokenizer
     rust_tokenizer_class = RemBertTokenizerFast
     test_rust_tokenizer = True
