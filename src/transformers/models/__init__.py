@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    flexibert,
     albert,
     auto,
     bart,
@@ -66,6 +65,7 @@ from . import (
     esm,
     flaubert,
     flava,
+    flexibert,
     fnet,
     fsmt,
     funnel,

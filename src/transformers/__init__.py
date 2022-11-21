@@ -121,7 +121,6 @@ _import_structure = {
     ],
     "models": [],
     # Models
-    "models.flexibert": ["FLEXIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlexiBERTConfig", "FlexiBERTTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -232,6 +231,7 @@ _import_structure = {
         "FlavaMultimodalConfig",
         "FlavaTextConfig",
     ],
+    "models.flexibert": ["FLEXIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlexiBERTConfig", "FlexiBERTTokenizer"],
     "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
@@ -593,7 +593,6 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
-    _import_structure["models.flexibert"].append("FlexiBERTTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -614,6 +613,7 @@ else:
         ["DPRContextEncoderTokenizerFast", "DPRQuestionEncoderTokenizerFast", "DPRReaderTokenizerFast"]
     )
     _import_structure["models.electra"].append("ElectraTokenizerFast")
+    _import_structure["models.flexibert"].append("FlexiBERTTokenizerFast")
     _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.funnel"].append("FunnelTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
@@ -3320,7 +3320,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.flexibert import FLEXIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlexiBERTConfig, FlexiBERTTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -3421,6 +3420,7 @@ if TYPE_CHECKING:
         FlavaMultimodalConfig,
         FlavaTextConfig,
     )
+    from .models.flexibert import FLEXIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlexiBERTConfig, FlexiBERTTokenizer
     from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
@@ -3749,7 +3749,6 @@ if TYPE_CHECKING:
         from .utils.dummy_tokenizers_objects import *
     else:
         # Fast tokenizers imports
-        from .models.flexibert import FlexiBERTTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -3768,6 +3767,7 @@ if TYPE_CHECKING:
         from .models.distilbert import DistilBertTokenizerFast
         from .models.dpr import DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast
         from .models.electra import ElectraTokenizerFast
+        from .models.flexibert import FlexiBERTTokenizerFast
         from .models.fnet import FNetTokenizerFast
         from .models.funnel import FunnelTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
@@ -3961,22 +3961,6 @@ if TYPE_CHECKING:
             top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
-
-        # PyTorch model imports
-
-        from .models.flexibert import (
-            FLEXIBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FlexiBERTForMaskedLM,
-            FlexiBERTForCausalLM,
-            FlexiBERTForMultipleChoice,
-            FlexiBERTForQuestionAnswering,
-            FlexiBERTForSequenceClassification,
-            FlexiBERTForTokenClassification,
-            FlexiBERTLayer,
-            FlexiBERTModel,
-            FlexiBERTPreTrainedModel,
-            load_tf_weights_in_flexibert,
-        )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -4361,6 +4345,21 @@ if TYPE_CHECKING:
             FlavaMultimodalModel,
             FlavaPreTrainedModel,
             FlavaTextModel,
+        )
+
+        # PyTorch model imports
+        from .models.flexibert import (
+            FLEXIBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FlexiBERTForCausalLM,
+            FlexiBERTForMaskedLM,
+            FlexiBERTForMultipleChoice,
+            FlexiBERTForQuestionAnswering,
+            FlexiBERTForSequenceClassification,
+            FlexiBERTForTokenClassification,
+            FlexiBERTLayer,
+            FlexiBERTModel,
+            FlexiBERTPreTrainedModel,
+            load_tf_weights_in_flexibert,
         )
         from .models.fnet import (
             FNET_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5231,7 +5230,6 @@ if TYPE_CHECKING:
         from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, shape_list
 
         # TensorFlow model imports
-
         from .models.albert import (
             TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFAlbertForMaskedLM,

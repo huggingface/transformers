@@ -18,14 +18,13 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import  _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
-from ...utils import is_tf_available
-
-
-
-from ...utils import is_torch_available
-
-
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_tf_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
@@ -62,29 +61,6 @@ else:
     ]
 
 
-
-try:
-    if not is_tf_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_tf_flexibert"] = [
-        "TF_FLEXIBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TFFlexiBERTForMaskedLM",
-        "TFFlexiBERTForCausalLM",
-        "TFFlexiBERTForMultipleChoice",
-        "TFFlexiBERTForQuestionAnswering",
-        "TFFlexiBERTForSequenceClassification",
-        "TFFlexiBERTForTokenClassification",
-        "TFFlexiBERTLayer",
-        "TFFlexiBERTModel",
-        "TFFlexiBERTPreTrainedModel",
-    ]
-
-
-
-
 if TYPE_CHECKING:
     from .configuration_flexibert import FLEXIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlexiBERTConfig
     from .tokenization_flexibert import FlexiBERTTokenizer
@@ -105,8 +81,8 @@ if TYPE_CHECKING:
     else:
         from .modeling_flexibert import (
             FLEXIBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FlexiBERTForMaskedLM,
             FlexiBERTForCausalLM,
+            FlexiBERTForMaskedLM,
             FlexiBERTForMultipleChoice,
             FlexiBERTForQuestionAnswering,
             FlexiBERTForSequenceClassification,
@@ -116,28 +92,6 @@ if TYPE_CHECKING:
             FlexiBERTPreTrainedModel,
             load_tf_weights_in_flexibert,
         )
-
-
-
-    try:
-        if not is_tf_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_tf_flexibert import (
-            TF_FLEXIBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFFlexiBERTForMaskedLM,
-            TFFlexiBERTForCausalLM,
-            TFFlexiBERTForMultipleChoice,
-            TFFlexiBERTForQuestionAnswering,
-            TFFlexiBERTForSequenceClassification,
-            TFFlexiBERTForTokenClassification,
-            TFFlexiBERTLayer,
-            TFFlexiBERTModel,
-            TFFlexiBERTPreTrainedModel,
-        )
-
 
 
 else:

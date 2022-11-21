@@ -29,7 +29,6 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
-        ("flexibert", "FlexiBERTConfig"),
         ("albert", "AlbertConfig"),
         ("bart", "BartConfig"),
         ("beit", "BeitConfig"),
@@ -70,6 +69,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("esm", "EsmConfig"),
         ("flaubert", "FlaubertConfig"),
         ("flava", "FlavaConfig"),
+        ("flexibert", "FlexiBERTConfig"),
         ("fnet", "FNetConfig"),
         ("fsmt", "FSMTConfig"),
         ("funnel", "FunnelConfig"),
@@ -179,7 +179,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
-        ("flexibert", "FLEXIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bart", "BART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -217,6 +216,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("esm", "ESM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("flaubert", "FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("flava", "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("flexibert", "FLEXIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fsmt", "FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("funnel", "FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -314,7 +314,6 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("flexibert", "FlexiBERT"),
         ("albert", "ALBERT"),
         ("bart", "BART"),
         ("barthez", "BARThez"),
@@ -365,6 +364,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("flan-t5", "FLAN-T5"),
         ("flaubert", "FlauBERT"),
         ("flava", "FLAVA"),
+        ("flexibert", "FlexiBERT"),
         ("fnet", "FNet"),
         ("fsmt", "FairSeq Machine-Translation"),
         ("funnel", "Funnel Transformer"),

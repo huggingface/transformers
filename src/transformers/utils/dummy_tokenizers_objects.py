@@ -3,13 +3,6 @@
 from ..utils import DummyObject, requires_backends
 
 
-class FlexiBERTTokenizerFast(metaclass=DummyObject):
-    _backends = ["tokenizers"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tokenizers"])
-
-
 class AlbertTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
@@ -144,6 +137,13 @@ class DPRReaderTokenizerFast(metaclass=DummyObject):
 
 
 class ElectraTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
+class FlexiBERTTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):

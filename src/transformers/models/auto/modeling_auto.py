@@ -28,7 +28,6 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
-        ("flexibert", "FlexiBERTModel"),
         ("albert", "AlbertModel"),
         ("bart", "BartModel"),
         ("beit", "BeitModel"),
@@ -69,6 +68,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("esm", "EsmModel"),
         ("flaubert", "FlaubertModel"),
         ("flava", "FlavaModel"),
+        ("flexibert", "FlexiBERTModel"),
         ("fnet", "FNetModel"),
         ("fsmt", "FSMTModel"),
         ("funnel", ("FunnelModel", "FunnelBaseModel")),
@@ -229,7 +229,6 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
-("flexibert", "FlexiBERTForMaskedLM"),
         ("albert", "AlbertForMaskedLM"),
         ("bart", "BartForConditionalGeneration"),
         ("bert", "BertForMaskedLM"),
@@ -250,6 +249,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("ernie", "ErnieForMaskedLM"),
         ("esm", "EsmForMaskedLM"),
         ("flaubert", "FlaubertWithLMHeadModel"),
+        ("flexibert", "FlexiBERTForMaskedLM"),
         ("fnet", "FNetForMaskedLM"),
         ("fsmt", "FSMTForConditionalGeneration"),
         ("funnel", "FunnelForMaskedLM"),
@@ -301,7 +301,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
-        ("flexibert", "FlexiBERTForCausalLM"),
         ("bart", "BartForCausalLM"),
         ("bert", "BertLMHeadModel"),
         ("bert-generation", "BertGenerationDecoder"),
@@ -316,6 +315,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("data2vec-text", "Data2VecTextForCausalLM"),
         ("electra", "ElectraForCausalLM"),
         ("ernie", "ErnieForCausalLM"),
+        ("flexibert", "FlexiBERTForCausalLM"),
         ("gpt2", "GPT2LMHeadModel"),
         ("gpt_neo", "GPTNeoForCausalLM"),
         ("gpt_neox", "GPTNeoXForCausalLM"),
@@ -442,7 +442,6 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
-("flexibert", "FlexiBERTForMaskedLM"),
         ("albert", "AlbertForMaskedLM"),
         ("bart", "BartForConditionalGeneration"),
         ("bert", "BertForMaskedLM"),
@@ -457,6 +456,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("ernie", "ErnieForMaskedLM"),
         ("esm", "EsmForMaskedLM"),
         ("flaubert", "FlaubertWithLMHeadModel"),
+        ("flexibert", "FlexiBERTForMaskedLM"),
         ("fnet", "FNetForMaskedLM"),
         ("funnel", "FunnelForMaskedLM"),
         ("ibert", "IBertForMaskedLM"),
@@ -550,7 +550,6 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
-        ("flexibert", "FlexiBERTForSequenceClassification"),
         ("albert", "AlbertForSequenceClassification"),
         ("bart", "BartForSequenceClassification"),
         ("bert", "BertForSequenceClassification"),
@@ -569,6 +568,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("ernie", "ErnieForSequenceClassification"),
         ("esm", "EsmForSequenceClassification"),
         ("flaubert", "FlaubertForSequenceClassification"),
+        ("flexibert", "FlexiBERTForSequenceClassification"),
         ("fnet", "FNetForSequenceClassification"),
         ("funnel", "FunnelForSequenceClassification"),
         ("gpt2", "GPT2ForSequenceClassification"),
@@ -614,7 +614,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
-        ("flexibert", "FlexiBERTForQuestionAnswering"),
         ("albert", "AlbertForQuestionAnswering"),
         ("bart", "BartForQuestionAnswering"),
         ("bert", "BertForQuestionAnswering"),
@@ -631,6 +630,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("electra", "ElectraForQuestionAnswering"),
         ("ernie", "ErnieForQuestionAnswering"),
         ("flaubert", "FlaubertForQuestionAnsweringSimple"),
+        ("flexibert", "FlexiBERTForQuestionAnswering"),
         ("fnet", "FNetForQuestionAnswering"),
         ("funnel", "FunnelForQuestionAnswering"),
         ("gptj", "GPTJForQuestionAnswering"),
@@ -691,7 +691,6 @@ MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
-("flexibert", "FlexiBERTForTokenClassification"),
         ("albert", "AlbertForTokenClassification"),
         ("bert", "BertForTokenClassification"),
         ("big_bird", "BigBirdForTokenClassification"),
@@ -707,6 +706,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("ernie", "ErnieForTokenClassification"),
         ("esm", "EsmForTokenClassification"),
         ("flaubert", "FlaubertForTokenClassification"),
+        ("flexibert", "FlexiBERTForTokenClassification"),
         ("fnet", "FNetForTokenClassification"),
         ("funnel", "FunnelForTokenClassification"),
         ("gpt2", "GPT2ForTokenClassification"),
@@ -740,7 +740,6 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Multiple Choice mapping
-("flexibert", "FlexiBERTForMultipleChoice"),
         ("albert", "AlbertForMultipleChoice"),
         ("bert", "BertForMultipleChoice"),
         ("big_bird", "BigBirdForMultipleChoice"),
@@ -753,6 +752,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("electra", "ElectraForMultipleChoice"),
         ("ernie", "ErnieForMultipleChoice"),
         ("flaubert", "FlaubertForMultipleChoice"),
+        ("flexibert", "FlexiBERTForMultipleChoice"),
         ("fnet", "FNetForMultipleChoice"),
         ("funnel", "FunnelForMultipleChoice"),
         ("ibert", "IBertForMultipleChoice"),

@@ -12,59 +12,45 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch FlexiBERT model. """
+""" PyTorch FlexiBERT model."""
 
+import copy
 import math
 import os
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
+import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from typing import Optional, Tuple, Union
 
 from ...activations import ACT2FN
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-    is_sklearn_available,
-)
+from ...file_utils import ModelOutput
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
-    NextSentencePredictorOutput,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...file_utils import (
-    ModelOutput,
+from ...modeling_utils import PreTrainedModel, SequenceSummary
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_sklearn_available,
+    logging,
     replace_return_docstrings,
 )
-from ...modeling_utils import (
-    PreTrainedModel,
-    SequenceSummary,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
-from ...pytorch_utils import (
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
-from ...utils import logging
 from .configuration_flexibert import FlexiBERTConfig
+from .dct import dct_2d
 
-from dataclasses import dataclass
 
 if is_sklearn_available():
     from sklearn import random_projection
@@ -161,7 +147,9 @@ class FlexiBERTEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_dim_list[0], padding_idx=config.pad_token_id)
+        self.word_embeddings = nn.Embedding(
+            config.vocab_size, config.hidden_dim_list[0], padding_idx=config.pad_token_id
+        )
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_dim_list[0])
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_dim_list[0])
 
@@ -206,7 +194,9 @@ class FlexiBERTEmbeddings(nn.Module):
 class FlexiBERTSelfAttention(nn.Module):
     def __init__(self, config, layer_id):
         super().__init__()
-        if config.hidden_dim_list[layer_id] % config.attention_heads_list[layer_id] != 0 and not hasattr(config, "embedding_size"):
+        if config.hidden_dim_list[layer_id] % config.attention_heads_list[layer_id] != 0 and not hasattr(
+            config, "embedding_size"
+        ):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads})"
@@ -285,12 +275,11 @@ class FlexiBERTSelfAttention(nn.Module):
             past_key_value = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        if self.sim=='sdp':
+        if self.sim == "sdp":
             attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        elif self.sim=='wma':
-            attention_scores= torch.matmul(torch.matmul(query_layer, self.W.weight), key_layer.transpose(-1, -2))
-
+        elif self.sim == "wma":
+            attention_scores = torch.matmul(torch.matmul(query_layer, self.W.weight), key_layer.transpose(-1, -2))
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
 
@@ -309,9 +298,8 @@ class FlexiBERTSelfAttention(nn.Module):
                 relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
-        
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        
+
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
             attention_scores = attention_scores + attention_mask
@@ -333,7 +321,6 @@ class FlexiBERTSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         if self.is_decoder:
@@ -345,8 +332,8 @@ class FlexiBERTSelfAttention(nn.Module):
 # Adapted from https://github.com/google-research/google-research/blob/master/f_net/fourier.py
 def fftn(x):
     """
-    Applies n-dimensional Fast Fourier Transform (FFT) to input array.
     Args:
+    Applies n-dimensional Fast Fourier Transform (FFT) to input array.
         x: Input n-dimensional array.
     Returns:
         n-dimensional Fourier transform of input n-dimensional array.
@@ -388,7 +375,7 @@ class FlexiBERTHeteroAttention(nn.Module):
     def __init__(self, config, layer_id):
         super().__init__()
 
-        assert config.from_model_dict_hetero is True, 'Heterogeneous attention only with model_dict_hetero'
+        assert config.from_model_dict_hetero is True, "Heterogeneous attention only with model_dict_hetero"
 
         # if config.hidden_dim_list[layer_id] % len(config.attention_heads_list[layer_id]) != 0 and not hasattr(config, "embedding_size"):
         #     raise ValueError(
@@ -402,8 +389,10 @@ class FlexiBERTHeteroAttention(nn.Module):
         # Fixing attention_head_size to specified values for grow-and-prune weight transfer
         # self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
         # self.attention_head_size = int(self.hidden_size / 2 ** math.floor(math.log(self.num_attention_heads, 2)))
-        attention_head_sizes = [int(attention.split('_')[2]) for attention in config.attention_heads_list[layer_id]]
-        assert len(set(attention_head_sizes)) == 1, f'All attention heads should have the same size for layer ID: {layer_id}'
+        attention_head_sizes = [int(attention.split("_")[2]) for attention in config.attention_heads_list[layer_id]]
+        assert (
+            len(set(attention_head_sizes)) == 1
+        ), f"All attention heads should have the same size for layer ID: {layer_id}"
         self.attention_head_size = attention_head_sizes[0]
 
         self.all_head_size = self.num_attention_heads * self.attention_head_size
@@ -420,26 +409,36 @@ class FlexiBERTHeteroAttention(nn.Module):
 
         self.is_decoder = config.is_decoder
 
-        self.attention_types = [attention.split('_')[0] for attention in config.attention_heads_list[layer_id]]
-        self.sim_types = [attention.split('_')[1] for attention in config.attention_heads_list[layer_id]]
+        self.attention_types = [attention.split("_")[0] for attention in config.attention_heads_list[layer_id]]
+        self.sim_types = [attention.split("_")[1] for attention in config.attention_heads_list[layer_id]]
 
         wma_count, conv_count = 0, 0
         for sim_type in self.sim_types:
-            if sim_type == 'wma':
-                setattr(self, f'W{wma_count}', torch.nn.Parameter(
-                    torch.FloatTensor(self.attention_head_size, self.attention_head_size).uniform_(-0.1, 0.1)))
+            if sim_type == "wma":
+                setattr(
+                    self,
+                    f"W{wma_count}",
+                    torch.nn.Parameter(
+                        torch.FloatTensor(self.attention_head_size, self.attention_head_size).uniform_(-0.1, 0.1)
+                    ),
+                )
                 wma_count += 1
             elif sim_type.isnumeric():
-                setattr(self, f'key_conv_attn_layer{conv_count}', SeparableConv1D(
-                    config, self.attention_head_size, self.attention_head_size, int(sim_type)))
-                setattr(self, f'conv_kernel_layer{conv_count}', nn.Linear(
-                    self.attention_head_size, int(sim_type)))
-                setattr(self, f'conv_out_layer{conv_count}', nn.Linear(
-                    self.attention_head_size, self.attention_head_size))
-                setattr(self, f'unfold{conv_count}', nn.Unfold(
-                    kernel_size=[int(sim_type), 1], padding=[int((int(sim_type) - 1) / 2), 0]))
+                setattr(
+                    self,
+                    f"key_conv_attn_layer{conv_count}",
+                    SeparableConv1D(config, self.attention_head_size, self.attention_head_size, int(sim_type)),
+                )
+                setattr(self, f"conv_kernel_layer{conv_count}", nn.Linear(self.attention_head_size, int(sim_type)))
+                setattr(
+                    self, f"conv_out_layer{conv_count}", nn.Linear(self.attention_head_size, self.attention_head_size)
+                )
+                setattr(
+                    self,
+                    f"unfold{conv_count}",
+                    nn.Unfold(kernel_size=[int(sim_type), 1], padding=[int((int(sim_type) - 1) / 2), 0]),
+                )
                 conv_count += 1
-
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -456,7 +455,7 @@ class FlexiBERTHeteroAttention(nn.Module):
         past_key_value=None,
         output_attentions=False,
     ):
-        
+
         mixed_query_layer = self.query(hidden_states)
         batch_size = hidden_states.size(0)
         max_seq_length = hidden_states.size(1)
@@ -502,24 +501,39 @@ class FlexiBERTHeteroAttention(nn.Module):
         attention_scores_list = []
         wma_count = 0
         for attention_head in range(self.num_attention_heads):
-            if self.attention_types[attention_head] == 'sa':
-                if self.sim_types[attention_head] == 'sdp':
+            if self.attention_types[attention_head] == "sa":
+                if self.sim_types[attention_head] == "sdp":
                     # Take the dot product between "query" and "key" to get the raw attention scores.
-                    attention_scores_list.append(torch.matmul(query_layer[:, attention_head, :, :], 
-                        key_layer[:, attention_head, :, :].transpose(-1, -2)))
-                elif self.sim_types[attention_head] == 'wma':
+                    attention_scores_list.append(
+                        torch.matmul(
+                            query_layer[:, attention_head, :, :], key_layer[:, attention_head, :, :].transpose(-1, -2)
+                        )
+                    )
+                elif self.sim_types[attention_head] == "wma":
                     # Take a weighted multiplicative addition between "query" and "key" vectors.
-                    attention_scores_list.append(torch.matmul(torch.matmul(query_layer[:, attention_head, :, :], getattr(self, f'W{wma_count}')), 
-                        key_layer[:, attention_head, :, :].transpose(-1, -2)))
+                    attention_scores_list.append(
+                        torch.matmul(
+                            torch.matmul(query_layer[:, attention_head, :, :], getattr(self, f"W{wma_count}")),
+                            key_layer[:, attention_head, :, :].transpose(-1, -2),
+                        )
+                    )
                     wma_count += 1
-            elif self.attention_types[attention_head] == 'l':
+            elif self.attention_types[attention_head] == "l":
                 # Attention operation not used in linear-transform based attention head.
                 # Attention scores only used for relative encodings.
-                attention_scores_list.append(torch.zeros(*[s for i, s in enumerate(attention_scores_size) if i != 1]).to(device=hidden_states.device))
-            elif self.attention_types[attention_head] == 'c':
+                attention_scores_list.append(
+                    torch.zeros(*[s for i, s in enumerate(attention_scores_size) if i != 1]).to(
+                        device=hidden_states.device
+                    )
+                )
+            elif self.attention_types[attention_head] == "c":
                 # Attention operation not used in convolution based attention head.
                 # Attention scores only used for relative encodings.
-                attention_scores_list.append(torch.zeros(*[s for i, s in enumerate(attention_scores_size) if i != 1]).to(device=hidden_states.device))
+                attention_scores_list.append(
+                    torch.zeros(*[s for i, s in enumerate(attention_scores_size) if i != 1]).to(
+                        device=hidden_states.device
+                    )
+                )
 
         attention_scores = torch.stack(attention_scores_list, 1)
 
@@ -540,9 +554,9 @@ class FlexiBERTHeteroAttention(nn.Module):
                 relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
                 relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
-        
+
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        
+
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
             attention_scores = attention_scores + attention_mask
@@ -564,48 +578,55 @@ class FlexiBERTHeteroAttention(nn.Module):
         conv_count = 0
         context_layer_list = []
         for attention_head in range(self.num_attention_heads):
-            if self.attention_types[attention_head] == 'sa':
-                context_layer_list.append(torch.zeros(*[batch_size, max_seq_length, self.attention_head_size]).to(device=hidden_states.device))
-            elif self.attention_types[attention_head] == 'l':
-                if self.sim_types[attention_head] == 'dft':
+            if self.attention_types[attention_head] == "sa":
+                context_layer_list.append(
+                    torch.zeros(*[batch_size, max_seq_length, self.attention_head_size]).to(
+                        device=hidden_states.device
+                    )
+                )
+            elif self.attention_types[attention_head] == "l":
+                if self.sim_types[attention_head] == "dft":
                     fft_output = fftn(value_layer[:, attention_head, :, :]).real
                     # Add fft to relative position embeddings
                     context_layer_list.append(context_layer[:, attention_head, :, :] + fft_output)
 
-                elif self.sim_types[attention_head] == 'dct':
+                elif self.sim_types[attention_head] == "dct":
                     dct_output = dct_2d(value_layer[:, attention_head, :, :])
                     # Add dct to relative position embeddings
                     context_layer_list.append(context_layer[:, attention_head, :, :] + dct_output)
-            elif self.attention_types[attention_head] == 'c':
-                mixed_key_conv_attn_layer = getattr(self, f'key_conv_attn_layer{conv_count}')(
-                    key_layer[:, attention_head, :, :].transpose(1, 2))
+            elif self.attention_types[attention_head] == "c":
+                mixed_key_conv_attn_layer = getattr(self, f"key_conv_attn_layer{conv_count}")(
+                    key_layer[:, attention_head, :, :].transpose(1, 2)
+                )
                 mixed_key_conv_attn_layer = mixed_key_conv_attn_layer.transpose(1, 2)
                 # print(f'mixed_key_conv_attn_layer.size(): {mixed_key_conv_attn_layer.size()}')
 
                 conv_attn_layer = torch.multiply(mixed_key_conv_attn_layer, query_layer[:, attention_head, :, :])
-                conv_kernel_layer = getattr(self, f'conv_kernel_layer{conv_count}')(conv_attn_layer)
+                conv_kernel_layer = getattr(self, f"conv_kernel_layer{conv_count}")(conv_attn_layer)
                 # print(f'conv_kernel_layer.size(): {conv_kernel_layer.size()}')
                 conv_kernel_layer = torch.reshape(conv_kernel_layer, [-1, int(self.sim_types[attention_head]), 1])
                 conv_kernel_layer = torch.softmax(conv_kernel_layer, dim=1)
                 # print(f'conv_kernel_layer.size() after reshape: {conv_kernel_layer.size()}')
 
-                conv_out_layer = getattr(self, f'conv_out_layer{conv_count}')(value_layer[:, attention_head, :, :])
+                conv_out_layer = getattr(self, f"conv_out_layer{conv_count}")(value_layer[:, attention_head, :, :])
                 conv_out_layer = torch.reshape(conv_out_layer, [batch_size, -1, self.attention_head_size])
                 conv_out_layer = conv_out_layer.transpose(1, 2).contiguous().unsqueeze(-1)
-                conv_out_layer = getattr(self, f'unfold{conv_count}')(conv_out_layer)
+                conv_out_layer = getattr(self, f"unfold{conv_count}")(conv_out_layer)
                 conv_out_layer = conv_out_layer.transpose(1, 2).reshape(
-                    batch_size, -1, self.attention_head_size, int(self.sim_types[attention_head]))
+                    batch_size, -1, self.attention_head_size, int(self.sim_types[attention_head])
+                )
                 # print(f'conv_out_layer.size(): {conv_out_layer.size()}')
-                conv_out_layer = torch.reshape(conv_out_layer, [-1, self.attention_head_size, int(self.sim_types[attention_head])])
+                conv_out_layer = torch.reshape(
+                    conv_out_layer, [-1, self.attention_head_size, int(self.sim_types[attention_head])]
+                )
                 # print(f'conv_out_layer.size() after reshape: {conv_out_layer.size()}')
                 conv_out_layer = torch.matmul(conv_out_layer, conv_kernel_layer)
                 conv_out_layer = torch.reshape(conv_out_layer, [-1, self.attention_head_size])
 
                 conv_out = torch.reshape(conv_out_layer, [batch_size, -1, self.attention_head_size])
                 conv_count += 1
-                
-                context_layer_list.append(context_layer[:, attention_head, :, :] + conv_out)
 
+                context_layer_list.append(context_layer[:, attention_head, :, :] + conv_out)
 
         context_layer = torch.stack(context_layer_list, 1)
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
@@ -626,7 +647,9 @@ class FlexiBERTHeteroAttention(nn.Module):
 class FlexiBERTLinearAttention(nn.Module):
     def __init__(self, config, layer_id):
         super().__init__()
-        if config.hidden_dim_list[layer_id] % config.attention_heads_list[layer_id] != 0 and not hasattr(config, "embedding_size"):
+        if config.hidden_dim_list[layer_id] % config.attention_heads_list[layer_id] != 0 and not hasattr(
+            config, "embedding_size"
+        ):
             raise ValueError(
                 f"The hidden size ({ config.hidden_dim_list[layer_id] }) is not a multiple of the number of attention "
                 f"heads ({config.attention_heads_list[layer_id]})"
@@ -649,7 +672,7 @@ class FlexiBERTLinearAttention(nn.Module):
 
         self.is_decoder = config.is_decoder
         self.sim = config.similarity_list[layer_id]
-        #self.W = torch.nn.Parameter(torch.FloatTensor(self.attention_head_size,self.attention_head_size).uniform_(-0.1, 0.1))
+        # self.W = torch.nn.Parameter(torch.FloatTensor(self.attention_head_size,self.attention_head_size).uniform_(-0.1, 0.1))
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -666,7 +689,7 @@ class FlexiBERTLinearAttention(nn.Module):
         past_key_value=None,
         output_attentions=False,
     ):
-        
+
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -704,8 +727,9 @@ class FlexiBERTLinearAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_layer, value_layer)
 
-        
-        attention_scores = torch.zeros(hidden_states.shape[0],self.num_attention_heads,hidden_states.shape[1],hidden_states.shape[1]).to(device=hidden_states.device)
+        attention_scores = torch.zeros(
+            hidden_states.shape[0], self.num_attention_heads, hidden_states.shape[1], hidden_states.shape[1]
+        ).to(device=hidden_states.device)
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             seq_length = hidden_states.size()[1]
@@ -717,7 +741,7 @@ class FlexiBERTLinearAttention(nn.Module):
 
             if self.position_embedding_type == "relative_key":
                 relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                #debug --> print(attention_scores.device(),relative_position_scores.device)
+                # debug --> print(attention_scores.device(),relative_position_scores.device)
                 attention_scores = attention_scores + relative_position_scores
 
             elif self.position_embedding_type == "relative_key_query":
@@ -725,9 +749,8 @@ class FlexiBERTLinearAttention(nn.Module):
                 relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
-        
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        
+
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
             attention_scores = attention_scores + attention_mask
@@ -749,16 +772,14 @@ class FlexiBERTLinearAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        
-
-        if self.sim == 'dft':
+        if self.sim == "dft":
             fft_output = torch.fft.fft(torch.fft.fft(hidden_states, dim=-1), dim=-2).real
-            #Add fft to relative position embeddings
+            # Add fft to relative position embeddings
             context_layer += fft_output
 
-        elif self.sim == 'dct':
+        elif self.sim == "dct":
             dct_output = dct_2d(hidden_states)
-            #Add fft to relative position embeddings
+            # Add fft to relative position embeddings
             context_layer += dct_output
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
@@ -775,7 +796,7 @@ class FlexiBERTSelfOutput(nn.Module):
 
         if config.from_model_dict_hetero is True:
             num_attention_heads = len(config.attention_heads_list[layer_id])
-            attention_head_size = int(config.attention_heads_list[layer_id][0].split('_')[2])
+            attention_head_size = int(config.attention_heads_list[layer_id][0].split("_")[2])
             all_head_size = num_attention_heads * attention_head_size
         else:
             all_head_size = config.hidden_dim_list[layer_id]
@@ -798,14 +819,12 @@ class FlexiBERTAttention(nn.Module):
         if config.from_model_dict_hetero is True:
             self.self = FlexiBERTHeteroAttention(config, layer_id)
         else:
-            if not(config.attention_type[layer_id] == 'sa' or config.attention_type[layer_id] == 'l'):
-                raise ValueError(
-                    f"Incorrect attention type specified"
-                )
+            if not (config.attention_type[layer_id] == "sa" or config.attention_type[layer_id] == "l"):
+                raise ValueError("Incorrect attention type specified")
 
-            if config.attention_type[layer_id] == 'sa':
+            if config.attention_type[layer_id] == "sa":
                 self.self = FlexiBERTSelfAttention(config, layer_id)
-            elif config.attention_type[layer_id] == 'l':
+            elif config.attention_type[layer_id] == "l":
                 self.self = FlexiBERTLinearAttention(config, layer_id)
 
         self.output = FlexiBERTSelfOutput(config, layer_id)
@@ -877,7 +896,7 @@ class FlexiBERTIntermediate(nn.Module):
         self.sequential = nn.Sequential(*modules)
 
     def forward(self, hidden_states):
-       
+
         return self.sequential(hidden_states)
 
 
@@ -889,16 +908,16 @@ class FlexiBERTOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.last_layer = last_layer
         if last_layer:
-                self.proj_required = False
+            self.proj_required = False
 
         else:
-            if  config.hidden_dim_list[layer_id]==config.hidden_dim_list[layer_id+1]:
+            if config.hidden_dim_list[layer_id] == config.hidden_dim_list[layer_id + 1]:
                 self.proj_required = False
             else:
                 self.proj_required = True
 
         if self.proj_required:
-            self.proj_head = nn.Linear(config.hidden_dim_list[layer_id],config.hidden_dim_list[layer_id+1])
+            self.proj_head = nn.Linear(config.hidden_dim_list[layer_id], config.hidden_dim_list[layer_id + 1])
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
@@ -910,18 +929,18 @@ class FlexiBERTOutput(nn.Module):
 
 
 class FlexiBERTLayer(nn.Module):
-    def __init__(self, config, layer_id, last_layer = False):
+    def __init__(self, config, layer_id, last_layer=False):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = FlexiBERTAttention(config,layer_id)
+        self.attention = FlexiBERTAttention(config, layer_id)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
-            self.crossattention = FlexiBERTAttention(config,layer_id)
-        self.intermediate = FlexiBERTIntermediate(config,layer_id)
-        self.output = FlexiBERTOutput(config,layer_id,last_layer)
+            self.crossattention = FlexiBERTAttention(config, layer_id)
+        self.intermediate = FlexiBERTIntermediate(config, layer_id)
+        self.output = FlexiBERTOutput(config, layer_id, last_layer)
 
     def forward(
         self,
@@ -953,9 +972,10 @@ class FlexiBERTLayer(nn.Module):
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
-            assert hasattr(
-                self, "crossattention"
-            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+            assert hasattr(self, "crossattention"), (
+                f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by"
+                " setting `config.add_cross_attention=True`"
+            )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -995,7 +1015,9 @@ class FlexiBERTLayer(nn.Module):
 class ConvBertSelfAttentionModular(nn.Module):
     def __init__(self, config, layer_id):
         super().__init__()
-        if config.hidden_dim_list[layer_id] % config.attention_heads_list[layer_id] != 0 and not hasattr(config, "embedding_size"):
+        if config.hidden_dim_list[layer_id] % config.attention_heads_list[layer_id] != 0 and not hasattr(
+            config, "embedding_size"
+        ):
             raise ValueError(
                 f"The hidden size ({config.hidden_dim_list[layer_id]}) is not a multiple of the number of attention "
                 f"heads ({ config.attention_heads_list[layer_id]})"
@@ -1015,7 +1037,7 @@ class ConvBertSelfAttentionModular(nn.Module):
             config.hidden_dim_list[layer_id] % self.num_attention_heads == 0
         ), "hidden_size should be divisible by num_attention_heads"
 
-        self.attention_head_size =  config.hidden_dim_list[layer_id] //config.attention_heads_list[layer_id]
+        self.attention_head_size = config.hidden_dim_list[layer_id] // config.attention_heads_list[layer_id]
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.query = nn.Linear(config.hidden_dim_list[layer_id], self.all_head_size)
@@ -1026,7 +1048,7 @@ class ConvBertSelfAttentionModular(nn.Module):
             config, config.hidden_dim_list[layer_id], self.all_head_size, self.conv_kernel_size
         )
         self.conv_kernel_layer = nn.Linear(self.all_head_size, self.num_attention_heads * self.conv_kernel_size)
-        self.conv_out_layer = nn.Linear( config.hidden_dim_list[layer_id], self.all_head_size)
+        self.conv_out_layer = nn.Linear(config.hidden_dim_list[layer_id], self.all_head_size)
 
         self.unfold = nn.Unfold(
             kernel_size=[self.conv_kernel_size, 1], padding=[int((self.conv_kernel_size - 1) / 2), 0]
@@ -1094,7 +1116,6 @@ class ConvBertSelfAttentionModular(nn.Module):
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             seq_length = hidden_states.size()[1]
@@ -1111,7 +1132,6 @@ class ConvBertSelfAttentionModular(nn.Module):
                 relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
                 relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
-
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
@@ -1216,10 +1236,12 @@ class ConvBertIntermediateModular(nn.Module):
             self.dense = nn.Linear(config.hidden_dim_list[layer_id], config.ff_dim_list[layer_id][0])
         else:
             self.dense = GroupedLinearLayer(
-                input_size=config.hidden_dim_list[layer_id], output_size=config.ff_dim_list[layer_id][0], num_groups=config.num_groups
+                input_size=config.hidden_dim_list[layer_id],
+                output_size=config.ff_dim_list[layer_id][0],
+                num_groups=config.num_groups,
             )
         if isinstance(config.hidden_act, str):
-            
+
             if config.hidden_act == "gelu":
                 self.intermediate_act_fn = nn.GELU()
 
@@ -1228,27 +1250,30 @@ class ConvBertIntermediateModular(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-        
         modules = []
-        
+
         modules.append(self.dense)
         modules.append(self.intermediate_act_fn)
 
-        for i in range(len(config.ff_dim_list[layer_id])-1):
+        for i in range(len(config.ff_dim_list[layer_id]) - 1):
 
             if config.num_groups == 1:
-                modules.append(nn.Linear(config.ff_dim_list[layer_id][i], config.ff_dim_list[layer_id][i+1]))
+                modules.append(nn.Linear(config.ff_dim_list[layer_id][i], config.ff_dim_list[layer_id][i + 1]))
             else:
-               modules.append(GroupedLinearLayer(
-                input_size=config.ff_dim_list[layer_id][i], output_size=config.ff_dim_list[layer_id][i+1], num_groups=config.num_groups
-            ))
+                modules.append(
+                    GroupedLinearLayer(
+                        input_size=config.ff_dim_list[layer_id][i],
+                        output_size=config.ff_dim_list[layer_id][i + 1],
+                        num_groups=config.num_groups,
+                    )
+                )
 
             modules.append(self.intermediate_act_fn)
 
         self.sequential = nn.Sequential(*modules)
 
     def forward(self, hidden_states):
-        
+
         return self.sequential(hidden_states)
 
 
@@ -1259,23 +1284,24 @@ class ConvBertOutputModular(nn.Module):
             self.dense = nn.Linear(config.ff_dim_list[layer_id][-1], config.hidden_dim_list[layer_id])
         else:
             self.dense = GroupedLinearLayer(
-                input_size=config.ff_dim_list[layer_id][-1], output_size=config.hidden_dim_list[layer_id], num_groups=config.num_groups
+                input_size=config.ff_dim_list[layer_id][-1],
+                output_size=config.hidden_dim_list[layer_id],
+                num_groups=config.num_groups,
             )
         self.LayerNorm = nn.LayerNorm(config.hidden_dim_list[layer_id], eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.last_layer = last_layer
         if last_layer:
-                self.proj_required = False
+            self.proj_required = False
 
         else:
-            if  config.hidden_dim_list[layer_id]==config.hidden_dim_list[layer_id+1]:
+            if config.hidden_dim_list[layer_id] == config.hidden_dim_list[layer_id + 1]:
                 self.proj_required = False
             else:
                 self.proj_required = True
 
         if self.proj_required:
-            self.proj_head = nn.Linear(config.hidden_dim_list[layer_id],config.hidden_dim_list[layer_id+1])
-
+            self.proj_head = nn.Linear(config.hidden_dim_list[layer_id], config.hidden_dim_list[layer_id + 1])
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
@@ -1287,18 +1313,18 @@ class ConvBertOutputModular(nn.Module):
 
 
 class ConvBertLayerModular(nn.Module):
-    def __init__(self, config, layer_id, last_layer = False):
+    def __init__(self, config, layer_id, last_layer=False):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = ConvBertAttentionModular(config,layer_id)
+        self.attention = ConvBertAttentionModular(config, layer_id)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
-            self.crossattention = ConvBertAttentionModular(config,layer_id)
-        self.intermediate = ConvBertIntermediateModular(config,layer_id)
-        self.output = ConvBertOutputModular(config,layer_id,last_layer)
+            self.crossattention = ConvBertAttentionModular(config, layer_id)
+        self.intermediate = ConvBertIntermediateModular(config, layer_id)
+        self.output = ConvBertOutputModular(config, layer_id, last_layer)
 
     def forward(
         self,
@@ -1321,9 +1347,10 @@ class ConvBertLayerModular(nn.Module):
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         if self.is_decoder and encoder_hidden_states is not None:
-            assert hasattr(
-                self, "crossattention"
-            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+            assert hasattr(self, "crossattention"), (
+                f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by"
+                " setting `config.add_cross_attention=True`"
+            )
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 encoder_attention_mask,
@@ -1354,14 +1381,14 @@ class FlexiBERTEncoder(nn.Module):
 
         if config.from_model_dict_hetero:
             for layer_id in range(config.num_hidden_layers):
-                layer_list.append(FlexiBERTLayer(config,layer_id,layer_id == config.num_hidden_layers - 1))
+                layer_list.append(FlexiBERTLayer(config, layer_id, layer_id == config.num_hidden_layers - 1))
         else:
             for layer_id in range(config.num_hidden_layers):
-                if config.attention_type[layer_id] == 'c':
-                    layer_list.append(ConvBertLayerModular(config,layer_id,layer_id == config.num_hidden_layers - 1))
+                if config.attention_type[layer_id] == "c":
+                    layer_list.append(ConvBertLayerModular(config, layer_id, layer_id == config.num_hidden_layers - 1))
                 else:
-                    layer_list.append(FlexiBERTLayer(config,layer_id,layer_id == config.num_hidden_layers - 1))
-        
+                    layer_list.append(FlexiBERTLayer(config, layer_id, layer_id == config.num_hidden_layers - 1))
+
         self.layer = nn.ModuleList(layer_list)
 
     def forward(
@@ -1500,7 +1527,7 @@ class FlexiBERTLMPredictionHead(nn.Module):
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
-    
+
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -1550,7 +1577,7 @@ class FlexiBERTPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.weight", r"predictions.decoder.bias"]
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
@@ -1582,14 +1609,16 @@ class FlexiBERTForPreTrainingOutput(ModelOutput):
         seq_relationship_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, 2)`):
             Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
             before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        hidden_states (:
+            obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when
+            ``config.output_hidden_states=True``): Tuple of :obj:`torch.FloatTensor` (one for the output of the
+            embeddings + one for the output of each layer) of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
-            sequence_length, sequence_length)`.
+        attentions (:
+            obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when
+            ``config.output_attentions=True``): Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -1603,14 +1632,14 @@ class FlexiBERTForPreTrainingOutput(ModelOutput):
 
 
 FLEXIBERT_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config ([`~FlexiBERTConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 FLEXIBERT_INPUTS_DOCSTRING = r"""
@@ -1618,8 +1647,7 @@ FLEXIBERT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`FlexiBERTTokenizer`].
-            See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`FlexiBERTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1631,15 +1659,16 @@ FLEXIBERT_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range `[0, config.max_position_embeddings - 1]`.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
@@ -1649,9 +1678,9 @@ FLEXIBERT_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert *input_ids* indices into associated vectors
-            than the model's internal embedding lookup matrix.
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
+            model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -1681,7 +1710,7 @@ class FlexiBERTModel(FlexiBERTPreTrainedModel):
     input to the forward pass.
     """
 
-    def __init__(self, config, add_pooling_layer=True, transfer_mode='OD'):
+    def __init__(self, config, add_pooling_layer=True, transfer_mode="OD"):
         super().__init__(config)
         self.config = config
 
@@ -1689,7 +1718,7 @@ class FlexiBERTModel(FlexiBERTPreTrainedModel):
         self.encoder = FlexiBERTEncoder(config)
         self.pooler = FlexiBERTPooler(config) if add_pooling_layer else None
 
-        assert transfer_mode in ['OD', 'RP'], '"transfer_mode" should be either ordered (OD) or random projection (RP)'
+        assert transfer_mode in ["OD", "RP"], '"transfer_mode" should be either ordered (OD) or random projection (RP)'
         self.transfer_mode = transfer_mode
 
         self.post_init()
@@ -1702,282 +1731,544 @@ class FlexiBERTModel(FlexiBERTPreTrainedModel):
 
     def _prune_heads(self, heads_to_prune):
         """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        See base class PreTrainedModel
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     def load_model_from_source(self, source_model, debug=False):
         """
-        Loads the FlexiBERTModel from a source model. Updates weights of the layers uptil the hidden dimension matches. Also updates the weights 
-        for matching feed forward dimensions.
+        Loads the FlexiBERTModel from a source model. Updates weights of the layers uptil the hidden dimension matches.
+        Also updates the weights for matching feed forward dimensions.
         """
         count = 0
-        total = len(self.embeddings.state_dict())+len(self.encoder.state_dict())
+        total = len(self.embeddings.state_dict()) + len(self.encoder.state_dict())
 
         source_config = source_model.config
 
-        assert self.config.from_model_dict_hetero == source_config.from_model_dict_hetero, \
-            'Source model should (not) have heterogeneous configuration'
+        assert (
+            self.config.from_model_dict_hetero == source_config.from_model_dict_hetero
+        ), "Source model should (not) have heterogeneous configuration"
 
         # Load embeddings if input size same, otherwise, using projection
         if self.config.hidden_dim_list[0] == source_config.hidden_dim_list[0]:
             if debug:
-                print('Loading embeddings directly')
+                print("Loading embeddings directly")
 
             self.embeddings.load_state_dict(source_model.embeddings.state_dict())
-            count+=len(source_model.embeddings.state_dict())
+            count += len(source_model.embeddings.state_dict())
         else:
             if debug:
-                print(f'Transfering embeddings using mode: {self.transfer_mode}')
+                print(f"Transfering embeddings using mode: {self.transfer_mode}")
 
             lower_hidden_size = min(self.config.hidden_dim_list[0], source_config.hidden_dim_list[0])
             rp = random_projection.GaussianRandomProjection(lower_hidden_size)
 
             with torch.no_grad():
-                self.embeddings.LayerNorm.weight[:lower_hidden_size] = source_model.embeddings.LayerNorm.weight[:lower_hidden_size]
-                self.embeddings.LayerNorm.bias[:lower_hidden_size] = source_model.embeddings.LayerNorm.bias[:lower_hidden_size]
-                
-                if self.transfer_mode == 'OD':
-                    self.embeddings.word_embeddings.weight[:, :lower_hidden_size] = source_model.embeddings.word_embeddings.weight[:, :lower_hidden_size]
-                    self.embeddings.position_embeddings.weight[:, :lower_hidden_size] = source_model.embeddings.position_embeddings.weight[:, :lower_hidden_size]
-                    self.embeddings.token_type_embeddings.weight[:, :lower_hidden_size] = source_model.embeddings.token_type_embeddings.weight[:, :lower_hidden_size]
+                self.embeddings.LayerNorm.weight[:lower_hidden_size] = source_model.embeddings.LayerNorm.weight[
+                    :lower_hidden_size
+                ]
+                self.embeddings.LayerNorm.bias[:lower_hidden_size] = source_model.embeddings.LayerNorm.bias[
+                    :lower_hidden_size
+                ]
+
+                if self.transfer_mode == "OD":
+                    self.embeddings.word_embeddings.weight[
+                        :, :lower_hidden_size
+                    ] = source_model.embeddings.word_embeddings.weight[:, :lower_hidden_size]
+                    self.embeddings.position_embeddings.weight[
+                        :, :lower_hidden_size
+                    ] = source_model.embeddings.position_embeddings.weight[:, :lower_hidden_size]
+                    self.embeddings.token_type_embeddings.weight[
+                        :, :lower_hidden_size
+                    ] = source_model.embeddings.token_type_embeddings.weight[:, :lower_hidden_size]
                 else:
-                    self.embeddings.word_embeddings.weight[:, :lower_hidden_size] = nn.Parameter(torch.from_numpy(rp.fit_transform(
-                        source_model.embeddings.word_embeddings.weight[:, :lower_hidden_size].cpu().numpy())))
-                    self.embeddings.position_embeddings.weight[:, :lower_hidden_size] = nn.Parameter(torch.from_numpy(rp.fit_transform(
-                        source_model.embeddings.position_embeddings.weight[:, :lower_hidden_size].cpu().numpy())))
-                    self.embeddings.token_type_embeddings.weight[:, :lower_hidden_size] = nn.Parameter(torch.from_numpy(rp.fit_transform(
-                        source_model.embeddings.token_type_embeddings.weight[:, :lower_hidden_size].cpu().numpy())))
+                    self.embeddings.word_embeddings.weight[:, :lower_hidden_size] = nn.Parameter(
+                        torch.from_numpy(
+                            rp.fit_transform(
+                                source_model.embeddings.word_embeddings.weight[:, :lower_hidden_size].cpu().numpy()
+                            )
+                        )
+                    )
+                    self.embeddings.position_embeddings.weight[:, :lower_hidden_size] = nn.Parameter(
+                        torch.from_numpy(
+                            rp.fit_transform(
+                                source_model.embeddings.position_embeddings.weight[:, :lower_hidden_size].cpu().numpy()
+                            )
+                        )
+                    )
+                    self.embeddings.token_type_embeddings.weight[:, :lower_hidden_size] = nn.Parameter(
+                        torch.from_numpy(
+                            rp.fit_transform(
+                                source_model.embeddings.token_type_embeddings.weight[:, :lower_hidden_size]
+                                .cpu()
+                                .numpy()
+                            )
+                        )
+                    )
 
         # Loading encoder
         if self.config.from_model_dict_hetero:
             with torch.no_grad():
-                for i in range(min(self.config.num_hidden_layers,source_config.num_hidden_layers)):
+                for i in range(min(self.config.num_hidden_layers, source_config.num_hidden_layers)):
                     if debug:
-                        print(f'Checking layer {i}...')
+                        print(f"Checking layer {i}...")
 
-                    if self.transfer_mode in ['OD', 'RP']:
+                    if self.transfer_mode in ["OD", "RP"]:
 
-                        attention_head_size = int(self.config.attention_heads_list[i][0].split('_')[2])
-                        lower_all_head_size = min(self.encoder.layer[i].attention.self.query.weight.shape[1], 
-                            source_model.encoder.layer[i].attention.self.query.weight.shape[1])
-                        lower_attention_head_size = min(attention_head_size, int(source_config.attention_heads_list[i][0].split('_')[2]))
+                        attention_head_size = int(self.config.attention_heads_list[i][0].split("_")[2])
+                        # lower_all_head_size = min(
+                        #     self.encoder.layer[i].attention.self.query.weight.shape[1],
+                        #     source_model.encoder.layer[i].attention.self.query.weight.shape[1],
+                        # )
+                        lower_attention_head_size = min(
+                            attention_head_size, int(source_config.attention_heads_list[i][0].split("_")[2])
+                        )
                         lower_hidden_size = min(self.config.hidden_dim_list[i], source_config.hidden_dim_list[i])
 
                         rp = random_projection.GaussianRandomProjection(lower_hidden_size)
                         rp_att = random_projection.GaussianRandomProjection(lower_attention_head_size)
 
                         self.encoder.layer[i].attention.self.dropout.load_state_dict(
-                            source_model.encoder.layer[i].attention.self.dropout.state_dict())
+                            source_model.encoder.layer[i].attention.self.dropout.state_dict()
+                        )
 
-                        if attention_head_size == int(source_config.attention_heads_list[i][0].split('_')[2]):
+                        if attention_head_size == int(source_config.attention_heads_list[i][0].split("_")[2]):
                             if debug:
-                                print(f'\tLoading distace embeddings directly')
+                                print("\tLoading distace embeddings directly")
 
                             self.encoder.layer[i].attention.self.distance_embedding.load_state_dict(
-                                source_model.encoder.layer[i].attention.self.distance_embedding.state_dict())
+                                source_model.encoder.layer[i].attention.self.distance_embedding.state_dict()
+                            )
                         else:
                             if debug:
-                                print(f'\tTransfering distance embeddings using mode: {self.transfer_mode}')
+                                print(f"\tTransfering distance embeddings using mode: {self.transfer_mode}")
 
-                            if self.transfer_mode == 'OD':
-                                self.encoder.layer[i].attention.self.distance_embedding.weight[:, :lower_attention_head_size] = \
-                                    source_model.encoder.layer[i].attention.self.distance_embedding.weight[:, :lower_attention_head_size]
+                            if self.transfer_mode == "OD":
+                                self.encoder.layer[i].attention.self.distance_embedding.weight[
+                                    :, :lower_attention_head_size
+                                ] = source_model.encoder.layer[i].attention.self.distance_embedding.weight[
+                                    :, :lower_attention_head_size
+                                ]
                             else:
-                                self.encoder.layer[i].attention.self.distance_embedding.weight[:, :lower_attention_head_size] = \
-                                    nn.Parameter(torch.from_numpy(rp_att.fit_transform(
-                                        source_model.encoder.layer[i].attention.self.distance_embedding.weight.cpu().numpy())))
+                                self.encoder.layer[i].attention.self.distance_embedding.weight[
+                                    :, :lower_attention_head_size
+                                ] = nn.Parameter(
+                                    torch.from_numpy(
+                                        rp_att.fit_transform(
+                                            source_model.encoder.layer[i]
+                                            .attention.self.distance_embedding.weight.cpu()
+                                            .numpy()
+                                        )
+                                    )
+                                )
 
-                        curr_attn_types = [attention.split('_')[0] for attention in self.config.attention_heads_list[i]]
-                        source_attn_types = [attention.split('_')[0] for attention in source_config.attention_heads_list[i]]
+                        curr_attn_types = [
+                            attention.split("_")[0] for attention in self.config.attention_heads_list[i]
+                        ]
+                        source_attn_types = [
+                            attention.split("_")[0] for attention in source_config.attention_heads_list[i]
+                        ]
 
-                        curr_sim_types = [attention.split('_')[1] for attention in self.config.attention_heads_list[i]]
-                        source_sim_types = [attention.split('_')[1] for attention in source_config.attention_heads_list[i]]
+                        curr_sim_types = [attention.split("_")[1] for attention in self.config.attention_heads_list[i]]
+                        source_sim_types = [
+                            attention.split("_")[1] for attention in source_config.attention_heads_list[i]
+                        ]
 
-                        curr_all_head_size = len(self.config.attention_heads_list[i]) * int(self.config.attention_heads_list[i][0].split('_')[2])
-                        source_all_head_size = len(source_config.attention_heads_list[i]) * int(source_config.attention_heads_list[i][0].split('_')[2])
+                        curr_all_head_size = len(self.config.attention_heads_list[i]) * int(
+                            self.config.attention_heads_list[i][0].split("_")[2]
+                        )
+                        source_all_head_size = len(source_config.attention_heads_list[i]) * int(
+                            source_config.attention_heads_list[i][0].split("_")[2]
+                        )
 
                         wma_count, conv_count = 0, 0
-                        for j in range(min(len(self.config.attention_heads_list[i]), len(source_config.attention_heads_list[i]))):
+                        for j in range(
+                            min(len(self.config.attention_heads_list[i]), len(source_config.attention_heads_list[i]))
+                        ):
                             # We only transfer attention weights if the corresponding head is the same
                             if curr_attn_types[j] == source_attn_types[j]:
                                 if debug:
-                                    print(f'\tTransfering attention head {j}: {self.config.attention_heads_list[i][j]}')
+                                    print(
+                                        f"\tTransfering attention head {j}: {self.config.attention_heads_list[i][j]}"
+                                    )
 
-                                    self.encoder.layer[i].attention.self.query.bias[j*attention_head_size:(j+1)*attention_head_size] = \
-                                        source_model.encoder.layer[i].attention.self.query.bias[j*attention_head_size:(j+1)*attention_head_size]
-                                    self.encoder.layer[i].attention.self.key.bias[j*attention_head_size:(j+1)*attention_head_size] = \
-                                        source_model.encoder.layer[i].attention.self.key.bias[j*attention_head_size:(j+1)*attention_head_size]
-                                    self.encoder.layer[i].attention.self.value.bias[j*attention_head_size:(j+1)*attention_head_size] = \
-                                        source_model.encoder.layer[i].attention.self.value.bias[j*attention_head_size:(j+1)*attention_head_size]
+                                    self.encoder.layer[i].attention.self.query.bias[
+                                        j * attention_head_size : (j + 1) * attention_head_size
+                                    ] = source_model.encoder.layer[i].attention.self.query.bias[
+                                        j * attention_head_size : (j + 1) * attention_head_size
+                                    ]
+                                    self.encoder.layer[i].attention.self.key.bias[
+                                        j * attention_head_size : (j + 1) * attention_head_size
+                                    ] = source_model.encoder.layer[i].attention.self.key.bias[
+                                        j * attention_head_size : (j + 1) * attention_head_size
+                                    ]
+                                    self.encoder.layer[i].attention.self.value.bias[
+                                        j * attention_head_size : (j + 1) * attention_head_size
+                                    ] = source_model.encoder.layer[i].attention.self.value.bias[
+                                        j * attention_head_size : (j + 1) * attention_head_size
+                                    ]
 
                                     if self.config.hidden_dim_list[i] != source_config.hidden_dim_list[i]:
-                                        if self.transfer_mode == 'OD':
-                                            self.encoder.layer[i].attention.self.query.weight[j*attention_head_size:(j+1)*attention_head_size, :lower_hidden_size] = \
-                                                source_model.encoder.layer[i].attention.self.query.weight[j*attention_head_size:(j+1)*attention_head_size, :lower_hidden_size]
-                                            self.encoder.layer[i].attention.self.key.weight[j*attention_head_size:(j+1)*attention_head_size, :lower_hidden_size] = \
-                                                source_model.encoder.layer[i].attention.self.key.weight[j*attention_head_size:(j+1)*attention_head_size, :lower_hidden_size]
-                                            self.encoder.layer[i].attention.self.value.weight[j*attention_head_size:(j+1)*attention_head_size, :lower_hidden_size] = \
-                                                source_model.encoder.layer[i].attention.self.value.weight[j*attention_head_size:(j+1)*attention_head_size, :lower_hidden_size]
+                                        if self.transfer_mode == "OD":
+                                            self.encoder.layer[i].attention.self.query.weight[
+                                                j * attention_head_size : (j + 1) * attention_head_size,
+                                                :lower_hidden_size,
+                                            ] = source_model.encoder.layer[i].attention.self.query.weight[
+                                                j * attention_head_size : (j + 1) * attention_head_size,
+                                                :lower_hidden_size,
+                                            ]
+                                            self.encoder.layer[i].attention.self.key.weight[
+                                                j * attention_head_size : (j + 1) * attention_head_size,
+                                                :lower_hidden_size,
+                                            ] = source_model.encoder.layer[i].attention.self.key.weight[
+                                                j * attention_head_size : (j + 1) * attention_head_size,
+                                                :lower_hidden_size,
+                                            ]
+                                            self.encoder.layer[i].attention.self.value.weight[
+                                                j * attention_head_size : (j + 1) * attention_head_size,
+                                                :lower_hidden_size,
+                                            ] = source_model.encoder.layer[i].attention.self.value.weight[
+                                                j * attention_head_size : (j + 1) * attention_head_size,
+                                                :lower_hidden_size,
+                                            ]
                                         else:
-                                            self.encoder.layer[i].attention.self.query.weight[j*attention_head_size:(j+1)*attention_head_size, :lower_hidden_size] = \
-                                                nn.Parameter(torch.from_numpy(rp.fit_transform(
-                                                    source_model.encoder.layer[i].attention.self.query.weight[j*attention_head_size:(j+1)*attention_head_size, :lower_hidden_size].cpu().numpy())))
-                                            self.encoder.layer[i].attention.self.key.weight[j*attention_head_size:(j+1)*attention_head_size, :lower_hidden_size] = \
-                                                nn.Parameter(torch.from_numpy(rp.fit_transform(
-                                                    source_model.encoder.layer[i].attention.self.key.weight[j*attention_head_size:(j+1)*attention_head_size, :lower_hidden_size].cpu().numpy())))
-                                            self.encoder.layer[i].attention.self.value.weight[j*attention_head_size:(j+1)*attention_head_size, :lower_hidden_size] = \
-                                                nn.Parameter(torch.from_numpy(rp.fit_transform(
-                                                    source_model.encoder.layer[i].attention.self.value.weight[j*attention_head_size:(j+1)*attention_head_size, :lower_hidden_size].cpu().numpy())))
+                                            self.encoder.layer[i].attention.self.query.weight[
+                                                j * attention_head_size : (j + 1) * attention_head_size,
+                                                :lower_hidden_size,
+                                            ] = nn.Parameter(
+                                                torch.from_numpy(
+                                                    rp.fit_transform(
+                                                        source_model.encoder.layer[i]
+                                                        .attention.self.query.weight[
+                                                            j * attention_head_size : (j + 1) * attention_head_size,
+                                                            :lower_hidden_size,
+                                                        ]
+                                                        .cpu()
+                                                        .numpy()
+                                                    )
+                                                )
+                                            )
+                                            self.encoder.layer[i].attention.self.key.weight[
+                                                j * attention_head_size : (j + 1) * attention_head_size,
+                                                :lower_hidden_size,
+                                            ] = nn.Parameter(
+                                                torch.from_numpy(
+                                                    rp.fit_transform(
+                                                        source_model.encoder.layer[i]
+                                                        .attention.self.key.weight[
+                                                            j * attention_head_size : (j + 1) * attention_head_size,
+                                                            :lower_hidden_size,
+                                                        ]
+                                                        .cpu()
+                                                        .numpy()
+                                                    )
+                                                )
+                                            )
+                                            self.encoder.layer[i].attention.self.value.weight[
+                                                j * attention_head_size : (j + 1) * attention_head_size,
+                                                :lower_hidden_size,
+                                            ] = nn.Parameter(
+                                                torch.from_numpy(
+                                                    rp.fit_transform(
+                                                        source_model.encoder.layer[i]
+                                                        .attention.self.value.weight[
+                                                            j * attention_head_size : (j + 1) * attention_head_size,
+                                                            :lower_hidden_size,
+                                                        ]
+                                                        .cpu()
+                                                        .numpy()
+                                                    )
+                                                )
+                                            )
                                     else:
-                                        self.encoder.layer[i].attention.self.query.weight[j*attention_head_size:(j+1)*attention_head_size, :] = \
-                                            source_model.encoder.layer[i].attention.self.query.weight[j*attention_head_size:(j+1)*attention_head_size, :]
-                                        self.encoder.layer[i].attention.self.key.weight[j*attention_head_size:(j+1)*attention_head_size, :] = \
-                                            source_model.encoder.layer[i].attention.self.key.weight[j*attention_head_size:(j+1)*attention_head_size, :]
-                                        self.encoder.layer[i].attention.self.value.weight[j*attention_head_size:(j+1)*attention_head_size, :] = \
-                                            source_model.encoder.layer[i].attention.self.value.weight[j*attention_head_size:(j+1)*attention_head_size, :]
+                                        self.encoder.layer[i].attention.self.query.weight[
+                                            j * attention_head_size : (j + 1) * attention_head_size, :
+                                        ] = source_model.encoder.layer[i].attention.self.query.weight[
+                                            j * attention_head_size : (j + 1) * attention_head_size, :
+                                        ]
+                                        self.encoder.layer[i].attention.self.key.weight[
+                                            j * attention_head_size : (j + 1) * attention_head_size, :
+                                        ] = source_model.encoder.layer[i].attention.self.key.weight[
+                                            j * attention_head_size : (j + 1) * attention_head_size, :
+                                        ]
+                                        self.encoder.layer[i].attention.self.value.weight[
+                                            j * attention_head_size : (j + 1) * attention_head_size, :
+                                        ] = source_model.encoder.layer[i].attention.self.value.weight[
+                                            j * attention_head_size : (j + 1) * attention_head_size, :
+                                        ]
 
-                                if curr_sim_types[j] == 'wma' and source_sim_types[j] == 'wma':
-                                    if attention_head_size == int(source_config.attention_heads_list[i][0].split('_')[2]):
-                                        setattr(self.encoder.layer[i].attention.self, f'W{wma_count}', 
-                                            getattr(source_model.encoder.layer[i].attention.self, f'W{wma_count}'))
+                                if curr_sim_types[j] == "wma" and source_sim_types[j] == "wma":
+                                    if attention_head_size == int(
+                                        source_config.attention_heads_list[i][0].split("_")[2]
+                                    ):
+                                        setattr(
+                                            self.encoder.layer[i].attention.self,
+                                            f"W{wma_count}",
+                                            getattr(source_model.encoder.layer[i].attention.self, f"W{wma_count}"),
+                                        )
                                     else:
-                                        curr_w = getattr(self.encoder.layer[i].attention.self, f'W{wma_count}')
-                                        source_w = getattr(source_model.encoder.layer[i].attention.self, f'W{wma_count}')
+                                        curr_w = getattr(self.encoder.layer[i].attention.self, f"W{wma_count}")
+                                        source_w = getattr(
+                                            source_model.encoder.layer[i].attention.self, f"W{wma_count}"
+                                        )
 
-                                        if self.transfer_mode == 'OD':
-                                            curr_w[:lower_attention_head_size, :lower_attention_head_size] = source[:lower_attention_head_size, :lower_attention_head_size]
+                                        if self.transfer_mode == "OD":
+                                            curr_w[:lower_attention_head_size, :lower_attention_head_size] = source_w[
+                                                :lower_attention_head_size, :lower_attention_head_size
+                                            ]
                                         else:
                                             source_w = rp_att.fit_transform(source_w.cpu().numpy())
                                             source_w = rp_att.fit_transform(np.transpose(source_w))
-                                            curr_w[:lower_attention_head_size, :lower_attention_head_size] = nn.Parameter(torch.from_nump(source_w))
+                                            curr_w[
+                                                :lower_attention_head_size, :lower_attention_head_size
+                                            ] = nn.Parameter(torch.from_nump(source_w))
                                     wma_count += 1
                                 elif curr_sim_types[j].isnumeric():
                                     lower_sim_type = min(int(curr_sim_types[j]), int(source_sim_types[j]))
 
-                                    curr_key_conv_attn_layer = getattr(self.encoder.layer[i].attention.self, f'key_conv_attn_layer{conv_count}')
-                                    source_key_conv_attn_layer = getattr(source_model.encoder.layer[i].attention.self, f'key_conv_attn_layer{conv_count}')
-                                    curr_conv_kernel_layer = getattr(self.encoder.layer[i].attention.self, f'conv_kernel_layer{conv_count}')
-                                    source_conv_kernel_layer = getattr(source_model.encoder.layer[i].attention.self, f'conv_kernel_layer{conv_count}')
-                                    curr_conv_out_layer = getattr(self.encoder.layer[i].attention.self, f'conv_out_layer{conv_count}')
-                                    source_conv_out_layer = getattr(source_model.encoder.layer[i].attention.self, f'conv_out_layer{conv_count}')
-                                    curr_unfold = getattr(self.encoder.layer[i].attention.self, f'unfold{conv_count}')
-                                    source_unfold = getattr(source_model.encoder.layer[i].attention.self, f'unfold{conv_count}')
-                                    
+                                    curr_key_conv_attn_layer = getattr(
+                                        self.encoder.layer[i].attention.self, f"key_conv_attn_layer{conv_count}"
+                                    )
+                                    source_key_conv_attn_layer = getattr(
+                                        source_model.encoder.layer[i].attention.self,
+                                        f"key_conv_attn_layer{conv_count}",
+                                    )
+                                    curr_conv_kernel_layer = getattr(
+                                        self.encoder.layer[i].attention.self, f"conv_kernel_layer{conv_count}"
+                                    )
+                                    source_conv_kernel_layer = getattr(
+                                        source_model.encoder.layer[i].attention.self, f"conv_kernel_layer{conv_count}"
+                                    )
+                                    curr_conv_out_layer = getattr(
+                                        self.encoder.layer[i].attention.self, f"conv_out_layer{conv_count}"
+                                    )
+                                    source_conv_out_layer = getattr(
+                                        source_model.encoder.layer[i].attention.self, f"conv_out_layer{conv_count}"
+                                    )
+                                    curr_unfold = getattr(self.encoder.layer[i].attention.self, f"unfold{conv_count}")
+                                    source_unfold = getattr(
+                                        source_model.encoder.layer[i].attention.self, f"unfold{conv_count}"
+                                    )
+
                                     curr_unfold.load_state_dict(source_unfold.state_dict())
 
-                                    if attention_head_size == int(source_config.attention_heads_list[i][0].split('_')[2]) and int(curr_sim_types[j]) == int(source_sim_types[j]):
-                                        curr_key_conv_attn_layer.load_state_dict(source_key_conv_attn_layer.state_dict())
+                                    if attention_head_size == int(
+                                        source_config.attention_heads_list[i][0].split("_")[2]
+                                    ) and int(curr_sim_types[j]) == int(source_sim_types[j]):
+                                        curr_key_conv_attn_layer.load_state_dict(
+                                            source_key_conv_attn_layer.state_dict()
+                                        )
                                         curr_conv_kernel_layer.load_state_dict(source_conv_kernel_layer.state_dict())
                                         curr_conv_out_layer.load_state_dict(source_conv_out_layer.state_dict())
                                     else:
                                         # TODO: Implement RP for convolutional layers
-                                        curr_key_conv_attn_layer.bias[:lower_attention_head_size, :] = source_key_conv_attn_layer.bias[:lower_attention_head_size, :]
-                                        curr_key_conv_attn_layer.depthwise.weight[:lower_attention_head_size, :, :lower_sim_type] = \
-                                            torch.functional.F.interpolate(source_key_conv_attn_layer.depthwise.weight[:lower_attention_head_size, :, :], lower_sim_type)
-                                        curr_key_conv_attn_layer.pointwise.weight[:lower_attention_head_size, :lower_attention_head_size] = \
-                                            source_key_conv_attn_layer.pointwise.weight[:lower_attention_head_size, :lower_attention_head_size]
+                                        curr_key_conv_attn_layer.bias[
+                                            :lower_attention_head_size, :
+                                        ] = source_key_conv_attn_layer.bias[:lower_attention_head_size, :]
+                                        curr_key_conv_attn_layer.depthwise.weight[
+                                            :lower_attention_head_size, :, :lower_sim_type
+                                        ] = torch.functional.F.interpolate(
+                                            source_key_conv_attn_layer.depthwise.weight[
+                                                :lower_attention_head_size, :, :
+                                            ],
+                                            lower_sim_type,
+                                        )
+                                        curr_key_conv_attn_layer.pointwise.weight[
+                                            :lower_attention_head_size, :lower_attention_head_size
+                                        ] = source_key_conv_attn_layer.pointwise.weight[
+                                            :lower_attention_head_size, :lower_attention_head_size
+                                        ]
 
-                                        curr_conv_kernel_layer.weight[:lower_sim_type, :lower_attention_head_size] = source_conv_kernel_layer.weight[:lower_sim_type, :lower_attention_head_size]
-                                        curr_conv_kernel_layer.bias[:lower_sim_type] = source_conv_kernel_layer.bias[:lower_sim_type]
+                                        curr_conv_kernel_layer.weight[
+                                            :lower_sim_type, :lower_attention_head_size
+                                        ] = source_conv_kernel_layer.weight[
+                                            :lower_sim_type, :lower_attention_head_size
+                                        ]
+                                        curr_conv_kernel_layer.bias[:lower_sim_type] = source_conv_kernel_layer.bias[
+                                            :lower_sim_type
+                                        ]
 
-                                        curr_conv_out_layer.weight[:lower_attention_head_size, :lower_attention_head_size] = \
-                                            source_conv_out_layer.weight[:lower_attention_head_size, :lower_attention_head_size]
-                                        curr_conv_out_layer.bias[:lower_attention_head_size] = source_conv_out_layer.bias[:lower_attention_head_size]
+                                        curr_conv_out_layer.weight[
+                                            :lower_attention_head_size, :lower_attention_head_size
+                                        ] = source_conv_out_layer.weight[
+                                            :lower_attention_head_size, :lower_attention_head_size
+                                        ]
+                                        curr_conv_out_layer.bias[
+                                            :lower_attention_head_size
+                                        ] = source_conv_out_layer.bias[:lower_attention_head_size]
                                     conv_count += 1
 
-                            if curr_all_head_size == source_all_head_size and self.config.hidden_dim_list[i] == source_config.hidden_dim_list[i]:
-                                self.encoder.layer[i].attention.output.load_state_dict(source_model.encoder.layer[i].attention.output.state_dict())
+                            if (
+                                curr_all_head_size == source_all_head_size
+                                and self.config.hidden_dim_list[i] == source_config.hidden_dim_list[i]
+                            ):
+                                self.encoder.layer[i].attention.output.load_state_dict(
+                                    source_model.encoder.layer[i].attention.output.state_dict()
+                                )
                             else:
-                                self.encoder.layer[i].attention.output.dense.bias[:lower_hidden_size] = \
-                                    source_model.encoder.layer[i].attention.output.dense.bias[:lower_hidden_size]
+                                self.encoder.layer[i].attention.output.dense.bias[
+                                    :lower_hidden_size
+                                ] = source_model.encoder.layer[i].attention.output.dense.bias[:lower_hidden_size]
 
                                 if self.config.hidden_dim_list[i] != source_config.hidden_dim_list[i]:
-                                    if self.transfer_mode == 'OD':
-                                        self.encoder.layer[i].attention.output.dense.weight[:lower_hidden_size, j*attention_head_size:(j+1)*attention_head_size] = \
-                                            source_model.encoder.layer[i].attention.output.dense.weight[:lower_hidden_size, j*attention_head_size:(j+1)*attention_head_size]
+                                    if self.transfer_mode == "OD":
+                                        self.encoder.layer[i].attention.output.dense.weight[
+                                            :lower_hidden_size, j * attention_head_size : (j + 1) * attention_head_size
+                                        ] = source_model.encoder.layer[i].attention.output.dense.weight[
+                                            :lower_hidden_size, j * attention_head_size : (j + 1) * attention_head_size
+                                        ]
                                     else:
-                                        self.encoder.layer[i].attention.output.dense.weight[:lower_hidden_size, j*attention_head_size:(j+1)*attention_head_size] = \
-                                            nn.Parameter(torch.from_numpy(np.transpose(rp.fit_transform(np.transpose(
-                                                source_model.encoder.layer[i].attention.output.dense.weight[:lower_hidden_size, j*attention_head_size:(j+1)*attention_head_size].cpu().numpy())))))
+                                        self.encoder.layer[i].attention.output.dense.weight[
+                                            :lower_hidden_size, j * attention_head_size : (j + 1) * attention_head_size
+                                        ] = nn.Parameter(
+                                            torch.from_numpy(
+                                                np.transpose(
+                                                    rp.fit_transform(
+                                                        np.transpose(
+                                                            source_model.encoder.layer[i]
+                                                            .attention.output.dense.weight[
+                                                                :lower_hidden_size,
+                                                                j
+                                                                * attention_head_size : (j + 1)
+                                                                * attention_head_size,
+                                                            ]
+                                                            .cpu()
+                                                            .numpy()
+                                                        )
+                                                    )
+                                                )
+                                            )
+                                        )
                                 else:
-                                    self.encoder.layer[i].attention.output.dense.weight[:, j*attention_head_size:(j+1)*attention_head_size] = \
-                                            source_model.encoder.layer[i].attention.output.dense.weight[:, j*attention_head_size:(j+1)*attention_head_size]
+                                    self.encoder.layer[i].attention.output.dense.weight[
+                                        :, j * attention_head_size : (j + 1) * attention_head_size
+                                    ] = source_model.encoder.layer[i].attention.output.dense.weight[
+                                        :, j * attention_head_size : (j + 1) * attention_head_size
+                                    ]
 
-                                    assert self.encoder.layer[i].attention.output.dense.weight.shape[0] == lower_hidden_size
+                                    assert (
+                                        self.encoder.layer[i].attention.output.dense.weight.shape[0]
+                                        == lower_hidden_size
+                                    )
 
                         if self.config.hidden_dim_list[i] == source_config.hidden_dim_list[i]:
-                            self.encoder.layer[i].attention.output.LayerNorm.load_state_dict(source_model.encoder.layer[i].attention.output.LayerNorm.state_dict())
+                            self.encoder.layer[i].attention.output.LayerNorm.load_state_dict(
+                                source_model.encoder.layer[i].attention.output.LayerNorm.state_dict()
+                            )
                         else:
-                            self.encoder.layer[i].attention.output.LayerNorm.weight[:lower_hidden_size] = \
-                                source_model.encoder.layer[i].attention.output.LayerNorm.weight[:lower_hidden_size]
-                            self.encoder.layer[i].attention.output.LayerNorm.bias[:lower_hidden_size] = \
-                                source_model.encoder.layer[i].attention.output.LayerNorm.bias[:lower_hidden_size]
-                        
-                        self.encoder.layer[i].attention.output.dropout.load_state_dict(source_model.encoder.layer[i].attention.output.dropout.state_dict())
+                            self.encoder.layer[i].attention.output.LayerNorm.weight[
+                                :lower_hidden_size
+                            ] = source_model.encoder.layer[i].attention.output.LayerNorm.weight[:lower_hidden_size]
+                            self.encoder.layer[i].attention.output.LayerNorm.bias[
+                                :lower_hidden_size
+                            ] = source_model.encoder.layer[i].attention.output.LayerNorm.bias[:lower_hidden_size]
+
+                        self.encoder.layer[i].attention.output.dropout.load_state_dict(
+                            source_model.encoder.layer[i].attention.output.dropout.state_dict()
+                        )
 
                         # Transfer weights of feed-forward layer(s)
                         for f in range(min(len(self.config.ff_dim_list[i]), len(source_config.ff_dim_list[i]))):
                             if debug:
-                                print(f'\tTransfering feed-forward layer {f}')
-                            lower_dim_0 = min(self.encoder.layer[i].intermediate.sequential[2*f].weight.shape[0],
-                                source_model.encoder.layer[i].intermediate.sequential[2*f].weight.shape[0])
-                            lower_dim_1 = min(self.encoder.layer[i].intermediate.sequential[2*f].weight.shape[1],
-                                source_model.encoder.layer[i].intermediate.sequential[2*f].weight.shape[1])
-                            self.encoder.layer[i].intermediate.sequential[2*f].weight[:lower_dim_0, :lower_dim_1] = \
-                                source_model.encoder.layer[i].intermediate.sequential[2*f].weight[:lower_dim_0, :lower_dim_1]
-                            self.encoder.layer[i].intermediate.sequential[2*f].bias[:lower_dim_0] = \
-                                source_model.encoder.layer[i].intermediate.sequential[2*f].bias[:lower_dim_0]
-                            
+                                print(f"\tTransfering feed-forward layer {f}")
+                            lower_dim_0 = min(
+                                self.encoder.layer[i].intermediate.sequential[2 * f].weight.shape[0],
+                                source_model.encoder.layer[i].intermediate.sequential[2 * f].weight.shape[0],
+                            )
+                            lower_dim_1 = min(
+                                self.encoder.layer[i].intermediate.sequential[2 * f].weight.shape[1],
+                                source_model.encoder.layer[i].intermediate.sequential[2 * f].weight.shape[1],
+                            )
+                            self.encoder.layer[i].intermediate.sequential[2 * f].weight[:lower_dim_0, :lower_dim_1] = (
+                                source_model.encoder.layer[i]
+                                .intermediate.sequential[2 * f]
+                                .weight[:lower_dim_0, :lower_dim_1]
+                            )
+                            self.encoder.layer[i].intermediate.sequential[2 * f].bias[:lower_dim_0] = (
+                                source_model.encoder.layer[i].intermediate.sequential[2 * f].bias[:lower_dim_0]
+                            )
+
                         output_lower_dim = min(self.config.ff_dim_list[i][-1], source_config.ff_dim_list[i][-1])
-                        self.encoder.layer[i].output.dense.bias[:lower_hidden_size] = source_model.encoder.layer[i].output.dense.bias[:lower_hidden_size]
+                        self.encoder.layer[i].output.dense.bias[:lower_hidden_size] = source_model.encoder.layer[
+                            i
+                        ].output.dense.bias[:lower_hidden_size]
 
                         if self.config.hidden_dim_list[i] != source_config.hidden_dim_list[i]:
-                            if self.transfer_mode == 'OD':
-                                self.encoder.layer[i].output.dense.weight[:lower_hidden_size, :output_lower_dim] = \
-                                    source_model.encoder.layer[i].output.dense.weight[:lower_hidden_size, :output_lower_dim]
+                            if self.transfer_mode == "OD":
+                                self.encoder.layer[i].output.dense.weight[
+                                    :lower_hidden_size, :output_lower_dim
+                                ] = source_model.encoder.layer[i].output.dense.weight[
+                                    :lower_hidden_size, :output_lower_dim
+                                ]
                             else:
-                                self.encoder.layer[i].output.dense.weight[:lower_hidden_size, :output_lower_dim] = \
-                                    nn.Parameter(torch.from_numpy(np.transpose(rp.fit_transform(
-                                        np.transpose(source_model.encoder.layer[i].output.dense.weight[:lower_hidden_size, :output_lower_dim].cpu().numpy())))))
+                                self.encoder.layer[i].output.dense.weight[
+                                    :lower_hidden_size, :output_lower_dim
+                                ] = nn.Parameter(
+                                    torch.from_numpy(
+                                        np.transpose(
+                                            rp.fit_transform(
+                                                np.transpose(
+                                                    source_model.encoder.layer[i]
+                                                    .output.dense.weight[:lower_hidden_size, :output_lower_dim]
+                                                    .cpu()
+                                                    .numpy()
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
                         else:
-                            self.encoder.layer[i].output.dense.weight[:, :output_lower_dim] = source_model.encoder.layer[i].output.dense.weight[:, :output_lower_dim]
+                            self.encoder.layer[i].output.dense.weight[
+                                :, :output_lower_dim
+                            ] = source_model.encoder.layer[i].output.dense.weight[:, :output_lower_dim]
 
                         if self.config.hidden_dim_list[i] == source_config.hidden_dim_list[i]:
-                            self.encoder.layer[i].output.LayerNorm.load_state_dict(source_model.encoder.layer[i].output.LayerNorm.state_dict())
+                            self.encoder.layer[i].output.LayerNorm.load_state_dict(
+                                source_model.encoder.layer[i].output.LayerNorm.state_dict()
+                            )
                         else:
-                            self.encoder.layer[i].output.LayerNorm.weight[:lower_hidden_size] = source_model.encoder.layer[i].output.LayerNorm.weight[:lower_hidden_size]
-                            self.encoder.layer[i].output.LayerNorm.bias[:lower_hidden_size] = source_model.encoder.layer[i].output.LayerNorm.bias[:lower_hidden_size]
-                        
-                        self.encoder.layer[i].output.dropout.load_state_dict(source_model.encoder.layer[i].output.dropout.state_dict())
+                            self.encoder.layer[i].output.LayerNorm.weight[
+                                :lower_hidden_size
+                            ] = source_model.encoder.layer[i].output.LayerNorm.weight[:lower_hidden_size]
+                            self.encoder.layer[i].output.LayerNorm.bias[
+                                :lower_hidden_size
+                            ] = source_model.encoder.layer[i].output.LayerNorm.bias[:lower_hidden_size]
+
+                        self.encoder.layer[i].output.dropout.load_state_dict(
+                            source_model.encoder.layer[i].output.dropout.state_dict()
+                        )
         else:
-            for i in range(min(self.config.num_hidden_layers,source_config.num_hidden_layers)):
-                #Loading self attention 
-                if self.config.attention_type[i] == source_config.attention_type[i] :
-                    
-                    if self.config.hidden_dim_list[i] ==  source_config.hidden_dim_list[i] and \
-                    self.config.attention_heads_list[i] ==  source_config.attention_heads_list[i] and \
-                    self.config.similarity_list[i] == source_config.similarity_list[i]:
-                        
-                        self.encoder.layer[i].attention.load_state_dict(source_model.encoder.layer[i].attention.state_dict())
-                        count+=len(source_model.encoder.layer[i].attention.state_dict())
+            for i in range(min(self.config.num_hidden_layers, source_config.num_hidden_layers)):
+                # Loading self attention
+                if self.config.attention_type[i] == source_config.attention_type[i]:
 
-                        if self.config.ff_dim_list[i] == source_config.ff_dim_list[i] :
-                            self.encoder.layer[i].intermediate.load_state_dict(source_model.encoder.layer[i].intermediate.state_dict())
-                            count+=len(source_model.encoder.layer[i].intermediate.state_dict())
-                            # print("Intermediate loaded")
+                    if (
+                        self.config.hidden_dim_list[i] == source_config.hidden_dim_list[i]
+                        and self.config.attention_heads_list[i] == source_config.attention_heads_list[i]
+                        and self.config.similarity_list[i] == source_config.similarity_list[i]
+                    ):
 
-                            if i + 1 < min(self.config.num_hidden_layers,source_config.num_hidden_layers) \
-                                and self.config.hidden_dim_list[i+1] == source_config.hidden_dim_list[i+1]:
-                                self.encoder.layer[i].output.load_state_dict(source_model.encoder.layer[i].output.state_dict())
-                                count+=len(source_model.encoder.layer[i].output.state_dict())
-                                # print("Output loaded")
+                        self.encoder.layer[i].attention.load_state_dict(
+                            source_model.encoder.layer[i].attention.state_dict()
+                        )
+                        count += len(source_model.encoder.layer[i].attention.state_dict())
 
-                        # print("-"*3,"Loaded Weights for Layer:",i,"-"*3)
+                        if self.config.ff_dim_list[i] == source_config.ff_dim_list[i]:
+                            self.encoder.layer[i].intermediate.load_state_dict(
+                                source_model.encoder.layer[i].intermediate.state_dict()
+                            )
+                            count += len(source_model.encoder.layer[i].intermediate.state_dict())
+
+                            if (
+                                i + 1 < min(self.config.num_hidden_layers, source_config.num_hidden_layers)
+                                and self.config.hidden_dim_list[i + 1] == source_config.hidden_dim_list[i + 1]
+                            ):
+                                self.encoder.layer[i].output.load_state_dict(
+                                    source_model.encoder.layer[i].output.state_dict()
+                                )
+                                count += len(source_model.encoder.layer[i].output.state_dict())
                 else:
-                    # print("-"*3,"Done Loading Source","-"*3)
                     break
 
         return count * 1.0 / total
@@ -2007,23 +2298,22 @@ class FlexiBERTModel(FlexiBERTPreTrainedModel):
     ):
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-            if the model is configured as a decoder.
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
         encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
-            is used in the cross-attention if the model is configured as a decoder.
-            Mask values selected in `[0, 1]`:
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
         past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-            decoding (see `past_key_values`).
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2050,7 +2340,6 @@ class FlexiBERTModel(FlexiBERTPreTrainedModel):
 
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-
 
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
@@ -2118,12 +2407,12 @@ class FlexiBERTModel(FlexiBERTPreTrainedModel):
         )
 
 
-@add_start_docstrings("""FlexiBERT Model with a `language modeling` head on top. """, FLEXIBERT_START_DOCSTRING)
+@add_start_docstrings("""FlexiBERT Model with a `language modeling` head on top.""", FLEXIBERT_START_DOCSTRING)
 class FlexiBERTForMaskedLM(FlexiBERTPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.weight", r"predictions.decoder.bias"]
 
-    def __init__(self, config, transfer_mode='OD'):
+    def __init__(self, config, transfer_mode="OD"):
         super().__init__(config)
 
         if config.is_decoder:
@@ -2132,7 +2421,7 @@ class FlexiBERTForMaskedLM(FlexiBERTPreTrainedModel):
                 "bi-directional self-attention."
             )
 
-        assert transfer_mode in ['OD', 'RP'], '"transfer_mode" should be either ordered (OD) or random projection (RP)'
+        assert transfer_mode in ["OD", "RP"], '"transfer_mode" should be either ordered (OD) or random projection (RP)'
         self.transfer_mode = transfer_mode
 
         self.flexibert = FlexiBERTModel(config, add_pooling_layer=False, transfer_mode=self.transfer_mode)
@@ -2142,11 +2431,11 @@ class FlexiBERTForMaskedLM(FlexiBERTPreTrainedModel):
 
     def load_model_from_source(self, source_model, debug=False):
         initial_state_dict = copy.deepcopy(self.state_dict())
-        
+
         # Transfer weights
         self.flexibert.load_model_from_source(source_model.bert, debug)
         if debug:
-            print(f'Transfering MLM head\n')
+            print("Transfering MLM head\n")
         self.cls.load_state_dict(source_model.cls.state_dict())
 
         # Get ratio of transfer of weights
@@ -2156,12 +2445,13 @@ class FlexiBERTForMaskedLM(FlexiBERTPreTrainedModel):
             not_transferred_weights_sum += not_transferred_weights
             total_weights += torch.prod(torch.tensor(value.shape))
             if debug:
-                if not_transferred_weights != 0: print(f'Model key: {key} is not transferred (or has {not_transferred_weights} same weights)')
+                if not_transferred_weights != 0:
+                    print(f"Model key: {key} is not transferred (or has {not_transferred_weights} same weights)")
                 else:
-                    print(f'Model key: {key} is transferred successfully!')
+                    print(f"Model key: {key} is transferred successfully!")
 
         # Return weight transfer ratio
-        return (1 - not_transferred_weights_sum/total_weights)
+        return 1 - not_transferred_weights_sum / total_weights
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -2193,10 +2483,9 @@ class FlexiBERTForMaskedLM(FlexiBERTPreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss.
-            Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring)
-            Tokens with indices set to `-100` are ignored (masked), the loss is only computed for the tokens with labels
-            in `[0, ..., config.vocab_size]`.
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2249,13 +2538,13 @@ class FlexiBERTForMaskedLM(FlexiBERTPreTrainedModel):
 
 
 @add_start_docstrings(
-    """FlexiBERT Model with a `language modeling` head on top for CLM fine-tuning. """, FLEXIBERT_START_DOCSTRING
+    """FlexiBERT Model with a `language modeling` head on top for CLM fine-tuning.""", FLEXIBERT_START_DOCSTRING
 )
 class FlexiBERTForCausalLM(FlexiBERTPreTrainedModel):
 
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", r"predictions.decoder.weight"]
 
-    def __init__(self, config, transfer_mode='OD'):
+    def __init__(self, config, transfer_mode="OD"):
         super().__init__(config)
 
         if config.is_decoder:
@@ -2264,7 +2553,7 @@ class FlexiBERTForCausalLM(FlexiBERTPreTrainedModel):
                 "bi-directional self-attention."
             )
 
-        assert transfer_mode in ['OD', 'RP'], '"transfer_mode" should be either ordered (OD) or random projection (RP)'
+        assert transfer_mode in ["OD", "RP"], '"transfer_mode" should be either ordered (OD) or random projection (RP)'
         self.transfer_mode = transfer_mode
 
         self.flexibert = FlexiBERTModel(config, add_pooling_layer=False, transfer_mode=self.transfer_mode)
@@ -2274,11 +2563,11 @@ class FlexiBERTForCausalLM(FlexiBERTPreTrainedModel):
 
     def load_model_from_source(self, source_model, debug=False):
         initial_state_dict = copy.deepcopy(self.state_dict())
-        
+
         # Transfer weights
         self.flexibert.load_model_from_source(source_model.bert, debug)
         if debug:
-            print(f'Transfering MLM head\n')
+            print("Transfering MLM head\n")
         self.cls.load_state_dict(source_model.cls.state_dict())
 
         # Get ratio of transfer of weights
@@ -2288,12 +2577,13 @@ class FlexiBERTForCausalLM(FlexiBERTPreTrainedModel):
             not_transferred_weights_sum += not_transferred_weights
             total_weights += torch.prod(torch.tensor(value.shape))
             if debug:
-                if not_transferred_weights != 0: print(f'Model key: {key} is not transferred (or has {not_transferred_weights} same weights)')
+                if not_transferred_weights != 0:
+                    print(f"Model key: {key} is not transferred (or has {not_transferred_weights} same weights)")
                 else:
-                    print(f'Model key: {key} is transferred successfully!')
+                    print(f"Model key: {key} is transferred successfully!")
 
         # Return weight transfer ratio
-        return (1 - not_transferred_weights_sum/total_weights)
+        return 1 - not_transferred_weights_sum / total_weights
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
@@ -2304,22 +2594,22 @@ class FlexiBERTForCausalLM(FlexiBERTPreTrainedModel):
     @add_start_docstrings_to_model_forward(FLEXIBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            inputs_embeds=None,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            head_mask=None,
-            cross_attn_head_mask=None,
-            past_key_values=None,
-            labels=None,
-            use_cache=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        head_mask=None,
+        cross_attn_head_mask=None,
+        past_key_values=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -2332,26 +2622,24 @@ class FlexiBERTForCausalLM(FlexiBERTPreTrainedModel):
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2
-            tensors of shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional
-            tensors of shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two
-            additional tensors are only required when the model is used as a decoder in a Sequence to Sequence
-            model.
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two additional tensors are
+            only required when the model is used as a decoder in a Sequence to Sequence model.
 
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-            cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential
-            decoding.
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
 
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`.
         use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-            decoding (see `past_key_values`).
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
 
         Returns:
 
@@ -2361,17 +2649,16 @@ class FlexiBERTForCausalLM(FlexiBERTPreTrainedModel):
         >>> from transformers import FlexiBERTTokenizer, FlexiBERTForCausalLM, FlexiBERTConfig
         >>> import torch
 
-        >>> tokenizer = FlexiBERTTokenizer.from_pretrained('flexibert-mini')
+        >>> tokenizer = FlexiBERTTokenizer.from_pretrained("flexibert-mini")
         >>> config = FlexiBERTConfig.from_pretrained("flexibert-mini")
         >>> config.is_decoder = True
-        >>> model = FlexiBERTForCausalLM.from_pretrained('flexibert-mini', config=config)
+        >>> model = FlexiBERTForCausalLM.from_pretrained("flexibert-mini", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> prediction_logits = outputs.logits
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.flexibert(
@@ -2430,8 +2717,11 @@ class FlexiBERTForCausalLM(FlexiBERTPreTrainedModel):
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
         for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],)
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            )
         return reordered_past
+
 
 class FlexiBERTClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
@@ -2456,7 +2746,7 @@ class FlexiBERTClassificationHead(nn.Module):
 
 @add_start_docstrings(
     """FlexiBERT Model transformer with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
+    the pooled output) e.g. for GLUE tasks.""",
     FLEXIBERT_START_DOCSTRING,
 )
 class FlexiBERTForSequenceClassification(FlexiBERTPreTrainedModel):
@@ -2477,24 +2767,23 @@ class FlexiBERTForSequenceClassification(FlexiBERTPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in `[0, ..., config.num_labels - 1]`.
-            If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2546,9 +2835,10 @@ class FlexiBERTForSequenceClassification(FlexiBERTPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 @add_start_docstrings(
     """FlexiBERT Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    the pooled output and a softmax) e.g. for RocStories/SWAG tasks.""",
     FLEXIBERT_START_DOCSTRING,
 )
 class FlexiBERTForMultipleChoice(FlexiBERTPreTrainedModel):
@@ -2562,7 +2852,9 @@ class FlexiBERTForMultipleChoice(FlexiBERTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(FLEXIBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        FLEXIBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -2570,23 +2862,23 @@ class FlexiBERTForMultipleChoice(FlexiBERTPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in `[0, ..., num_choices-1]` where `num_choices` is the size of the second dimension
-            of the input tensors. (See `input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
+            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
+            `input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -2638,7 +2930,7 @@ class FlexiBERTForMultipleChoice(FlexiBERTPreTrainedModel):
 
 @add_start_docstrings(
     """FlexiBERT Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks.""",
     FLEXIBERT_START_DOCSTRING,
 )
 class FlexiBERTForTokenClassification(FlexiBERTPreTrainedModel):
@@ -2675,8 +2967,7 @@ class FlexiBERTForTokenClassification(FlexiBERTPreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss.
-            Indices should be in `[0, ..., config.num_labels - 1]`.
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2716,7 +3007,7 @@ class FlexiBERTForTokenClassification(FlexiBERTPreTrainedModel):
 
 @add_start_docstrings(
     """FlexiBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).""",
     FLEXIBERT_START_DOCSTRING,
 )
 class FlexiBERTForQuestionAnswering(FlexiBERTPreTrainedModel):
@@ -2756,12 +3047,12 @@ class FlexiBERTForQuestionAnswering(FlexiBERTPreTrainedModel):
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
