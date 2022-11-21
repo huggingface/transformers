@@ -2345,7 +2345,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 missing_keys,
                 unexpected_keys,
                 mismatched_keys,
-                offload_files,
+                offload_index,
                 error_msgs,
             ) = cls._load_pretrained_model(
                 model,
@@ -2374,7 +2374,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:
-            dispatch_model(model, device_map=device_map, offload_dir=offload_folder, offload_files=offload_files)
+            dispatch_model(model, device_map=device_map, offload_dir=offload_folder, offload_index=offload_index)
 
         if output_loading_info:
             if loading_info is None:
