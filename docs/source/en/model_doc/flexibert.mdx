@@ -1,0 +1,121 @@
+<!--Copyright 2022 Shikhar Tuli. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# FlexiBERT
+
+## Overview
+
+FlexiBERT is a suite of heterogeneous and flexible models proposed in [FlexiBERT: Are Current Transformer Architectures too Homogeneous and Rigid?](https://arxiv.org/abs/2205.11656) by Shikhar Tuli, Bhishma Dedhia, Shreshth Tuli, and Niraj K. Jha.
+
+The abstract from the paper is the following:
+
+The existence of a plethora of language models makes the problem of selecting the best one for a custom task challenging. Most state-of-the-art methods leverage transformer-based models (e.g., BERT) or their variants. Training such models and exploring their hyperparameter space, however, is computationally expensive. Prior work proposes several neural architecture search (NAS) methods that employ performance predictors (e.g., surrogate models) to address this issue; however, analysis has been limited to homogeneous models that use fixed dimensionality throughout the network. This leads to sub-optimal architectures. To address this limitation, we propose a suite of heterogeneous and flexible models, namely FlexiBERT, that have varied encoder layers with a diverse set of possible operations and different hidden dimensions. For better-posed surrogate modeling in this expanded design space, we propose a new graph-similarity-based embedding scheme. We also propose a novel NAS policy, called BOSHNAS, that leverages this new scheme, Bayesian modeling, and second-order optimization, to quickly train and use a neural surrogate model to converge to the optimal architecture. A comprehensive set of experiments shows that the proposed policy, when applied to the FlexiBERT design space, pushes the performance frontier upwards compared to traditional models. FlexiBERT-Mini, one of our proposed models, has 3% fewer parameters than BERT-Mini and achieves 8.9% higher GLUE score. A FlexiBERT model with equivalent performance as the best homogeneous model achieves 2.6x smaller size. FlexiBERT-Large, another proposed model, achieves state-of-the-art results, outperforming the baseline models by at least 5.7% on the GLUE benchmark.
+
+This model was contributed by [Shikhar Tuli](https://stuli.me). The original code can be found [here](https://github.com/jha-lab/txf_design-space).
+
+## FlexiBERTConfig
+
+[[autodoc]] FlexiBERTConfig
+
+
+## FlexiBERTTokenizer
+
+[[autodoc]] FlexiBERTTokenizer
+    - build_inputs_with_special_tokens
+    - get_special_tokens_mask
+    - create_token_type_ids_from_sequences
+    - save_vocabulary
+
+
+## FlexiBERTTokenizerFast
+
+[[autodoc]] FlexiBERTTokenizerFast
+
+
+## FlexiBERTModel
+
+[[autodoc]] FlexiBERTModel
+    - forward
+
+
+## FlexiBERTForCausalLM
+
+[[autodoc]] FlexiBERTForCausalLM
+    - forward
+
+
+## FlexiBERTForMaskedLM
+
+[[autodoc]] FlexiBERTForMaskedLM
+    - forward
+
+
+## FlexiBERTForSequenceClassification
+
+[[autodoc]] transformers.FlexiBERTForSequenceClassification
+    - forward
+
+## FlexiBERTForMultipleChoice
+
+[[autodoc]] transformers.FlexiBERTForMultipleChoice
+    - forward
+
+
+## FlexiBERTForTokenClassification
+
+[[autodoc]] transformers.FlexiBERTForTokenClassification
+    - forward
+
+
+## FlexiBERTForQuestionAnswering
+
+[[autodoc]] FlexiBERTForQuestionAnswering
+    - forward## TFFlexiBERTModel
+
+[[autodoc]] TFFlexiBERTModel
+    - call
+
+
+## TFFlexiBERTForMaskedLM
+
+[[autodoc]] TFFlexiBERTForMaskedLM
+    - call
+
+
+## TFFlexiBERTForCausalLM
+
+[[autodoc]] TFFlexiBERTForCausalLM
+    - call
+
+
+## TFFlexiBERTForSequenceClassification
+
+[[autodoc]] TFFlexiBERTForSequenceClassification
+    - call
+
+
+## TFFlexiBERTForMultipleChoice
+
+[[autodoc]] TFFlexiBERTForMultipleChoice
+    - call
+
+
+## TFFlexiBERTForTokenClassification
+
+[[autodoc]] TFFlexiBERTForTokenClassification
+    - call
+
+
+## TFFlexiBERTForQuestionAnswering
+
+[[autodoc]] TFFlexiBERTForQuestionAnswering
+    - call
