@@ -127,11 +127,11 @@ class ChineseCLIPProcessorTest(unittest.TestCase):
         processor = ChineseCLIPProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
         processor.save_pretrained(self.tmpdirname)
 
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
+        tokenizer_add_kwargs = self.get_tokenizer(cls_token="(CLS)", sep_token="(SEP)")
+        feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False)
 
         processor = ChineseCLIPProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+            self.tmpdirname, cls_token="(CLS)", sep_token="(SEP)", do_normalize=False
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
