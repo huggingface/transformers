@@ -15,7 +15,6 @@
 
 
 import unittest
-from copy import deepcopy
 
 from transformers import RobertaPreLayerNormConfig, is_torch_available
 from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
