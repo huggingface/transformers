@@ -30,13 +30,9 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 import h5py
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.keras import backend as K
-from tensorflow.python.keras.engine import data_adapter
-from tensorflow.python.keras.engine.keras_tensor import KerasTensor
-from tensorflow.python.keras.saving import hdf5_format
+from packaging.version import parse
 
 from huggingface_hub import Repository, list_repo_files
-from keras.saving.hdf5_format import save_attributes_to_hdf5_group
 from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 
 from . import DataCollatorWithPadding, DefaultDataCollator
@@ -66,6 +62,18 @@ from .utils import (
     requires_backends,
     working_or_temp_dir,
 )
+
+
+if parse(tf.__version__) >= parse("2.11.0"):
+    from keras import backend as K
+    from keras.engine import data_adapter
+    from keras.engine.keras_tensor import KerasTensor
+    from keras.saving.legacy import hdf5_format
+else:
+    from tensorflow.python.keras import backend as K
+    from tensorflow.python.keras.engine import data_adapter
+    from tensorflow.python.keras.engine.keras_tensor import KerasTensor
+    from tensorflow.python.keras.saving import hdf5_format
 
 
 if is_safetensors_available():
@@ -2310,7 +2318,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         )
                         param_dset[:] = layer.numpy()
                         layers.append(layer_name.encode("utf8"))
-                    save_attributes_to_hdf5_group(shard_file, "layer_names", layers)
+                    hdf5_format.save_attributes_to_hdf5_group(shard_file, "layer_names", layers)
 
         if push_to_hub:
             self._upload_modified_files(
