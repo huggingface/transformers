@@ -199,6 +199,7 @@ PYTORCH_EXPORT_MODELS = {
     ("roformer", "junnyu/roformer_chinese_base"),
     ("squeezebert", "squeezebert/squeezebert-uncased"),
     ("mobilebert", "google/mobilebert-uncased"),
+    ("mobilenet_v1", "google/mobilenet_v1_0.75_192"),
     ("mobilenet_v2", "google/mobilenet_v2_0.35_96"),
     ("mobilevit", "apple/mobilevit-small"),
     ("xlm", "xlm-clm-ende-1024"),
