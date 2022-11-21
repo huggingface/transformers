@@ -253,6 +253,13 @@ class MaskFormerFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class MaskFormerImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class MobileNetV1FeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -275,7 +282,6 @@ class MobileNetV2FeatureExtractor(metaclass=DummyObject):
 
 
 class MobileNetV2ImageProcessor(metaclass=DummyObject):
-class MaskFormerImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
