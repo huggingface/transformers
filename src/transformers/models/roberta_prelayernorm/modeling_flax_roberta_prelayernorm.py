@@ -218,6 +218,7 @@ class FlaxRobertaPreLayerNormSelfAttention(nn.Module):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.config.hidden_size,))
 
     @nn.compact
+    # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartAttention._concatenate_to_cache
     def _concatenate_to_cache(self, key, value, query, attention_mask):
         """
         This function takes projected key, value states from a single input token and concatenates the states to cached
@@ -347,7 +348,6 @@ class FlaxRobertaPreLayerNormSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfOutput with Bert->RobertaPreLayerNorm
 class FlaxRobertaPreLayerNormSelfOutput(nn.Module):
     config: RobertaPreLayerNormConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -742,6 +742,7 @@ class FlaxRobertaPreLayerNormPreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, gradient_checkpointing=gradient_checkpointing, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
+    # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainedModel.enable_gradient_checkpointing
     def enable_gradient_checkpointing(self):
         self._module = self.module_class(
             config=self.config,
@@ -791,6 +792,7 @@ class FlaxRobertaPreLayerNormPreTrainedModel(FlaxPreTrainedModel):
         else:
             return random_params
 
+    # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderPreTrainedModel.init_cache
     def init_cache(self, batch_size, max_length):
         r"""
         Args:
