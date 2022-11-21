@@ -113,6 +113,12 @@ class FlexiBERTConfig(PretrainedConfig):
         gradient_checkpointing=False,
         position_embedding_type="relative_key",
         use_cache=True,
+        attention_type=None,
+        hidden_dim_list=None,
+        attention_heads_list=None,
+        ff_dim_list=None,
+        similarity_list=None,
+        from_model_dict_hetero=False,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, 
@@ -141,12 +147,28 @@ class FlexiBERTConfig(PretrainedConfig):
         self.num_groups = num_groups
 
         # Set default values for BERT-like model
-        self.attention_type = ['sa'] * self.num_hidden_layers
-        self.hidden_dim_list = [hidden_size] * self.num_hidden_layers
-        self.attention_heads_list = [num_attention_heads] * self.num_hidden_layers
-        self.ff_dim_list = [[intermediate_size],] * self.num_hidden_layers
-        self.similarity_list = ['sdp'] * self.num_hidden_layers
-        self.from_model_dict_hetero = False
+        if attention_type is not None:
+            self.attention_type = attention_type
+        else:
+            self.attention_type = ['sa'] * self.num_hidden_layers
+        if hidden_dim_list is not None:
+            self.hidden_dim_list = hidden_dim_list
+        else:
+            self.hidden_dim_list = [hidden_size] * self.num_hidden_layers
+        if attention_heads_list is not None:
+            self.attention_heads_list = attention_heads_list
+        else:
+            self.attention_heads_list = [num_attention_heads] * self.num_hidden_layers
+        if ff_dim_list is not None:
+            self.ff_dim_list = ff_dim_list
+        else:
+            self.ff_dim_list = [[intermediate_size],] * self.num_hidden_layers
+        if similarity_list is not None:
+            self.similarity_list = similarity_list
+        else:
+            self.similarity_list = ['sdp'] * self.num_hidden_layers
+        
+        self.from_model_dict_hetero = from_model_dict_hetero
        
 
     def from_model_dict(self, model_dict):
