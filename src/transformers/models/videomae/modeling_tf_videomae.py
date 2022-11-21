@@ -117,7 +117,7 @@ def get_sinusoid_encoding_table(n_position, d_hid):
     sinusoid_table[:, 0::2] = np.sin(sinusoid_table[:, 0::2])  # dim 2i
     sinusoid_table[:, 1::2] = np.cos(sinusoid_table[:, 1::2])  # dim 2i+1
 
-    return tf.Tensor(sinusoid_table)[None, ...]
+    return tf.convert_to_tensor(sinusoid_table)[None, ...]
 
 
 class TFVideoMAEEmbeddings(tf.keras.layers.Layer):
@@ -132,7 +132,9 @@ class TFVideoMAEEmbeddings(tf.keras.layers.Layer):
         self.patch_embeddings = TFVideoMAEPatchEmbeddings(config, name="patch_embeddings")
         self.num_patches = self.patch_embeddings.num_patches
         # fixed sin-cos embedding
-        self.position_embeddings = get_sinusoid_encoding_table(self.num_patches, config.hidden_size)
+        self.position_embeddings = tf.cast(
+            get_sinusoid_encoding_table(self.num_patches, config.hidden_size), "float32"
+        )
         self.config = config
 
     def call(self, pixel_values, bool_masked_pos):
@@ -282,7 +284,6 @@ class TFVideoMAESelfAttention(tf.keras.layers.Layer):
         attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
         dk = tf.cast(self.sqrt_att_head_size, dtype=attention_scores.dtype)
         attention_scores = tf.divide(attention_scores, dk)
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
         # Normalize the attention scores to probabilities.
         attention_probs = stable_softmax(attention_scores, axis=-1)
@@ -469,9 +470,11 @@ class TFVideoMAEEncoder(tf.keras.layers.Layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
+            layer_head_mask = head_mask[i] if head_mask is not None else None
+
             layer_outputs = layer_module(
                 hidden_states=hidden_states,
-                head_mask=head_mask[i],
+                head_mask=layer_head_mask,
                 output_attentions=output_attentions,
                 training=training,
             )
@@ -1031,7 +1034,7 @@ class TFVideoMAEForVideoClassification(TFVideoMAEPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.videomae = TFVideoMAEModel(config, name="videomae")
+        self.videomae = TFVideoMAEMainLayer(config, name="videomae")
 
         # Classifier head
         self.fc_norm = (
@@ -1124,7 +1127,7 @@ class TFVideoMAEForVideoClassification(TFVideoMAEPreTrainedModel):
         sequence_output = outputs[0]
 
         if self.fc_norm is not None:
-            sequence_output = self.fc_norm(tf.reduce_mean(sequence_output(axis=1)))
+            sequence_output = self.fc_norm(tf.reduce_mean(sequence_output, axis=1))
         else:
             sequence_output = sequence_output[:, 0]
 
