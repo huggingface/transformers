@@ -160,7 +160,7 @@ class ChineseCLIPProcessorTest(unittest.TestCase):
 
         processor = ChineseCLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
-        input_str = "lower newer"
+        input_str = "Alexandra，T-shirt的价格是15便士。"
 
         encoded_processor = processor(text=input_str)
 
@@ -175,12 +175,12 @@ class ChineseCLIPProcessorTest(unittest.TestCase):
 
         processor = ChineseCLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
-        input_str = "lower newer"
+        input_str = "Alexandra，T-shirt的价格是15便士。"
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values"])
+        self.assertListEqual(list(inputs.keys()), ["input_ids", "token_type_ids", "attention_mask", "pixel_values"])
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
@@ -205,7 +205,7 @@ class ChineseCLIPProcessorTest(unittest.TestCase):
 
         processor = ChineseCLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
-        input_str = "lower newer"
+        input_str = "Alexandra，T-shirt的价格是15便士。"
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input)
