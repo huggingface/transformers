@@ -121,6 +121,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.flexibert": ["FLEXIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlexiBERTConfig", "FlexiBERTTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -592,6 +593,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
+    _import_structure["models.flexibert"].append("FlexiBERTTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -852,6 +854,22 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.flexibert"].extend(
+        [
+            "FLEXIBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FlexiBERTForMaskedLM",
+            "FlexiBERTForCausalLM",
+            "FlexiBERTForMultipleChoice",
+            "FlexiBERTForQuestionAnswering",
+            "FlexiBERTForSequenceClassification",
+            "FlexiBERTForTokenClassification",
+            "FlexiBERTLayer",
+            "FlexiBERTModel",
+            "FlexiBERTPreTrainedModel",
+            "load_tf_weights_in_flexibert",
+        ]
+    )
 
     _import_structure["models.roc_bert"].extend(
         [
@@ -2371,6 +2389,21 @@ else:
         "shape_list",
     ]
     # TensorFlow models structure
+
+    _import_structure["models.flexibert"].extend(
+        [
+            "TF_FLEXIBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFFlexiBERTForMaskedLM",
+            "TFFlexiBERTForCausalLM",
+            "TFFlexiBERTForMultipleChoice",
+            "TFFlexiBERTForQuestionAnswering",
+            "TFFlexiBERTForSequenceClassification",
+            "TFFlexiBERTForTokenClassification",
+            "TFFlexiBERTLayer",
+            "TFFlexiBERTModel",
+            "TFFlexiBERTPreTrainedModel",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3301,6 +3334,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.flexibert import FLEXIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlexiBERTConfig, FlexiBERTTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -3729,6 +3763,7 @@ if TYPE_CHECKING:
         from .utils.dummy_tokenizers_objects import *
     else:
         # Fast tokenizers imports
+        from .models.flexibert import FlexiBERTTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -3942,6 +3977,20 @@ if TYPE_CHECKING:
         from .modeling_utils import PreTrainedModel
 
         # PyTorch model imports
+
+        from .models.flexibert import (
+            FLEXIBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FlexiBERTForMaskedLM,
+            FlexiBERTForCausalLM,
+            FlexiBERTForMultipleChoice,
+            FlexiBERTForQuestionAnswering,
+            FlexiBERTForSequenceClassification,
+            FlexiBERTForTokenClassification,
+            FlexiBERTLayer,
+            FlexiBERTModel,
+            FlexiBERTPreTrainedModel,
+            load_tf_weights_in_flexibert,
+        )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -5196,6 +5245,19 @@ if TYPE_CHECKING:
         from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, shape_list
 
         # TensorFlow model imports
+
+        from .models.flexibert import (
+            TF_FLEXIBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFFlexiBERTForMaskedLM,
+            TFFlexiBERTForCausalLM,
+            TFFlexiBERTForMultipleChoice,
+            TFFlexiBERTForQuestionAnswering,
+            TFFlexiBERTForSequenceClassification,
+            TFFlexiBERTForTokenClassification,
+            TFFlexiBERTLayer,
+            TFFlexiBERTModel,
+            TFFlexiBERTPreTrainedModel,
+        )
         from .models.albert import (
             TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFAlbertForMaskedLM,
