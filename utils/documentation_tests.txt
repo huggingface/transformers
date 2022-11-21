@@ -18,6 +18,7 @@ src/transformers/generation/utils.py
 src/transformers/models/albert/configuration_albert.py
 src/transformers/models/albert/modeling_albert.py
 src/transformers/models/albert/modeling_tf_albert.py
+src/transformers/models/audio_spectogram_transformer/modeling_audio_spectogram_transformer.py
 src/transformers/models/bart/configuration_bart.py
 src/transformers/models/bart/modeling_bart.py
 src/transformers/models/beit/configuration_beit.py
