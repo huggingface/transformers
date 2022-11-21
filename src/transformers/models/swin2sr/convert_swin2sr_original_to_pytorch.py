@@ -18,10 +18,9 @@ import argparse
 
 import torch
 from PIL import Image
-from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 import requests
-from transformers import Swin2SRConfig, Swin2SRForImageSuperResolution
+from transformers import Swin2SRConfig, Swin2SRForImageSuperResolution, Swin2SRImageProcessor
 
 
 def get_config(checkpoint_url):
@@ -160,25 +159,12 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
         if not ("relative_position_index" in key or "relative_coords_table" in key or "self_mask" in key):
             raise ValueError(f"Unexpected key {key} in state_dict")
 
-    # TODO create feature extractor
+    # verify values
+    processor = Swin2SRImageProcessor()
     url = "https://github.com/mv-lab/swin2sr/blob/main/testsets/real-inputs/shanghai.jpg?raw=true"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-    image_size = 126 if "Jpeg" in checkpoint_url else 256
-    transforms = Compose(
-        [
-            Resize((image_size, image_size)),
-            ToTensor(),
-            Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
-    )
-
-    pixel_values = transforms(image).unsqueeze(0)
-
-    if config.num_channels == 1:
-        pixel_values = pixel_values[:, 0, :, :].unsqueeze(1)
-
-    print("Shape of pixel values:", pixel_values.shape)
+    pixel_values = processor(image).pixel_values
 
     outputs = model(pixel_values)
 
@@ -219,33 +205,34 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     assert torch.allclose(outputs.reconstruction[0, 0, :3, :3], expected_slice, atol=1e-3)
     print("Looks ok!")
 
+    url_to_name = {
+        "https://github.com/mv-lab/swin2sr/releases/download/v0.0.1/Swin2SR_ClassicalSR_X2_64.pth": (
+            "swin2SR-classical-sr-x2-64"
+        ),
+        "https://github.com/mv-lab/swin2sr/releases/download/v0.0.1/Swin2SR_ClassicalSR_X4_64.pth": (
+            "swin2SR-classical-sr-x4-64"
+        ),
+        "https://github.com/mv-lab/swin2sr/releases/download/v0.0.1/Swin2SR_CompressedSR_X4_48.pth": (
+            "swin2SR-compressed-sr-x4-48"
+        ),
+        "https://github.com/mv-lab/swin2sr/releases/download/v0.0.1/Swin2SR_Lightweight_X2_64.pth": (
+            "swin2SR-lightweight-x2-64"
+        ),
+        "https://github.com/mv-lab/swin2sr/releases/download/v0.0.1/Swin2SR_RealworldSR_X4_64_BSRGAN_PSNR.pth": (
+            "swin2SR-realworld-sr-x4-64-bsrgan-psnr"
+        ),
+    }
+    model_name = url_to_name[checkpoint_url]
+
     if pytorch_dump_folder_path is not None:
-        url_to_name = {
-            "https://github.com/mv-lab/swin2sr/releases/download/v0.0.1/Swin2SR_ClassicalSR_X2_64.pth": (
-                "swin2SR-classical-sr-x2-64"
-            ),
-            "https://github.com/mv-lab/swin2sr/releases/download/v0.0.1/Swin2SR_ClassicalSR_X4_64.pth": (
-                "swin2SR-classical-sr-x4-64"
-            ),
-            "https://github.com/mv-lab/swin2sr/releases/download/v0.0.1/Swin2SR_CompressedSR_X4_48.pth": (
-                "swin2SR-compressed-sr-x4-48"
-            ),
-            "https://github.com/mv-lab/swin2sr/releases/download/v0.0.1/Swin2SR_Lightweight_X2_64.pth": (
-                "swin2SR-lightweight-x2-64"
-            ),
-            "https://github.com/mv-lab/swin2sr/releases/download/v0.0.1/Swin2SR_RealworldSR_X4_64_BSRGAN_PSNR.pth": (
-                "swin2SR-realworld-sr-x4-64-bsrgan-psnr"
-            ),
-        }
-        model_name = url_to_name[checkpoint_url]
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-
-        # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-        # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving image processor to {pytorch_dump_folder_path}")
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         model.push_to_hub(f"nielsr/{model_name}")
+        processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
