@@ -113,6 +113,7 @@ src/transformers/models/megatron_bert/configuration_megatron_bert.py
 src/transformers/models/mobilebert/configuration_mobilebert.py
 src/transformers/models/mobilebert/modeling_mobilebert.py
 src/transformers/models/mobilebert/modeling_tf_mobilebert.py
+src/transformers/models/mobilenet_v1/modeling_mobilenet_v1.py
 src/transformers/models/mobilenet_v2/modeling_mobilenet_v2.py
 src/transformers/models/mobilevit/modeling_mobilevit.py
 src/transformers/models/mobilevit/modeling_tf_mobilevit.py

@@ -410,6 +410,8 @@
         title: LeViT
       - local: model_doc/maskformer
         title: MaskFormer
+      - local: model_doc/mobilenet_v1
+        title: MobileNetV1
       - local: model_doc/mobilenet_v2
         title: MobileNetV2
       - local: model_doc/mobilevit
