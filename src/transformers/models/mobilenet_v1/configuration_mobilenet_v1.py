@@ -27,8 +27,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/mobilenet_v1_1.0_224": "https://huggingface.co/Matthijs/mobilenet_v1_1.0_224/resolve/main/config.json",
-    "google/mobilenet_v1_0.75_192": "https://huggingface.co/Matthijs/mobilenet_v1_0.75_192/resolve/main/config.json",
+    "google/mobilenet_v1_1.0_224": "https://huggingface.co/google/mobilenet_v1_1.0_224/resolve/main/config.json",
+    "google/mobilenet_v1_0.75_192": "https://huggingface.co/google/mobilenet_v1_0.75_192/resolve/main/config.json",
     # See all MobileNetV1 models at https://huggingface.co/models?filter=mobilenet_v1
 }
 
@@ -38,7 +38,7 @@ class MobileNetV1Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`MobileNetV1Model`]. It is used to instantiate a
     MobileNetV1 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MobileNetV1
-    [Matthijs/mobilenet_v1_1.0_224](https://huggingface.co/Matthijs/mobilenet_v1_1.0_224) architecture.
+    [google/mobilenet_v1_1.0_224](https://huggingface.co/google/mobilenet_v1_1.0_224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
