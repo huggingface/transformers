@@ -6,7 +6,7 @@ orbs:
 parameters:
     nightly:
         type: boolean
-        default: true
+        default: false
 
 jobs:
     # Fetch the tests to run
