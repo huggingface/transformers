@@ -16,6 +16,7 @@ import dataclasses
 import json
 import sys
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, ArgumentTypeError
+from ast import Call
 from copy import copy
 from enum import Enum
 from inspect import isclass
@@ -29,12 +30,9 @@ try:
     # For Python versions <3.8, Literal is not in typing: https://peps.python.org/pep-0586/
     from typing import Literal
 except ImportError:
-    try:
-        # For Python 3.7
-        from typing_extensions import Literal
-    except ImportError:
-        # On older Python versions, we cannot use Literal
-        Literal = None
+    # For Python 3.7
+    from typing_extensions import Literal
+
 
 DataClass = NewType("DataClass", Any)
 DataClassType = NewType("DataClassType", Any)
@@ -54,7 +52,16 @@ def string_to_bool(v):
         )
 
 
-def make_choice_type_function(choices):
+def make_choice_type_function(choices: list) -> Callable[[str], Any]:
+    """
+    Creates a mapping function from each choices string representation to the actual value. Used to support multiple value types for a single argument.
+
+    Args:
+        choices (list): List of choices.
+
+    Returns:
+        Callable[[str], Any]: Mapping function from string representation to actual value for each choice.
+    """
     str_to_choice = {str(choice): choice for choice in choices}
     return lambda arg: str_to_choice.get(arg, arg)
 
@@ -67,9 +74,8 @@ def HfArg(
     default_factory: Callable[[], Any] = dataclasses.MISSING,
     metadata: dict = None,
     **kwargs,
-):
-    """
-    Argument helper enabling a concise syntax to create dataclass fields for parsing with `HfArgumentParser`.
+) -> dataclasses.Field:
+    """Argument helper enabling a concise syntax to create dataclass fields for parsing with `HfArgumentParser`.
 
     Example comparing the use of `HfArg` and `dataclasses.field`:
     ```
@@ -80,22 +86,15 @@ def HfArg(
     ```
 
     Args:
-        aliases:
-            Single string or list of strings of aliases to pass on to argparse, e.g. `aliases=["--example", "-e"]`
-        help:
-            Help string to pass on to argparse that can be displayed with --help.
-        default:
-            Default value. If not default or default_factory is specified, the argument is required.
-        default_factory:
-            The default_factory is a 0-argument function called to initialize a field's value. It is useful to provide
-            default values for mutable types, e.g. lists: `default_factory=list`
-        metadata:
-            Further metadata to pass on to `dataclasses.field`.
-        kwargs:
-            (Optional) Passed on to `dataclasses.field`.
+        aliases (Union[str, List[str]], optional): Single string or list of strings of aliases to pass on to argparse, e.g. `aliases=["--example", "-e"]`. Defaults to None.
+        help (str, optional): Help string to pass on to argparse that can be displayed with --help. Defaults to None.
+        default (Any, optional): Default value for the argument. If not default or default_factory is specified, the argument is required. Defaults to dataclasses.MISSING.
+        default_factory (Callable[[], Any], optional): The default_factory is a 0-argument function called to initialize a field's value. It is useful to provide
+            default values for mutable types, e.g. lists: `default_factory=list`. Mutually exclusive with `default=`. Defaults to dataclasses.MISSING.
+        metadata (dict, optional): Further metadata to pass on to `dataclasses.field`. Defaults to None.
 
     Returns:
-        A `dataclasses.field` with the desired properties.
+        Field: A `dataclasses.Field` with the desired properties.
     """
     if metadata is None:
         # Important, don't use as default param in function signature because dict is mutable and shared across function calls

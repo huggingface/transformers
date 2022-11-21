@@ -32,12 +32,8 @@ try:
     # For Python versions <3.8, Literal is not in typing: https://peps.python.org/pep-0586/
     from typing import Literal
 except ImportError:
-    try:
-        # For Python 3.7
-        from typing_extensions import Literal
-    except ImportError:
-        # On older Python versions, we cannot use Literal
-        Literal = None
+    # For Python 3.7
+    from typing_extensions import Literal
 
 
 def list_field(default=None, metadata=None):
@@ -224,10 +220,6 @@ class HfArgumentParserTest(unittest.TestCase):
         self.assertEqual(enum_ex.foo, MixedTypeEnum.fourtytwo)
 
     def test_with_literal(self):
-        # In Python 3.6, we don't have Literal
-        if Literal is None:
-            return
-
         @dataclass
         class LiteralExample:
             foo: Literal["titi", "toto", 42] = "toto"
