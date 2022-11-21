@@ -14,14 +14,14 @@
 # limitations under the License.
 """Image processor class for Swin2SR."""
 
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
 from transformers.utils.generic import TensorType
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import pad, rescale, to_channel_dimension_format
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_transforms import rescale, to_channel_dimension_format
 from ...image_utils import ChannelDimension, ImageInput, is_batched, to_numpy_array, valid_images
 from ...utils import logging
 
@@ -40,44 +40,15 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `(size["height"],
-            size["width"])`. Can be overridden by the `do_resize` parameter in the `preprocess` method.
-        size (`dict`, *optional*, defaults to `{"height": 224, "width": 224}`):
-            Size of the output image after padding. Can be overridden by the `size` parameter in the `preprocess`
-            method.
-        do_normalize:
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels of the image.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether or not to normalize the input by subtracting a mean and multiplying by range.
     """
 
     model_input_names = ["pixel_values"]
 
-    def __init__(
-        self,
-        do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_pad: bool = True,
-        size: Optional[Dict[str, int]] = None,
-        num_channels: int = 3,
-        do_normalize: bool = True,
-        **kwargs
-    ) -> None:
+    def __init__(self, do_rescale: bool = True, rescale_factor: Union[int, float] = 1 / 255, **kwargs) -> None:
         super().__init__(**kwargs)
-        size = size if size is not None else {"height": 224, "width": 224}
-        size = get_size_dict(size)
 
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
-        self.do_pad = do_pad
-        self.size = size
-        self.do_normalize = do_normalize
-        self.mean = (0.4488, 0.4371, 0.4040) if num_channels == 3 else (0.0, 0.0, 0.0)
-        self.range = 1.0 if num_channels == 3 else 255.0
 
     def rescale(
         self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
@@ -101,39 +72,11 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         """
         return rescale(image, scale=scale, data_format=data_format, **kwargs)
 
-    def pad(self, image):
-        return -1
-
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: Union[float, List[float]],
-        range: float,
-    ) -> np.ndarray:
-        """
-        Normalize an image. image = (image - mean) * range.
-
-        Args:
-            image (`np.ndarray`):
-                Image to normalize.
-            ...
-
-        Returns:
-            `np.ndarray`: The normalized image.
-        """
-        image = (image - mean) * range
-
-        return image
-
     def preprocess(
         self,
         images: ImageInput,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
-        do_pad: Optional[bool] = None,
-        size: Dict[str, int] = None,
-        num_channels: int = 3,
-        do_normalize: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         **kwargs,
@@ -144,24 +87,10 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 Image to preprocess.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Dictionary in the format `{"height": h, "width": w}` specifying the size of the output image after
-                resizing.
-            resample (`PILImageResampling` filter, *optional*, defaults to `self.resample`):
-                `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
-                an effect if `do_resize` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use if `do_normalize` is set to `True`.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
@@ -176,20 +105,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
                 - Unset: Use the channel dimension format of the input image.
         """
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        do_pad = do_pad if do_pad is not None else self.do_pad
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        if self.mean is not None:
-            mean = self.mean
-        else:
-            mean = (0.4488, 0.4371, 0.4040) if num_channels == 3 else (0.0, 0.0, 0.0)
-        if self.range is not None:
-            range = self.range
-        else:
-            range = 1.0 if num_channels == 3 else 255.0
-
-        size = size if size is not None else self.size
-        size_dict = get_size_dict(size)
 
         if not is_batched(images):
             images = [images]
@@ -203,20 +119,11 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
-        if do_pad and size is None:
-            raise ValueError("Size must be specified if do_pad is True.")
-
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor) for image in images]
-
-        if do_pad:
-            images = [self.pad(image=image, size=size_dict) for image in images]
-
-        if do_normalize:
-            images = [self.normalize(image=image, mean=mean, range=range) for image in images]
 
         images = [to_channel_dimension_format(image, data_format) for image in images]
 
