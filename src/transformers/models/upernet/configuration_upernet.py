@@ -96,13 +96,13 @@ class UperNetConfig(PretrainedConfig):
         self.auxiliary_concat_input = auxiliary_concat_input
         self.loss_ignore_index = loss_ignore_index
 
-    # def to_dict(self):
-    #     """
-    #     Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-    #     Returns:
-    #         `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-    #     """
-    #     output = copy.deepcopy(self.__dict__)
-    #     output["backbone_config"] = self.backbone_config.to_dict()
-    #     output["model_type"] = self.__class__.model_type
-    #     return output
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+        Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["backbone_config"] = self.backbone_config.to_dict()
+        output["model_type"] = self.__class__.model_type
+        return output
