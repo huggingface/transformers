@@ -54,7 +54,7 @@
   - sections:
     - local: tasks/image_classification
       title: Clasificación de imágenes
-    title: Computer Vision
+    title: Visión Artificial
   title: Guías prácticas
 - sections:
   - local: philosophy
