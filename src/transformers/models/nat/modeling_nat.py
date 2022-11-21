@@ -445,6 +445,11 @@ class NatLayer(nn.Module):
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.intermediate = NatIntermediate(config, dim)
         self.output = NatOutput(config, dim)
+        self.layer_scale_parameters = (
+            nn.Parameter(config.layer_scale_init_value * torch.ones((2, dim)), requires_grad=True)
+            if config.layer_scale_init_value > 0
+            else None
+        )
 
     def maybe_pad(self, hidden_states, height, width):
         window_size = self.kernel_size
@@ -479,11 +484,18 @@ class NatLayer(nn.Module):
         if was_padded:
             attention_output = attention_output[:, :height, :width, :].contiguous()
 
+        if self.layer_scale_parameters is not None:
+            attention_output = self.layer_scale_parameters[0] * attention_output
+
         hidden_states = shortcut + self.drop_path(attention_output)
 
         layer_output = self.layernorm_after(hidden_states)
-        layer_output = self.intermediate(layer_output)
-        layer_output = hidden_states + self.output(layer_output)
+        layer_output = self.output(self.intermediate(layer_output))
+
+        if self.layer_scale_parameters is not None:
+            layer_output = self.layer_scale_parameters[1] * layer_output
+
+        layer_output = hidden_states + self.drop_path(layer_output)
 
         layer_outputs = (layer_output, attention_outputs[1]) if output_attentions else (layer_output,)
         return layer_outputs
