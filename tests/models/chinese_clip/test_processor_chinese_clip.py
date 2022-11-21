@@ -34,42 +34,56 @@ if is_vision_available():
 
 
 @require_vision
-class CLIPProcessorTest(unittest.TestCase):
+class ChineseCLIPProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        # fmt: off
-        vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "lo", "l</w>", "w</w>", "r</w>", "t</w>", "low</w>", "er</w>", "lowest</w>", "newer</w>", "wider", "<unk>", "<|startoftext|>", "<|endoftext|>"]
-        # fmt: on
-        vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        merges = ["#version: 0.2", "l o", "lo w</w>", "e r</w>", ""]
-        self.special_tokens_map = {"unk_token": "<unk>"}
-
+        vocab_tokens = [
+            "[UNK]",
+            "[CLS]",
+            "[SEP]",
+            "[PAD]",
+            "[MASK]",
+            "的",
+            "价",
+            "格",
+            "是",
+            "15",
+            "便",
+            "alex",
+            "##andra",
+            "，",
+            "。",
+            "-",
+            "t",
+            "shirt",
+        ]
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(vocab_tokens) + "\n")
+        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
         feature_extractor_map = {
             "do_resize": True,
-            "size": 20,
+            "size": {"height": 224, "width": 224},
             "do_center_crop": True,
-            "crop_size": 18,
+            "crop_size": {"height": 18, "width": 18},
             "do_normalize": True,
             "image_mean": [0.48145466, 0.4578275, 0.40821073],
             "image_std": [0.26862954, 0.26130258, 0.27577711],
+            "do_convert_rgb": True,
         }
         self.feature_extractor_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
         with open(self.feature_extractor_file, "w", encoding="utf-8") as fp:
             json.dump(feature_extractor_map, fp)
 
     def get_tokenizer(self, **kwargs):
-        return CLIPTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs):
-        return CLIPTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+        return BertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return CLIPFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
+        return ChineseCLIPFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -90,47 +104,47 @@ class CLIPProcessorTest(unittest.TestCase):
         tokenizer_fast = self.get_rust_tokenizer()
         feature_extractor = self.get_feature_extractor()
 
-        processor_slow = CLIPProcessor(tokenizer=tokenizer_slow, feature_extractor=feature_extractor)
+        processor_slow = ChineseCLIPProcessor(tokenizer=tokenizer_slow, feature_extractor=feature_extractor)
         processor_slow.save_pretrained(self.tmpdirname)
-        processor_slow = CLIPProcessor.from_pretrained(self.tmpdirname, use_fast=False)
+        processor_slow = ChineseCLIPProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
-        processor_fast = CLIPProcessor(tokenizer=tokenizer_fast, feature_extractor=feature_extractor)
+        processor_fast = ChineseCLIPProcessor(tokenizer=tokenizer_fast, feature_extractor=feature_extractor)
         processor_fast.save_pretrained(self.tmpdirname)
-        processor_fast = CLIPProcessor.from_pretrained(self.tmpdirname)
+        processor_fast = ChineseCLIPProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
         self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
         self.assertEqual(tokenizer_slow.get_vocab(), tokenizer_fast.get_vocab())
-        self.assertIsInstance(processor_slow.tokenizer, CLIPTokenizer)
-        self.assertIsInstance(processor_fast.tokenizer, CLIPTokenizerFast)
+        self.assertIsInstance(processor_slow.tokenizer, BertTokenizer)
+        self.assertIsInstance(processor_fast.tokenizer, BertTokenizerFast)
 
         self.assertEqual(processor_slow.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertEqual(processor_fast.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor_slow.feature_extractor, CLIPFeatureExtractor)
-        self.assertIsInstance(processor_fast.feature_extractor, CLIPFeatureExtractor)
+        self.assertIsInstance(processor_slow.feature_extractor, ChineseCLIPFeatureExtractor)
+        self.assertIsInstance(processor_fast.feature_extractor, ChineseCLIPFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = CLIPProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = ChineseCLIPProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
 
-        processor = CLIPProcessor.from_pretrained(
+        processor = ChineseCLIPProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, CLIPTokenizerFast)
+        self.assertIsInstance(processor.tokenizer, BertTokenizerFast)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, CLIPFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, ChineseCLIPFeatureExtractor)
 
     def test_feature_extractor(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ChineseCLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         image_input = self.prepare_image_inputs()
 
@@ -144,7 +158,7 @@ class CLIPProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ChineseCLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         input_str = "lower newer"
 
@@ -159,7 +173,7 @@ class CLIPProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ChineseCLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
@@ -176,7 +190,7 @@ class CLIPProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ChineseCLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -189,7 +203,7 @@ class CLIPProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ChineseCLIPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
