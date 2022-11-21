@@ -126,7 +126,6 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     if push_to_hub:
         print(f"Pushing model and feature extractor for {model_name} to hub")
-        print("Backbone config:", model.config.backbone_config)
         model.push_to_hub(f"nielsr/{model_name}")
         # feature_extractor.push_to_hub(f"nielsr/{model_name}")
 
