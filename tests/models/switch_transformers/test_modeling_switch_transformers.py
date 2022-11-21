@@ -1113,8 +1113,8 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
         model = SwitchTransformersModel.from_pretrained(
             "google/switch-base-8", torch_dtype=torch.bfloat16, device_map="auto"
         ).eval()
-        input_ids = torch.ones((32, 64), dtype=torch.long).to(0)
-        decoder_input_ids = torch.ones((32, 64), dtype=torch.long).to(0)
+        input_ids = torch.ones((32, 64), dtype=torch.long)
+        decoder_input_ids = torch.ones((32, 64), dtype=torch.long)
 
         # fmt: off
         EXPECTED_MEAN_LOGITS = torch.Tensor(
@@ -1128,7 +1128,7 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
             ]
         ).to(torch.bfloat16)
         # fmt: on
-        hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state.cpu()
+        hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state
         hf_logits = hf_logits[0, 0, :30]
 
         torch.testing.assert_allclose(hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3)
