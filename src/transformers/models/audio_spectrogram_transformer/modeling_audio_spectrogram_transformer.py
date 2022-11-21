@@ -543,7 +543,7 @@ class ASTMLPHead(nn.Module):
     """,
     AUDIO_SPECTROGRAM_TRANSFORMER_START_DOCSTRING,
 )
-class ASTForSequenceClassification(ASTPreTrainedModel):
+class ASTForAudioClassification(ASTPreTrainedModel):
     def __init__(self, config: ASTConfig) -> None:
         super().__init__(config)
 

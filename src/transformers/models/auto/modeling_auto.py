@@ -785,7 +785,7 @@ MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Audio Classification mapping
-        ("audio-spectrogram-transformer", "ASTForSequenceClassification"),
+        ("audio-spectrogram-transformer", "ASTForAudioClassification"),
         ("data2vec-audio", "Data2VecAudioForSequenceClassification"),
         ("hubert", "HubertForSequenceClassification"),
         ("sew", "SEWForSequenceClassification"),

@@ -902,7 +902,7 @@ else:
             "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ASTModel",
             "ASTPreTrainedModel",
-            "ASTForSequenceClassification",
+            "ASTForAudioClassification",
         ]
     )
     _import_structure["models.auto"].extend(
@@ -3974,7 +3974,7 @@ if TYPE_CHECKING:
         )
         from .models.audio_spectrogram_transformer import (
             AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ASTForSequenceClassification,
+            ASTForAudioClassification,
             ASTModel,
             ASTPreTrainedModel,
         )

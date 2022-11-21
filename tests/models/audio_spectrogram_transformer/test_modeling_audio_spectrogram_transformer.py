@@ -30,7 +30,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import ASTForSequenceClassification, ASTModel
+    from transformers import ASTForAudioClassification, ASTModel
     from transformers.models.audio_spectrogram_transformer.modeling_audio_spectrogram_transformer import (
         AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
@@ -148,7 +148,7 @@ class ASTModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ASTModel,
-            ASTForSequenceClassification,
+            ASTForAudioClassification,
         )
         if is_torch_available()
         else ()
@@ -227,9 +227,7 @@ class ASTModelIntegrationTest(unittest.TestCase):
     def test_inference_audio_classification(self):
 
         feature_extractor = self.default_feature_extractor
-        model = ASTForSequenceClassification.from_pretrained("MIT/ast-finetuned-audioset-10-10-0.4593").to(
-            torch_device
-        )
+        model = ASTForAudioClassification.from_pretrained("MIT/ast-finetuned-audioset-10-10-0.4593").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         audio, sampling_rate = prepare_audio()

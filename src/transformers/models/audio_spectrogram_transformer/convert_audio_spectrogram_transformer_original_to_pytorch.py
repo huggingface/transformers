@@ -24,7 +24,7 @@ import torchaudio
 from datasets import load_dataset
 
 from huggingface_hub import hf_hub_download
-from transformers import ASTConfig, ASTFeatureExtractor, ASTForSequenceClassification
+from transformers import ASTConfig, ASTFeatureExtractor, ASTForAudioClassification
 from transformers.utils import logging
 
 
@@ -193,7 +193,7 @@ def convert_audio_spectrogram_transformer_checkpoint(model_name, pytorch_dump_fo
     new_state_dict = convert_state_dict(state_dict, config)
 
     # load 🤗 model
-    model = ASTForSequenceClassification(config)
+    model = ASTForAudioClassification(config)
     model.eval()
 
     model.load_state_dict(new_state_dict)
