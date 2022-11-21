@@ -61,8 +61,6 @@ from ...modeling_tf_utils import (
 from ...utils import logging
 from .configuration_flexibert import FlexiBERTConfig
 
-from sklearn import random_projection
-
 
 logger = logging.get_logger(__name__)
 

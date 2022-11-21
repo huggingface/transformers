@@ -29,6 +29,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
+    is_sklearn_available,
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -64,6 +65,9 @@ from ...utils import logging
 from .configuration_flexibert import FlexiBERTConfig
 
 from dataclasses import dataclass
+
+if is_sklearn_available():
+    from sklearn import random_projection
 
 
 logger = logging.get_logger(__name__)
