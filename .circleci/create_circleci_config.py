@@ -25,7 +25,6 @@ import yaml
 COMMON_ENV_VARIABLES = {"OMP_NUM_THREADS": 1, "TRANSFORMERS_IS_CI": True, "PYTEST_TIMEOUT": 120}
 COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "s": None}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.7.12"}]
-TORCH_SCATTER_INSTALL = "pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html"
 
 
 @dataclass
@@ -127,7 +126,6 @@ torch_and_tf_job = CircleCIJob(
         "git lfs install",
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
-        TORCH_SCATTER_INSTALL,
         "pip install tensorflow_probability",
         "pip install git+https://github.com/huggingface/accelerate",
     ],
@@ -143,7 +141,6 @@ torch_and_flax_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade pip",
         "pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]",
-        TORCH_SCATTER_INSTALL,
         "pip install git+https://github.com/huggingface/accelerate",
     ],
     marker="is_pt_flax_cross_test",
@@ -157,7 +154,6 @@ torch_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
         "pip install --upgrade pip",
         "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
-        TORCH_SCATTER_INSTALL,
         "pip install git+https://github.com/huggingface/accelerate",
     ],
     pytest_num_workers=3,
@@ -193,7 +189,6 @@ pipelines_torch_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade pip",
         "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
-        TORCH_SCATTER_INSTALL,
     ],
     pytest_options={"rA": None},
     tests_to_run="tests/pipelines/"
@@ -313,8 +308,12 @@ layoutlm_job = CircleCIJob(
         "pip install 'git+https://github.com/facebookresearch/detectron2.git'",
         "sudo apt install tesseract-ocr",
         "pip install pytesseract",
+        "pip install natten",
     ],
-    tests_to_run="tests/models/*layoutlmv*",
+    tests_to_run=[
+        "tests/models/*layoutlmv*",
+        "tests/models/*nat",
+    ],
     pytest_num_workers=1,
     pytest_options={"durations": 100},
 )
@@ -324,7 +323,7 @@ repo_utils_job = CircleCIJob(
     "repo_utils",
     install_steps=[
         "pip install --upgrade pip",
-        "pip install .[all,quality,testing]",
+        "pip install .[quality,testing]",
     ],
     parallelism=None,
     pytest_num_workers=1,

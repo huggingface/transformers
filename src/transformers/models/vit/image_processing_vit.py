@@ -193,6 +193,7 @@ class ViTImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
+        **kwargs,
     ):
         """
         Preprocess an image or batch of images.

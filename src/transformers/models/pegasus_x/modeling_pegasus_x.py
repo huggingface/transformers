@@ -1375,6 +1375,8 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
     PEGASUS_X_START_DOCSTRING,
 )
 class PegasusXModel(PegasusXPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+
     def __init__(self, config: PegasusXConfig):
         super().__init__(config)
 
@@ -1522,6 +1524,8 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
         r"decoder.version",
         r"lm_head.weight",
         r"embed_positions.weight",
+        "decoder.embed_tokens.weight",
+        "encoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: PegasusXConfig):

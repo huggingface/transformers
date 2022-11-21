@@ -153,6 +153,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         clusters: Optional[Union[int, List[int]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
+        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.

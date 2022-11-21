@@ -88,6 +88,30 @@ class TokenClassificationPipeline(Pipeline):
     Named Entity Recognition pipeline using any `ModelForTokenClassification`. See the [named entity recognition
     examples](../task_summary#named-entity-recognition) for more information.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> token_classifier = pipeline(model="Jean-Baptiste/camembert-ner", aggregation_strategy="simple")
+    >>> sentence = "Je m'appelle jean-baptiste et je vis à montréal"
+    >>> tokens = token_classifier(sentence)
+    >>> tokens
+    [{'entity_group': 'PER', 'score': 0.9931, 'word': 'jean-baptiste', 'start': 12, 'end': 26}, {'entity_group': 'LOC', 'score': 0.998, 'word': 'montréal', 'start': 38, 'end': 47}]
+
+    >>> token = tokens[0]
+    >>> # Start and end provide an easy way to highlight words in the original text.
+    >>> sentence[token["start"] : token["end"]]
+    ' jean-baptiste'
+
+    >>> # Some models use the same idea to do part of speech.
+    >>> syntaxer = pipeline(model="vblagoje/bert-english-uncased-finetuned-pos", aggregation_strategy="simple")
+    >>> syntaxer("My name is Sarah and I live in London")
+    [{'entity_group': 'PRON', 'score': 0.999, 'word': 'my', 'start': 0, 'end': 2}, {'entity_group': 'NOUN', 'score': 0.997, 'word': 'name', 'start': 3, 'end': 7}, {'entity_group': 'AUX', 'score': 0.994, 'word': 'is', 'start': 8, 'end': 10}, {'entity_group': 'PROPN', 'score': 0.999, 'word': 'sarah', 'start': 11, 'end': 16}, {'entity_group': 'CCONJ', 'score': 0.999, 'word': 'and', 'start': 17, 'end': 20}, {'entity_group': 'PRON', 'score': 0.999, 'word': 'i', 'start': 21, 'end': 22}, {'entity_group': 'VERB', 'score': 0.998, 'word': 'live', 'start': 23, 'end': 27}, {'entity_group': 'ADP', 'score': 0.999, 'word': 'in', 'start': 28, 'end': 30}, {'entity_group': 'PROPN', 'score': 0.999, 'word': 'london', 'start': 31, 'end': 37}]
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
+
     This token recognition pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"ner"` (for predicting the classes of tokens in a sequence: person, organisation, location or miscellaneous).
 
@@ -238,6 +262,10 @@ class TokenClassificationPipeline(Pipeline):
         shifted_exp = np.exp(logits - maxes)
         scores = shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
 
+        if self.framework == "tf":
+            input_ids = input_ids.numpy()
+            offset_mapping = offset_mapping.numpy() if offset_mapping is not None else None
+
         pre_entities = self.gather_pre_entities(
             sentence, input_ids, scores, offset_mapping, special_tokens_mask, aggregation_strategy
         )
@@ -276,9 +304,6 @@ class TokenClassificationPipeline(Pipeline):
                     if self.framework == "pt":
                         start_ind = start_ind.item()
                         end_ind = end_ind.item()
-                    else:
-                        start_ind = int(start_ind.numpy())
-                        end_ind = int(end_ind.numpy())
                 word_ref = sentence[start_ind:end_ind]
                 if getattr(self.tokenizer._tokenizer.model, "continuing_subword_prefix", None):
                     # This is a BPE, word aware tokenizer, there is a correct way

@@ -21,7 +21,7 @@ cómo escribir un modelo personalizado y su configuración para que pueda usarse
 con la comunidad (con el código en el que se basa) para que cualquiera pueda usarlo, incluso si no está presente en la biblioteca 
 🤗 Transformers.
 
-Ilustraremos todo esto con un modelo ResNet, envolviendo la clase ResNet de la [biblioteca timm](https://github.com/rwightman/pytorch-image-models/tree/master/timm) en un [`PreTrainedModel`].
+Ilustraremos todo esto con un modelo ResNet, envolviendo la clase ResNet de la [biblioteca timm](https://github.com/rwightman/pytorch-image-models) en un [`PreTrainedModel`].
 
 ## Escribir una configuración personalizada
 
@@ -55,9 +55,9 @@ class ResnetConfig(PretrainedConfig):
         **kwargs,
     ):
         if block_type not in ["basic", "bottleneck"]:
-            raise ValueError(f"`block` must be 'basic' or bottleneck', got {block}.")
+            raise ValueError(f"`block_type` must be 'basic' or bottleneck', got {block_type}.")
         if stem_type not in ["", "deep", "deep-tiered"]:
-            raise ValueError(f"`stem_type` must be '', 'deep' or 'deep-tiered', got {block}.")
+            raise ValueError(f"`stem_type` must be '', 'deep' or 'deep-tiered', got {stem_type}.")
 
         self.block_type = block_type
         self.layers = layers
@@ -145,6 +145,9 @@ class ResnetModel(PreTrainedModel):
 Para el modelo que clasificará las imágenes, solo cambiamos el método de avance (es decir, el método `forward`):
 
 ```py
+import torch
+
+
 class ResnetModelForImageClassification(PreTrainedModel):
     config_class = ResnetConfig
 

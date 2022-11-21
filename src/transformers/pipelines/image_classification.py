@@ -34,6 +34,18 @@ class ImageClassificationPipeline(Pipeline):
     Image classification pipeline using any `AutoModelForImageClassification`. This pipeline predicts the class of an
     image.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> classifier = pipeline(model="microsoft/beit-base-patch16-224-pt22k-ft22k")
+    >>> classifier("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png")
+    [{'score': 0.442, 'label': 'macaw'}, {'score': 0.088, 'label': 'popinjay'}, {'score': 0.075, 'label': 'parrot'}, {'score': 0.073, 'label': 'parodist, lampooner'}, {'score': 0.046, 'label': 'poll, poll_parrot'}]
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
+
     This image classification pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"image-classification"`.
 

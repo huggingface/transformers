@@ -50,7 +50,6 @@ from transformers.testing_utils import (
     RequestCounter,
     is_staging_test,
     nested_simplify,
-    require_scatter,
     require_tensorflow_probability,
     require_tf,
     require_torch,
@@ -355,6 +354,15 @@ class CommonPipelineTest(unittest.TestCase):
         pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert", batch_size=2, num_workers=1)
         self.assertEqual(pipe._batch_size, 2)
         self.assertEqual(pipe._num_workers, 1)
+
+    @require_torch
+    def test_pipeline_pathlike(self):
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
+        with tempfile.TemporaryDirectory() as d:
+            pipe.save_pretrained(d)
+            path = Path(d)
+            newpipe = pipeline(task="text-classification", model=path)
+        self.assertIsInstance(newpipe, TextClassificationPipeline)
 
     @require_torch
     def test_pipeline_override(self):
@@ -740,7 +748,6 @@ class PipelineUtilsTest(unittest.TestCase):
 
     @slow
     @require_torch
-    @require_scatter
     def test_load_default_pipelines_pt_table_qa(self):
         import torch
 
