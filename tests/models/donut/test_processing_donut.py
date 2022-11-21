@@ -19,7 +19,7 @@ import unittest
 from transformers import DonutProcessor
 
 
-DONUT_PRETRAINED_MODEL_NAME = "nielsr/donut-base"
+DONUT_PRETRAINED_MODEL_NAME = "naver-clova-ix/donut-base"
 
 
 class DonutProcessorTest(unittest.TestCase):
