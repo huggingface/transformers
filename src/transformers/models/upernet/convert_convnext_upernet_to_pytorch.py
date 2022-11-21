@@ -22,29 +22,60 @@ from transformers import ConvNextConfig, UperNetConfig, UperNetForSemanticSegmen
 
 
 def get_upernet_config(model_name):
-    backbone_config = ConvNextConfig()
-    config = UperNetConfig(backbone_config=backbone_config)
+    backbone_config = ConvNextConfig(out_features=["stage1", "stage2", "stage3", "stage4"])
+    config = UperNetConfig(backbone_config=backbone_config, num_labels=150)
 
     return config
 
 
-def rename_key(name):
-    if "encoder.mask_token" in name:
-        name = name.replace("encoder.mask_token", "embeddings.mask_token")
+# here we list all keys to be renamed (original name on the left, our name on the right)
+def create_rename_keys(config):
+    rename_keys = []
 
-    return name
+    # fmt: off
+    # stem
+    rename_keys.append(("backbone.downsample_layers.0.0.weight", "backbone.convnext.embeddings.patch_embeddings.weight"))
+    rename_keys.append(("backbone.downsample_layers.0.0.bias", "backbone.convnext.embeddings.patch_embeddings.bias"))
+    rename_keys.append(("backbone.downsample_layers.0.1.weight", "backbone.convnext.embeddings.layernorm.weight"))
+    rename_keys.append(("backbone.downsample_layers.0.1.bias", "backbone.convnext.embeddings.layernorm.bias"))
+    # stages
+    for i in range(len(config.backbone_config.depths)):
+        for j in range(config.backbone_config.depths[i]):
+            rename_keys.append((f"backbone.stages.{i}.{j}.gamma", f"backbone.convnext.encoder.stages.{i}.layers.{j}.layer_scale_parameter"))
+            rename_keys.append((f"backbone.stages.{i}.{j}.depthwise_conv.weight", f"backbone.convnext.encoder.stages.{i}.layers.{j}.dwconv.weight"))
+            rename_keys.append((f"backbone.stages.{i}.{j}.depthwise_conv.bias", f"backbone.convnext.encoder.stages.{i}.layers.{j}.dwconv.bias"))
+            rename_keys.append((f"backbone.stages.{i}.{j}.norm.weight", f"backbone.convnext.encoder.stages.{i}.layers.{j}.layernorm.weight"))
+            rename_keys.append((f"backbone.stages.{i}.{j}.norm.bias", f"backbone.convnext.encoder.stages.{i}.layers.{j}.layernorm.bias"))
+            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv1.weight", f"backbone.convnext.encoder.stages.{i}.layers.{j}.pwconv1.weight"))
+            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv1.bias", f"backbone.convnext.encoder.stages.{i}.layers.{j}.pwconv1.bias"))
+            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv2.weight", f"backbone.convnext.encoder.stages.{i}.layers.{j}.pwconv2.weight"))
+            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv2.bias", f"backbone.convnext.encoder.stages.{i}.layers.{j}.pwconv2.bias"))
+        if i > 0:
+            rename_keys.append((f"backbone.downsample_layers.{i}.0.weight", f"backbone.convnext.encoder.stages.{i}.downsampling_layer.0.weight"))
+            rename_keys.append((f"backbone.downsample_layers.{i}.0.bias", f"backbone.convnext.encoder.stages.{i}.downsampling_layer.0.bias"))
+            rename_keys.append((f"backbone.downsample_layers.{i}.1.weight", f"backbone.convnext.encoder.stages.{i}.downsampling_layer.1.weight"))
+            rename_keys.append((f"backbone.downsample_layers.{i}.1.bias", f"backbone.convnext.encoder.stages.{i}.downsampling_layer.1.bias"))
+        
+        rename_keys.append((f"backbone.norm{i}.weight", f"backbone.hidden_states_norms.{i}.weight"))
+        rename_keys.append((f"backbone.norm{i}.bias", f"backbone.hidden_states_norms.{i}.bias"))
+    
+    # decode head
+    rename_keys.extend(
+            [
+                ("decode_head.conv_seg.weight", "decode_head.classifier.weight"),
+                ("decode_head.conv_seg.bias", "decode_head.classifier.bias"),
+                ("auxiliary_head.conv_seg.weight", "auxiliary_head.classifier.weight"),
+                ("auxiliary_head.conv_seg.bias", "auxiliary_head.classifier.bias"),
+            ]
+    )
+    # fmt: on
+
+    return rename_keys
 
 
-def convert_state_dict(orig_state_dict, model):
-    for key in orig_state_dict.copy().keys():
-        val = orig_state_dict.pop(key)
-
-        if "attn_mask" in key:
-            pass
-        else:
-            orig_state_dict[rename_key(key)] = val
-
-    return orig_state_dict
+def rename_key(dct, old, new):
+    val = dct.pop(old)
+    dct[new] = val
 
 
 def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
@@ -58,8 +89,21 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     model = UperNetForSemanticSegmentation(config)
     model.eval()
 
-    new_state_dict = convert_state_dict(state_dict, model)
-    model.load_state_dict(new_state_dict)
+    # replace "bn" => "batch_norm"
+    for key in state_dict.copy().keys():
+        val = state_dict.pop(key)
+        if "bn" in key:
+            key = key.replace("bn", "batch_norm")
+        state_dict[key] = val
+
+    # rename keys
+    rename_keys = create_rename_keys(config)
+    for src, dest in rename_keys:
+        rename_key(state_dict, src, dest)
+
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+    assert missing_keys == ["backbone.convnext.layernorm.weight", "backbone.convnext.layernorm.bias"]
+    assert len(unexpected_keys) == 0, f"Unexpected keys: {unexpected_keys}"
 
     # TODO verify on image
     # url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -82,8 +126,9 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     if push_to_hub:
         print(f"Pushing model and feature extractor for {model_name} to hub")
-        model.push_to_hub(f"microsoft/{model_name}")
-        # feature_extractor.push_to_hub(f"microsoft/{model_name}")
+        print("Backbone config:", model.config.backbone_config)
+        model.push_to_hub(f"nielsr/{model_name}")
+        # feature_extractor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

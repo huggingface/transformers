@@ -14,6 +14,8 @@
 # limitations under the License.
 """ UperNet model configuration"""
 
+import copy
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -69,11 +71,12 @@ class UperNetConfig(PretrainedConfig):
 
     def __init__(
         self,
-        backbone_config,
+        backbone_config=None,
         hidden_size=512,
         pool_scales=[1, 2, 3, 6],
         use_auxiliary_head=True,
         auxiliary_loss_weight=0.4,
+        auxiliary_in_channels=384,
         auxiliary_channels=256,
         auxiliary_num_convs=1,
         auxiliary_concat_input=False,
@@ -87,7 +90,19 @@ class UperNetConfig(PretrainedConfig):
         self.pool_scales = pool_scales
         self.use_auxiliary_head = use_auxiliary_head
         self.auxiliary_loss_weight = auxiliary_loss_weight
+        self.auxiliary_in_channels = auxiliary_in_channels
         self.auxiliary_channels = auxiliary_channels
         self.auxiliary_num_convs = auxiliary_num_convs
         self.auxiliary_concat_input = auxiliary_concat_input
         self.loss_ignore_index = loss_ignore_index
+
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+        Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["backbone_config"] = self.backbone_config.to_dict()
+        output["model_type"] = self.__class__.model_type
+        return output

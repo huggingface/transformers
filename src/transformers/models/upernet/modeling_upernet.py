@@ -218,7 +218,7 @@ class FCNHead(nn.Module):
         self, config, in_index: int = 2, kernel_size: int = 3, dilation: Union[int, Tuple[int, int]] = 1
     ) -> None:
         super().__init__()
-        self.in_channels = config.hidden_size
+        self.in_channels = config.auxiliary_in_channels
         self.channels = config.auxiliary_channels
         self.num_convs = config.auxiliary_num_convs
         self.concat_input = config.auxiliary_concat_input
