@@ -2390,20 +2390,6 @@ else:
     ]
     # TensorFlow models structure
 
-    _import_structure["models.flexibert"].extend(
-        [
-            "TF_FLEXIBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFFlexiBERTForMaskedLM",
-            "TFFlexiBERTForCausalLM",
-            "TFFlexiBERTForMultipleChoice",
-            "TFFlexiBERTForQuestionAnswering",
-            "TFFlexiBERTForSequenceClassification",
-            "TFFlexiBERTForTokenClassification",
-            "TFFlexiBERTLayer",
-            "TFFlexiBERTModel",
-            "TFFlexiBERTPreTrainedModel",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5246,18 +5232,6 @@ if TYPE_CHECKING:
 
         # TensorFlow model imports
 
-        from .models.flexibert import (
-            TF_FLEXIBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFFlexiBERTForMaskedLM,
-            TFFlexiBERTForCausalLM,
-            TFFlexiBERTForMultipleChoice,
-            TFFlexiBERTForQuestionAnswering,
-            TFFlexiBERTForSequenceClassification,
-            TFFlexiBERTForTokenClassification,
-            TFFlexiBERTLayer,
-            TFFlexiBERTModel,
-            TFFlexiBERTPreTrainedModel,
-        )
         from .models.albert import (
             TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFAlbertForMaskedLM,
