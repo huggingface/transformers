@@ -38,7 +38,7 @@ def get_audio_spectrogram_transformer_config(model_name):
     if "10-10" in model_name:
         pass
     elif "speech-commands" in model_name:
-        config.time_dimension = 128
+        config.max_length = 128
     elif "12-12" in model_name:
         config.time_stride = 12
         config.frequency_stride = 12
@@ -202,7 +202,8 @@ def convert_audio_spectrogram_transformer_checkpoint(model_name, pytorch_dump_fo
     # source: https://github.com/YuanGongND/ast/blob/79e873b8a54d0a3b330dd522584ff2b9926cd581/src/run.py#L62
     mean = -4.2677393 if "speech-commands" not in model_name else -6.845978
     std = 4.5689974 if "speech-commands" not in model_name else 5.5654526
-    feature_extractor = ASTFeatureExtractor(mean=mean, std=std)
+    max_length = 1024 if "speech-commands" not in model_name else 128
+    feature_extractor = ASTFeatureExtractor(mean=mean, std=std, max_length=max_length)
 
     if "speech-commands" in model_name:
         dataset = load_dataset("speech_commands", "v0.02", split="validation")
@@ -217,8 +218,7 @@ def convert_audio_spectrogram_transformer_checkpoint(model_name, pytorch_dump_fo
         waveform, _ = torchaudio.load(filepath)
         waveform = waveform.squeeze().numpy()
 
-    max_length = 1024 if "speech-commands" not in model_name else 128
-    inputs = feature_extractor(waveform, sampling_rate=16000, max_length=max_length, return_tensors="pt")
+    inputs = feature_extractor(waveform, sampling_rate=16000, return_tensors="pt")
 
     # forward pass
     outputs = model(**inputs)
