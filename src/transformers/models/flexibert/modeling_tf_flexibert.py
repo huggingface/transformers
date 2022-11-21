@@ -1085,7 +1085,6 @@ class TFFlexiBERTModel(TFFlexiBERTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FLEXIBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -1304,7 +1303,6 @@ class TFFlexiBERTForMaskedLM(TFFlexiBERTPreTrainedModel, TFMaskedLanguageModelin
 
     @add_start_docstrings_to_model_forward(FLEXIBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1408,7 +1406,6 @@ class TFFlexiBERTLMHeadModel(TFFlexiBERTPreTrainedModel, TFCausalLanguageModelin
         return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFCausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1605,7 +1602,6 @@ class TFFlexiBERTForSequenceClassification(TFFlexiBERTPreTrainedModel, TFSequenc
 
     @add_start_docstrings_to_model_forward(FLEXIBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1715,7 +1711,6 @@ class TFFlexiBERTForMultipleChoice(TFFlexiBERTPreTrainedModel, TFMultipleChoiceL
 
     @add_start_docstrings_to_model_forward(FLEXIBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1871,7 +1866,6 @@ class TFFlexiBERTForTokenClassification(TFFlexiBERTPreTrainedModel, TFTokenClass
 
     @add_start_docstrings_to_model_forward(FLEXIBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1978,7 +1972,6 @@ class TFFlexiBERTForQuestionAnswering(TFFlexiBERTPreTrainedModel, TFQuestionAnsw
 
     @add_start_docstrings_to_model_forward(FLEXIBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
