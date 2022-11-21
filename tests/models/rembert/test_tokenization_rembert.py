@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import RemBertTokenizer, RemBertTokenizerFast
-from transformers.testing_utils import require_sentencepiece, require_tokenizers
+from transformers.testing_utils import require_tokenizers
 from transformers.utils import is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -25,7 +25,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 FRAMEWORK = "pt" if is_torch_available() else "tf"
 
 
-@require_sentencepiece
 @require_tokenizers
 class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
