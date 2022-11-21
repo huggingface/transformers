@@ -99,11 +99,9 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         rust_ids = rust_tokenizer.encode(sequence)
         self.assertListEqual(ids, rust_ids)
 
-    # can't train new_tokenizer via Tokenizers lib
     def test_training_new_tokenizer(self):
         pass
 
-    # can't train new_tokenizer via Tokenizers lib
     def test_training_new_tokenizer_with_special_tokens_change(self):
         pass
 
