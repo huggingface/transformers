@@ -189,7 +189,6 @@ class TimeSformerDropPath(nn.Module):
 
 
 # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L57
-# and transformers.models.videomae.modeling_videomae.VideoMAESelfAttention
 class TimesformerSelfAttention(nn.Module):
     def __init__(self, config: TimesformerConfig):
         super().__init__()
@@ -224,7 +223,6 @@ class TimesformerSelfAttention(nn.Module):
         return outputs
 
 
-# Adapted from transformers.models.videomae.modeling_videomae.VideoMAESelfOutput with VideoMAE->TimeSformer
 class TimesformerSelfOutput(nn.Module):
     """
     The residual connection is defined in TimesformerLayer instead of here (as is the case with other models), due to
@@ -244,7 +242,6 @@ class TimesformerSelfOutput(nn.Module):
         return hidden_states
 
 
-# Adapted from transformers.models.videomae.modeling_videomae.VideoMAEAttention with VideoMAE->TimeSformer
 class TimeSformerAttention(nn.Module):
     def __init__(self, config: TimesformerConfig) -> None:
         super().__init__()
@@ -265,7 +262,6 @@ class TimeSformerAttention(nn.Module):
 
 
 # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L39
-# and transformers.models.videomae.modeling_videomae.VideoMAEIntermediate
 class TimesformerIntermediate(nn.Module):
     def __init__(self, config: TimesformerConfig) -> None:
         super().__init__()
@@ -423,7 +419,6 @@ class TimesformerLayer(nn.Module):
             return outputs
 
 
-# Adapted from transformers.models.videomae.modeling_videomae.VideoMAEEncoder with VideoMAE->TimeSformer
 class TimesformerEncoder(nn.Module):
     def __init__(self, config: TimesformerConfig) -> None:
         super().__init__()
@@ -477,7 +472,6 @@ class TimesformerEncoder(nn.Module):
         )
 
 
-# Adapted from transformers.models.videomae.modeling_videomae.VideoMAEPreTrainedModel with VideoMAE->TimeSformer
 class TimesformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -539,7 +533,6 @@ TIMESFORMER_INPUTS_DOCSTRING = r"""
     "The bare TimeSformer Model transformer outputting raw hidden-states without any specific head on top.",
     TIMESFORMER_START_DOCSTRING,
 )
-# Adapted from transformers.models.videomae.modeling_videomae.VideoMAEModel with VideoMAE->TimeSformer
 class TimesformerModel(TimesformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -651,7 +644,6 @@ class TimesformerModel(TimesformerPreTrainedModel):
 of the [CLS] token) e.g. for ImageNet.""",
     TIMESFORMER_START_DOCSTRING,
 )
-# Adapted from transformers.models.videomae.modeling_videomae.VideoMAEForVideoClassification with VideoMAE->TimeSformer
 class TimesformerForVideoClassification(TimesformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

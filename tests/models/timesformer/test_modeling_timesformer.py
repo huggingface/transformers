@@ -175,9 +175,7 @@ class TimesformerModelTest(ModelTesterMixin, unittest.TestCase):
         inputs_dict = copy.deepcopy(inputs_dict)
 
         if return_labels:
-            if model_class in [
-                *get_values(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING),
-            ]:
+            if model_class in get_values(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING):
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
