@@ -34,6 +34,8 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
+    from transformers import Swin2SRImageProcessor
+
 
 class Swin2SRModelTester:
     def __init__(
@@ -301,18 +303,20 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_super_resolution_head(self):
         # TODO update to appropriate organization
+        processor = Swin2SRImageProcessor()
         model = Swin2SRForImageSuperResolution.from_pretrained("nielsr/swin2SR-classical-sr-x2-64").to(torch_device)
-        feature_extractor = self.default_feature_extractor
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
 
         # verify the logits
-        expected_shape = torch.Size((1, 1000))
-        self.assertEqual(outputs.logits.shape, expected_shape)
-        expected_slice = torch.tensor([-0.3947, -0.4306, 0.0026]).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        expected_shape = torch.Size([1, 3, 960, 1280])
+        self.assertEqual(outputs.reconstruction.shape, expected_shape)
+        expected_slice = torch.tensor(
+            [[0.5458, 0.5546, 0.5638], [0.5526, 0.5565, 0.5651], [0.5396, 0.5426, 0.5621]]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.reconstruction[0, 0, :3, :3], expected_slice, atol=1e-4))
