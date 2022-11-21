@@ -47,6 +47,8 @@
     title: Modelos multilingües para inferencia
   - local: converting_tensorflow_models
     title: Convertir checkpoints de TensorFlow
+  - local: serialization
+    title: Serialización
   title: Guías prácticas
 - sections:
   - local: philosophy
