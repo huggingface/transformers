@@ -1643,7 +1643,7 @@ class TFModelTesterMixin:
             if metrics:
                 self.assertTrue(len(accuracy1) == len(accuracy3) > 0, "Missing metrics!")
 
-    def test_int64_inputs(self):
+    def test_int64_inputs_and_dummies(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             prepared_for_class = self._prepare_for_class(
@@ -1662,6 +1662,12 @@ class TFModelTesterMixin:
             }
             model = model_class(config)
             model(**prepared_for_class)  # No assertion, we're just checking this doesn't throw an error
+
+            # After testing that the model accepts int64 inputs, confirm that its dummies are int64 by default too
+            for key, tensor in model.dummy_inputs.items():
+                self.assertTrue(isinstance(tensor, tf.Tensor))
+                if tensor.dtype.is_integer:
+                    self.assertTrue(tensor.dtype == tf.int64)
 
     def test_generate_with_headmasking(self):
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
@@ -2322,16 +2328,6 @@ class UtilsFunctionsTest(unittest.TestCase):
         # Check models are equal
         for p1, p2 in zip(safetensors_model.weights, tf_model.weights):
             self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
-
-    def test_dummy_inputs_dtype(self):
-        # Ensure all integer dummy inputs are int64
-        self.assertTrue(hasattr(self, "dummy_inputs"))
-        self.assertTrue(isinstance(self.dummy_inputs, dict))
-        for key, tensor in self.dummy_inputs.items():
-            self.assertTrue(isinstance(tensor, tf.Tensor))
-            if tensor.dtype.is_integer:
-                self.assertTrue(tensor.dtype == tf.int64)
-
 
 
 @require_tf

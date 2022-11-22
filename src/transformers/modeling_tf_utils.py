@@ -1115,7 +1115,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         return {
-            "input_ids": tf.constant(DUMMY_INPUTS),
+            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int64),
         }
 
     @property

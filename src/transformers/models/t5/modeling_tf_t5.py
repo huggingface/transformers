@@ -878,7 +878,7 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
 
     @property
     def dummy_inputs(self):
-        inputs = tf.constant(DUMMY_INPUTS)
+        inputs = tf.constant(DUMMY_INPUTS, dtype=tf.int64)
         input_mask = tf.constant(DUMMY_MASK)
         dummy_inputs = {
             "input_ids": inputs,
@@ -1575,7 +1575,7 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
 
     @property
     def dummy_inputs(self):
-        return {"input_ids": tf.constant(DUMMY_INPUTS)}
+        return {"input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int64)}
 
     def get_encoder(self):
         return self.encoder
