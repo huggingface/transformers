@@ -496,6 +496,7 @@ def build_model(model_arch, tiny_config, output_dir):
 
     # TODO: check `FlaubertWithLMHeadModel` and `XLMWithLMHeadModel`
     if any([model_arch.__name__.endswith(x) for x in ["ForCausalLM", "LMHeadModel"]]):
+        tiny_config.is_encoder_decoder = False
         tiny_config.is_decoder = True
 
     model = model_arch(config=tiny_config)
