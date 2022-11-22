@@ -1215,10 +1215,31 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
             output_embeddings.out_features = input_embeddings.num_embeddings
 
+    def get_token_embeddings_size(self) -> int:
+        """
+        Return the current size of the input token embeddings matrix. 
+        
+        Use in conjunction with resize_token_embeddings to provide a baseline against which size changes can be 
+        calculated. For example:
+        
+        ```
+        # add 1 new embedding
+        current_embeddings_size = my_xformer.get_token_embeddings_size()
+        new_embeddings_size = current_embeddings_size + 1
+        my_xformer.resize_token_embeddings(new_embeddings_size)
+        ```
+        
+        Return:
+            `int`: The current size of the token embeddings matrix.
+        """
+        return self.get_input_embeddings().weight.size()[0]
+            
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
         """
-        Resizes input token embeddings matrix of the model if `new_num_tokens != config.vocab_size`.
-
+        Resizes input token embeddings matrix of the model if `new_num_tokens` does not correspond to the current size.
+        
+        Use `get_token_embeddings_size()` to retrieve the current size.
+        
         Takes care of tying weights embeddings afterwards if the model class has a `tie_weights()` method.
 
         Arguments:
