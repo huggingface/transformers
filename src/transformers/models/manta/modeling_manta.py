@@ -259,8 +259,8 @@ class MantaCachedConvolutionPooling(nn.Module):
 
         self.conv_layers = nn.Sequential(
             *[
-                MantaConvFeatures(hidden_dim, h, k, groups=h if depthwise_convolution else 1, padding="same")
-                for (k, h) in kernel_size
+                MantaConvFeatures(self.hidden_dim, h, k, groups=h if self.depthwise_convolution else 1, padding="same")
+                for (k, h) in self.kernel_size
             ]
         )
 
@@ -478,12 +478,12 @@ class MantaModel(MantaPreTrainedModel):
         self.byte_embeddings = nn.Embedding(config.vocab_size, config.byte_embedding_dim)
 
         self.frontier_predictor = MantaFrontierPredictor(
+            hidden_size=config.byte_embedding_dim,
             num_layers=config.frontier_predictor_num_layers,
             num_attention_heads=config.frontier_predictor_num_attention_heads,
-            attention_window=config.frontier_predictor_attention_window,
-            hidden_size=config.byte_embedding_dim,
-            max_length=config.max_length_encoder_decoder,
             dropout_rate=config.dropout_rate,
+            attention_window=config.frontier_predictor_attention_window,
+            max_length=config.max_length_inputs,
         )
 
         self.pooler = MantaCachedConvolutionPooling(
@@ -645,12 +645,12 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
         self.byte_embeddings = nn.Embedding(config.vocab_size, config.byte_embedding_dim)
 
         self.frontier_predictor = MantaFrontierPredictor(
+            hidden_size=config.byte_embedding_dim,
             num_layers=config.frontier_predictor_num_layers,
             num_attention_heads=config.frontier_predictor_num_attention_heads,
-            attention_window=config.frontier_predictor_attention_window,
-            hidden_size=config.byte_embedding_dim,
-            max_length=config.max_length_encoder_decoder,
             dropout_rate=config.dropout_rate,
+            attention_window=config.frontier_predictor_attention_window,
+            max_length=config.max_length_inputs,
         )
 
         self.pooler = MantaCachedConvolutionPooling(
@@ -924,12 +924,12 @@ class MantaEncoderModel(MantaPreTrainedModel):
         self.byte_embeddings = nn.Embedding(config.vocab_size, config.byte_embedding_dim)
 
         self.frontier_predictor = MantaFrontierPredictor(
+            hidden_size=config.byte_embedding_dim,
             num_layers=config.frontier_predictor_num_layers,
             num_attention_heads=config.frontier_predictor_num_attention_heads,
-            attention_window=config.frontier_predictor_attention_window,
-            hidden_size=config.byte_embedding_dim,
-            max_length=config.max_length_encoder_decoder,
             dropout_rate=config.dropout_rate,
+            attention_window=config.frontier_predictor_attention_window,
+            max_length=config.max_length_inputs,
         )
 
         self.pooler = MantaCachedConvolutionPooling(

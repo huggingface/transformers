@@ -59,6 +59,8 @@ class MantaConfig(PretrainedConfig):
             less powerful than normal convolution, and impedes using different number of channels.
         pooling_mean_pool (`bool`, *optional*, defaults to `False`):
             Activates mean-pooling instead of default max-pooling as the reduction operation for each block.
+        max_length_inputs (`int`, *optional*, defaults to 256):
+            Maximum sequence length of the byte input sequences. Can be greater than max_length_encoder_decoder.
         max_length_encoder_decoder (`int`, *optional*, defaults to 256):
             Maximum output sequence length of the tokenization module. This allows to control the length of the sequences that the encoder-decoder model receives.
         d_model (`int`, *optional*, defaults to 512):
@@ -106,6 +108,7 @@ class MantaConfig(PretrainedConfig):
         pooling_kernel_size=3,
         pooling_depthwise_convolution=True,
         pooling_mean_pool=False,
+        max_length_inputs=256,
         max_length_encoder_decoder=256,
         d_model=512,
         d_kv=64,
@@ -134,6 +137,7 @@ class MantaConfig(PretrainedConfig):
         self.pooling_kernel_size = pooling_kernel_size
         self.pooling_depthwise_convolution = pooling_depthwise_convolution
         self.pooling_mean_pool = pooling_mean_pool
+        self.max_length_inputs = max_length_inputs
         self.max_length_encoder_decoder = max_length_encoder_decoder
         self.d_model = d_model
         self.d_kv = d_kv
