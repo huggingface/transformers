@@ -26,7 +26,7 @@ class MaskFormerSwinConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`MaskFormerSwinModel`]. It is used to instantiate
     a Donut model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Swin
-    [microsoft/swin-tiny-patch4-window7-224(https://huggingface.co/microsoft/swin-tiny-patch4-window7-224)
+    [microsoft/swin-tiny-patch4-window7-224](https://huggingface.co/microsoft/swin-tiny-patch4-window7-224)
     architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -76,10 +76,10 @@ class MaskFormerSwinConfig(PretrainedConfig):
     ```python
     >>> from transformers import MaskFormerSwinConfig, MaskFormerSwinModel
 
-    >>> # Initializing a Donut naver-clova-ix/donut-base style configuration
+    >>> # Initializing a microsoft/swin-tiny-patch4-window7-224 style configuration
     >>> configuration = MaskFormerSwinConfig()
 
-    >>> # Randomly initializing a model from the naver-clova-ix/donut-base style configuration
+    >>> # Initializing a model (with random weights) from the microsoft/swin-tiny-patch4-window7-224 style configuration
     >>> model = MaskFormerSwinModel(configuration)
 
     >>> # Accessing the model configuration
