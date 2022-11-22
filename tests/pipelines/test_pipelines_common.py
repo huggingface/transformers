@@ -221,7 +221,7 @@ class PipelineTestCaseMeta(type):
                     pass
 
                 if model is None:
-                    self.skip("model is `None`")
+                    self.skipTest("model is `None`")
 
                 if hasattr(model, "eval"):
                     model = model.eval()
