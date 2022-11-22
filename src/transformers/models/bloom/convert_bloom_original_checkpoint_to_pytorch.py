@@ -197,7 +197,7 @@ def convert_bloom_checkpoint_to_pytorch(
             else:
                 missing_keys = missing_keys.intersection(set(other_keys.missing_keys))
 
-        assert not missing_keys
+        assert not missing_keys, f"The keys {missing_keys} are missing"
 
         # Save pytorch-model
         os.makedirs(pytorch_dump_folder_path, exist_ok=True)
