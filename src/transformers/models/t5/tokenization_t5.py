@@ -80,9 +80,9 @@ class T5Tokenizer(PreTrainedTokenizer):
             The token used for padding, for example when batching sequences of different lengths.
         extra_ids (`int`, *optional*, defaults to 100):
            Add a number of extra ids added to the vocabulary for use as sentinels. These tokens are
-            accessible as "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1. These
-            tokens can be retrieved by calling get_sentinel_tokens method and token ids can be
-            by calling  get_sentinel_token_ids method
+            accessible as "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1. These tokens can be
+            retrieved by calling get_sentinel_tokens method and token ids can be by calling get_sentinel_token_ids
+            method
          additional_special_tokens (`List[str]`, *optional*):
             Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
