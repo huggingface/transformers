@@ -20,6 +20,7 @@ import os
 from typing import Any, Dict, Optional, Union
 
 from .. import __version__
+from ..configuration_utils import PretrainedConfig
 from ..utils import (
     GENERATION_CONFIG_NAME,
     PushToHubMixin,
@@ -73,6 +74,9 @@ class GenerationConfig(PushToHubMixin):
             [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
         penalty_alpha (`float`, *optional*):
             The values balance the model confidence and the degeneration penalty in contrastive search decoding.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should use the past last key/values attentions (if applicable to the model) to
+            speed up decoding.
 
         > Parameters for manipulation of the model output logits
 
@@ -108,13 +112,13 @@ class GenerationConfig(PushToHubMixin):
             words that must be included, the opposite to `bad_words_ids`. If given `List[List[List[int]]]`, this
             triggers a [disjunctive constraint](https://github.com/huggingface/transformers/issues/14081), where one
             can allow different forms of each word.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should use the past last key/values attentions (if applicable to the model) to
-            speed up decoding.
         renormalize_logits (`bool`, *optional*, defaults to `False`):
             Whether to renormalize the logits after applying all the logits processors or warpers (including the custom
             ones). It's highly recommended to set this flag to `True` as the search algorithms suppose the score logits
             are normalized but some logit processors or warpers break the normalization.
+        constraints (`List[Constraint]`, *optional*):
+            Custom constraints that can be added to the generation to ensure that the output will contain the use of
+            certain tokens as defined by `Constraint` objects, in the most sensible way possible.
         forced_bos_token_id (`int`, *optional*, defaults to `model.config.forced_bos_token_id`):
             The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful for
             multilingual models like [mBART](../model_doc/mbart) where the first generated token needs to be the target
@@ -191,6 +195,7 @@ class GenerationConfig(PushToHubMixin):
         self.num_beams = kwargs.pop("num_beams", 1)
         self.num_beam_groups = kwargs.pop("num_beam_groups", 1)
         self.penalty_alpha = kwargs.pop("penalty_alpha", None)
+        self.use_cache = kwargs.pop("use_cache", True)
 
         # Parameters for manipulation of the model output logits
         self.temperature = kwargs.pop("temperature", 1.0)
@@ -203,6 +208,8 @@ class GenerationConfig(PushToHubMixin):
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
         self.force_word_ids = kwargs.pop("force_word_ids", None)
+        self.renormalize_logits = kwargs.pop("renormalize_logits", False)
+        self.constraints = kwargs.pop("constraints", None)
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
         self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
@@ -484,18 +491,11 @@ class GenerationConfig(PushToHubMixin):
             kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
         config = cls(**config_dict)
-
-        to_remove = []
-        for key, value in kwargs.items():
-            if hasattr(config, key):
-                setattr(config, key, value)
-                to_remove.append(key)
-        for key in to_remove:
-            kwargs.pop(key, None)
+        unused_kwargs = config.update(kwargs)
 
         logger.info(f"Generate config {config}")
         if return_unused_kwargs:
-            return config, kwargs
+            return config, unused_kwargs
         else:
             return config
 
@@ -568,3 +568,47 @@ class GenerationConfig(PushToHubMixin):
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string(use_diff=use_diff))
+
+    @classmethod
+    def from_model_config(cls, model_config: PretrainedConfig) -> "GenerationConfig":
+        """
+        Instantiates a [`GenerationConfig`] from a [`PretrainedConfig`]. This function is useful to convert legacy
+        [`PretrainedConfig`] objects, which may contain generation parameters, into a stand-alone [`GenerationConfig`].
+
+        Args:
+            model_config (`PretrainedConfig`):
+                The model config that will be used to instantiate the generation config.
+
+        Returns:
+            [`GenerationConfig`]: The configuration object instantiated from those parameters.
+        """
+        config_dict = model_config.to_dict()
+        config = cls.from_dict(config_dict, return_unused_kwargs=False)
+
+        # Handles a few special cases
+        if config.eos_token_id is None and hasattr(config_dict, "decoder"):
+            config.eos_token_id = config_dict["decoder"]["eos_token_id"]
+
+        return config
+
+    def update(self, **kwargs):
+        """
+        Updates attributes of this class instance with attributes from `kwargs` if they match existing atributtes,
+        returning all the unused kwargs.
+
+        Args:
+            kwargs (`Dict[str, Any]`):
+                Dictionary of attributes to tentatively update this class.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary containing all the key-value pairs that were not used to update the instance.
+        """
+        to_remove = []
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+                to_remove.append(key)
+
+        # remove all the attributes that were updated, without modifying the input dict
+        unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
+        return unused_kwargs
