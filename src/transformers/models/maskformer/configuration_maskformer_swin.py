@@ -41,9 +41,9 @@ class MaskFormerSwinConfig(PretrainedConfig):
             The number of input channels.
         embed_dim (`int`, *optional*, defaults to 96):
             Dimensionality of patch embedding.
-        depths (`list(int)`, *optional*, defaults to [2, 2, 6, 2]):
+        depths (`List[int]`, *optional*, defaults to `[2, 2, 6, 2]`):
             Depth of each layer in the Transformer encoder.
-        num_heads (`list(int)`, *optional*, defaults to [3, 6, 12, 24]):
+        num_heads (`List[int]`, *optional*, defaults to `[3, 6, 12, 24]`):
             Number of attention heads in each layer of the Transformer encoder.
         window_size (`int`, *optional*, defaults to 7):
             Size of windows.
