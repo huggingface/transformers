@@ -137,7 +137,7 @@ class MaskFormerSwinConfig(PretrainedConfig):
         # we set the hidden_size attribute in order to make Swin work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
-        self.stage_names = [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
         if out_features is not None:
             if not isinstance(out_features, list):
                 raise ValueError("out_features should be a list")

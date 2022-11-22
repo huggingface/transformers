@@ -862,7 +862,7 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel):
 
         num_features = [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
         self.out_feature_channels = {}
-        for i, stage in enumerate(self.stage_names):
+        for i, stage in enumerate(self.stage_names[1:]):
             self.out_feature_channels[stage] = num_features[i]
 
         self.hidden_states_norms = nn.ModuleList([nn.LayerNorm(num_channels) for num_channels in self.channels])
@@ -882,7 +882,7 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel):
         # spatial dimensions contains all the heights and widths of each stage, including after the embeddings
         spatial_dimensions: Tuple[Tuple[int, int]] = outputs.hidden_states_spatial_dimensions
         for i, (hidden_state, stage, (height, width)) in enumerate(
-            zip(hidden_states, self.stage_names, spatial_dimensions)
+            zip(hidden_states, self.stage_names[1:], spatial_dimensions)
         ):
             norm = self.hidden_states_norms[i]
             # the last element corespond to the layer's last block output but before patch merging
