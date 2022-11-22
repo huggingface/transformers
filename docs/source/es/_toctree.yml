@@ -55,6 +55,10 @@
     - local: tasks/image_classification
       title: Clasificación de imágenes
     title: Visión Artificial
+  - sections:
+    - local: pr_checks
+      title: Verificaciones en un Pull Request
+    title: Contribuir
   title: Guías prácticas
 - sections:
   - local: philosophy
