@@ -137,7 +137,7 @@ class TFVideoMAEEmbeddings(tf.keras.layers.Layer):
         )
         self.config = config
 
-    def call(self, pixel_values, bool_masked_pos):
+    def call(self, pixel_values: tf.Tensor, bool_masked_pos: tf.Tensor) -> tf.Tensor:
         # create patch embeddings
         embeddings = self.patch_embeddings(pixel_values)
 
@@ -191,7 +191,7 @@ class TFVideoMAEPatchEmbeddings(tf.keras.layers.Layer):
             name="projection",
         )
 
-    def call(self, pixel_values):
+    def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
         batch_size, _, num_channels, height, width = tf.shape(pixel_values)
         if num_channels != self.num_channels:
             raise ValueError(
@@ -205,6 +205,7 @@ class TFVideoMAEPatchEmbeddings(tf.keras.layers.Layer):
         # (batch_size, num_frames, height, width, num_channels). Also, in CPU mode,
         # the Conv3D layer won't support the channels' first format.
         # So, permute to (batch_size, num_frames, height, width, num_channels).
+        # Conv3D in TensorFlow: https://www.tensorflow.org/api_docs/python/tf/keras/layers/Conv3D
         pixel_values = tf.transpose(pixel_values, [0, 1, 3, 4, 2])
         embeddings = self.projection(pixel_values)
         embeddings = tf.reshape(embeddings, [batch_size, -1, tf.shape(embeddings)[-1]])
@@ -253,13 +254,13 @@ class TFVideoMAESelfAttention(tf.keras.layers.Layer):
         return tf.transpose(tensor, perm=[0, 2, 1, 3])
 
     def linear_transformation(self, inputs, weight, bias=None):
+        # weight = tf.transpose(weight) # To match the PT weights (particularly for cross-loading).
         w_x = tf.matmul(inputs, weight, transpose_b=True)
         return w_x + bias if bias is not None else w_x
 
     def call(
-        self, hidden_states, head_mask: Optional[tf.Tensor] = None, output_attentions: bool = False
+        self, hidden_states: tf.Tensor, head_mask: Optional[tf.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[tf.Tensor, tf.Tensor], Tuple[tf.Tensor]]:
-
         batch_size = tf.shape(hidden_states)[0]
         k_bias = tf.zeros_like(self.v_bias) if self.q_bias is not None else None
 
