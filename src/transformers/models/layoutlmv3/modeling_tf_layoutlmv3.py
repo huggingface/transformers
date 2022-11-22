@@ -990,8 +990,8 @@ class TFLayoutLMv3PreTrainedModel(TFPreTrainedModel):
         image_shape = (2, self.config.num_channels, size, size)
         pixel_values = tf.random.uniform(shape=image_shape, minval=-1, maxval=1)
         return {
-            "input_ids": tf.constant(_DUMMY_INPUT_IDS, dtype=tf.int32),
-            "bbox": tf.constant(_DUMMY_BBOX, dtype=tf.int32),
+            "input_ids": tf.constant(_DUMMY_INPUT_IDS, dtype=tf.int64),
+            "bbox": tf.constant(_DUMMY_BBOX, dtype=tf.int64),
             "pixel_values": pixel_values,
         }
 

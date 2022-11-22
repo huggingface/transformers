@@ -879,7 +879,7 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
     @property
     def dummy_inputs(self):
         inputs = tf.constant(DUMMY_INPUTS, dtype=tf.int64)
-        input_mask = tf.constant(DUMMY_MASK)
+        input_mask = tf.constant(DUMMY_MASK, dtype=tf.int64)
         dummy_inputs = {
             "input_ids": inputs,
             "decoder_input_ids": inputs,

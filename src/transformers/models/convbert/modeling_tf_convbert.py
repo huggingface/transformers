@@ -1058,7 +1058,7 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
         Returns:
             tf.Tensor with dummy inputs
         """
-        return {"input_ids": tf.convert_to_tensor(MULTIPLE_CHOICE_DUMMY_INPUTS)}
+        return {"input_ids": tf.convert_to_tensor(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int64)}
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(
