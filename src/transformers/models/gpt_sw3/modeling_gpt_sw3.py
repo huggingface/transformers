@@ -345,17 +345,13 @@ class GptSw3Attention(nn.Module):
         # [sq, b, np, 3 * hn] -> 3 [sq, b, np, hn]
         (query_layer, key_layer, value_layer) = self._split_tensor_along_last_dim(mixed_x_layer, 3)
 
-        # TODO: Enable caching once we have attention working
-        # TODO: Make sure this works and all dims are in the right order!
         if layer_past is not None:
             past_key, past_value = layer_past
-            key = torch.cat((past_key, key_layer), dim=-2)
-            value = torch.cat((past_value, value_layer), dim=-2)
+            key_layer = torch.cat((past_key, key_layer), dim=0)
+            value_layer = torch.cat((past_value, value_layer), dim=0)
 
-        # TODO: Enable caching once we have attention working
-        # TODO: Make sure this works and all dims are in the right order!
         if use_cache is True:
-            present = (key, value)
+            present = (key_layer, value_layer)
         else:
             present = None
 
