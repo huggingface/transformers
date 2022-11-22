@@ -58,25 +58,6 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 250300)
 
-    def test_rust_and_python_bpe_tokenizers(self):
-        tokenizer = RemBertTokenizer.from_pretrained("google/rembert")
-        tokenizer.save_pretrained(self.tmpdirname)
-        rust_tokenizer = RemBertTokenizerFast.from_pretrained(self.tmpdirname)
-
-        sequence = "Hi I am new at huggingface."
-
-        ids = tokenizer.encode(sequence)
-        rust_ids = rust_tokenizer.encode(sequence)
-        self.assertListEqual(ids, rust_ids)
-
-        ids = tokenizer.encode(sequence, add_special_tokens=False)
-        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
-
-        tokens = tokenizer.convert_ids_to_tokens(ids)
-        rust_tokens = rust_tokenizer.tokenize(sequence)
-        self.assertListEqual(tokens, rust_tokens)
-
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
             return
