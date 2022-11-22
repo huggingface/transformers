@@ -213,6 +213,12 @@ class T5Tokenizer(PreTrainedTokenizer):
             return ([0] * len(token_ids_0)) + [1]
         return ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
 
+    def get_sentinel_tokens(self):
+        return list(set(filter(lambda x: bool("extra_id" in str(x)), self.additional_special_tokens)))
+
+    def get_sentinel_token_ids(self):
+        return [self._convert_token_to_id(token) for token in self.get_sentinel_tokens()]
+
     def _add_eos_if_not_present(self, token_ids: List[int]) -> List[int]:
         """Do not add eos again if user already added it."""
         if len(token_ids) > 0 and token_ids[-1] == self.eos_token_id:
