@@ -466,12 +466,21 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         else:
             max_size = None
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
-        if "shortest_edge" not in size or "longest_edge" not in size:
-            raise ValueError(f"Size must contain 'shortest_edge' and 'longest_edge' keys. Got {size.keys()}.")
+        if "shortest_edge" in size and "longest_edge" in size:
+            size = size["shortest_edge"]
+            max_size = size["longest_edge"]
+        elif "height" in size and "width" in size:
+            size = (size["height"], size["width"])
+            max_size = None
+        else:
+            raise ValueError(
+                "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got"
+                f" {size.keys()}."
+            )
         size = get_maskformer_resize_output_image_size(
             image=image,
-            size=size["shortest_edge"],
-            max_size=size["longest_edge"],
+            size=size,
+            max_size=max_size,
             size_divisor=size_divisor,
             default_to_square=False,
         )
@@ -710,7 +719,9 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         pad_bottom = output_height - input_height
         pad_right = output_width - input_width
         padding = ((0, pad_bottom), (0, pad_right))
-        padded_image = pad(image, padding, mode=PaddingMode.CONSTANT, constant_values=constant_values, data_format=data_format)
+        padded_image = pad(
+            image, padding, mode=PaddingMode.CONSTANT, constant_values=constant_values, data_format=data_format
+        )
         return padded_image
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
@@ -741,7 +752,10 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         """
         pad_size = get_max_height_width(images)
 
-        padded_images = [self._pad_image(image, pad_size, constant_values=constant_values, data_format=data_format) for image in images]
+        padded_images = [
+            self._pad_image(image, pad_size, constant_values=constant_values, data_format=data_format)
+            for image in images
+        ]
         data = {"pixel_values": padded_images}
 
         if return_pixel_mask:
@@ -832,7 +846,9 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 # We add an axis to make them compatible with the transformations library
                 # this will be removed in the future
                 masks = [mask[None, ...] for mask in masks]
-                masks = [self._pad_image(image=mask, output_size=pad_size, constant_values=ignore_index) for mask in masks]
+                masks = [
+                    self._pad_image(image=mask, output_size=pad_size, constant_values=ignore_index) for mask in masks
+                ]
                 masks = np.concatenate(masks, axis=0)
                 mask_labels.append(torch.from_numpy(masks))
                 class_labels.append(torch.from_numpy(classes))

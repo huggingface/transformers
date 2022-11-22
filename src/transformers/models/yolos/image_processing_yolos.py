@@ -865,7 +865,9 @@ class YolosImageProcessor(BaseImageProcessor):
         pad_bottom = output_height - input_height
         pad_right = output_width - input_width
         padding = ((0, pad_bottom), (0, pad_right))
-        padded_image = pad(image, padding, mode=PaddingMode.CONSTANT, constant_values=constant_values, data_format=data_format)
+        padded_image = pad(
+            image, padding, mode=PaddingMode.CONSTANT, constant_values=constant_values, data_format=data_format
+        )
         return padded_image
 
     def pad(
