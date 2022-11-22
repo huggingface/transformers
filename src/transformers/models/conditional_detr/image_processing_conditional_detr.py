@@ -881,9 +881,15 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         else:
             max_size = None
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
-        if "shortest_edge" not in size or "longest_edge" not in size:
-            raise ValueError(f"Size must contain 'shortest_edge' and 'longest_edge' keys. Got {size.keys()}.")
-        size = get_resize_output_image_size(image, size["shortest_edge"], size["longest_edge"])
+        if "shortest_edge" in size and "longest_edge" in size:
+            size = get_resize_output_image_size(image, size["shortest_edge"], size["longest_edge"])
+        elif "height" in size and "width" in size:
+            size = (size["height"], size["width"])
+        else:
+            raise ValueError(
+                "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got"
+                f" {size.keys()}."
+            )
         image = resize(image, size=size, resample=resample, data_format=data_format)
         return image
 
