@@ -777,15 +777,15 @@ class SpeechT5SpeechDecoderPostnet(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor):
         before_outs = self.feat_out(hidden_states).view(hidden_states.size(0), -1, self.config.num_mel_bins)
-
         logits = self.prob_out(hidden_states).view(hidden_states.size(0), -1)
+        after_outs = self.postnet(before_outs)
+        return before_outs, after_outs, logits
 
-        layer_output = before_outs.transpose(1, 2)
+    def postnet(self, hidden_states: torch.Tensor):
+        layer_output = hidden_states.transpose(1, 2)
         for layer in self.layers:
             layer_output = layer(layer_output)
-        after_outs = before_outs + layer_output.transpose(1, 2)
-
-        return before_outs, after_outs, logits
+        return hidden_states + layer_output.transpose(1, 2)
 
 
 class SpeechT5TextEncoderPrenet(nn.Module):
@@ -1799,7 +1799,7 @@ class SpeechT5DecoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         decoder_hidden_states = self.prenet(input_values, speaker_embeddings)
 
         outputs = self.wrapped_decoder(
-            hidden_states=decoder_hidden_states[:, -1:],  # TODO: ???
+            hidden_states=decoder_hidden_states,
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
@@ -2601,39 +2601,64 @@ class SpeechT5ForTTS(SpeechT5PreTrainedModel):
         # )
         return outputs
 
-    # def prepare_inputs_for_generation(
-    #     self,
-    #     decoder_input_ids,
-    #     past=None,
-    #     attention_mask=None,
-    #     head_mask=None,
-    #     decoder_head_mask=None,
-    #     cross_attn_head_mask=None,
-    #     use_cache=None,
-    #     encoder_outputs=None,
-    #     **kwargs
-    # ):
-    #     # cut decoder_input_ids if past is used
-    #     if past is not None:
-    #         decoder_input_ids = decoder_input_ids[:, -1:]
+    @torch.no_grad()
+    def generate_speech(
+        self,
+        input_ids: torch.Tensor,
+        speaker_embeddings: Optional[torch.Tensor] = None,
+        threshold: float = 0.5,
+        minlenratio: float = 0.0,
+        maxlenratio: float = 20.0,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
 
-    #     return {
-    #         "encoder_outputs": encoder_outputs,
-    #         "past_key_values": past,
-    #         "decoder_input_ids": decoder_input_ids,
-    #         "attention_mask": attention_mask,
-    #         "head_mask": head_mask,
-    #         "decoder_head_mask": decoder_head_mask,
-    #         "cross_attn_head_mask": cross_attn_head_mask,
-    #         "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
-    #     }
+        encoder_out = self.speecht5.encoder(
+            input_values=input_ids,
+            attention_mask=torch.ones_like(input_ids),
+            return_dict=True,
+        )
 
-    # @staticmethod
-    # def _reorder_cache(past, beam_idx):
-    #     reordered_past = ()
-    #     for layer_past in past:
-    #         reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
-    #     return reordered_past
+        encoder_last_hidden_state = encoder_out.last_hidden_state
+
+        maxlen = int(encoder_last_hidden_state.size(1) * maxlenratio / self.config.reduction_factor)
+        minlen = int(encoder_last_hidden_state.size(1) * minlenratio / self.config.reduction_factor)
+
+        ys = encoder_last_hidden_state.new_zeros(1, 1, self.config.num_mel_bins)
+
+        outs, probs = [], []
+        past_key_values = None
+        idx = 0
+
+        while True:
+            idx += 1
+
+            decoder_hidden_states = self.speecht5.decoder.prenet(ys, speaker_embeddings)
+
+            decoder_out = self.speecht5.decoder.wrapped_decoder(
+                hidden_states=decoder_hidden_states[:, -1:],
+                #attention_mask=decoder_attention_mask,
+                encoder_hidden_states=encoder_last_hidden_state,
+                #encoder_attention_mask=???,
+                past_key_values=past_key_values,
+                use_cache=True,
+                return_dict=True,
+            )
+
+            z = decoder_out.last_hidden_state
+            past_key_values = decoder_out.past_key_values
+
+            outs += [
+                self.speech_decoder_postnet.feat_out(z[0, -1]).view(self.config.reduction_factor, self.config.num_mel_bins)
+            ]
+            probs += [ torch.sigmoid(self.speech_decoder_postnet.prob_out(z[0, -1])) ]
+
+            ys = torch.cat((ys, outs[-1][-1].view(1, 1, self.config.num_mel_bins)), dim=1)
+
+            if idx >= minlen and (int(sum(probs[-1] >= threshold)) > 0 or idx >= maxlen):
+                outs = torch.cat(outs, dim=0).unsqueeze(0)
+                outs = self.speech_decoder_postnet.postnet(outs)
+                outs = outs.squeeze(0)
+                probs = torch.cat(probs, dim=0)
+                return outs, probs
 
 
 @add_start_docstrings("""SpeechT5 Model with a TODO on top.""", SPEECHT5_START_DOCSTRING)
