@@ -15,9 +15,8 @@
 """ Chinese-CLIP model configuration"""
 
 import copy
-import os
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
+from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 
 if TYPE_CHECKING:

@@ -17,8 +17,6 @@ Image/Text processor class for Chinese-CLIP
 """
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ..bert import BertTokenizer, BertTokenizerFast
-from .feature_extraction_chinese_clip import ChineseCLIPFeatureExtractor
 
 
 class ChineseCLIPProcessor(ProcessorMixin):

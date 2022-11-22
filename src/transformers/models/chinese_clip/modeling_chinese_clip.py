@@ -22,7 +22,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndCrossAttentions
+from ...modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,

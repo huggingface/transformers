@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch Chinese-CLIP model. """
 
 
-import inspect
 import os
 import tempfile
 import unittest
@@ -23,8 +22,7 @@ import unittest
 import numpy as np
 
 import requests
-import transformers
-from transformers import ChineseCLIPConfig, BertConfig, CLIPVisionConfig
+from transformers import ChineseCLIPConfig
 from transformers.testing_utils import (
     require_torch,
     require_vision,
@@ -41,7 +39,6 @@ from ...test_modeling_common import (
 
 if is_torch_available():
     import torch
-    from torch import nn
 
     from transformers import ChineseCLIPModel
     from transformers.models.chinese_clip.modeling_chinese_clip import CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
