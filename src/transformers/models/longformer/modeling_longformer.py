@@ -1288,10 +1288,11 @@ class LongformerEncoder(nn.Module):
         output_hidden_states=False,
         return_dict=True,
     ):
-
         is_index_masked = attention_mask < 0
         is_index_global_attn = attention_mask > 0
-        is_global_attn = torch.any(is_index_global_attn).item()  # the ONNX export should record is_global_attn == True
+
+        # Record `is_global_attn == True` to enable ONNX export
+        is_global_attn = is_index_global_attn.flatten().any().item()
 
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None  # All local attentions.
@@ -1346,16 +1347,14 @@ class LongformerEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        # undo padding
-        # this path should be recorded in the ONNX export, it is fine with padding_len == 0 as well
-        if padding_len > 0:
-            # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
-            hidden_states = hidden_states[:, : hidden_states.shape[1] - padding_len]
-            if output_hidden_states:
-                all_hidden_states = tuple([state[:, : state.shape[1] - padding_len] for state in all_hidden_states])
+        # undo padding if necessary
+        # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
+        hidden_states = hidden_states[:, : hidden_states.shape[1] - padding_len]
+        if output_hidden_states:
+            all_hidden_states = tuple([state[:, : state.shape[1] - padding_len] for state in all_hidden_states])
 
-            if output_attentions:
-                all_attentions = tuple([state[:, :, : state.shape[2] - padding_len, :] for state in all_attentions])
+        if output_attentions:
+            all_attentions = tuple([state[:, :, : state.shape[2] - padding_len, :] for state in all_attentions])
 
         if not return_dict:
             return tuple(
