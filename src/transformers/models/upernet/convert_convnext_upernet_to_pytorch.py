@@ -115,7 +115,7 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     #     outputs = model(**inputs).logits
 
     # print(outputs.keys())
-    # print("Looks ok!")
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")

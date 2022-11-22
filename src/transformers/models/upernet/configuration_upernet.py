@@ -18,6 +18,7 @@ import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..resnet import ResNetConfig
 
 
 logger = logging.get_logger(__name__)
@@ -71,7 +72,7 @@ class UperNetConfig(PretrainedConfig):
 
     def __init__(
         self,
-        backbone_config,
+        backbone_config=None,
         hidden_size=512,
         pool_scales=[1, 2, 3, 6],
         use_auxiliary_head=True,
@@ -84,6 +85,11 @@ class UperNetConfig(PretrainedConfig):
         **kwargs
     ):
         super().__init__(**kwargs)
+
+        if backbone_config is None:
+            backbone_config = {}
+            logger.info("backbone_config is None. Initializing the config with default ResNet backbone.")
+            self.backbone_config = ResNetConfig(**backbone_config)
 
         self.backbone_config = backbone_config
         self.hidden_size = hidden_size
@@ -103,6 +109,7 @@ class UperNetConfig(PretrainedConfig):
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
+        print("Backbone config: ", type(self.backbone_config))
         output["backbone_config"] = self.backbone_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
