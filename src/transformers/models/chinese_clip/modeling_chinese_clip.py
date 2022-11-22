@@ -469,7 +469,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
             # fix the None pooled_output of text_outputs to conform with dict_output
             pooled_output = text_outputs[1]
             if pooled_output is None:
-                text_outputs = (text_outputs[0], ) + text_outputs[2:]
+                text_outputs = (text_outputs[0],) + text_outputs[2:]
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
             return ((loss,) + output) if loss is not None else output
 

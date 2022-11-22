@@ -38,6 +38,7 @@ CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     ),
 }
 
+
 class ChineseCLIPConfig(PretrainedConfig):
     r"""
     [`ChineseCLIPConfig`] is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used

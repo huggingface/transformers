@@ -151,7 +151,9 @@ class ChineseCLIPImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         size = get_size_dict(size, default_to_square=False)
-        output_size = get_resize_output_image_size(image, size=(size['height'], size['width']), default_to_square=False)
+        output_size = get_resize_output_image_size(
+            image, size=(size["height"], size["width"]), default_to_square=False
+        )
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
     def center_crop(

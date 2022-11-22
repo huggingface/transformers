@@ -726,7 +726,7 @@ else:
     _import_structure["image_transforms"] = ["rescale", "resize", "to_pil_image"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
-    _import_structure["models.chinese_clip"].extend(["ChineseCLIPFeatureExtractor", "ChineseCLIPImageProcessor"])    
+    _import_structure["models.chinese_clip"].extend(["ChineseCLIPFeatureExtractor", "ChineseCLIPImageProcessor"])
     _import_structure["models.clip"].extend(["CLIPFeatureExtractor", "CLIPImageProcessor"])
     _import_structure["models.convnext"].extend(["ConvNextFeatureExtractor", "ConvNextImageProcessor"])
     _import_structure["models.deformable_detr"].append("DeformableDetrFeatureExtractor")

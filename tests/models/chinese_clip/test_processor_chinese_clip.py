@@ -124,7 +124,9 @@ class ChineseCLIPProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor_fast.feature_extractor, ChineseCLIPFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = ChineseCLIPProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = ChineseCLIPProcessor(
+            tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor()
+        )
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(cls_token="(CLS)", sep_token="(SEP)")

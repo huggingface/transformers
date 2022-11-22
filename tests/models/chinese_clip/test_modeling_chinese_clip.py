@@ -52,6 +52,7 @@ if is_vision_available():
 from ..bert.test_modeling_bert import BertModelTester
 from ..clip.test_modeling_clip import CLIPVisionModelTester
 
+
 class ChineseCLIPModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
 
@@ -66,7 +67,15 @@ class ChineseCLIPModelTester:
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        config, input_ids, token_type_ids, attention_mask, _, __, ___ = self.text_model_tester.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            attention_mask,
+            _,
+            __,
+            ___,
+        ) = self.text_model_tester.prepare_config_and_inputs()
         vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
 
         config = self.get_config()
@@ -238,9 +247,9 @@ class ChineseCLIPModelIntegrationTest(unittest.TestCase):
         processor = CLIPProcessor.from_pretrained(model_name)
 
         image = prepare_img()
-        inputs = processor(
-            text=["杰尼龟", "妙蛙种子", "小火龙", "皮卡丘"], images=image, padding=True, return_tensors="pt"
-        ).to(torch_device)
+        inputs = processor(text=["杰尼龟", "妙蛙种子", "小火龙", "皮卡丘"], images=image, padding=True, return_tensors="pt").to(
+            torch_device
+        )
 
         # forward pass
         with torch.no_grad():
