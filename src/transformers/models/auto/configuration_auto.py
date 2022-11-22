@@ -30,6 +30,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
         ("albert", "AlbertConfig"),
+        ("audio-spectrogram-transformer", "ASTConfig"),
         ("bart", "BartConfig"),
         ("beit", "BeitConfig"),
         ("bert", "BertConfig"),
@@ -102,6 +103,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mctct", "MCTCTConfig"),
         ("megatron-bert", "MegatronBertConfig"),
         ("mobilebert", "MobileBertConfig"),
+        ("mobilenet_v1", "MobileNetV1Config"),
         ("mobilenet_v2", "MobileNetV2Config"),
         ("mobilevit", "MobileViTConfig"),
         ("mpnet", "MPNetConfig"),
@@ -179,6 +181,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("audio-spectrogram-transformer", "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bart", "BART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bert", "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -246,6 +249,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("mbart", "MBART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mctct", "MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("megatron-bert", "MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("mobilenet_v1", "MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilenet_v2", "MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilevit", "MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mpnet", "MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -313,6 +317,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("albert", "ALBERT"),
+        ("audio-spectrogram-transformer", "Audio Spectrogram Transformer"),
         ("bart", "BART"),
         ("barthez", "BARThez"),
         ("bartpho", "BARTpho"),
@@ -400,6 +405,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("megatron_gpt2", "Megatron-GPT2"),
         ("mluke", "mLUKE"),
         ("mobilebert", "MobileBERT"),
+        ("mobilenet_v1", "MobileNetV1"),
         ("mobilenet_v2", "MobileNetV2"),
         ("mobilevit", "MobileViT"),
         ("mpnet", "MPNet"),
