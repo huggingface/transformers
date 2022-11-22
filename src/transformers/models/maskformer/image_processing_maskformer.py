@@ -467,8 +467,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             max_size = None
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
-            size = size["shortest_edge"]
-            max_size = size["longest_edge"]
+            size, max_size = size["shortest_edge"], size["longest_edge"]
         elif "height" in size and "width" in size:
             size = (size["height"], size["width"])
             max_size = None
