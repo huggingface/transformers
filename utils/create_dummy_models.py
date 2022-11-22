@@ -15,6 +15,7 @@
 
 import argparse
 import collections.abc
+import copy
 import importlib
 import inspect
 import json
@@ -39,7 +40,6 @@ from transformers import (
     PreTrainedTokenizerFast,
     logging,
 )
-from transformers.image_processing_utils import BaseImageProcessor
 from transformers.feature_extraction_utils import FeatureExtractionMixin
 from transformers.file_utils import is_tf_available, is_torch_available
 from transformers.image_processing_utils import BaseImageProcessor
@@ -491,6 +491,12 @@ def build_model(model_arch, tiny_config, output_dir):
     # copy the (same set of) processors (for a model type) to the model arch. specific folder
     if os.path.isdir(processor_output_dir):
         shutil.copytree(processor_output_dir, checkpoint_dir, dirs_exist_ok=True)
+
+    tiny_config = copy.deepcopy(tiny_config)
+
+    # TODO: check `FlaubertWithLMHeadModel` and `XLMWithLMHeadModel`
+    if any([model_arch.__name__.endswith(x) for x in ["ForCausalLM", "LMHeadModel"]]):
+        tiny_config.is_decoder = True
 
     model = model_arch(config=tiny_config)
     model.save_pretrained(checkpoint_dir)
