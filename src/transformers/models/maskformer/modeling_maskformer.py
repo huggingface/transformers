@@ -39,7 +39,6 @@ from ...utils import (
     requires_backends,
 )
 from ..detr import DetrConfig
-from ..swin import SwinConfig
 from .configuration_maskformer import MaskFormerConfig
 from .configuration_maskformer_swin import MaskFormerSwinConfig
 
@@ -1379,7 +1378,7 @@ class MaskFormerPixelLevelModule(nn.Module):
 
         # TODD: add method to load pretrained weights of backbone
         backbone_config = config.backbone_config
-        if isinstance(backbone_config, SwinConfig):
+        if backbone_config.model_type == "swin":
             # for backwards compatibility
             backbone_config = MaskFormerSwinConfig.from_dict(backbone_config.to_dict())
             backbone_config.out_features = ["stage1", "stage2", "stage3", "stage4"]
