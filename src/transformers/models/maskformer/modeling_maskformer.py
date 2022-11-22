@@ -1526,6 +1526,8 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, MaskFormerPixelLevelModule):
+            module.encoder.gradient_checkpointing = value
         if isinstance(module, DetrDecoder):
             module.gradient_checkpointing = value
 
