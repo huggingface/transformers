@@ -31,6 +31,7 @@ _import_structure = {
     "auto_factory": ["get_values"],
     "configuration_auto": ["ALL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CONFIG_MAPPING", "MODEL_NAMES_MAPPING", "AutoConfig"],
     "feature_extraction_auto": ["FEATURE_EXTRACTOR_MAPPING", "AutoFeatureExtractor"],
+    "image_processing_auto": ["IMAGE_PROCESSOR_MAPPING", "AutoImageProcessor"],
     "processing_auto": ["PROCESSOR_MAPPING", "AutoProcessor"],
     "tokenization_auto": ["TOKENIZER_MAPPING", "AutoTokenizer"],
 }
@@ -72,6 +73,7 @@ else:
         "MODEL_WITH_LM_HEAD_MAPPING",
         "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
         "AutoModel",
+        "AutoBackbone",
         "AutoModelForAudioClassification",
         "AutoModelForAudioFrameClassification",
         "AutoModelForAudioXVector",
@@ -184,6 +186,7 @@ if TYPE_CHECKING:
     from .auto_factory import get_values
     from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, MODEL_NAMES_MAPPING, AutoConfig
     from .feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
+    from .image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
     from .processing_auto import PROCESSOR_MAPPING, AutoProcessor
     from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 
@@ -223,6 +226,7 @@ if TYPE_CHECKING:
             MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
+            AutoBackbone,
             AutoModel,
             AutoModelForAudioClassification,
             AutoModelForAudioFrameClassification,

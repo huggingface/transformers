@@ -43,9 +43,10 @@ class LayoutLMv3FeatureExtractionTester(unittest.TestCase):
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        size=18,
+        size=None,
         apply_ocr=True,
     ):
+        size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -97,8 +98,8 @@ class LayoutLMv3FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -112,8 +113,8 @@ class LayoutLMv3FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -132,8 +133,8 @@ class LayoutLMv3FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -144,8 +145,8 @@ class LayoutLMv3FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -164,8 +165,8 @@ class LayoutLMv3FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -176,8 +177,8 @@ class LayoutLMv3FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 

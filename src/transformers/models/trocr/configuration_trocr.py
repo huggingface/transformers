@@ -82,12 +82,12 @@ class TrOCRConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import TrOCRForCausalLM, TrOCRConfig
+    >>> from transformers import TrOCRConfig, TrOCRForCausalLM
 
     >>> # Initializing a TrOCR-base style configuration
     >>> configuration = TrOCRConfig()
 
-    >>> # Initializing a model from the TrOCR-base style configuration
+    >>> # Initializing a model (with random weights) from the TrOCR-base style configuration
     >>> model = TrOCRForCausalLM(configuration)
 
     >>> # Accessing the model configuration

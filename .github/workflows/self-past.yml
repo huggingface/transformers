@@ -83,6 +83,10 @@ jobs:
           rm -rf tests/models/__pycache__
           rm -rf reports
 
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
       - id: set-matrix
         working-directory: /transformers
         name: Identify models to test
@@ -126,6 +130,10 @@ jobs:
         working-directory: /transformers
         run: |
           python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
 
       - name: Run all tests on GPU
         working-directory: /transformers
@@ -189,6 +197,10 @@ jobs:
         run: |
           python3 utils/print_env.py
 
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
       - name: Run all tests on GPU
         working-directory: /transformers
         run: python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
@@ -250,6 +262,7 @@ jobs:
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |
           pip install slack_sdk
+          pip show slack_sdk
           python utils/notification_service.py "${{ needs.setup.outputs.matrix }}"
 
       # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.

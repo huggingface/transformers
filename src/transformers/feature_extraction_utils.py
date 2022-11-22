@@ -33,14 +33,16 @@ from .utils import (
     copy_func,
     download_url,
     is_flax_available,
+    is_jax_tensor,
+    is_numpy_array,
     is_offline_mode,
     is_remote_url,
     is_tf_available,
     is_torch_available,
+    is_torch_device,
     logging,
     torch_required,
 )
-from .utils.generic import _is_jax, _is_numpy, _is_torch_device
 
 
 if TYPE_CHECKING:
@@ -150,10 +152,10 @@ class BatchFeature(UserDict):
             import jax.numpy as jnp  # noqa: F811
 
             as_tensor = jnp.array
-            is_tensor = _is_jax
+            is_tensor = is_jax_tensor
         else:
             as_tensor = np.asarray
-            is_tensor = _is_numpy
+            is_tensor = is_numpy_array
 
         # Do the tensor conversion in batch
         for key, value in self.items():
@@ -188,7 +190,7 @@ class BatchFeature(UserDict):
         # This check catches things like APEX blindly calling "to" on all inputs to a module
         # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
         # into a HalfTensor
-        if isinstance(device, str) or _is_torch_device(device) or isinstance(device, int):
+        if isinstance(device, str) or is_torch_device(device) or isinstance(device, int):
             self.data = {k: v.to(device=device) for k, v in self.data.items()}
         else:
             logger.warning(f"Attempting to cast a BatchFeature to type {str(device)}. This is not supported.")
@@ -251,13 +253,21 @@ class FeatureExtractionMixin(PushToHubMixin):
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-            use_auth_token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `~/.huggingface`).
+            use_auth_token (`str` or `bool`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
+                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
+
+
+                <Tip>
+
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+
+                </Tip>
+
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
                 If `False`, then this function returns just the final feature extractor object. If `True`, then this
                 functions returns a `Tuple(feature_extractor, unused_kwargs)` where *unused_kwargs* is a dictionary
@@ -267,12 +277,6 @@ class FeatureExtractionMixin(PushToHubMixin):
                 The values in kwargs of any keys which are feature extractor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
                 controlled by the `return_unused_kwargs` keyword parameter.
-
-        <Tip>
-
-        Passing `use_auth_token=True` is required when you want to use a private model.
-
-        </Tip>
 
         Returns:
             A feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`].

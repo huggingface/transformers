@@ -199,6 +199,7 @@ You can easily log and monitor your runs code. The following are currently suppo
 * [Weights & Biases](https://docs.wandb.ai/integrations/huggingface)
 * [Comet ML](https://www.comet.ml/docs/python-sdk/huggingface/)
 * [Neptune](https://docs.neptune.ai/integrations-and-supported-tools/model-training/hugging-face)
+* [ClearML](https://clear.ml/docs/latest/docs/getting_started/ds/ds_first_steps)
 
 ### Weights & Biases
 
@@ -335,3 +336,40 @@ Now, when you start the training with `trainer.train()`, your metadata will be l
 | `NEPTUNE_PROJECT` | The full name of your Neptune project (`workspace-name/project-name`). To find and copy it, head to **project settings** &rarr; **Properties**. |
 
 For detailed instructions and examples, see the [Neptune docs](https://docs.neptune.ai/integrations-and-supported-tools/model-training/hugging-face).
+
+### ClearML
+
+To use ClearML, install the clearml package with:
+
+```bash
+pip install clearml
+```
+
+Then [create new credentials]() from the ClearML Server. You can get a free hosted server [here]() or [self-host your own]()!
+After creating your new credentials, you can either copy the local snippet which you can paste after running:
+
+```bash
+clearml-init
+```
+
+Or you can copy the jupyter snippet if you are in Jupyter or Colab:
+
+```python
+%env CLEARML_WEB_HOST=https://app.clear.ml
+%env CLEARML_API_HOST=https://api.clear.ml
+%env CLEARML_FILES_HOST=https://files.clear.ml
+%env CLEARML_API_ACCESS_KEY=***
+%env CLEARML_API_SECRET_KEY=***
+```
+
+
+To enable logging to ClearML, include `"clearml"` in the `report_to` of your `TrainingArguments` or script. Or just pass along `--report_to all` if you have `clearml` already installed.
+
+Advanced configuration is possible by setting environment variables:
+
+| Environment Variable | Value |
+|---|---|
+| CLEARML_PROJECT    | Name of the project in ClearML. (default: `"HuggingFace Transformers"`) |
+| CLEARML_TASK       | Name of the task in ClearML. (default: `"Trainer"`) |
+
+Additional configuration options are available through generic [clearml environment variables](https://clear.ml/docs/latest/docs/configs/env_vars).

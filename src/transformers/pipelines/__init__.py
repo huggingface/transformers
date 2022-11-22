@@ -21,11 +21,12 @@ import os
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from numpy import isin
 
-from huggingface_hub.file_download import http_get
+from huggingface_hub import model_info
 
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
@@ -36,7 +37,14 @@ from ..models.auto.modeling_auto import AutoModelForDepthEstimation
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..tokenization_utils_fast import PreTrainedTokenizerFast
-from ..utils import HUGGINGFACE_CO_RESOLVE_ENDPOINT, is_tf_available, is_torch_available, logging
+from ..utils import (
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
+    is_kenlm_available,
+    is_pyctcdecode_available,
+    is_tf_available,
+    is_torch_available,
+    logging,
+)
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
@@ -337,7 +345,7 @@ SUPPORTED_TASKS = {
         "tf": (),
         "pt": (AutoModelForObjectDetection,) if is_torch_available() else (),
         "default": {"model": {"pt": ("facebook/detr-resnet-50", "2729413")}},
-        "type": "image",
+        "type": "multimodal",
     },
     "zero-shot-object-detection": {
         "impl": ZeroShotObjectDetectionPipeline,
@@ -381,25 +389,17 @@ def get_supported_tasks() -> List[str]:
 
 
 def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
-    tmp = io.BytesIO()
-    headers = {}
-    if use_auth_token:
-        headers["Authorization"] = f"Bearer {use_auth_token}"
-
     try:
-        http_get(f"https://huggingface.co/api/models/{model}", tmp, headers=headers)
-        tmp.seek(0)
-        body = tmp.read()
-        data = json.loads(body)
+        info = model_info(model, token=use_auth_token)
     except Exception as e:
         raise RuntimeError(f"Instantiating a pipeline without a task set raised an error: {e}")
-    if "pipeline_tag" not in data:
+    if not info.pipeline_tag:
         raise RuntimeError(
             f"The model {model} does not seem to have a correct `pipeline_tag` set to infer the task automatically"
         )
-    if data.get("library_name", "transformers") != "transformers":
-        raise RuntimeError(f"This model is meant to be used with {data['library_name']} not with transformers")
-    task = data["pipeline_tag"]
+    if getattr(info, "library_name", "transformers") != "transformers":
+        raise RuntimeError(f"This model is meant to be used with {info.library_name} not with transformers")
+    task = info.pipeline_tag
     return task
 
 
@@ -590,15 +590,17 @@ def pipeline(
     >>> from transformers import pipeline, AutoModelForTokenClassification, AutoTokenizer
 
     >>> # Sentiment analysis pipeline
-    >>> pipeline("sentiment-analysis")
+    >>> analyzer = pipeline("sentiment-analysis")
 
     >>> # Question answering pipeline, specifying the checkpoint identifier
-    >>> pipeline("question-answering", model="distilbert-base-cased-distilled-squad", tokenizer="bert-base-cased")
+    >>> oracle = pipeline(
+    ...     "question-answering", model="distilbert-base-cased-distilled-squad", tokenizer="bert-base-cased"
+    ... )
 
     >>> # Named entity recognition pipeline, passing in a specific model and tokenizer
     >>> model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-    >>> pipeline("ner", model=model, tokenizer=tokenizer)
+    >>> recognizer = pipeline("ner", model=model, tokenizer=tokenizer)
     ```"""
     if model_kwargs is None:
         model_kwargs = {}
@@ -631,6 +633,8 @@ def pipeline(
             " feature_extractor may not be compatible with the default model. Please provide a PreTrainedModel class"
             " or a path/identifier to a pretrained model when providing feature_extractor."
         )
+    if isinstance(model, Path):
+        model = str(model)
 
     # Config is the primordial information item.
     # Instantiate config if needed
@@ -837,11 +841,12 @@ def pipeline(
 
                     kwargs["decoder"] = decoder
                 except ImportError as e:
-                    logger.warning(
-                        f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Try to install"
-                        " `pyctcdecode` and `kenlm`: (`pip install pyctcdecode`, `pip install"
-                        f" https://github.com/kpu/kenlm/archive/master.zip`): Error: {e}"
-                    )
+                    logger.warning(f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Error: {e}")
+                    if not is_kenlm_available():
+                        logger.warning("Try to install `kenlm`: `pip install kenlm")
+
+                    if not is_pyctcdecode_available():
+                        logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
 
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:

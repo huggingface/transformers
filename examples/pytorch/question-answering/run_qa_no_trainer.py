@@ -57,7 +57,7 @@ from utils_qa import postprocess_qa_predictions
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.24.0.dev0")
+check_min_version("4.25.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
@@ -108,7 +108,7 @@ def parse_args():
         "--train_file", type=str, default=None, help="A csv or a json file containing the training data."
     )
     parser.add_argument(
-        "--preprocessing_num_workers", type=int, default=4, help="A csv or a json file containing the training data."
+        "--preprocessing_num_workers", type=int, default=1, help="A csv or a json file containing the training data."
     )
     parser.add_argument("--do_predict", action="store_true", help="To do prediction on the question answering model")
     parser.add_argument(
@@ -296,7 +296,7 @@ def parse_args():
         default="all",
         help=(
             'The integration to report the results and logs to. Supported platforms are `"tensorboard"`,'
-            ' `"wandb"` and `"comet_ml"`. Use `"all"` (default) to report to all integrations.'
+            ' `"wandb"`, `"comet_ml"` and `"clearml"`. Use `"all"` (default) to report to all integrations.'
             "Only applicable when `--with_tracking` is passed."
         ),
     )

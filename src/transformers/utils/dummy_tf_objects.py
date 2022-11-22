@@ -31,6 +31,13 @@ class TFForcedEOSTokenLogitsProcessor(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFGenerationMixin(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFLogitsProcessor(metaclass=DummyObject):
     _backends = ["tf"]
 
@@ -1136,6 +1143,44 @@ class TFElectraPreTrainedModel(metaclass=DummyObject):
 
 
 class TFEncoderDecoderModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+ESM_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFEsmForMaskedLM(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFEsmForSequenceClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFEsmForTokenClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFEsmModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFEsmPreTrainedModel(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):

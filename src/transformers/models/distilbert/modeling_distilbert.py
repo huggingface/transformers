@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 """
  PyTorch DistilBERT model adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM) and in
  part from HuggingFace PyTorch version of Google AI Bert model (https://github.com/google-research/bert)
@@ -590,6 +591,8 @@ class DistilBertModel(DistilBertPreTrainedModel):
     DISTILBERT_START_DOCSTRING,
 )
 class DistilBertForMaskedLM(DistilBertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["vocab_projector.weight"]
+
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
 

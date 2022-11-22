@@ -213,8 +213,6 @@ class FlaubertTokenizer(PreTrainedTokenizer):
             Dictionary mapping languages string identifiers to their IDs.
         id2lang (`Dict[int, str]`, *optional*):
             Dictionary mapping language IDs to their string identifiers.
-        do_lowercase_and_remove_accent (`bool`, *optional*, defaults to `True`):
-            Whether to lowercase and remove accents when tokenizing.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -247,9 +245,20 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         ],
         lang2id=None,
         id2lang=None,
-        do_lowercase_and_remove_accent=True,
         **kwargs
     ):
+
+        do_lowercase_and_remove_accent = kwargs.pop("do_lowercase_and_remove_accent", None)
+        if do_lowercase_and_remove_accent is not None:
+            logger.warning(
+                "`do_lowercase_and_remove_accent` is passed as a keyword argument, but this won't do anything."
+                " `FlaubertTokenizer` will always set it to `False`."
+            )
+        # always `False`
+        self.do_lowercase_and_remove_accent = False
+
+        self.do_lowercase = do_lowercase
+
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
@@ -260,8 +269,6 @@ class FlaubertTokenizer(PreTrainedTokenizer):
             additional_special_tokens=additional_special_tokens,
             lang2id=lang2id,
             id2lang=id2lang,
-            do_lowercase_and_remove_accent=do_lowercase_and_remove_accent,
-            do_lowercase=do_lowercase,
             **kwargs,
         )
 
@@ -280,8 +287,6 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         # cache of sm.MosesTokenizer instance
         self.cache_moses_tokenizer = dict()
         self.lang_with_custom_tokenizer = set(["zh", "th", "ja"])
-        # True for current supported model (v1.2.0), False for XLM-17 & 100
-        self.do_lowercase_and_remove_accent = False
         self.lang2id = lang2id
         self.id2lang = id2lang
         if lang2id is not None and id2lang is not None:

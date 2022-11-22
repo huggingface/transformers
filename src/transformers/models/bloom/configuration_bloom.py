@@ -152,7 +152,6 @@ class BloomConfig(PretrainedConfig):
 
 
 class BloomOnnxConfig(OnnxConfigWithPast):
-
     torch_onnx_minimum_version = version.parse("1.12")
 
     def __init__(
@@ -171,7 +170,8 @@ class BloomOnnxConfig(OnnxConfigWithPast):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         common_inputs = OrderedDict({"input_ids": {0: "batch", 1: "sequence"}})
         if self.use_past:
-            self.fill_with_past_key_values_(common_inputs, direction="inputs")
+            # BLOOM stores values on dynamic axis 2. For more details see: https://github.com/huggingface/transformers/pull/18344
+            self.fill_with_past_key_values_(common_inputs, direction="inputs", inverted_values_shape=True)
             common_inputs["attention_mask"] = {0: "batch", 1: "past_sequence + sequence"}
         else:
             common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}

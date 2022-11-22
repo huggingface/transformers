@@ -63,3 +63,11 @@ class TestActivations(unittest.TestCase):
             get_activation("bogus")
         with self.assertRaises(KeyError):
             get_activation(None)
+
+    def test_activations_are_distinct_objects(self):
+        act1 = get_activation("gelu")
+        act1.a = 1
+        act2 = get_activation("gelu")
+        self.assertEqual(act1.a, 1)
+        with self.assertRaises(AttributeError):
+            _ = act2.a
