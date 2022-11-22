@@ -17,7 +17,7 @@
 
 import math
 import random
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 import tensorflow as tf
 
