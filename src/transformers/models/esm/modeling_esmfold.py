@@ -2118,7 +2118,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
             position_ids = torch.arange(L, device=device).expand_as(input_ids)
 
         # === ESM ===
-        esmaa = self.af2_idx_to_esm_idx(aa, attention_mask).to(device)
+        esmaa = self.af2_idx_to_esm_idx(aa, attention_mask)
 
         if masking_pattern is not None:
             masked_aa, esmaa, mlm_targets = self.bert_mask(aa, esmaa, attention_mask, masking_pattern)
@@ -2207,8 +2207,10 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         return EsmForProteinFoldingOutput(**structure)
 
     def af2_idx_to_esm_idx(self, aa, mask):
+        # avoid indexing on different devices
+        if self.af2_to_esm.device != aa.device:
+            self.af2_to_esm = self.af2_to_esm.to(aa.device)
         aa = (aa + 1).masked_fill(mask != 1, 0)
-        aa = aa.to(self.af2_to_esm.device)
         return self.af2_to_esm[aa]
 
     def compute_language_model_representations(self, esmaa: torch.Tensor) -> torch.Tensor:
