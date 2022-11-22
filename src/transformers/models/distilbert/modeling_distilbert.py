@@ -142,7 +142,7 @@ class MultiHeadSelfAttention(nn.Module):
         self.dropout = nn.Dropout(p=config.attention_dropout)
 
         # Split evenly into multiheads
-        if self.dim % self.n_heads != 0
+        if self.dim % self.n_heads != 0:
             raise ValueError("self.n_heads (" + str(self.n_heads) + ") must divide self.dim (" + str(self.dim) + ") evenly")
        
 
