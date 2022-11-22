@@ -2323,6 +2323,16 @@ class UtilsFunctionsTest(unittest.TestCase):
         for p1, p2 in zip(safetensors_model.weights, tf_model.weights):
             self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
 
+    def test_dummy_inputs_dtype(self):
+        # Ensure all integer dummy inputs are int64
+        self.assertTrue(hasattr(self, "dummy_inputs"))
+        self.assertTrue(isinstance(self.dummy_inputs, dict))
+        for key, tensor in self.dummy_inputs.items():
+            self.assertTrue(isinstance(tensor, tf.Tensor))
+            if tensor.dtype.is_integer:
+                self.assertTrue(tensor.dtype == tf.int64)
+
+
 
 @require_tf
 @is_staging_test
