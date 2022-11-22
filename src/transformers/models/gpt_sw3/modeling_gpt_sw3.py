@@ -169,8 +169,6 @@ class CoreAttention(torch.nn.Module):
         key_layer,
         value_layer,
         attention_mask,
-        layer_past=None,
-        get_key_value=False,
     ):
 
         # ===================================
@@ -205,19 +203,6 @@ class CoreAttention(torch.nn.Module):
 
         # change view to [b, np, sq, sk]
         attention_scores = matmul_result.view(*output_size)
-
-        # ==================================================
-        # Update attention mask for inference. [b, np, sq, sk]
-        # ==================================================
-        # TODO: Figure out what this is doing and if it can be removed or should be used!
-        if get_key_value:
-            with torch.no_grad():
-                if layer_past is not None:
-                    attention_mask = attention_mask[
-                        ..., attention_scores.size(3) - 1, : attention_scores.size(3)
-                    ].unsqueeze(2)
-                else:
-                    attention_mask = attention_mask[..., : attention_scores.size(3), : attention_scores.size(3)]
 
         # ===========================
         # Attention probs and dropout
@@ -288,12 +273,6 @@ class GptSw3Attention(nn.Module):
         self.c_attn = nn.Linear(self.hidden_size, 3 * self.hidden_size)
         self.c_proj = nn.Linear(self.hidden_size, self.hidden_size)
 
-        # Inference key-value memory
-        # TODO: Combine nemo and hf caching and memory
-        self.inference_key_memory = None
-        self.inference_value_memory = None
-        self.inference_current_sequence_len = 0
-
     def _split_tensor_along_last_dim(self, tensor, num_partitions):
         """
         Split a tensor along its last dimension.
@@ -309,13 +288,12 @@ class GptSw3Attention(nn.Module):
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
         layer_past: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,           # TODO: How does attention mask work in hf?
-        use_cache: Optional[bool] = False,                            # TODO: Enable caching once attention is working!
+        attention_mask: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
         get_key_value: Optional[bool] = False,
     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
 
-        # TODO: Find the best place to do this!
         # hidden_states: [b, sq, h] -> [sq, b, h]
         hidden_states = hidden_states.transpose(0, 1)
 
@@ -325,11 +303,8 @@ class GptSw3Attention(nn.Module):
         # np := number of attention heads
         # hn := hidden size of attention heads
 
-        # Attention mask (lower triangular).
-        # TODO: Don't create this at every call to forward, find a better place to create it (copy hf).
-        sq, b, h = hidden_states.shape
-        causal_mask = torch.tril(torch.ones((b, sq, sq), device=hidden_states.device)).view(b, 1, sq, sq)
-        causal_mask = causal_mask < 0.5
+        # Causal mask (lower triangular) and attention mask.
+        # causal_mask = (attention_mask.transpose(2, 3) * attention_mask).tril() < 0.5
 
         # hidden_states: [sq, b, h]
         # Attention heads [sq, b, h] -> [sq, b, (np * 3 * hn)]
@@ -346,11 +321,13 @@ class GptSw3Attention(nn.Module):
         (query_layer, key_layer, value_layer) = self._split_tensor_along_last_dim(mixed_x_layer, 3)
 
         if layer_past is not None:
+            # TODO: Follow hf caching format, wich means convert it to gpt-sw3 compatible format here.
             past_key, past_value = layer_past
             key_layer = torch.cat((past_key, key_layer), dim=0)
             value_layer = torch.cat((past_value, value_layer), dim=0)
 
         if use_cache is True:
+            # TODO: Follow hf caching format, convert to hf caching format before saving.
             present = (key_layer, value_layer)
         else:
             present = None
@@ -366,14 +343,9 @@ class GptSw3Attention(nn.Module):
 
         attn_output = self.c_proj(attn_output)
 
-        # TODO: Find the best place to do this!
-        # hidden_states: [sq, b, h] -> [b, sq, h]
+        # [sq, b, h] -> [b, sq, h]
         attn_output = attn_output.transpose(0, 1)
-        attn_weights = attn_weights.transpose(0, 1)  # TODO: Figure out if this should this be transposed!
-
-        # TODO: Figure out what this does!
-        # if get_key_value:
-        #     output = [output, present]
+        attn_weights = attn_weights.transpose(0, 1)
 
         outputs = (attn_output, present)
         if output_attentions:
@@ -473,7 +445,6 @@ class GptSw3PreTrainedModel(PreTrainedModel):
     """
 
     config_class = GptSw3Config
-    # load_tf_weights = load_tf_weights_in_gpt_sw3  # TODO: Safely remove this!
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
@@ -830,30 +801,15 @@ class GptSw3Model(GptSw3PreTrainedModel):
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
             attention_mask = attention_mask[:, None, None, :]
 
-            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-            # masked positions, this operation will create a tensor which is 0.0 for
-            # positions we want to attend and the dtype's smallest value for masked positions.
-            # Since we are adding it to the raw scores before the softmax, this is
-            # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
-
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.config.add_cross_attention and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+            # We make the attention mask into a causal mask of dimensions [batch_size, 1, seq_length, seq_length]
+            attention_mask = (attention_mask.transpose(2, 3) * attention_mask).tril() < 0.5
         else:
-            encoder_attention_mask = None
-
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # head_mask has shape n_layer x batch x n_heads x N x N
-        head_mask = self.get_head_mask(head_mask, self.config.n_layer)
+            # If no attention mask is provided, we just make a causal mask.
+            seq_length = input_shape[-1]
+            attention_mask = torch.tril(torch.ones((batch_size, seq_length, seq_length), device=device)).view(
+                batch_size, 1, seq_length, seq_length
+            )
+            attention_mask = attention_mask < 0.5
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
