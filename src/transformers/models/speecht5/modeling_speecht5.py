@@ -2604,13 +2604,37 @@ class SpeechT5ForTTS(SpeechT5PreTrainedModel):
     @torch.no_grad()
     def generate_speech(
         self,
-        input_ids: torch.Tensor,
-        speaker_embeddings: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor,
+        speaker_embeddings: Optional[torch.FloatTensor] = None,
         threshold: float = 0.5,
         minlenratio: float = 0.0,
         maxlenratio: float = 20.0,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> torch.FloatTensor:
+        r"""
+        Converts a sequence of input tokens into a sequence of mel spectrograms, which can subsequently be turned
+        into a speech waveform using a vocoder.
 
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. The `batch_size` should be 1 currently.
+
+                Indices can be obtained using [`SpeechT5Tokenizer`]. See [`~PreTrainedTokenizer.encode`] and
+                [`~PreTrainedTokenizer.__call__`] for details.
+
+                [What are input IDs?](../glossary#input-ids)
+            speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
+                Tensor containing the speaker embeddings.
+            threshold (`float`, *optional*, defaults to 0.5):
+                The generated sequence ends when the predicted stop token probability exceeds this value.
+            minlenratio (`float`, *optional*, defaults to 0.0):
+                Used to calculate the minimum required length for the output sequence.
+            maxlenratio (`float`, *optional*, defaults to 20.0):
+                Used to calculate the maximum allowed length for the output sequence.
+
+        Returns:
+            `torch.FloatTensor` of shape `(output_sequence_length, config.num_mel_bins)` containing the
+            predicted mel spectrogram.
+        """
         encoder_out = self.speecht5.encoder(
             input_values=input_ids,
             attention_mask=torch.ones_like(input_ids),
@@ -2622,17 +2646,20 @@ class SpeechT5ForTTS(SpeechT5PreTrainedModel):
         maxlen = int(encoder_last_hidden_state.size(1) * maxlenratio / self.config.reduction_factor)
         minlen = int(encoder_last_hidden_state.size(1) * minlenratio / self.config.reduction_factor)
 
-        ys = encoder_last_hidden_state.new_zeros(1, 1, self.config.num_mel_bins)
+        # Start the output sequence with a mel spectrum that is all zeros.
+        output_sequence = encoder_last_hidden_state.new_zeros(1, 1, self.config.num_mel_bins)
 
-        outs, probs = [], []
+        spectrogram = []
         past_key_values = None
         idx = 0
 
         while True:
             idx += 1
 
-            decoder_hidden_states = self.speecht5.decoder.prenet(ys, speaker_embeddings)
+            # Run the decoder prenet on the entire output sequence.
+            decoder_hidden_states = self.speecht5.decoder.prenet(output_sequence, speaker_embeddings)
 
+            # Run the decoder layers on the last element of the prenet output.
             decoder_out = self.speecht5.decoder.wrapped_decoder(
                 hidden_states=decoder_hidden_states[:, -1:],
                 #attention_mask=decoder_attention_mask,
@@ -2643,22 +2670,26 @@ class SpeechT5ForTTS(SpeechT5PreTrainedModel):
                 return_dict=True,
             )
 
-            z = decoder_out.last_hidden_state
+            last_decoder_output = decoder_out.last_hidden_state[0, -1]
             past_key_values = decoder_out.past_key_values
 
-            outs += [
-                self.speech_decoder_postnet.feat_out(z[0, -1]).view(self.config.reduction_factor, self.config.num_mel_bins)
-            ]
-            probs += [ torch.sigmoid(self.speech_decoder_postnet.prob_out(z[0, -1])) ]
+            # Predict the new mel spectrum for this step in the sequence.
+            spectrum = self.speech_decoder_postnet.feat_out(last_decoder_output)
+            spectrum = spectrum.view(self.config.reduction_factor, self.config.num_mel_bins)
+            spectrogram.append(spectrum)
 
-            ys = torch.cat((ys, outs[-1][-1].view(1, 1, self.config.num_mel_bins)), dim=1)
+            # Extend the output sequence with the new mel spectrum.
+            output_sequence = torch.cat((output_sequence, spectrum[-1].view(1, 1, self.config.num_mel_bins)), dim=1)
 
-            if idx >= minlen and (int(sum(probs[-1] >= threshold)) > 0 or idx >= maxlen):
-                outs = torch.cat(outs, dim=0).unsqueeze(0)
-                outs = self.speech_decoder_postnet.postnet(outs)
-                outs = outs.squeeze(0)
-                probs = torch.cat(probs, dim=0)
-                return outs, probs
+            # Predict the probability that this is the stop token.
+            prob = torch.sigmoid(self.speech_decoder_postnet.prob_out(last_decoder_output))
+
+            # Finished when stop token or maximum length is reached.
+            if idx >= minlen and (int(sum(prob >= threshold)) > 0 or idx >= maxlen):
+                spectrogram = torch.cat(spectrogram, dim=0).unsqueeze(0)
+                spectrogram = self.speech_decoder_postnet.postnet(spectrogram)
+                spectrogram = spectrogram.squeeze(0)
+                return spectrogram
 
 
 @add_start_docstrings("""SpeechT5 Model with a TODO on top.""", SPEECHT5_START_DOCSTRING)
