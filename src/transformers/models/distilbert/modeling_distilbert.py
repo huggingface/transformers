@@ -259,6 +259,7 @@ class TransformerBlock(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
 
+        # Configure multi heads
         if config.dim % config.n_heads != 0:
             raise ValueError("config.n_heads (" + str(config.n_heads) + ") must divide config.dim (" + str(config.dim) + ") evenly")
         
