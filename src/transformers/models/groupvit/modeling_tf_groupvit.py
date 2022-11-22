@@ -1821,7 +1821,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
             dtype=tf.float32,
         )
         return {
-            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32),
+            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int64),
             "pixel_values": VISION_DUMMY_INPUTS,
         }
 
