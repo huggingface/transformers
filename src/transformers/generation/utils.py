@@ -1140,7 +1140,7 @@ class GenerationMixin:
             except EnvironmentError:
                 generation_config = GenerationConfig.from_model_config(self.config)
         generation_config = copy.deepcopy(generation_config)
-        model_kwargs = generation_config.update(kwargs)  # All unused kwargs must be model kwargs
+        model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
 
         # 2. Validate the `.generate()` call
         self._validate_model_class()
@@ -1249,7 +1249,7 @@ class GenerationMixin:
                 " increasing `max_new_tokens`."
             )
 
-        # 6. determine generation mode
+        # 8. determine generation mode
         is_constraint_gen_mode = (
             generation_config.constraints is not None or generation_config.force_words_ids is not None
         )
@@ -1315,7 +1315,7 @@ class GenerationMixin:
                 UserWarning,
             )
 
-        # 7. prepare distribution pre_processing samplers
+        # 9. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
             generation_config=generation_config,
             input_ids_seq_length=input_ids_seq_length,
@@ -1324,11 +1324,11 @@ class GenerationMixin:
             logits_processor=logits_processor,
         )
 
-        # 8. prepare stopping criteria
+        # 10. prepare stopping criteria
         stopping_criteria = self._get_stopping_criteria(
             generation_config=generation_config, stopping_criteria=stopping_criteria
         )
-        # 9. go into different generation modes
+        # 11. go into different generation modes
         if is_greedy_gen_mode:
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
@@ -1336,7 +1336,7 @@ class GenerationMixin:
                     " greedy search."
                 )
 
-            # 10. run greedy search
+            # 12. run greedy search
             return self.greedy_search(
                 input_ids,
                 logits_processor=logits_processor,
@@ -1372,10 +1372,10 @@ class GenerationMixin:
             )
 
         elif is_sample_gen_mode:
-            # 10. prepare logits warper
+            # 12. prepare logits warper
             logits_warper = self._get_logits_warper(generation_config)
 
-            # 11. expand input_ids with `num_return_sequences` additional sequences per batch
+            # 13. expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
                 expand_size=generation_config.num_return_sequences,
@@ -1383,7 +1383,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-            # 12. run sample
+            # 14. run sample
             return self.sample(
                 input_ids,
                 logits_processor=logits_processor,
@@ -1404,7 +1404,7 @@ class GenerationMixin:
             if stopping_criteria.max_length is None:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
 
-            # 10. prepare beam search scorer
+            # 12. prepare beam search scorer
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
                 num_beams=generation_config.num_beams,
@@ -1413,14 +1413,14 @@ class GenerationMixin:
                 do_early_stopping=generation_config.early_stopping,
                 num_beam_hyps_to_keep=generation_config.num_return_sequences,
             )
-            # 11. interleave input_ids with `num_beams` additional sequences per batch
+            # 13. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
                 expand_size=generation_config.num_beams,
                 is_encoder_decoder=self.config.is_encoder_decoder,
                 **model_kwargs,
             )
-            # 12. run beam search
+            # 14. run beam search
             return self.beam_search(
                 input_ids,
                 beam_scorer,
@@ -1435,12 +1435,12 @@ class GenerationMixin:
             )
 
         elif is_beam_sample_gen_mode:
-            # 10. prepare logits warper
+            # 12. prepare logits warper
             logits_warper = self._get_logits_warper(generation_config)
 
             if stopping_criteria.max_length is None:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
-            # 11. prepare beam search scorer
+            # 13. prepare beam search scorer
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size * generation_config.num_return_sequences,
                 num_beams=generation_config.num_beams,
@@ -1449,7 +1449,7 @@ class GenerationMixin:
                 do_early_stopping=generation_config.early_stopping,
             )
 
-            # 12. interleave input_ids with `num_beams` additional sequences per batch
+            # 14. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
                 expand_size=generation_config.num_beams * generation_config.num_return_sequences,
@@ -1457,7 +1457,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-            # 13. run beam sample
+            # 15. run beam sample
             return self.beam_sample(
                 input_ids,
                 beam_scorer,
@@ -1482,10 +1482,11 @@ class GenerationMixin:
             if stopping_criteria.max_length is None:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
 
-            if generation_config.typical_p is not None:
+            has_default_typical_p = kwargs.get("typical_p") is None and generation_config.typical_p == 1.0
+            if not has_default_typical_p:
                 raise ValueError("Decoder argument `typical_p` is not supported with beam groups.")
 
-            # 10. prepare beam search scorer
+            # 12. prepare beam search scorer
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
                 num_beams=generation_config.num_beams,
@@ -1496,14 +1497,14 @@ class GenerationMixin:
                 num_beam_hyps_to_keep=generation_config.num_return_sequences,
                 num_beam_groups=generation_config.num_beam_groups,
             )
-            # 11. interleave input_ids with `num_beams` additional sequences per batch
+            # 13. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
                 expand_size=generation_config.num_beams,
                 is_encoder_decoder=self.config.is_encoder_decoder,
                 **model_kwargs,
             )
-            # 12. run beam search
+            # 14. run beam search
             return self.group_beam_search(
                 input_ids,
                 beam_scorer,
@@ -1573,7 +1574,7 @@ class GenerationMixin:
                         constraint = PhrasalConstraint(word_ids)
                     final_constraints.append(constraint)
 
-            # 10. prepare beam search scorer
+            # 12. prepare beam search scorer
             constrained_beam_scorer = ConstrainedBeamSearchScorer(
                 constraints=final_constraints,
                 batch_size=batch_size,
@@ -1583,14 +1584,14 @@ class GenerationMixin:
                 do_early_stopping=generation_config.early_stopping,
                 num_beam_hyps_to_keep=generation_config.num_return_sequences,
             )
-            # 11. interleave input_ids with `num_beams` additional sequences per batch
+            # 13. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
                 expand_size=generation_config.num_beams,
                 is_encoder_decoder=self.config.is_encoder_decoder,
                 **model_kwargs,
             )
-            # 12. run beam search
+            # 14. run beam search
             return self.constrained_beam_search(
                 input_ids,
                 constrained_beam_scorer=constrained_beam_scorer,

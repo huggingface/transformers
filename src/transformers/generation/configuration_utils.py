@@ -207,7 +207,7 @@ class GenerationConfig(PushToHubMixin):
         self.length_penalty = kwargs.pop("length_penalty", 1.0)
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
-        self.force_word_ids = kwargs.pop("force_word_ids", None)
+        self.force_words_ids = kwargs.pop("force_words_ids", None)
         self.renormalize_logits = kwargs.pop("renormalize_logits", False)
         self.constraints = kwargs.pop("constraints", None)
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
@@ -491,7 +491,7 @@ class GenerationConfig(PushToHubMixin):
             kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
         config = cls(**config_dict)
-        unused_kwargs = config.update(kwargs)
+        unused_kwargs = config.update(**kwargs)
 
         logger.info(f"Generate config {config}")
         if return_unused_kwargs:
