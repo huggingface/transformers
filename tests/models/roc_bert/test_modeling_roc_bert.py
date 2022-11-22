@@ -627,6 +627,11 @@ class RoCBertModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
+    def test_decoder_model_past_with_large_inputs_relative_pos_emb(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        config_and_inputs[0].position_embedding_type = "relative_key"
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
@@ -705,4 +710,4 @@ class RoCBertModelIntegrationTest(unittest.TestCase):
         # convert to tokens is: ['[CLS]', '巴', '*', '黎', '是', '法', '国', '的', '首', '都', '[SEP]']
         expected_output = torch.tensor([[101, 2349, 115, 7944, 3221, 3791, 1744, 4638, 7674, 6963, 102]])
 
-        self.assertTrue(output_ids, expected_output)
+        self.assertEqual(output_ids, expected_output)

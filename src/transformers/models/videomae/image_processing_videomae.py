@@ -121,7 +121,7 @@ class VideoMAEImageProcessor(BaseImageProcessor):
         size = size if size is not None else {"shortest_edge": 224}
         size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
-        crop_size = get_size_dict(crop_size)
+        crop_size = get_size_dict(crop_size, param_name="crop_size")
 
         self.do_resize = do_resize
         self.size = size
@@ -157,7 +157,7 @@ class VideoMAEImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        size = get_size_dict(size)
+        size = get_size_dict(size, default_to_square=False)
         if "shortest_edge" in size:
             output_size = get_resize_output_image_size(image, size["shortest_edge"], default_to_square=False)
         elif "height" in size and "width" in size:
@@ -186,6 +186,8 @@ class VideoMAEImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         size = get_size_dict(size)
+        if "height" not in size or "width" not in size:
+            raise ValueError(f"Size must have 'height' and 'width' as keys. Got {size.keys()}")
         return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
 
     def rescale(
@@ -346,7 +348,7 @@ class VideoMAEImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size)
+        crop_size = get_size_dict(crop_size, param_name="crop_size")
 
         if not valid_images(videos):
             raise ValueError(

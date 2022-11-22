@@ -18,6 +18,14 @@ Each framework has a generate method for auto-regressive text generation impleme
 - TensorFlow [`~generation.TFGenerationMixin.generate`] is implemented in [`~generation.TFGenerationMixin`].
 - Flax/JAX [`~generation.FlaxGenerationMixin.generate`] is implemented in [`~generation.FlaxGenerationMixin`].
 
+<!--- TODO: add a brief description of GenerationConfig (with examples) when it becomes usable with generate --->
+
+## GenerationConfig
+
+[[autodoc]] generation.GenerationConfig
+	- from_pretrained
+	- save_pretrained
+
 ## GenerationMixin
 
 [[autodoc]] generation.GenerationMixin

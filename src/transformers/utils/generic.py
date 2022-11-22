@@ -336,6 +336,28 @@ class ContextManagers:
         self.stack.__exit__(*args, **kwargs)
 
 
+def can_return_loss(model_class):
+    """
+    Check if a given model can return loss.
+
+    Args:
+        model_class (`type`): The class of the model.
+    """
+    model_name = model_class.__name__
+    if model_name.startswith("TF"):
+        signature = inspect.signature(model_class.call)
+    elif model_name.startswith("Flax"):
+        signature = inspect.signature(model_class.__call__)
+    else:
+        signature = inspect.signature(model_class.forward)
+
+    for p in signature.parameters:
+        if p == "return_loss" and signature.parameters[p].default is True:
+            return True
+
+    return False
+
+
 def find_labels(model_class):
     """
     Find the labels used by a given model.
