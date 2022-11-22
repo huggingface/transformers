@@ -94,7 +94,6 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
             accessible as "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1. These
             tokens can be retrieved by calling get_sentinel_tokens method and token ids can be
             by calling  get_sentinel_token_ids method
-            [here](https://github.com/google-research/text-to-text-transfer-transformer/blob/9fd7b14a769417be33bc6c850f9598764913c833/t5/data/preprocessors.py#L2117)).
         additional_special_tokens (`List[str]`, *optional*):
             Additional special tokens used by the tokenizer.
     """
