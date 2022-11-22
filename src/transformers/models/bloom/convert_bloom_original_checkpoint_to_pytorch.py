@@ -191,7 +191,7 @@ def convert_bloom_checkpoint_to_pytorch(
                     tensors[key] = tensors[key] / pretraining_tp
 
             other_keys = model.load_state_dict(tensors, strict=False)
-            # assert not other_keys.unexpected_keys
+            assert not other_keys.unexpected_keys, f"The keys {other_keys.unexpected_keys} are unexpected"
             if missing_keys is None:
                 missing_keys = set(other_keys.missing_keys)
             else:
