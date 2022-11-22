@@ -440,13 +440,12 @@ class ResNetBackbone(ResNetPreTrainedModel):
 
         self.out_features = config.out_features
 
-        self.out_feature_channels = {
-            "stem": config.embedding_size,
-            "stage1": config.hidden_sizes[0],
-            "stage2": config.hidden_sizes[1],
-            "stage3": config.hidden_sizes[2],
-            "stage4": config.hidden_sizes[3],
-        }
+        out_feature_channels = {}
+        out_feature_channels["stem"] = config.embedding_size
+        for idx, stage in enumerate(self.stage_names[1:]):
+            out_feature_channels[stage] = config.hidden_sizes[idx]
+
+        self.out_feature_channels = out_feature_channels
 
         # initialize weights and apply final processing
         self.post_init()
