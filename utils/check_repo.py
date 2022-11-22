@@ -668,8 +668,11 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "PyTorchBenchmarkArguments",
     "TensorFlowBenchmark",
     "TensorFlowBenchmarkArguments",
+    "MaskFormerSwinBackbone",
     "ResNetBackbone",
     "AutoBackbone",
+    "MaskFormerSwinConfig",
+    "MaskFormerSwinModel",
 ]
 
 

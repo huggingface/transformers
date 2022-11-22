@@ -22,7 +22,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig"],
-    "configuration_maskformer_swin": ["MASKFORMER_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerSwinConfig"],
+    "configuration_maskformer_swin": ["MaskFormerSwinConfig"],
 }
 
 try:
