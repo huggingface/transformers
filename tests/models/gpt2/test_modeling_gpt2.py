@@ -18,7 +18,7 @@ import datetime
 import math
 import unittest
 
-from transformers import GPT2Config, is_torch_available
+from transformers import GenerationConfig, GPT2Config, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -727,6 +727,9 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     def test_gpt2_sample_max_time(self):
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
         model = GPT2LMHeadModel.from_pretrained("gpt2")
+        # Pre-load the generation config to avoid a generate-time `from_pretrained`` call, which would interfere with
+        # the timing.
+        generation_config = GenerationConfig.from_pretrained("gpt2")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -736,31 +739,31 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         MAX_TIME = 0.5
 
         start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=256)
+        model.generate(input_ids, generation_config, do_sample=True, max_time=MAX_TIME, max_length=256)
         duration = datetime.datetime.now() - start
         self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
         self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
 
         start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=MAX_TIME, max_length=256)
+        model.generate(input_ids, generation_config, do_sample=False, max_time=MAX_TIME, max_length=256)
         duration = datetime.datetime.now() - start
         self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
         self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
 
         start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, num_beams=2, max_time=MAX_TIME, max_length=256)
+        model.generate(input_ids, generation_config, do_sample=False, num_beams=2, max_time=MAX_TIME, max_length=256)
         duration = datetime.datetime.now() - start
         self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
         self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
 
         start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, num_beams=2, max_time=MAX_TIME, max_length=256)
+        model.generate(input_ids, generation_config, do_sample=True, num_beams=2, max_time=MAX_TIME, max_length=256)
         duration = datetime.datetime.now() - start
         self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
         self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
 
         start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
+        model.generate(input_ids, generation_config, do_sample=False, max_time=None, max_length=256)
         duration = datetime.datetime.now() - start
         self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
 
