@@ -1956,9 +1956,9 @@ class EsmFoldingTrunk(nn.Module):
         for recycle_idx in range(no_recycles):
             with ContextManagers([] if recycle_idx == no_recycles - 1 else [torch.no_grad()]):
                 # === Recycling ===
-                recycle_s = self.recycle_s_norm(recycle_s.detach())
-                recycle_z = self.recycle_z_norm(recycle_z.detach())
-                recycle_z += self.recycle_disto(recycle_bins.detach())
+                recycle_s = self.recycle_s_norm(recycle_s.detach()).to(device)
+                recycle_z = self.recycle_z_norm(recycle_z.detach()).to(device)
+                recycle_z += self.recycle_disto(recycle_bins.detach()).to(device)
 
                 s_s, s_z = trunk_iter(s_s_0 + recycle_s, s_z_0 + recycle_z, residx, mask)
 
@@ -2118,7 +2118,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
             position_ids = torch.arange(L, device=device).expand_as(input_ids)
 
         # === ESM ===
-        esmaa = self.af2_idx_to_esm_idx(aa, attention_mask)
+        esmaa = self.af2_idx_to_esm_idx(aa, attention_mask).to(device)
 
         if masking_pattern is not None:
             masked_aa, esmaa, mlm_targets = self.bert_mask(aa, esmaa, attention_mask, masking_pattern)
@@ -2208,6 +2208,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
 
     def af2_idx_to_esm_idx(self, aa, mask):
         aa = (aa + 1).masked_fill(mask != 1, 0)
+        aa = aa.to(self.af2_to_esm.device)
         return self.af2_to_esm[aa]
 
     def compute_language_model_representations(self, esmaa: torch.Tensor) -> torch.Tensor:
