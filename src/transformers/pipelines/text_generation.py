@@ -202,8 +202,10 @@ class TextGenerationPipeline(Pipeline):
         return super().__call__(text_inputs, **kwargs)
 
     def preprocess(self, prompt_text, prefix="", handle_long_generation=None, **generate_kwargs):
+        is_encoder_decoder = hasattr(self.model.config, "decoder_start_token_id")
+
         inputs = self.tokenizer(
-            prefix + prompt_text, padding=False, add_special_tokens=False, return_tensors=self.framework
+            prefix + prompt_text, padding=False, add_special_tokens=is_encoder_decoder, return_tensors=self.framework
         )
         inputs["prompt_text"] = prompt_text
 
@@ -277,6 +279,11 @@ class TextGenerationPipeline(Pipeline):
                             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                         )
                     )
+
+                # If a user uses a encoder-decoder model, we should prepend the input text together with the
+                # generated text.
+                if (prompt_text not in text) and hasattr(self.model.config, "decoder_start_token_id"):
+                    text = prompt_text + " " + text
 
                 if return_type == ReturnType.FULL_TEXT:
                     all_text = prompt_text + text[prompt_length:]
