@@ -134,12 +134,12 @@ def convert_megatron_checkpoint(sd_megatron, config):
         sd_hf[f"transformer.h.{i}.ln_1.bias"] = sd_megatron[f"{pf}{i}.input_layernorm.bias"]
         # sd_hf[f"transformer.h.{i}.attn.bias"] = causal_mask
         # sd_hf[f"transformer.h.{i}.attn.masked_bias"] = torch.tensor(-1e4, dtype=torch.bfloat16)
-        val = sd_megatron[f"{pf}{i}.self_attention.query_key_value.weight"]
+        val1 = sd_megatron[f"{pf}{i}.self_attention.query_key_value.weight"]
         # out_val = fix_query_key_value_ordering(val, 3, heads, hidden_size_per_head)
-        sd_hf[f"transformer.h.{i}.attn.c_attn.weight"] = val # out_val
-        val = sd_megatron[f"{pf}{i}.self_attention.query_key_value.bias"]
+        sd_hf[f"transformer.h.{i}.attn.c_attn.weight"] = val1 # out_val
+        val2 = sd_megatron[f"{pf}{i}.self_attention.query_key_value.bias"]
         # out_val = fix_query_key_value_ordering(val, 3, heads, hidden_size_per_head)
-        sd_hf[f"transformer.h.{i}.attn.c_attn.bias"] = val # out_val
+        sd_hf[f"transformer.h.{i}.attn.c_attn.bias"] = val2 # out_val
         sd_hf[f"transformer.h.{i}.attn.c_proj.weight"] = sd_megatron[f"{pf}{i}.self_attention.dense.weight"]
         sd_hf[f"transformer.h.{i}.attn.c_proj.bias"] = sd_megatron[f"{pf}{i}.self_attention.dense.bias"]
         sd_hf[f"transformer.h.{i}.ln_2.weight"] = sd_megatron[f"{pf}{i}.post_attention_layernorm.weight"]
