@@ -1411,9 +1411,8 @@ class GenerationTesterMixin:
         # check `generate()` and `contrastive_search()` are equal
         for model_class in self.all_generative_model_classes:
 
-            # TODO: Fix Bloom. Bloom fails because `past` has a different shape.
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
-            if any(model_name in model_class.__name__.lower() for model_name in ["bloom", "fsmt", "reformer"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
                 return
 
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
@@ -1434,9 +1433,8 @@ class GenerationTesterMixin:
     def test_contrastive_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
 
-            # TODO: Fix Bloom. Bloom fails because `past` has a different shape.
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
-            if any(model_name in model_class.__name__.lower() for model_name in ["bloom", "fsmt", "reformer"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
                 return
 
             # enable cache
@@ -3009,8 +3007,8 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(max_score_diff < 1e-5)
 
     def test_validate_generation_inputs(self):
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-t5")
-        model = AutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-t5")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-roberta")
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-roberta")
 
         encoder_input_str = "Hello world"
         input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
@@ -3023,3 +3021,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "foo"):
             fake_model_kwargs = {"foo": "bar"}
             model.generate(input_ids, **fake_model_kwargs)
+
+        # However, valid model_kwargs are accepted
+        valid_model_kwargs = {"attention_mask": torch.zeros_like(input_ids)}
+        model.generate(input_ids, **valid_model_kwargs)
