@@ -386,6 +386,7 @@ def create_circleci_config(folder=None):
     if len(jobs) > 0:
         config = {"version": "2.1"}
         config["parameters"] = {
+            # Only used to accept the parameters from the trigger
             "nightly": {"type": "boolean", "default": False},
             "tests_to_run": {"type": "string", "default": test_list},
         }
