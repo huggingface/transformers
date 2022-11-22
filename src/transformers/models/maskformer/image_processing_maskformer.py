@@ -698,6 +698,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         output_size: Tuple[int, int],
+        constant_values: Union[float, Iterable[float]] = 0,
         data_format: Optional[ChannelDimension] = None,
     ) -> np.ndarray:
         """
@@ -709,13 +710,14 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         pad_bottom = output_height - input_height
         pad_right = output_width - input_width
         padding = ((0, pad_bottom), (0, pad_right))
-        padded_image = pad(image, padding, mode=PaddingMode.CONSTANT, constant_values=0, data_format=data_format)
+        padded_image = pad(image, padding, mode=PaddingMode.CONSTANT, constant_values=constant_values, data_format=data_format)
         return padded_image
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
     def pad(
         self,
         images: List[np.ndarray],
+        constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
@@ -728,6 +730,8 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         Pad the bottom and right of the image with zeros to the output size.
             image (`np.ndarray`):
                 Image to pad.
+            constant_values (`float` or `Iterable[float]`, *optional*):
+                The value to use for the padding if `mode` is `"constant"`.
             return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return a pixel mask.
             input_channel_dimension (`ChannelDimension`, *optional*, defaults to `None`):
@@ -737,7 +741,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         """
         pad_size = get_max_height_width(images)
 
-        padded_images = [self._pad_image(image, pad_size, data_format=data_format) for image in images]
+        padded_images = [self._pad_image(image, pad_size, constant_values=constant_values, data_format=data_format) for image in images]
         data = {"pixel_values": padded_images}
 
         if return_pixel_mask:
@@ -828,7 +832,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 # We add an axis to make them compatible with the transformations library
                 # this will be removed in the future
                 masks = [mask[None, ...] for mask in masks]
-                masks = [pad(image=mask, output_size=pad_size, contant_values=ignore_index) for mask in masks]
+                masks = [self._pad_image(image=mask, output_size=pad_size, constant_values=ignore_index) for mask in masks]
                 masks = np.concatenate(masks, axis=0)
                 mask_labels.append(torch.from_numpy(masks))
                 class_labels.append(torch.from_numpy(classes))

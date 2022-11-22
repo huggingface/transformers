@@ -853,6 +853,7 @@ class YolosImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         output_size: Tuple[int, int],
+        constant_values: Union[float, Iterable[float]] = 0,
         data_format: Optional[ChannelDimension] = None,
     ) -> np.ndarray:
         """
@@ -864,7 +865,7 @@ class YolosImageProcessor(BaseImageProcessor):
         pad_bottom = output_height - input_height
         pad_right = output_width - input_width
         padding = ((0, pad_bottom), (0, pad_right))
-        padded_image = pad(image, padding, mode=PaddingMode.CONSTANT, constant_values=0, data_format=data_format)
+        padded_image = pad(image, padding, mode=PaddingMode.CONSTANT, constant_values=constant_values, data_format=data_format)
         return padded_image
 
     def pad(
