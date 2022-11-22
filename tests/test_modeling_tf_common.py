@@ -1665,15 +1665,17 @@ class TFModelTesterMixin:
 
             # After testing that the model accepts int64 inputs, confirm that its dummies are int64 by default too
             for key, tensor in model.dummy_inputs.items():
-                self.assertTrue(isinstance(tensor, tf.Tensor))
+                self.assertTrue(isinstance(tensor, tf.Tensor), "Dummy inputs should be tf.Tensor!")
                 if tensor.dtype.is_integer:
-                    self.assertTrue(tensor.dtype == tf.int64)
+                    self.assertTrue(tensor.dtype == tf.int64, "Integer dummy inputs should be tf.int64!")
 
             if hasattr(model, "serving"):
                 serving_sig = model.serving.input_signature
                 for key, tensor_spec in serving_sig[0].items():
                     if tensor_spec.dtype.is_integer:
-                        self.assertTrue(tensor_spec.dtype == tf.int64)
+                        self.assertTrue(
+                            tensor_spec.dtype == tf.int64, "Serving signatures should use tf.int64 for ints!"
+                        )
 
     def test_generate_with_headmasking(self):
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
