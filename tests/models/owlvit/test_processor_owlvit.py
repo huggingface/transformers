@@ -227,6 +227,23 @@ class OwlViTProcessorTest(unittest.TestCase):
         self.assertListEqual(list(input_ids[0]), predicted_ids[0])
         self.assertListEqual(list(input_ids[1]), predicted_ids[1])
 
+    def test_processor_case2(self):
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+
+        processor = OwlViTProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+
+        image_input = self.prepare_image_inputs()
+        query_input = self.prepare_image_inputs()
+
+        inputs = processor(images=image_input, query_images=query_input)
+
+        self.assertListEqual(list(inputs.keys()), ["query_pixel_values", "pixel_values"])
+
+        # test if it raises when no input is passed
+        with pytest.raises(ValueError):
+            processor()
+
     def test_tokenizer_decode(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()

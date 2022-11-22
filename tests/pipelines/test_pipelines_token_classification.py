@@ -44,6 +44,8 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     def run_pipeline_test(self, token_classifier, _):
         model = token_classifier.model
         tokenizer = token_classifier.tokenizer
+        if not tokenizer.is_fast:
+            return  # Slow tokenizers do not return offsets mappings, so this test will fail
 
         outputs = token_classifier("A simple string")
         self.assertIsInstance(outputs, list)

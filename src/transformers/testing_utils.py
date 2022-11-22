@@ -17,6 +17,7 @@ import contextlib
 import functools
 import inspect
 import logging
+import multiprocessing
 import os
 import re
 import shlex
@@ -38,6 +39,7 @@ from transformers import logging as transformers_logging
 
 from .deepspeed import is_deepspeed_available
 from .integrations import (
+    is_clearml_available,
     is_fairscale_available,
     is_optuna_available,
     is_ray_available,
@@ -56,6 +58,7 @@ from .utils import (
     is_ipex_available,
     is_jumanpp_available,
     is_librosa_available,
+    is_natten_available,
     is_onnx_available,
     is_pandas_available,
     is_phonemizer_available,
@@ -64,7 +67,6 @@ from .utils import (
     is_pytorch_quantization_available,
     is_rjieba_available,
     is_safetensors_available,
-    is_scatter_available,
     is_scipy_available,
     is_sentencepiece_available,
     is_soundfile_availble,
@@ -281,6 +283,16 @@ def require_timm(test_case):
     return unittest.skipUnless(is_timm_available(), "test requires Timm")(test_case)
 
 
+def require_natten(test_case):
+    """
+    Decorator marking a test that requires NATTEN.
+
+    These tests are skipped when NATTEN isn't installed.
+
+    """
+    return unittest.skipUnless(is_natten_available(), "test requires natten")(test_case)
+
+
 def require_torch(test_case):
     """
     Decorator marking a test that requires PyTorch.
@@ -316,16 +328,6 @@ def require_intel_extension_for_pytorch(test_case):
         "test requires Intel Extension for PyTorch to be installed and match current PyTorch version, see"
         " https://github.com/intel/intel-extension-for-pytorch",
     )(test_case)
-
-
-def require_torch_scatter(test_case):
-    """
-    Decorator marking a test that requires PyTorch scatter.
-
-    These tests are skipped when PyTorch scatter isn't installed.
-
-    """
-    return unittest.skipUnless(is_scatter_available(), "test requires PyTorch scatter")(test_case)
 
 
 def require_tensorflow_probability(test_case):
@@ -402,14 +404,6 @@ def require_pytesseract(test_case):
     Decorator marking a test that requires PyTesseract. These tests are skipped when PyTesseract isn't installed.
     """
     return unittest.skipUnless(is_pytesseract_available(), "test requires PyTesseract")(test_case)
-
-
-def require_scatter(test_case):
-    """
-    Decorator marking a test that requires PyTorch Scatter. These tests are skipped when PyTorch Scatter isn't
-    installed.
-    """
-    return unittest.skipUnless(is_scatter_available(), "test requires PyTorch Scatter")(test_case)
 
 
 def require_pytorch_quantization(test_case):
@@ -595,6 +589,16 @@ def require_wandb(test_case):
 
     """
     return unittest.skipUnless(is_wandb_available(), "test requires wandb")(test_case)
+
+
+def require_clearml(test_case):
+    """
+    Decorator marking a test requires clearml.
+
+    These tests are skipped when clearml isn't installed.
+
+    """
+    return unittest.skipUnless(is_clearml_available(), "test requires clearml")(test_case)
 
 
 def require_soundfile(test_case):
@@ -1547,6 +1551,8 @@ def nested_simplify(obj, decimals=3):
 
     if isinstance(obj, list):
         return [nested_simplify(item, decimals) for item in obj]
+    if isinstance(obj, tuple):
+        return tuple([nested_simplify(item, decimals) for item in obj])
     elif isinstance(obj, np.ndarray):
         return nested_simplify(obj.tolist())
     elif isinstance(obj, Mapping):
@@ -1670,3 +1676,43 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None):
         return wrapper
 
     return decorator
+
+
+def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=600):
+    """
+    To run a test in a subprocess. In particular, this can avoid (GPU) memory issue.
+
+    Args:
+        test_case (`unittest.TestCase`):
+            The test that will run `target_func`.
+        target_func (`Callable`):
+            The function implementing the actual testing logic.
+        inputs (`dict`, *optional*, defaults to `None`):
+            The inputs that will be passed to `target_func` through an (input) queue.
+        timeout (`int`, *optional*, defaults to 600):
+            The timeout (in seconds) that will be passed to the input and output queues.
+    """
+
+    start_methohd = "spawn"
+    ctx = multiprocessing.get_context(start_methohd)
+
+    input_queue = ctx.Queue(1)
+    output_queue = ctx.JoinableQueue(1)
+
+    # We can't send `unittest.TestCase` to the child, otherwise we get issues regarding pickle.
+    input_queue.put(inputs, timeout=timeout)
+
+    process = ctx.Process(target=target_func, args=(input_queue, output_queue, timeout))
+    process.start()
+    # Kill the child process if we can't get outputs from it in time: otherwise, the hanging subprocess prevents
+    # the test to exit properly.
+    try:
+        results = output_queue.get(timeout=timeout)
+        output_queue.task_done()
+    except Exception as e:
+        process.terminate()
+        test_case.fail(e)
+    process.join(timeout=timeout)
+
+    if results["error"] is not None:
+        test_case.fail(f'{results["error"]}')

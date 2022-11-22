@@ -50,7 +50,6 @@ from transformers.testing_utils import (
     RequestCounter,
     is_staging_test,
     nested_simplify,
-    require_scatter,
     require_tensorflow_probability,
     require_tf,
     require_torch,
@@ -155,6 +154,12 @@ def get_tiny_feature_extractor_from_checkpoint(checkpoint, tiny_config, feature_
             feature_extractor = None
     if hasattr(tiny_config, "image_size") and feature_extractor:
         feature_extractor = feature_extractor.__class__(size=tiny_config.image_size, crop_size=tiny_config.image_size)
+
+    # Audio Spectogram Transformer specific.
+    if feature_extractor.__class__.__name__ == "ASTFeatureExtractor":
+        feature_extractor = feature_extractor.__class__(
+            max_length=tiny_config.max_length, num_mel_bins=tiny_config.num_mel_bins
+        )
 
     # Speech2TextModel specific.
     if hasattr(tiny_config, "input_feat_per_channel") and feature_extractor:
@@ -357,6 +362,15 @@ class CommonPipelineTest(unittest.TestCase):
         self.assertEqual(pipe._num_workers, 1)
 
     @require_torch
+    def test_pipeline_pathlike(self):
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
+        with tempfile.TemporaryDirectory() as d:
+            pipe.save_pretrained(d)
+            path = Path(d)
+            newpipe = pipeline(task="text-classification", model=path)
+        self.assertIsInstance(newpipe, TextClassificationPipeline)
+
+    @require_torch
     def test_pipeline_override(self):
         class MyPipeline(TextClassificationPipeline):
             pass
@@ -421,6 +435,56 @@ class CommonPipelineTest(unittest.TestCase):
         # instead of the expected tensor.
         outputs = text_classifier(["This is great !"] * 20, batch_size=32)
         self.assertEqual(len(outputs), 20)
+
+
+class PipelineScikitCompatTest(unittest.TestCase):
+    @require_torch
+    def test_pipeline_predict_pt(self):
+        data = ["This is a test"]
+
+        text_classifier = pipeline(
+            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
+        )
+
+        expected_output = [{"label": ANY(str), "score": ANY(float)}]
+        actual_output = text_classifier.predict(data)
+        self.assertEqual(expected_output, actual_output)
+
+    @require_tf
+    def test_pipeline_predict_tf(self):
+        data = ["This is a test"]
+
+        text_classifier = pipeline(
+            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="tf"
+        )
+
+        expected_output = [{"label": ANY(str), "score": ANY(float)}]
+        actual_output = text_classifier.predict(data)
+        self.assertEqual(expected_output, actual_output)
+
+    @require_torch
+    def test_pipeline_transform_pt(self):
+        data = ["This is a test"]
+
+        text_classifier = pipeline(
+            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
+        )
+
+        expected_output = [{"label": ANY(str), "score": ANY(float)}]
+        actual_output = text_classifier.transform(data)
+        self.assertEqual(expected_output, actual_output)
+
+    @require_tf
+    def test_pipeline_transform_tf(self):
+        data = ["This is a test"]
+
+        text_classifier = pipeline(
+            task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="tf"
+        )
+
+        expected_output = [{"label": ANY(str), "score": ANY(float)}]
+        actual_output = text_classifier.transform(data)
+        self.assertEqual(expected_output, actual_output)
 
 
 class PipelinePadTest(unittest.TestCase):
@@ -690,7 +754,6 @@ class PipelineUtilsTest(unittest.TestCase):
 
     @slow
     @require_torch
-    @require_scatter
     def test_load_default_pipelines_pt_table_qa(self):
         import torch
 

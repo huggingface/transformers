@@ -106,6 +106,21 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
     similar to the (extractive) question answering pipeline; however, the pipeline takes an image (and optional OCR'd
     words/boxes) as input instead of text context.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> document_qa = pipeline(model="impira/layoutlm-document-qa")
+    >>> document_qa(
+    ...     image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
+    ...     question="What is the invoice number?",
+    ... )
+    [{'score': 0.425, 'answer': 'us-001', 'start': 16, 'end': 16}]
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
+
     This document question answering pipeline can currently be loaded from [`pipeline`] using the following task
     identifier: `"document-question-answering"`.
 
@@ -235,7 +250,6 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
               `word_boxes`).
             - **answer** (`str`) -- The answer to the question.
             - **words** (`list[int]`) -- The index of each word/box pair that is in the answer
-            - **page** (`int`) -- The page of the answer
         """
         if isinstance(question, str):
             inputs = {"question": question, "image": image}
@@ -315,7 +329,6 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                 "p_mask": None,
                 "word_ids": None,
                 "words": None,
-                "page": None,
                 "output_attentions": True,
                 "is_last": True,
             }
@@ -339,6 +352,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                 return_overflowing_tokens=True,
                 **tokenizer_kwargs,
             )
+            encoding.pop("overflow_to_sample_mapping")  # We do not use this
 
             num_spans = len(encoding["input_ids"])
 
@@ -395,9 +409,6 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         words = model_inputs.pop("words", None)
         is_last = model_inputs.pop("is_last", False)
 
-        if "overflow_to_sample_mapping" in model_inputs:
-            model_inputs.pop("overflow_to_sample_mapping")
-
         if self.model_type == ModelType.VisionEncoderDecoder:
             model_outputs = self.model.generate(**model_inputs)
         else:
@@ -421,7 +432,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         return answers
 
     def postprocess_encoder_decoder_single(self, model_outputs, **kwargs):
-        sequence = self.tokenizer.batch_decode(model_outputs.sequences)[0]
+        sequence = self.tokenizer.batch_decode(model_outputs["sequences"])[0]
 
         # TODO: A lot of this logic is specific to Donut and should probably be handled in the tokenizer
         # (see https://github.com/huggingface/transformers/pull/18414/files#r961747408 for more context).

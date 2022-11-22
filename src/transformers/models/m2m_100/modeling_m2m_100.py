@@ -532,6 +532,7 @@ class M2M100PreTrainedModel(PreTrainedModel):
     config_class = M2M100Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["M2M100Attention"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -693,10 +694,10 @@ class M2M100Encoder(M2M100PreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
+        self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+
         if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = M2M100SinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -777,6 +778,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         embed_pos = self.embed_positions(input_ids, inputs_embeds)
+        embed_pos = embed_pos.to(inputs_embeds.device)
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -868,10 +870,10 @@ class M2M100Decoder(M2M100PreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+
         if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = M2M100SinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -1010,6 +1012,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
 
         # embed positions
         positions = self.embed_positions(input_ids, inputs_embeds, past_key_values_length)
+        positions = positions.to(inputs_embeds.device)
 
         hidden_states = inputs_embeds + positions
 
@@ -1125,6 +1128,8 @@ class M2M100Decoder(M2M100PreTrainedModel):
     M2M_100_START_DOCSTRING,
 )
 class M2M100Model(M2M100PreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+
     def __init__(self, config: M2M100Config):
         super().__init__(config)
 
@@ -1241,12 +1246,8 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
         r"encoder.version",
         r"decoder.version",
         r"lm_head.weight",
-        r"model.encoder.embed_positions.weights",
-        r"model.decoder.embed_positions.weights",
-    ]
-    _keys_to_ignore_on_save = [
-        r"model.encoder.embed_positions.weights",
-        r"model.decoder.embed_positions.weights",
+        r"encoder.embed_tokens.weight",
+        r"decoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: M2M100Config):

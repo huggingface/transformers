@@ -456,7 +456,9 @@ class CTRLModel(CTRLPreTrainedModel):
 
         inputs_embeds *= np.sqrt(self.d_model_size)
 
-        pos_embeds = self.pos_encoding[position_ids, :].to(device)
+        # `self.pos_encoding` won't be sent to the correct device along the model, so we do it manually.
+        self.pos_encoding = self.pos_encoding.to(device)
+        pos_embeds = self.pos_encoding[position_ids, :]
 
         hidden_states = inputs_embeds + pos_embeds + token_type_embeds
 
@@ -507,6 +509,8 @@ class CTRLModel(CTRLPreTrainedModel):
     CTRL_START_DOCSTRING,
 )
 class CTRLLMHeadModel(CTRLPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.transformer = CTRLModel(config)

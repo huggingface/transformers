@@ -60,7 +60,7 @@ Tips:
   position embeddings.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/beit_architecture.jpg"
-alt="drawing" width="600"/> 
+alt="drawing" width="600"/>
 
 <small> BEiT pre-training. Taken from the <a href="https://arxiv.org/abs/2106.08254">original paper.</a> </small>
 
@@ -82,6 +82,12 @@ contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code 
 
 [[autodoc]] BeitFeatureExtractor
     - __call__
+    - post_process_semantic_segmentation
+
+## BeitImageProcessor
+
+[[autodoc]] BeitImageProcessor
+    - preprocess
     - post_process_semantic_segmentation
 
 ## BeitModel

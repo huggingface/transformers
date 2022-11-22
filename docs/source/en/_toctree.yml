@@ -183,6 +183,8 @@
       title: DeepSpeed Integration
     - local: main_classes/feature_extractor
       title: Feature Extractor
+    - local: main_classes/image_processor
+      title: Image Processor
     title: Main Classes
   - sections:
     - isExpanded: false
@@ -247,6 +249,8 @@
         title: ERNIE
       - local: model_doc/esm
         title: ESM
+      - local: model_doc/flan-t5
+        title: FLAN-T5
       - local: model_doc/flaubert
         title: FlauBERT
       - local: model_doc/fnet
@@ -271,6 +275,8 @@
         title: HerBERT
       - local: model_doc/ibert
         title: I-BERT
+      - local: model_doc/jukebox
+        title: Jukebox
       - local: model_doc/layoutlm
         title: LayoutLM
       - local: model_doc/led
@@ -337,12 +343,16 @@
         title: RetriBERT
       - local: model_doc/roberta
         title: RoBERTa
+      - local: model_doc/roc_bert
+        title: RoCBert
       - local: model_doc/roformer
         title: RoFormer
       - local: model_doc/splinter
         title: Splinter
       - local: model_doc/squeezebert
         title: SqueezeBERT
+      - local: model_doc/switch_transformers
+        title: SwitchTransformers
       - local: model_doc/t5
         title: T5
       - local: model_doc/t5v1.1
@@ -386,6 +396,8 @@
         title: DeiT
       - local: model_doc/detr
         title: DETR
+      - local: model_doc/dinat
+        title: DiNAT
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt
@@ -398,8 +410,14 @@
         title: LeViT
       - local: model_doc/maskformer
         title: MaskFormer
+      - local: model_doc/mobilenet_v1
+        title: MobileNetV1
+      - local: model_doc/mobilenet_v2
+        title: MobileNetV2
       - local: model_doc/mobilevit
         title: MobileViT
+      - local: model_doc/nat
+        title: NAT
       - local: model_doc/poolformer
         title: PoolFormer
       - local: model_doc/regnet
@@ -412,6 +430,8 @@
         title: Swin Transformer
       - local: model_doc/swinv2
         title: Swin Transformer V2
+      - local: model_doc/table-transformer
+        title: Table Transformer
       - local: model_doc/van
         title: VAN
       - local: model_doc/videomae
@@ -427,6 +447,8 @@
       title: Vision models
     - isExpanded: false
       sections:
+      - local: model_doc/audio-spectrogram-transformer
+        title: Audio Spectrogram Transformer
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct
@@ -462,6 +484,8 @@
       sections:
       - local: model_doc/clip
         title: CLIP
+      - local: model_doc/clipseg
+        title: CLIPSeg
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/donut

@@ -925,6 +925,12 @@ class MobileBertModel(MobileBertPreTrainedModel):
     MOBILEBERT_START_DOCSTRING,
 )
 class MobileBertForPreTraining(MobileBertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [
+        "cls.predictions.decoder.weight",
+        "cls.predictions.decoder.bias",
+        "embeddings.position_ids",
+    ]
+
     def __init__(self, config):
         super().__init__(config)
         self.mobilebert = MobileBertModel(config)
@@ -1033,6 +1039,11 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
 class MobileBertForMaskedLM(MobileBertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    _keys_to_ignore_on_load_missing = [
+        "cls.predictions.decoder.weight",
+        "cls.predictions.decoder.bias",
+        "embeddings.position_ids",
+    ]
 
     def __init__(self, config):
         super().__init__(config)
