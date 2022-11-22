@@ -140,12 +140,18 @@ class MaskFormerSwinModelTester:
         model.eval()
         result = model(pixel_values)
 
-        # verify hidden states
+        # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
         self.parent.assertListEqual(list(result.feature_maps[0].shape), [13, 16, 16, 16])
 
         # verify channels
+        self.parent.assertEqual(len(model.channels), len(config.out_features))
         self.parent.assertListEqual(model.channels, [16, 32, 64])
+
+        # verify ValueError
+        with self.parent.assertRaises(ValueError):
+            config.out_features = ["stem"]
+            model = MaskFormerSwinBackbone(config=config)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
