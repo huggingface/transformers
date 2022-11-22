@@ -1,4 +1,5 @@
 import enum
+import warnings
 
 from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING
 
@@ -21,6 +22,21 @@ class TextGenerationPipeline(Pipeline):
     """
     Language generation pipeline using any `ModelWithLMHead`. This pipeline predicts the words that will follow a
     specified text prompt.
+
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> generator = pipeline(model="gpt2")
+    >>> generator("I can't believe you did such a ", do_sample=False)
+    [{'generated_text': "I can't believe you did such a icky thing to me. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I'm so sorry. I"}]
+
+    >>> # These parameters will return suggestions, and only the newly created text making it easier for prompting suggestions.
+    >>> outputs = generator("My tart needs some", num_return_sequences=4, return_full_text=False)
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
     This language generation pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"text-generation"`.
@@ -80,6 +96,7 @@ class TextGenerationPipeline(Pipeline):
         clean_up_tokenization_spaces=None,
         prefix=None,
         handle_long_generation=None,
+        stop_sequence=None,
         **generate_kwargs
     ):
         preprocess_params = {}
@@ -120,6 +137,15 @@ class TextGenerationPipeline(Pipeline):
             postprocess_params["return_type"] = return_type
         if clean_up_tokenization_spaces is not None:
             postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
+
+        if stop_sequence is not None:
+            stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
+            if len(stop_sequence_ids) > 1:
+                warnings.warn(
+                    "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
+                    " the stop sequence will be used as the stop sequence string in the interim."
+                )
+            generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
 
         return preprocess_params, forward_params, postprocess_params
 

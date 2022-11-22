@@ -93,12 +93,12 @@ class TrajectoryTransformerConfig(PretrainedConfig):
         Example:
 
     ```python
-    >>> from transformers import TrajectoryTransformerModel, TrajectoryTransformerConfig
+    >>> from transformers import TrajectoryTransformerConfig, TrajectoryTransformerModel
 
     >>> # Initializing a TrajectoryTransformer CarlCochet/trajectory-transformer-halfcheetah-medium-v2 style configuration
     >>> configuration = TrajectoryTransformerConfig()
 
-    >>> # Initializing a model from the CarlCochet/trajectory-transformer-halfcheetah-medium-v2 style configuration
+    >>> # Initializing a model (with random weights) from the CarlCochet/trajectory-transformer-halfcheetah-medium-v2 style configuration
     >>> model = TrajectoryTransformerModel(configuration)
 
     >>> # Accessing the model configuration

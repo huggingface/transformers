@@ -38,12 +38,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import (
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    is_torch_greater_than_1_6,
-    prune_linear_layer,
-)
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -187,12 +182,9 @@ class NezhaEmbeddings(nn.Module):
         # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        if is_torch_greater_than_1_6:
-            self.register_buffer(
-                "token_type_ids",
-                torch.zeros((1, config.max_position_embeddings), dtype=torch.long),
-                persistent=False,
-            )
+        self.register_buffer(
+            "token_type_ids", torch.zeros((1, config.max_position_embeddings), dtype=torch.long), persistent=False
+        )
 
     def forward(
         self,
@@ -1046,6 +1038,8 @@ class NezhaModel(NezhaPreTrainedModel):
     NEZHA_START_DOCSTRING,
 )
 class NezhaForPreTraining(NezhaPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1148,7 +1142,7 @@ class NezhaForPreTraining(NezhaPreTrainedModel):
 class NezhaForMaskedLM(NezhaPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"predictions.decoder.bias", r"positions_encoding"]
+    _keys_to_ignore_on_load_missing = [r"cls.predictions.decoder", r"positions_encoding"]
 
     def __init__(self, config):
         super().__init__(config)

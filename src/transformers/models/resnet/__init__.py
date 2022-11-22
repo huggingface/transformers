@@ -36,6 +36,7 @@ else:
         "ResNetForImageClassification",
         "ResNetModel",
         "ResNetPreTrainedModel",
+        "ResNetBackbone",
     ]
 
 try:
@@ -63,6 +64,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_resnet import (
             RESNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ResNetBackbone,
             ResNetForImageClassification,
             ResNetModel,
             ResNetPreTrainedModel,

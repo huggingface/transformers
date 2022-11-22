@@ -955,7 +955,7 @@ class LxmertModel(LxmertPreTrainedModel):
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
-        # positions we want to attend and -10000.0 for masked positions.
+        # positions we want to attend and the dtype's smallest value for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
         extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)
@@ -1023,6 +1023,8 @@ class LxmertModel(LxmertPreTrainedModel):
     LXMERT_START_DOCSTRING,
 )
 class LxmertForPreTraining(LxmertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         # Configuration

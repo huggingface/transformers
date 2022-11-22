@@ -648,7 +648,11 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
 @add_start_docstrings("""SqueezeBERT Model with a `language modeling` head on top.""", SQUEEZEBERT_START_DOCSTRING)
 class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
 
-    _keys_to_ignore_on_load_missing = [r"predictions.decoder.bias"]
+    _keys_to_ignore_on_load_missing = [
+        r"predictions.decoder.bias",
+        "cls.predictions.decoder.weight",
+        "embeddings.position_ids",
+    ]
 
     def __init__(self, config):
         super().__init__(config)

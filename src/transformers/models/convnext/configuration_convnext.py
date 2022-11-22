@@ -67,12 +67,14 @@ class ConvNextConfig(PretrainedConfig):
 
     Example:
     ```python
-    >>> from transformers import ConvNextModel, ConvNextConfig
+    >>> from transformers import ConvNextConfig, ConvNextModel
 
     >>> # Initializing a ConvNext convnext-tiny-224 style configuration
     >>> configuration = ConvNextConfig()
-    >>> # Initializing a model from the convnext-tiny-224 style configuration
+
+    >>> # Initializing a model (with random weights) from the convnext-tiny-224 style configuration
     >>> model = ConvNextModel(configuration)
+
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
@@ -117,7 +119,7 @@ class ConvNextOnnxConfig(OnnxConfig):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         return OrderedDict(
             [
-                ("pixel_values", {0: "batch", 1: "sequence"}),
+                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
             ]
         )
 

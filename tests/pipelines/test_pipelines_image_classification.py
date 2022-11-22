@@ -22,10 +22,10 @@ from transformers import (
 )
 from transformers.pipelines import ImageClassificationPipeline, pipeline
 from transformers.testing_utils import (
-    is_pipeline_test,
     nested_simplify,
     require_tf,
     require_torch,
+    require_torch_or_tf,
     require_vision,
     slow,
 )
@@ -43,7 +43,7 @@ else:
             pass
 
 
-@is_pipeline_test
+@require_torch_or_tf
 @require_vision
 class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
@@ -140,7 +140,7 @@ class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     @require_tf
     def test_small_model_tf(self):
         small_model = "hf-internal-testing/tiny-random-vit"
-        image_classifier = pipeline("image-classification", model=small_model)
+        image_classifier = pipeline("image-classification", model=small_model, framework="tf")
 
         outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
         self.assertEqual(

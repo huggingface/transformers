@@ -57,7 +57,7 @@ tgt_text = "La vie est comme une boîte de chocolat."
 
 model_inputs = tokenizer(src_text, text_target=tgt_text, return_tensors="pt")
 
-loss = model(**model_inputs, labels=labels)  # forward pass
+loss = model(**model_inputs).loss  # forward pass
 ```
 
 - Generation

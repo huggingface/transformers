@@ -13,9 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
+import tempfile
 import unittest
 
-from transformers import AutoModel, AutoModelForCausalLM, AutoModelForSequenceClassification, AutoTokenizer, pipeline
+from transformers import (
+    AutoModel,
+    AutoModelForCausalLM,
+    AutoModelForSeq2SeqLM,
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    pipeline,
+)
 from transformers.testing_utils import (
     is_torch_available,
     require_accelerate,
@@ -100,18 +108,34 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
+    def test_warns_save_pretrained(self):
+        r"""
+        Test whether trying to save a model after converting it in 8-bit will throw a warning.
+        """
+        with self.assertWarns(UserWarning), tempfile.TemporaryDirectory() as tmpdirname:
+            self.model_8bit.save_pretrained(tmpdirname)
+
 
 class MixedInt8ModelClassesTest(BaseMixedInt8Test):
     def setUp(self):
         super().setUp()
         # model_name
         self.model_name = "bigscience/bloom-560m"
-        # Models and tokenizer
+        self.seq_to_seq_name = "t5-small"
+
+        # Different types of model
+
         self.base_model = AutoModel.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        # Sequence classification model
         self.sequence_model = AutoModelForSequenceClassification.from_pretrained(
             self.model_name, load_in_8bit=True, device_map="auto"
         )
+        # CausalLM model
         self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        # Seq2seq model
+        self.seq_to_seq_model = AutoModelForSeq2SeqLM.from_pretrained(
+            self.seq_to_seq_name, load_in_8bit=True, device_map="auto"
+        )
 
     def tearDown(self):
         r"""
@@ -121,6 +145,7 @@ class MixedInt8ModelClassesTest(BaseMixedInt8Test):
         del self.base_model
         del self.sequence_model
         del self.model_8bit
+        del self.seq_to_seq_model
 
         gc.collect()
         torch.cuda.empty_cache()
@@ -138,6 +163,7 @@ class MixedInt8ModelClassesTest(BaseMixedInt8Test):
         # Other heads should be nn.Parameter
         self.assertTrue(self.model_8bit.lm_head.weight.__class__ == torch.nn.Parameter)
         self.assertTrue(self.sequence_model.score.weight.__class__ == torch.nn.Parameter)
+        self.assertTrue(self.seq_to_seq_model.lm_head.weight.__class__ == torch.nn.Parameter)
 
 
 class MixedInt8TestPipeline(BaseMixedInt8Test):
@@ -189,23 +215,8 @@ class MixedInt8TestMultiGpu(BaseMixedInt8Test):
             self.model_name, load_in_8bit=True, max_memory=memory_mapping, device_map="auto"
         )
 
-        def get_list_devices(model):
-            list_devices = []
-            for _, module in model.named_children():
-                if len(list(module.children())) > 0:
-                    list_devices.extend(get_list_devices(module))
-                else:
-                    # Do a try except since we can encounter Dropout modules that does not
-                    # have any device set
-                    try:
-                        list_devices.append(next(module.parameters()).device.index)
-                    except BaseException:
-                        continue
-            return list_devices
-
-        list_devices = get_list_devices(model_parallel)
-        # Check that we have dispatched the model into 2 separate devices
-        self.assertTrue((1 in list_devices) and (0 in list_devices))
+        # Check correct device map
+        self.assertEqual(set(model_parallel.hf_device_map.values()), {0, 1})
 
         # Check that inference pass works on the model
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")

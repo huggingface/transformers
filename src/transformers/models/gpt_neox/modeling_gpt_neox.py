@@ -300,6 +300,7 @@ class GPTNeoXMLP(nn.Module):
 class GPTNeoXLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.use_parallel_residual = config.use_parallel_residual
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = GPTNeoXAttention(config)
@@ -314,28 +315,37 @@ class GPTNeoXLayer(nn.Module):
         layer_past=None,
         output_attentions=False,
     ):
-        residual = hidden_states
-        ln_out = self.input_layernorm(hidden_states)
+
         attention_layer_outputs = self.attention(
-            ln_out,
+            self.input_layernorm(hidden_states),
             attention_mask=attention_mask,
             layer_past=layer_past,
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
-        attn_output = attention_layer_outputs[0]  # output_attn: a, present, (attentions)
+        attn_output = attention_layer_outputs[0]  # output_attn: attn_output, present, (attn_weights)
         outputs = attention_layer_outputs[1:]
 
-        mlp_output = self.mlp(self.post_attention_layernorm(hidden_states))
-        hidden_states = mlp_output + attn_output + residual
+        if self.use_parallel_residual:
+            # pseudocode:
+            # x = x + attn(ln1(x)) + mlp(ln2(x))
+            mlp_output = self.mlp(self.post_attention_layernorm(hidden_states))
+            hidden_states = mlp_output + attn_output + hidden_states
+        else:
+            # pseudocode:
+            # x = x + attn(ln1(x))
+            # x = x + mlp(ln2(x))
+            attn_output = attn_output + hidden_states
+            mlp_output = self.mlp(self.post_attention_layernorm(attn_output))
+            hidden_states = mlp_output + attn_output
 
         if use_cache:
-            outputs = (hidden_states,) + outputs
+            outputs = (hidden_states,) + outputs  # hidden_states, present, (attn_weights)
         else:
-            outputs = (hidden_states,) + outputs[1:]
+            outputs = (hidden_states,) + outputs[1:]  # hidden_states, (attn_weights)
 
-        return outputs  # hidden_states, present, (attentions)
+        return outputs
 
 
 GPT_NEOX_START_DOCSTRING = r"""
@@ -354,7 +364,7 @@ GPT_NEOX_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`GPTNeoXTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`GPTNeoXTokenizerFast`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -411,6 +421,8 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         self.embed_in = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList([GPTNeoXLayer(config) for _ in range(config.num_hidden_layers)])
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -484,7 +496,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
-            # positions we want to attend and -10000.0 for masked positions.
+            # positions we want to attend and the dtype's smallest value for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
             attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
@@ -508,14 +520,37 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         for i, (layer, layer_past) in enumerate(zip(self.layers, past_key_values)):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-            outputs = layer(
-                hidden_states,
-                attention_mask=attention_mask,
-                head_mask=head_mask[i],
-                layer_past=layer_past,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-            )
+
+            if self.gradient_checkpointing and self.training:
+
+                if use_cache:
+                    logger.warning(
+                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                    )
+                    use_cache = False
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        # None for layer_past
+                        return module(*inputs, use_cache, None, output_attentions)
+
+                    return custom_forward
+
+                outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(layer),
+                    hidden_states,
+                    attention_mask,
+                    head_mask[i],
+                )
+            else:
+                outputs = layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    head_mask=head_mask[i],
+                    layer_past=layer_past,
+                    use_cache=use_cache,
+                    output_attentions=output_attentions,
+                )
             hidden_states = outputs[0]
             if use_cache is True:
                 presents = presents + (outputs[1],)
@@ -601,13 +636,13 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import GPTNeoXTokenizer, GPTNeoXForCausalLM, GPTNeoXConfig
+        >>> from transformers import GPTNeoXTokenizerFast, GPTNeoXForCausalLM, GPTNeoXConfig
         >>> import torch
 
-        >>> tokenizer = GPTNeoXTokenizer.from_pretrained("gpt-neox-20b")
-        >>> config = GPTNeoXConfig.from_pretrained("gpt-neox-20b")
+        >>> tokenizer = GPTNeoXTokenizerFast.from_pretrained("EleutherAI/gpt-neox-20b")
+        >>> config = GPTNeoXConfig.from_pretrained("EleutherAI/gpt-neox-20b")
         >>> config.is_decoder = True
-        >>> model = GPTNeoXForCausalLM.from_pretrained("gpt-neox-20b", config=config)
+        >>> model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

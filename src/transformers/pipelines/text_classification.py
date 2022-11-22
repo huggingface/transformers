@@ -50,6 +50,21 @@ class TextClassificationPipeline(Pipeline):
     Text classification pipeline using any `ModelForSequenceClassification`. See the [sequence classification
     examples](../task_summary#sequence-classification) for more information.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> classifier = pipeline(model="distilbert-base-uncased-finetuned-sst-2-english")
+    >>> classifier("This movie is disgustingly good !")
+    [{'label': 'POSITIVE', 'score': 1.0}]
+
+    >>> classifier("Director tried too much.")
+    [{'label': 'NEGATIVE', 'score': 0.996}]
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
+
     This text classification pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"sentiment-analysis"` (for classifying sequences according to positive or negative sentiments).
 
@@ -87,7 +102,9 @@ class TextClassificationPipeline(Pipeline):
             postprocess_params["_legacy"] = False
         elif return_all_scores is not None:
             warnings.warn(
-                "`return_all_scores` is now deprecated, use `top_k=1` if you want similar functionnality", UserWarning
+                "`return_all_scores` is now deprecated,  if want a similar funcionality use `top_k=None` instead of"
+                " `return_all_scores=True` or `top_k=1` instead of `return_all_scores=False`.",
+                UserWarning,
             )
             if return_all_scores:
                 postprocess_params["top_k"] = None
