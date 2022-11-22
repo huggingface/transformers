@@ -713,12 +713,6 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
             inputs_embeds = torch.cat([inputs_embeds, speaker_embeddings], dim=-1)
             inputs_embeds = nn.functional.relu(self.speaker_embeds_layer(inputs_embeds))
 
-        #TODO: need to do anything with this?
-        # if tgt_lengths_in is not None:
-        #     tgt_frames_mask = ~(self._source_mask(tgt_lengths_in).squeeze(1))
-        # else:
-        #     tgt_frames_mask = None
-
         return inputs_embeds
 
 
@@ -798,6 +792,12 @@ class SpeechT5TextEncoderPrenet(nn.Module):
             config.hidden_size,
             config.max_text_positions,
         )
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
 
     def forward(self, input_ids: torch.Tensor):
         inputs_embeds = self.embed_tokens(input_ids)
@@ -2517,16 +2517,6 @@ class SpeechT5ForTTS(SpeechT5PreTrainedModel):
     def get_decoder(self):
         return self.speecht5.get_decoder()
 
-    # def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-    #     new_embeddings = super().resize_token_embeddings(new_num_tokens)
-    #     return new_embeddings
-
-    # def get_output_embeddings(self):
-    #     return self.text_decoder_postnet.get_output_embeddings()
-
-    # def set_output_embeddings(self, new_embeddings):
-    #     self.text_decoder_postnet.set_output_embeddings(new_embeddings)
-
     @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -2554,6 +2544,8 @@ class SpeechT5ForTTS(SpeechT5PreTrainedModel):
         Example: TODO
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # TODO: how to implement this? (see the big `forward` in the original model)
 
         # if labels is not None:
         #     if decoder_input_ids is None:
@@ -2635,9 +2627,11 @@ class SpeechT5ForTTS(SpeechT5PreTrainedModel):
             `torch.FloatTensor` of shape `(output_sequence_length, config.num_mel_bins)` containing the
             predicted mel spectrogram.
         """
+        encoder_attention_mask = torch.ones_like(input_ids)
+
         encoder_out = self.speecht5.encoder(
             input_values=input_ids,
-            attention_mask=torch.ones_like(input_ids),
+            attention_mask=encoder_attention_mask,
             return_dict=True,
         )
 
@@ -2662,9 +2656,9 @@ class SpeechT5ForTTS(SpeechT5PreTrainedModel):
             # Run the decoder layers on the last element of the prenet output.
             decoder_out = self.speecht5.decoder.wrapped_decoder(
                 hidden_states=decoder_hidden_states[:, -1:],
-                #attention_mask=decoder_attention_mask,
+                attention_mask=None,
                 encoder_hidden_states=encoder_last_hidden_state,
-                #encoder_attention_mask=???,
+                encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
                 use_cache=True,
                 return_dict=True,
