@@ -18,6 +18,7 @@
 
 from . import (
     albert,
+    audio_spectrogram_transformer,
     auto,
     bart,
     barthez,
@@ -103,6 +104,7 @@ from . import (
     mluke,
     mmbt,
     mobilebert,
+    mobilenet_v1,
     mobilenet_v2,
     mobilevit,
     mpnet,

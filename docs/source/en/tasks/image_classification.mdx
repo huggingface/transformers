@@ -12,11 +12,16 @@ specific language governing permissions and limitations under the License.
 
 # Image classification
 
+[[open-in-colab]]
+
 <Youtube id="tjAIM7BOYhw"/>
 
-Image classification assigns a label or class to an image. Unlike text or audio classification, the inputs are the pixel values that represent an image. There are many uses for image classification, like detecting damage after a disaster, monitoring crop health, or helping screen medical images for signs of disease.
+Image classification assigns a label or class to an image. Unlike text or audio classification, the inputs are the pixel values that comprise an image. There are many applications for image classification such as detecting damage after a natural disaster, monitoring crop health, or helping screen medical images for signs of disease.
 
-This guide will show you how to fine-tune [ViT](https://huggingface.co/docs/transformers/v4.16.2/en/model_doc/vit) on the [Food-101](https://huggingface.co/datasets/food101) dataset to classify a food item in an image.
+This guide will show you how to:
+
+1. Finetune [ViT](https://huggingface.co/docs/transformers/v4.16.2/en/model_doc/vit) on the [Food-101](https://huggingface.co/datasets/food101) dataset to classify a food item in an image.
+2. Use your finetuned model for inference.
 
 <Tip>
 
@@ -24,9 +29,23 @@ See the image classification [task page](https://huggingface.co/tasks/image-clas
 
 </Tip>
 
+Before you begin, make sure you have all the necessary libraries installed:
+
+```bash
+pip install transformers datasets evaluate
+```
+
+We encourage you to login to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to login:
+
+```py
+>>> from huggingface_hub import notebook_login
+
+>>> notebook_login()
+```
+
 ## Load Food-101 dataset
 
-Load only the first 5000 images of the Food-101 dataset from the 🤗 Datasets library since it is pretty large:
+Start by loading a smaller subset of the Food-101 dataset from the 🤗 Datasets library. This'll give you a chance to experiment and make sure everythings works before spending more time training on the full dataset.
 
 ```py
 >>> from datasets import load_dataset
@@ -34,7 +53,7 @@ Load only the first 5000 images of the Food-101 dataset from the 🤗 Datasets l
 >>> food = load_dataset("food101", split="train[:5000]")
 ```
 
-Split this dataset into a train and test set:
+Split the dataset's `train` split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
 
 ```py
 >>> food = food.train_test_split(test_size=0.2)
@@ -48,7 +67,12 @@ Then take a look at an example:
  'label': 79}
 ```
 
-The `image` field contains a PIL image, and each `label` is an integer that represents a class. Create a dictionary that maps a label name to an integer and vice versa. The mapping will help the model recover the label name from the label number:
+There are two fields:
+
+- `image`: a PIL image of the food item.
+- `label`: the label class of the food item.
+
+To make it easier for the model to get the label name from the label id, create a dictionary that maps the label name to an integer and vice versa:
 
 ```py
 >>> labels = food["train"].features["label"].names
@@ -58,18 +82,16 @@ The `image` field contains a PIL image, and each `label` is an integer that repr
 ...     id2label[str(i)] = label
 ```
 
-Now you can convert the label number to a label name for more information:
+Now you can convert the label id to a label name:
 
 ```py
 >>> id2label[str(79)]
 'prime_rib'
 ```
 
-Each food class - or label - corresponds to a number; `79` indicates a prime rib in the example above.
-
 ## Preprocess
 
-Load the ViT feature extractor to process the image into a tensor:
+The next step is to load a ViT feature extractor to process the image into a tensor:
 
 ```py
 >>> from transformers import AutoFeatureExtractor
@@ -77,7 +99,9 @@ Load the ViT feature extractor to process the image into a tensor:
 >>> feature_extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
 ```
 
-Apply several image transformations to the dataset to make the model more robust against overfitting. Here you'll use torchvision's [`transforms`](https://pytorch.org/vision/stable/transforms.html) module. Crop a random part of the image, resize it, and normalize it with the image mean and standard deviation:
+Apply some image transformations to the images to make the model more robust against overfitting. Here you'll use torchvision's [`transforms`](https://pytorch.org/vision/stable/transforms.html) module, but you can also use any image library you like. 
+
+Crop a random part of the image, resize it, and normalize it with the image mean and standard deviation:
 
 ```py
 >>> from torchvision.transforms import RandomResizedCrop, Compose, Normalize, ToTensor
@@ -91,7 +115,7 @@ Apply several image transformations to the dataset to make the model more robust
 >>> _transforms = Compose([RandomResizedCrop(size), ToTensor(), normalize])
 ```
 
-Create a preprocessing function that will apply the transforms and return the `pixel_values` - the inputs to the model - of the image:
+Then create a preprocessing function to apply the transforms and return the `pixel_values` - the inputs to the model - of the image:
 
 ```py
 >>> def transforms(examples):
@@ -100,13 +124,13 @@ Create a preprocessing function that will apply the transforms and return the `p
 ...     return examples
 ```
 
-Use 🤗 Dataset's [`~datasets.Dataset.with_transform`] method to apply the transforms over the entire dataset. The transforms are applied on-the-fly when you load an element of the dataset:
+To apply the preprocessing function over the entire dataset, use 🤗 Datasets [`~datasets.Dataset.with_transform`] method. The transforms are applied on the fly when you load an element of the dataset:
 
 ```py
 >>> food = food.with_transform(transforms)
 ```
 
-Use [`DefaultDataCollator`] to create a batch of examples. Unlike other data collators in 🤗 Transformers, the DefaultDataCollator does not apply additional preprocessing such as padding.
+Now create a batch of examples using [`DataCollatorWithPadding`]. Unlike other data collators in 🤗 Transformers, the `DefaultDataCollator` does not apply additional preprocessing such as padding.
 
 ```py
 >>> from transformers import DefaultDataCollator
@@ -114,11 +138,39 @@ Use [`DefaultDataCollator`] to create a batch of examples. Unlike other data col
 >>> data_collator = DefaultDataCollator()
 ```
 
+## Evaluate
+
+Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a evaluation method with the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) metric (see the 🤗 Evaluate [quick tour](https://huggingface.co/docs/evaluate/a_quick_tour) to learn more about how to load and compute a metric):
+
+```py
+>>> import evaluate
+
+>>> accuracy = evaluate.load("accuracy")
+```
+
+Then create a function that passes your predictions and labels to [`~evaluate.EvaluationModule.compute`] to calculate the accuracy:
+
+```py
+>>> import numpy as np
+
+
+>>> def compute_metrics(eval_pred):
+...     predictions = np.argmax(eval_pred.predictions, axis=1)
+...     return accuracy.compute(predictions=predictions, references=eval_pred.label_ids)
+```
+
+Your `compute_metrics` function is ready to go now, and you'll return to it when you setup your training.
+
 ## Train
 
 <frameworkcontent>
 <pt>
-Load ViT with [`AutoModelForImageClassification`]. Specify the number of labels, and pass the model the mapping between label number and label class:
+<Tip>
+
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+
+</Tip>
+You're ready to start training your model now! Load ViT with [`AutoModelForImageClassification`]. Specify the number of labels along with the number of expected labels, and the label mappings:
 
 ```py
 >>> from transformers import AutoModelForImageClassification, TrainingArguments, Trainer
@@ -131,31 +183,28 @@ Load ViT with [`AutoModelForImageClassification`]. Specify the number of labels,
 ... )
 ```
 
-<Tip>
-
-If you aren't familiar with fine-tuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#finetune-with-trainer)!
-
-</Tip>
-
 At this point, only three steps remain:
 
-1. Define your training hyperparameters in [`TrainingArguments`]. It is important you don't remove unused columns because this will drop the `image` column. Without the `image` column, you can't create `pixel_values`. Set `remove_unused_columns=False` to prevent this behavior!
-2. Pass the training arguments to [`Trainer`] along with the model, datasets, tokenizer, and data collator.
-3. Call [`~Trainer.train`] to fine-tune your model.
+1. Define your training hyperparameters in [`TrainingArguments`]. It is important you don't remove unused columns because this'll drop the `image` column. Without the `image` column, you can't create `pixel_values`. Set `remove_unused_columns=False` to prevent this behavior! The only other required parameter is `output_dir` which specifies where to save your model. You'll push this model to the Hub by setting `push_to_hub=True` (you need to be signed in to Hugging Face to upload your model). At the end of each epoch, the [`Trainer`] will evaluate the accuracy and save the training checkpoint.
+2. Pass the training arguments to [`Trainer`] along with the model, dataset, tokenizer, data collator, and `compute_metrics` function.
+3. Call [`~Trainer.train`] to finetune your model.
 
 ```py
 >>> training_args = TrainingArguments(
-...     output_dir="./results",
-...     per_device_train_batch_size=16,
-...     evaluation_strategy="steps",
-...     num_train_epochs=4,
-...     fp16=True,
-...     save_steps=100,
-...     eval_steps=100,
-...     logging_steps=10,
-...     learning_rate=2e-4,
-...     save_total_limit=2,
+...     output_dir="my_awesome_food_model",
 ...     remove_unused_columns=False,
+...     evaluation_strategy="epoch",
+...     save_strategy="epoch",
+...     learning_rate=5e-5,
+...     per_device_train_batch_size=16,
+...     gradient_accumulation_steps=4,
+...     per_device_eval_batch_size=16,
+...     num_train_epochs=3,
+...     warmup_ratio=0.1,
+...     logging_steps=10,
+...     load_best_model_at_end=True,
+...     metric_for_best_model="accuracy",
+...     push_to_hub=True,
 ... )
 
 >>> trainer = Trainer(
@@ -165,15 +214,84 @@ At this point, only three steps remain:
 ...     train_dataset=food["train"],
 ...     eval_dataset=food["test"],
 ...     tokenizer=feature_extractor,
+...     compute_metrics=compute_metrics,
 ... )
 
 >>> trainer.train()
+```
+
+Once training is completed, share your model to the Hub with the [`~transformers.Trainer.push_to_hub`] method so everyone can use your model:
+
+```py
+>>> trainer.push_to_hub()
 ```
 </pt>
 </frameworkcontent>
 
 <Tip>
 
-For a more in-depth example of how to fine-tune a model for image classification, take a look at the corresponding [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
+For a more in-depth example of how to finetune a model for image classification, take a look at the corresponding [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
 
 </Tip>
+
+## Inference
+
+Great, now that you've finetuned a model, you can use it for inference!
+
+Load an image you'd like to run inference on:
+
+```py
+>>> ds = load_dataset("food101", split="validation[:10]")
+>>> image = ds["image"][0]
+```
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/beignets-task-guide.png" alt="image of beignets"/>
+</div>
+
+The simplest way to try out your finetuned model for inference is to use it in a [`pipeline`]. Instantiate a `pipeline` for image classification with your model, and pass your image to it:
+
+```py
+>>> from transformers import pipeline
+
+>>> classifier = pipeline("image-classification", model="my_awesome_food_model")
+>>> classifier(image)
+[{'score': 0.35574808716773987, 'label': 'beignets'},
+ {'score': 0.018057454377412796, 'label': 'chicken_wings'},
+ {'score': 0.017733804881572723, 'label': 'prime_rib'},
+ {'score': 0.016335085034370422, 'label': 'bruschetta'},
+ {'score': 0.0160061065107584, 'label': 'ramen'}]
+```
+You can also manually replicate the results of the `pipeline` if you'd like:
+
+<frameworkcontent>
+<pt>
+Load a feature extractor to preprocess the image and return the `input` as PyTorch tensors:
+
+```py
+>>> from transformers import AutoFeatureExtractor
+>>> import torch
+
+>>> feature_extractor = AutoFeatureExtractor.from_pretrained("my_awesome_food_model")
+>>> inputs = feature_extractor(image, return_tensors="pt")
+```
+
+Pass your inputs to the model and return the logits:
+
+```py
+>>> from transformers import AutoModelForImageClassification
+
+>>> model = AutoModelForImageClassification.from_pretrained("my_awesome_food_model")
+>>> with torch.no_grad():
+...     logits = model(**inputs).logits
+```
+
+Get the predicted label with the highest probability, and use the model's `id2label` mapping to convert it to a label:
+
+```py
+>>> predicted_label = logits.argmax(-1).item()
+>>> model.config.id2label[predicted_label]
+'beignets'
+```
+</pt>
+</frameworkcontent>
