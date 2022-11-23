@@ -174,6 +174,7 @@ _import_structure = {
         "CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ChineseCLIPConfig",
         "ChineseCLIPProcessor",
+        "ChineseCLIPTextConfig",
         "ChineseCLIPVisionConfig",
     ],
     "models.clip": [
@@ -3375,6 +3376,7 @@ if TYPE_CHECKING:
         CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ChineseCLIPConfig,
         ChineseCLIPProcessor,
+        ChineseCLIPTextConfig,
         ChineseCLIPVisionConfig,
     )
     from .models.clip import (
