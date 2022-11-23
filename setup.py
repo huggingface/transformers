@@ -124,7 +124,6 @@ _deps = [
     "jaxlib>=0.1.65,<=0.3.6",
     "jieba",
     "kenlm",
-    "keras-nlp>=0.3.1",
     "nltk",
     "natten>=0.14.4",
     "numpy>=1.17",
@@ -248,8 +247,8 @@ extras = {}
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "pyknp")
 extras["sklearn"] = deps_list("scikit-learn")
 
-extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text")
-extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text")
+extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp>=0.3.1")
+extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp>=0.3.1")
 
 extras["torch"] = deps_list("torch")
 extras["accelerate"] = deps_list("accelerate")
