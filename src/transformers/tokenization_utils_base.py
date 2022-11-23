@@ -898,7 +898,13 @@ class SpecialTokensMixin:
 
             if self.verbose:
                 logger.info(f"Assigning {value} to the {key} key of the tokenizer")
-            setattr(self, key, value)
+                if key == "additional_special_tokens":
+                    additional_special_tokens = getattr(self, key)
+                    for x in value:
+                        if x not in additional_special_tokens:
+                            additional_special_tokens.append(x)
+                else:
+                    setattr(self, key, value)
 
             if key == "additional_special_tokens":
                 assert isinstance(value, (list, tuple)) and all(
