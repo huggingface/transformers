@@ -14,13 +14,14 @@
 # limitations under the License.
 """ PyTorch UperNet model. Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation."""
 
-from typing import List, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 from torch import nn
 
 from transformers import AutoBackbone
 
+from ...modeling_outputs import SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
 from .configuration_upernet import UperNetConfig
 
@@ -289,13 +290,56 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         self.backbone = AutoBackbone.from_config(config.backbone_config)
 
         # Semantic segmentation head(s)
+        print("Backbone channels:", self.backbone.channels)
         self.decode_head = UperHead(config, in_channels=self.backbone.channels)
         self.auxiliary_head = FCNHead(config) if config.use_auxiliary_head else None
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def forward(self, pixel_values):
-        encoder_hidden_states = self.backbone(pixel_values)
+    def forward(
+        self,
+        pixel_values: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, SemanticSegmenterOutput]:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
-        return encoder_hidden_states
+        outputs = self.backbone(pixel_values)
+        features = outputs.feature_maps
+
+        print("Features:")
+        for i in features:
+            print(i.shape)
+
+        logits = self.decode_head(features)
+
+        auxiliary_logits = None
+        if self.auxiliary_head is not None:
+            auxiliary_logits = self.auxiliary_head(features)
+
+        loss = None
+        if labels is not None:
+            if self.config.num_labels == 1:
+                raise ValueError("The number of labels should be greater than one")
+            else:
+                loss = self.compute_loss(logits, auxiliary_logits, labels)
+
+        if not return_dict:
+            if output_hidden_states:
+                output = (logits,) + outputs[1:]
+            else:
+                output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SemanticSegmenterOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            attentions=None, # TODO fix this
+        )

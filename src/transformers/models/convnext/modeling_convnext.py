@@ -537,9 +537,10 @@ class ConvNextBackbone(ConvNextPreTrainedModel):
         hidden_states = outputs.hidden_states
 
         feature_maps = ()
+        # we skip the stem
         for idx, (stage, hidden_state) in enumerate(zip(self.stage_names[1:], hidden_states[1:])):
             if stage in self.out_features:
                 hidden_state = self.hidden_states_norms[idx](hidden_state)
-                feature_maps += (hidden_states[idx],)
+                feature_maps += (hidden_state,)
 
         return BackboneOutput(feature_maps=feature_maps)

@@ -17,8 +17,12 @@
 import argparse
 
 import torch
+from PIL import Image
+from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
+import requests
 from transformers import ConvNextConfig, UperNetConfig, UperNetForSemanticSegmentation
+from transformers.utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 
 def get_upernet_config(model_name):
@@ -78,6 +82,9 @@ def rename_key(dct, old, new):
     dct[new] = val
 
 
+image_transforms = Compose([Resize((512, 512)), ToTensor(), Normalize(mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD)])
+
+
 def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     model_name_to_url = {
         "convnext-tiny-upernet": "https://download.openmmlab.com/mmsegmentation/v0.5/convnext/upernet_convnext_tiny_fp16_512x512_160k_ade20k/upernet_convnext_tiny_fp16_512x512_160k_ade20k_20220227_124553-cad485de.pth",
@@ -106,21 +113,21 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     assert len(unexpected_keys) == 0, f"Unexpected keys: {unexpected_keys}"
 
     # TODO verify on image
-    # url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    # eature_extractor = ViTFeatureExtractor(size={"height": 192, "width": 192})
-    # image = Image.open(requests.get(url, stream=True).raw)
-    # inputs = feature_extractor(images=image, return_tensors="pt")
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    pixel_values = image_transforms(image).unsqueeze(0)
 
-    # with torch.no_grad():
-    #     outputs = model(**inputs).logits
+    print("Shape of pixel values:", pixel_values.shape)
 
-    # print(outputs.keys())
+    with torch.no_grad():
+        outputs = model(pixel_values)
+
+    print("Shape of logits:", outputs.logits.shape)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-
         # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
         # feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
