@@ -28,6 +28,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("altclip", "AltClipModel"),
         ("albert", "AlbertModel"),
         ("bart", "BartModel"),
         ("beit", "BeitModel"),
@@ -837,6 +838,7 @@ _MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Zero Shot Image Classification mapping
         ("clip", "CLIPModel"),
         ("clipseg", "CLIPSegModel"),
+        ("altclip", "AltClipModel"),
     ]
 )
 

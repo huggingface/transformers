@@ -121,6 +121,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.altclip": ["ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "AltClipConfig", "AltClipTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -591,6 +592,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
+    _import_structure["models.altclip"].append("AltClipTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -850,6 +852,13 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.altclip"].extend(
+        [
+            "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "AltClipModel",
+        ]
+    )
 
     _import_structure["models.roc_bert"].extend(
         [
@@ -3290,6 +3299,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.altclip import ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, AltClipConfig
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -3929,6 +3939,20 @@ if TYPE_CHECKING:
         from .modeling_utils import PreTrainedModel
 
         # PyTorch model imports
+
+        from .models.altclip import (
+            ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            AltClipForMaskedLM,
+            AltClipForCausalLM,
+            AltClipForMultipleChoice,
+            AltClipForQuestionAnswering,
+            AltClipForSequenceClassification,
+            AltClipForTokenClassification,
+            AltClipLayer,
+            AltClipModel,
+            AltClipPreTrainedModel,
+            load_tf_weights_in_altclip,
+        )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
