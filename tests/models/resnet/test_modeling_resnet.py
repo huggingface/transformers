@@ -18,6 +18,8 @@
 import inspect
 import unittest
 
+import numpy as np
+
 from transformers import ResNetConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
@@ -205,7 +207,28 @@ class ResNetModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_backbone(*config_and_inputs)
 
+    def test_determinism(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            if model_class.__name__ == "ResNetBackbone":
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    first = model(**self._prepare_for_class(inputs_dict, model_class))
+                    second = model(**self._prepare_for_class(inputs_dict, model_class))
+
+                print("First:", len(first.feature_maps))
+                print("Second:", len(second.keys()))
+                out_1 = first.cpu().numpy()
+                out_2 = second.cpu().numpy()
+                out_1 = out_1[~np.isnan(out_1)]
+                out_2 = out_2[~np.isnan(out_2)]
+                max_diff = np.amax(np.abs(out_1 - out_2))
+                self.assertLessEqual(max_diff, 1e-5)
+
     def test_initialization(self):
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
