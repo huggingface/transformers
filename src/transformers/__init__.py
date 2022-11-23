@@ -396,6 +396,13 @@ _import_structure = {
         "ViltImageProcessor",
         "ViltProcessor",
     ],
+    "models.bridgetower": [
+        "BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BridgeTowerConfig",
+        "BridgeTowerFeatureExtractor",
+        "BridgeTowerImageProcessor",
+        "BridgeTowerProcessor",
+    ],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig", "VisionTextDualEncoderProcessor"],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
@@ -736,6 +743,7 @@ else:
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
+    _import_structure["models.bridgetower"].extend(["BridgeTowerFeatureExtractor", "BridgeTowerImageProcessor", "BridgeTowerProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor"])
 
@@ -2102,6 +2110,19 @@ else:
             "ViltLayer",
             "ViltModel",
             "ViltPreTrainedModel",
+        ]
+    )
+    _import_structure["models.bridgetower"].extend(
+        [
+            "BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BridgeTowerForImageAndTextRetrieval",
+            "BridgeTowerForImagesAndTextClassification",
+            "BridgeTowerForTokenClassification",
+            "BridgeTowerForMaskedLM",
+            "BridgeTowerForQuestionAnswering",
+            "BridgeTowerLayer",
+            "BridgeTowerModel",
+            "BridgeTowerPreTrainedModel",
         ]
     )
     _import_structure["models.vision_encoder_decoder"].extend(["VisionEncoderDecoderModel"])
@@ -3512,6 +3533,13 @@ if TYPE_CHECKING:
         ViltImageProcessor,
         ViltProcessor,
     )
+    from .models.bridgetower import (
+        BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BridgeTowerConfig,
+        BridgeTowerFeatureExtractor,
+        BridgeTowerImageProcessor,
+        BridgeTowerProcessor,
+    )
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
@@ -3813,6 +3841,7 @@ if TYPE_CHECKING:
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
+        from .models.bridgetower import BridgeTowerFeatureExtractor, BridgeTowerImageProcessor, BridgeTowerProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
         from .models.yolos import YolosFeatureExtractor
 
@@ -4925,6 +4954,17 @@ if TYPE_CHECKING:
             ViltLayer,
             ViltModel,
             ViltPreTrainedModel,
+        )
+        from .models.bridgetower import (
+            BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BridgeTowerForImageAndTextRetrieval,
+            BridgeTowerForImagesAndTextClassification,
+            BridgeTowerForMaskedLM,
+            BridgeTowerForQuestionAnswering,
+            BridgeTowerForTokenClassification,
+            BridgeTowerLayer,
+            BridgeTowerModel,
+            BridgeTowerPreTrainedModel,
         )
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import VisionTextDualEncoderModel

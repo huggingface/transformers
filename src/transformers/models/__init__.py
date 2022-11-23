@@ -155,6 +155,7 @@ from . import (
     van,
     videomae,
     vilt,
+    bridgetower,
     vision_encoder_decoder,
     vision_text_dual_encoder,
     visual_bert,

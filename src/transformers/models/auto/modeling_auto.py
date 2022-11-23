@@ -145,6 +145,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("van", "VanModel"),
         ("videomae", "VideoMAEModel"),
         ("vilt", "ViltModel"),
+        ("bridgetower", "BridgeTowerModel"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderModel"),
         ("visual_bert", "VisualBertModel"),
         ("vit", "ViTModel"),
@@ -665,6 +666,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         ("vilt", "ViltForQuestionAnswering"),
+        ("bridgetower", "BridgeTowerForQuestionAnswering"),
     ]
 )
 
