@@ -290,7 +290,6 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         self.backbone = AutoBackbone.from_config(config.backbone_config)
 
         # Semantic segmentation head(s)
-        print("Backbone channels:", self.backbone.channels)
         self.decode_head = UperHead(config, in_channels=self.backbone.channels)
         self.auxiliary_head = FCNHead(config) if config.use_auxiliary_head else None
 
@@ -312,10 +311,6 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
 
         outputs = self.backbone(pixel_values)
         features = outputs.feature_maps
-
-        print("Features:")
-        for i in features:
-            print(i.shape)
 
         logits = self.decode_head(features)
 
@@ -341,5 +336,5 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=None, # TODO fix this
+            attentions=None,  # TODO fix this, could be that some backbones have attentions
         )

@@ -488,16 +488,16 @@ class ConvNextBackbone(ConvNextPreTrainedModel):
         self.convnext = ConvNextModel(config)
 
         self.out_features = config.out_features
+        if "stem" in self.out_features:
+            raise ValueError("This backbone does not support 'stem' in the `out_features`.")
 
-        self.out_feature_channels = {
-            "stem": config.hidden_sizes[0],
-            "stage1": config.hidden_sizes[0],
-            "stage2": config.hidden_sizes[1],
-            "stage3": config.hidden_sizes[2],
-            "stage4": config.hidden_sizes[3],
-        }
+        out_feature_channels = {}
+        out_feature_channels["stem"] = config.hidden_sizes[0]
+        for idx, stage in enumerate(self.stage_names[1:]):
+            out_feature_channels[stage] = config.hidden_sizes[idx]
 
-        # TODO this assumes stem is not used
+        self.out_feature_channels = out_feature_channels
+
         self.hidden_states_norms = nn.ModuleList(
             [ConvNextLayerNorm(num_channels, data_format="channels_first") for num_channels in config.hidden_sizes]
         )

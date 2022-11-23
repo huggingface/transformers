@@ -82,7 +82,9 @@ def rename_key(dct, old, new):
     dct[new] = val
 
 
-image_transforms = Compose([Resize((512, 512)), ToTensor(), Normalize(mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD)])
+image_transforms = Compose(
+    [Resize((512, 512)), ToTensor(), Normalize(mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD)]
+)
 
 
 def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
@@ -112,17 +114,19 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     assert missing_keys == ["backbone.convnext.layernorm.weight", "backbone.convnext.layernorm.bias"]
     assert len(unexpected_keys) == 0, f"Unexpected keys: {unexpected_keys}"
 
-    # TODO verify on image
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    # verify on image
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     pixel_values = image_transforms(image).unsqueeze(0)
-
-    print("Shape of pixel values:", pixel_values.shape)
 
     with torch.no_grad():
         outputs = model(pixel_values)
 
-    print("Shape of logits:", outputs.logits.shape)
+    expected_slice = torch.tensor(
+        [[-8.8110, -7.5399, -7.5429], [-8.5200, -7.0736, -7.2054], [-8.5220, -7.2897, -7.3901]]
+    )
+    print("Logits:", outputs.logits[0, 0, :3, :3])
+    assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
