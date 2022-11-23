@@ -18,6 +18,7 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 from torch import nn
+from torch.nn import CrossEntropyLoss
 
 from transformers import AutoBackbone
 
@@ -275,15 +276,15 @@ class UperNetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
+    # TODO look into weights initialization
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, AutoBackbone):
             module._init_weights
 
-    # TODO look into weights initialization and gradient checkpointing
-    # def _set_gradient_checkpointing(self, module, value=False):
-    #     if isinstance(module, BertEncoder):
-    #         module.gradient_checkpointing = value
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, AutoBackbone):
+            module.gradient_checkpointing = value
 
 
 class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
@@ -298,6 +299,23 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def compute_loss(self, logits, auxiliary_logits, labels):
+        # upsample logits to the images' original size
+        upsampled_logits = nn.functional.interpolate(
+            logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+        )
+        if auxiliary_logits is not None:
+            upsampled_auxiliary_logits = nn.functional.interpolate(
+                auxiliary_logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+            )
+        # compute weighted loss
+        loss_fct = CrossEntropyLoss(ignore_index=self.config.loss_ignore_index)
+        main_loss = loss_fct(upsampled_logits, labels)
+        auxiliary_loss = loss_fct(upsampled_auxiliary_logits, labels)
+        loss = main_loss + self.config.auxiliary_loss_weight * auxiliary_loss
+
+        return loss
 
     def forward(
         self,

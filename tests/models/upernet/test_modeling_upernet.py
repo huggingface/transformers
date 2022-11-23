@@ -159,6 +159,14 @@ class UperNetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    @unittest.skip(reason="UperNet does not have a base model")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(reason="UperNet does not have a base model")
+    def test_save_load_fast_init_to_base(self):
+        pass
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
