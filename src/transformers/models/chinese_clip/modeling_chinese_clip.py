@@ -676,7 +676,9 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
+
         Examples:
+
         ```python
         >>> from PIL import Image
         >>> import requests
