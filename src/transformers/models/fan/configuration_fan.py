@@ -46,9 +46,9 @@ class FANConfig(PretrainedConfig):
     Args:
         patch_size (int, defaults to 16):
             Size of each patch to generated the embedding tokens from the image
-        hidden_size (`int`, *optional*, defaults to 384):
+        hidden_size (`int`, *optional*, defaults to 448):
             Dimension of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 18):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
@@ -90,7 +90,7 @@ class FANConfig(PretrainedConfig):
             Number of ClassAttentionBlock used. Class Attention Layer as in CaiT https://arxiv.org/abs/2103.17239.
         hybrid_patch_size (`int`, defaults to 2):
             The patch size used in the hybrid embeddings, when using default backbone.
-        channel_dims (`tuple(int)`, *optional*, defaults to None):
+        channel_dims (`List[int]`, *optional*, defaults to None):
             List of Input channels for each of the encoder layers. If None it defaults to [config.hidden_size] *
             config.num_hidden_layers.
         feat_downsample (`bool`, defaults to ):
@@ -102,7 +102,7 @@ class FANConfig(PretrainedConfig):
         rounding_mode (`string`, *optional*, defaults to 'floor'):
             Torch Divison rounding mode used for positional encoding. Should be set to None in Semantic Segmentation
             tasks to be compatible with original paper implementation.
-        segmentation_in_channels (tuple(int), defaults to (128, 256, 480, 480)):
+        segmentation_in_channels (`List[int]`, defaults to [448,448,448,448]):
             Number of channels in each of the hidden features used for Semantic Segmentation.
         decoder_hidden_size (`int`, *optional*, defaults to 768):
             The dimension of the all-MLP decode head for Semantic Segmenatation.
@@ -130,8 +130,8 @@ class FANConfig(PretrainedConfig):
     def __init__(
         self,
         patch_size=16,
-        hidden_size=384,
-        num_hidden_layers=12,
+        hidden_size=448,
+        num_hidden_layers=18,
         num_attention_heads=8,
         depths=None,
         eta=1.0,
@@ -155,7 +155,7 @@ class FANConfig(PretrainedConfig):
         feat_downsample=False,
         out_index=-1,
         rounding_mode="floor",
-        segmentation_in_channels=[128, 256, 480, 480],
+        segmentation_in_channels=[448, 448, 448, 448],
         decoder_hidden_size=768,
         semantic_loss_ignore_index=-100,
         layer_norm_eps=1e-6,
