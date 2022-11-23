@@ -903,6 +903,7 @@ class SpecialTokensMixin:
                     for x in value:
                         if x not in additional_special_tokens:
                             additional_special_tokens.append(x)
+                        self.additional_special_tokens = additional_special_tokens
                 else:
                     setattr(self, key, value)
 
