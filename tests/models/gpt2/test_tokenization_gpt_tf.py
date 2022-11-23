@@ -26,7 +26,7 @@ if is_tf_available():
             config = AutoConfig.from_pretrained(TINY_MODEL_CHECKPOINT)
             self.model = TFGPT2LMHeadModel.from_config(config)
 
-        @tf.function(input_signature=(tf.TensorSpec((None,), tf.string, name="text"), ))
+        @tf.function(input_signature=(tf.TensorSpec((None,), tf.string, name="text"),))
         def serving(self, inputs):
             tokenized = self.tokenizer(inputs)
 
@@ -36,7 +36,7 @@ if is_tf_available():
                 input_ids=input_ids_dense,
                 attention_mask=input_mask,
             )
-            
+
             return outputs["logits"]
 
 
@@ -48,9 +48,7 @@ class GPTTokenizationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        self.tokenizers = [
-            GPT2Tokenizer.from_pretrained(checkpoint) for checkpoint in (TOKENIZER_CHECKPOINTS )
-        ]
+        self.tokenizers = [GPT2Tokenizer.from_pretrained(checkpoint) for checkpoint in (TOKENIZER_CHECKPOINTS)]
         self.tf_tokenizers = [TFGPT2Tokenizer.from_pretrained(checkpoint) for checkpoint in TOKENIZER_CHECKPOINTS]
         assert len(self.tokenizers) == len(self.tf_tokenizers)
 
@@ -98,14 +96,7 @@ class GPTTokenizationTest(unittest.TestCase):
             out = model.serving(test_inputs)  # Build model with some sample inputs
             with TemporaryDirectory() as tempdir:
                 save_path = Path(tempdir) / "saved.model"
-                tf.saved_model.save(
-                    model,
-                    save_path,
-                    signatures={
-                        "serving_default":
-                            model.serving
-                    }
-                )
+                tf.saved_model.save(model, save_path, signatures={"serving_default": model.serving})
                 loaded_model = tf.saved_model.load(save_path)
             loaded_output = loaded_model.signatures["serving_default"](test_inputs)["output_0"]
             # We may see small differences because the loaded model is compiled, so we need an epsilon for the test

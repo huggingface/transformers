@@ -4,7 +4,7 @@ from ..utils import DummyObject, requires_backends
 
 
 class TFGPT2Tokenizer(metaclass=DummyObject):
-    _backends = ["tensorflow_text"]
+    _backends = ["keras_nlp"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["keras_nlp"])
