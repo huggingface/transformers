@@ -1667,10 +1667,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return mem
 
     def to(self, *args, **kwargs):
-        r"""
-        Overrides the `.to` function from `nn.Module` to raise a ValueError if `8-bit` models are tried to be set on a
-        new device or `dtype`
-        """
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "is_loaded_in_8bit", False):
             raise ValueError(
@@ -1682,10 +1678,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return super().to(*args, **kwargs)
 
     def half(self, *args):
-        r"""
-        Overrides the `.half` function from `nn.Module` to raise a ValueError if this method is called with `8-bit`
-        models.
-        """
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "is_loaded_in_8bit", False):
             raise ValueError(
@@ -1697,10 +1689,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return super().half(*args)
 
     def float(self, *args):
-        r"""
-        Overrides the `.float` function from `nn.Module` to raise a ValueError if this method is called with `8-bit`
-        models.
-        """
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "is_loaded_in_8bit", False):
             raise ValueError(
