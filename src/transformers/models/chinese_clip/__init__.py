@@ -25,6 +25,7 @@ _import_structure = {
         "CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ChineseCLIPConfig",
         "ChineseCLIPOnnxConfig",
+        "ChineseCLIPVisionConfig",
     ],
     "processing_chinese_clip": ["ChineseCLIPProcessor"],
 }
@@ -55,6 +56,7 @@ if TYPE_CHECKING:
         CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ChineseCLIPConfig,
         ChineseCLIPOnnxConfig,
+        ChineseCLIPVisionConfig,
     )
     from .processing_chinese_clip import ChineseCLIPProcessor
 
