@@ -1666,7 +1666,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             mem = mem + mem_bufs
         return mem
 
-    def to(self, *args):
+    def to(self, *args, **kwargs):
         r"""
         Overrides the `.to` function from `nn.Module` to raise a ValueError if `8-bit` models are tried to be set on a
         new device or `dtype`
@@ -1679,7 +1679,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " model has already been set to the correct devices and casted to the correct `dtype`."
             )
         else:
-            return super().to(*args)
+            return super().to(*args, **kwargs)
 
     def half(self, *args):
         r"""
