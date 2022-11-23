@@ -1503,12 +1503,13 @@ class FANEncoder(FANPreTrainedModel):
             if is_backbone_hybrid and self.config.feat_downsample:
                 tmp = current_hidden_state[:, 1:, :].reshape(batch_size, Hp, Wp, -1).permute(0, 3, 1, 2).contiguous()
                 tmp = self.learnable_downsample(tmp)
+                tmp = tmp.reshape(batch_size, Hp * Wp, -1).permute(0, 2, 1).contiguous()
                 encoder_states + (tmp,)
             else:
-                hidden_state_reshaped = (
-                    current_hidden_state[:, 1:, :].reshape(batch_size, Hp, Wp, -1).permute(0, 3, 1, 2).contiguous()
-                )
-                encoder_states = encoder_states + (hidden_state_reshaped,)
+                # hidden_state_reshaped = (
+                #     current_hidden_state[:, 1:, :].reshape(batch_size, Hp, Wp, -1).permute(0, 3, 1, 2).contiguous()
+                # )
+                encoder_states = encoder_states + (current_hidden_state[:, 1:, :],)
 
         if not return_dict:
             return tuple(
@@ -1779,11 +1780,11 @@ class FANDecodeHead(FANPreTrainedModel):
         if is_backbone_hybrid:
             encoder_states = backbone_hidden_states + (
                 reshape_hidden_state(encoder_hidden_states[self.config.out_index]),
-                encoder_hidden_states[-1],
+                reshape_hidden_state(encoder_hidden_states[-1]),
             )
         else:
             encoder_states = tuple(reshape_hidden_state(encoder_hidden_states[idx]) for idx in out_index) + (
-                encoder_hidden_states[-1],
+                reshape_hidden_state(encoder_hidden_states[-1]),
             )
 
         all_hidden_states = ()
