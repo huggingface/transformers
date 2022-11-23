@@ -482,7 +482,7 @@ class ChineseCLIPModelTest(ModelTesterMixin, unittest.TestCase):
     test_attention_outputs = False
 
     def setUp(self):
-        text_kwargs = {"use_labels": False, "batch_size": 12}
+        text_kwargs = {"batch_size": 12}
         vision_kwargs = {"batch_size": 12}
         self.model_tester = ChineseCLIPModelTester(self, text_kwargs, vision_kwargs)
 
