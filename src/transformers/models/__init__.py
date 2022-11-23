@@ -29,6 +29,7 @@ from . import (
     bertweet,
     big_bird,
     bigbird_pegasus,
+    biogpt,
     blenderbot,
     blenderbot_small,
     bloom,
