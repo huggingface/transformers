@@ -27,21 +27,14 @@ from transformers.testing_utils import require_torch, require_vision, slow, torc
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
-)
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 
 
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import (
-        ChineseCLIPModel,
-        ChineseCLIPVisionModel,
-    )
+    from transformers import ChineseCLIPModel, ChineseCLIPVisionModel
     from transformers.models.chinese_clip.modeling_chinese_clip import CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
