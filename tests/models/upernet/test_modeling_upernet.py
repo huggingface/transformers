@@ -27,8 +27,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
-    from torch import nn
-
     from transformers import UperNetForSemanticSegmentation
     from transformers.models.upernet.modeling_upernet import UPERNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
