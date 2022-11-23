@@ -24,7 +24,7 @@ import numpy as np
 import requests
 from transformers import ChineseCLIPConfig, ChineseCLIPTextConfig, ChineseCLIPVisionConfig
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester

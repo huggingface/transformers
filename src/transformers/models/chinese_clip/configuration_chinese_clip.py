@@ -140,6 +140,23 @@ class ChineseCLIPTextConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
 
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        # get the vision config dict if we are loading from ChineseCLIPConfig
+        if config_dict.get("model_type") == "chinese-clip":
+            config_dict = config_dict["text_config"]
+
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warning(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
+
+        return cls.from_dict(config_dict, **kwargs)
+
 
 class ChineseCLIPVisionConfig(PretrainedConfig):
     r"""
