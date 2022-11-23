@@ -1666,6 +1666,36 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             mem = mem + mem_bufs
         return mem
 
+    def to(self, *args, **kwargs):
+        # Checks if the model has been loaded in 8-bit
+        if getattr(self, "is_loaded_in_8bit", False):
+            raise ValueError(
+                "`.to` is not supported for `8-bit` models. Please use the model as it is, since the"
+                " model has already been set to the correct devices and casted to the correct `dtype`."
+            )
+        else:
+            return super().to(*args, **kwargs)
+
+    def half(self, *args):
+        # Checks if the model has been loaded in 8-bit
+        if getattr(self, "is_loaded_in_8bit", False):
+            raise ValueError(
+                "`.half()` is not supported for `8-bit` models. Please use the model as it is, since the"
+                " model has already been casted to the correct `dtype`."
+            )
+        else:
+            return super().half(*args)
+
+    def float(self, *args):
+        # Checks if the model has been loaded in 8-bit
+        if getattr(self, "is_loaded_in_8bit", False):
+            raise ValueError(
+                "`.float()` is not supported for `8-bit` models. Please use the model as it is, since the"
+                " model has already been casted to the correct `dtype`."
+            )
+        else:
+            return super().float(*args)
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
         r"""
