@@ -1128,7 +1128,7 @@ class GenerationMixin:
         ```"""
         # 1. Handle `generation_config` and kwargs that might update it
         if generation_config is None:
-            generation_config = self.generation_config
+            generation_config = self.generation_config if self.generation_config is not None else GenerationConfig()
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
 
