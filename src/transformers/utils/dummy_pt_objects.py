@@ -1231,6 +1231,13 @@ class ChineseCLIPPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class ChineseCLIPTextModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class ChineseCLIPVisionModel(metaclass=DummyObject):
     _backends = ["torch"]
 
