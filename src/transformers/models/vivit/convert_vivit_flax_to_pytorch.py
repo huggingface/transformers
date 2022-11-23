@@ -60,7 +60,7 @@ def transform_state_encoder_block(state_dict, i):
     return new_state
 
 
-def transform_state(state_dict, transformer_layers=12):
+def transform_state(state_dict, transformer_layers=12, classification_head=False):
     new_state = OrderedDict()
 
     new_state['layernorm.bias'] = state_dict['optimizer']['target']['Transformer']['encoder_norm']['bias']
@@ -75,7 +75,11 @@ def transform_state(state_dict, transformer_layers=12):
     for i in range(transformer_layers):
         new_state.update(transform_state_encoder_block(state_dict, i))
 
-    
+    if classification_head:
+        new_state = {"vivit."+ k: v for k, v in new_state.items()}
+        new_state["classifier.weight"] = np.transpose(state_dict["optimizer"]["target"]["output_projection"]["kernel"])
+        new_state["classifier.bias"] = np.transpose(state_dict["optimizer"]["target"]["output_projection"]["bias"])
+
     return {k: torch.tensor(v) for k,v in new_state.items()}
 
 
@@ -88,13 +92,14 @@ if __name__ == '__main__':
     
     parser.add_argument('--flax_model', type=str, help='Path to flax model')
     parser.add_argument('--output_model_name', type=str, help='Name of the outputed file')
+    parser.add_argument('--classification_head', action="store_true")
     
     args = parser.parse_args()
     
     state_dict = restore_checkpoint(args.flax_model, None)
     
     n_layers = get_n_layers(state_dict)
-    new_state = transform_state(state_dict, n_layers)
+    new_state = transform_state(state_dict, n_layers, classification_head=args.classification_head)
     
     out_path = Path(args.flax_model).parent.absolute()
     
