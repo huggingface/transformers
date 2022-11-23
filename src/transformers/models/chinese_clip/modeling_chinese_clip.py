@@ -15,9 +15,9 @@
 """ PyTorch Chinese-CLIP model."""
 
 
+import math
 from dataclasses import dataclass
 from typing import Any, List, Optional, Tuple, Union
-import math
 
 import torch
 import torch.utils.checkpoint
@@ -40,11 +40,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_chinese_clip import (
-    ChineseCLIPConfig,
-    ChineseCLIPTextConfig,
-    ChineseCLIPVisionConfig,
-)
+from .configuration_chinese_clip import ChineseCLIPConfig, ChineseCLIPTextConfig, ChineseCLIPVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -114,7 +110,8 @@ class ChineseCLIPOutput(ModelOutput):
             The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
             similarity scores.
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`ChineseCLIPTextModel`].
+            The text embeddings obtained by applying the projection layer to the pooled output of
+            [`ChineseCLIPTextModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of
             [`ChineseCLIPVisionModel`].
@@ -341,7 +338,7 @@ class ChineseCLIPTextSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in ChineseCLIPModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in ChineseCLIPTextModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -1398,7 +1395,8 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
 
         if not isinstance(config.text_config, ChineseCLIPTextConfig):
             raise ValueError(
-                f"config.text_config is expected to be of type ChineseCLIPTextConfig but is of type {type(config.text_config)}."
+                "config.text_config is expected to be of type ChineseCLIPTextConfig but is of type"
+                f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, ChineseCLIPVisionConfig):
