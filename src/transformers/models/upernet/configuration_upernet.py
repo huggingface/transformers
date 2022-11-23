@@ -18,6 +18,7 @@ import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto.configuration_auto import CONFIG_MAPPING
 from ..resnet import ResNetConfig
 
 
@@ -87,9 +88,19 @@ class UperNetConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         if backbone_config is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
             backbone_config = {}
-            logger.info("backbone_config is None. Initializing the config with default ResNet backbone.")
-            self.backbone_config = ResNetConfig(**backbone_config)
+
+        if isinstance(backbone_config, dict):
+
+            if "model_type" in backbone_config:
+                backbone_config_class = CONFIG_MAPPING[backbone_config["model_type"]]
+            else:
+                logger.info(
+                    "`model_type` is not found in `backbone_config`. Use `ResNet` as the backbone configuration class."
+                )
+                backbone_config_class = ResNetConfig
+            backbone_config = backbone_config_class(**backbone_config)
 
         self.backbone_config = backbone_config
         self.hidden_size = hidden_size
@@ -104,8 +115,7 @@ class UperNetConfig(PretrainedConfig):
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-        Returns:
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)

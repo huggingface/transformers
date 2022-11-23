@@ -55,18 +55,18 @@ def create_rename_keys(config):
             rename_keys.append((f"backbone.downsample_layers.{i}.0.bias", f"backbone.convnext.encoder.stages.{i}.downsampling_layer.0.bias"))
             rename_keys.append((f"backbone.downsample_layers.{i}.1.weight", f"backbone.convnext.encoder.stages.{i}.downsampling_layer.1.weight"))
             rename_keys.append((f"backbone.downsample_layers.{i}.1.bias", f"backbone.convnext.encoder.stages.{i}.downsampling_layer.1.bias"))
-        
+
         rename_keys.append((f"backbone.norm{i}.weight", f"backbone.hidden_states_norms.{i}.weight"))
         rename_keys.append((f"backbone.norm{i}.bias", f"backbone.hidden_states_norms.{i}.bias"))
-    
+
     # decode head
     rename_keys.extend(
-            [
-                ("decode_head.conv_seg.weight", "decode_head.classifier.weight"),
-                ("decode_head.conv_seg.bias", "decode_head.classifier.bias"),
-                ("auxiliary_head.conv_seg.weight", "auxiliary_head.classifier.weight"),
-                ("auxiliary_head.conv_seg.bias", "auxiliary_head.classifier.bias"),
-            ]
+        [
+            ("decode_head.conv_seg.weight", "decode_head.classifier.weight"),
+            ("decode_head.conv_seg.bias", "decode_head.classifier.bias"),
+            ("auxiliary_head.conv_seg.weight", "auxiliary_head.classifier.weight"),
+            ("auxiliary_head.conv_seg.bias", "auxiliary_head.classifier.bias"),
+        ]
     )
     # fmt: on
 
