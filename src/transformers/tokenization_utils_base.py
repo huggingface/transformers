@@ -2083,6 +2083,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
 
+        # TODO: Ensure the modified attributes (those are also in the __init__ kwargs) will give identical tokenizers
+        # target_keys = self.init_kwargs.keys()
+        target_keys = ["model_max_length"]
         for k in self.init_kwargs:
             if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)
