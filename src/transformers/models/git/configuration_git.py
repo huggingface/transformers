@@ -250,8 +250,7 @@ class GITConfig(PretrainedConfig):
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-        Returns:
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)

@@ -194,10 +194,10 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     # define GIT configuration based on model name
     config = get_git_config(model_name)
     # load original state_dict from URL
-    # checkpoint_url = model_name_to_url[model_name]
-    # state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)["model"]
+    checkpoint_url = model_name_to_url[model_name]
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)["model"]
     # TODO remove line below
-    state_dict = torch.load("/Users/nielsrogge/Documents/GIT/model.pt", map_location="cpu")["model"]
+    # state_dict = torch.load("/Users/nielsrogge/Documents/GIT/model.pt", map_location="cpu")["model"]
     # rename keys
     prefix = "module." if model_name in ["git-base", "git-large"] else ""
     rename_keys = create_rename_keys(config, prefix=prefix)
@@ -252,8 +252,8 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
 
     if push_to_hub:
         print("Pushing model and processor to the hub...")
-        model.push_to_hub(f"microsoft/{model_name}")
-        processor.push_to_hub(f"microsoft/{model_name}")
+        model.push_to_hub(f"nielsr/{model_name}")
+        processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
