@@ -28,7 +28,6 @@ from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 from ..bert.configuration_bert import BertConfig
-from ..clip.configuration_clip import CLIPVisionConfig
 
 
 logger = logging.get_logger(__name__)
