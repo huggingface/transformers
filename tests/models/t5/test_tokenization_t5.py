@@ -14,6 +14,7 @@
 # limitations under the License.
 import json
 import os
+import re
 import tempfile
 import unittest
 
@@ -382,11 +383,26 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_get_sentinel_tokens(self):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=10)
-        self.assertEquals(len(tokenizer.get_sentinel_tokens()), 10)
+        sentinel_tokens = tokenizer.get_sentinel_tokens()
+        self.assertEquals(len(sentinel_tokens), 10)
         self.assertListEqual(
-            sorted(tokenizer.get_sentinel_tokens()), sorted([f"<extra_id_{str(i)}>" for i in range(0, 10)])
+            sorted(sentinel_tokens), sorted([f"<extra_id_{str(i)}>" for i in range(0, 10)])
         )
+        self.assertTrue([re.search("<extra_id_\d+>",token) is not None for token in sentinel_tokens])
 
     def test_get_sentinel_token_ids(self):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=10)
+        self.assertListEqual(sorted(tokenizer.get_sentinel_token_ids()), sorted([i for i in range(1000, 1010)]))
+
+    def test_get_sentinel_tokens_for_fasttokenizer(self):
+        tokenizer = T5TokenizerFast(SAMPLE_VOCAB, extra_ids=10)
+        sentinel_tokens = tokenizer.get_sentinel_tokens()
+        self.assertEquals(len(sentinel_tokens), 10)
+        self.assertListEqual(
+            sorted(sentinel_tokens), sorted([f"<extra_id_{str(i)}>" for i in range(0, 10)])
+        )
+        self.assertTrue([re.search("<extra_id_\d+>",token) is not None for token in sentinel_tokens])
+
+    def test_get_sentinel_token_ids_for_fasttokenizer(self):
+        tokenizer = T5TokenizerFast(SAMPLE_VOCAB, extra_ids=10)
         self.assertListEqual(sorted(tokenizer.get_sentinel_token_ids()), sorted([i for i in range(1000, 1010)]))
