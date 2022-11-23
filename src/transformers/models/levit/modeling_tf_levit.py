@@ -16,7 +16,7 @@
 
 import itertools
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 import tensorflow as tf
 from tensorflow.keras import backend as K
@@ -70,9 +70,9 @@ class TFLevitForImageClassificationWithTeacherOutput(ModelOutput):
             Prediction scores of the distillation head (i.e. the linear layer on top of the final hidden state of the
             distillation token).
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer plus
+            the initial embedding outputs.
     """
 
     logits: tf.Tensor = None
@@ -87,7 +87,17 @@ class TFLevitConvEmbeddings(tf.keras.layers.Layer):
     """
 
     def __init__(
-        self, in_channels, out_channels, kernel_size, stride, padding, dilation=1, groups=1, bn_weight_init=1, *args, **kwargs,
+        self,
+        in_channels,
+        out_channels,
+        kernel_size,
+        stride,
+        padding,
+        dilation=1,
+        groups=1,
+        bn_weight_init=1,
+        *args,
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
         # The padding layer is built in order to pad the inputs before entering the convolution operation.
@@ -105,12 +115,12 @@ class TFLevitConvEmbeddings(tf.keras.layers.Layer):
         # The epsilon and momentum used here are the defaults in torch batch norm layer.
         self.batch_norm = tf.keras.layers.BatchNormalization(epsilon=1e-05, momentum=0.1, name="batch_norm")
 
-    def call(self, embeddings: tf.Tensor, training: Optional[bool]=None):
+    def call(self, embeddings: tf.Tensor, training: Optional[bool] = None):
         embeddings = tf.transpose(embeddings, perm=(0, 2, 3, 1))
         embeddings = self.padding(embeddings)
         embeddings = self.convolution(embeddings, training=training)
-        embeddings = tf.transpose(embeddings, perm=(0, 3, 1, 2))
         embeddings = self.batch_norm(embeddings, training=training)
+        embeddings = tf.transpose(embeddings, perm=(0, 3, 1, 2))
         return embeddings
 
 
@@ -167,15 +177,15 @@ class TFLevitPatchEmbeddings(tf.keras.layers.Layer):
         )
         self.num_channels = config.num_channels
 
-    def call(self, pixel_values: tf.Tensor, training: Optional[bool]=None):
+    def call(self, pixel_values: tf.Tensor, training: Optional[bool] = None):
         batch_size = tf.shape(pixel_values)[0]
         num_channels = tf.shape(pixel_values)[1]
-        
+
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        
+
         embeddings = self.embedding_layer_1(pixel_values, training=training)
         embeddings = self.activation_layer_1(embeddings)
         embeddings = self.embedding_layer_2(embeddings, training=training)
@@ -183,7 +193,7 @@ class TFLevitPatchEmbeddings(tf.keras.layers.Layer):
         embeddings = self.embedding_layer_3(embeddings, training=training)
         embeddings = self.activation_layer_3(embeddings)
         embeddings = self.embedding_layer_4(embeddings, training=training)
-        
+
         # Flatten the embeddings
         num_channels = tf.shape(embeddings)[1]
         flattended_embeddings = tf.reshape(embeddings, shape=(batch_size, num_channels, -1))
@@ -195,24 +205,22 @@ class TFLevitPatchEmbeddings(tf.keras.layers.Layer):
 class TFMLPLayerWithBN(tf.keras.layers.Layer):
     def __init__(self, input_dim, output_dim, bn_weight_init=1, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.linear = tf.keras.layers.Dense(
-            units=output_dim,
-            use_bias=False,
-            name="linear"
-        )
+        self.linear = tf.keras.layers.Dense(units=output_dim, use_bias=False, name="linear")
         # The epsilon and momentum used here are the defaults in torch batch norm layer.
         self.batch_norm = tf.keras.layers.BatchNormalization(epsilon=1e-05, momentum=0.1, name="batch_norm")
 
-    def call(self, hidden_state: tf.Tensor, training: Optional[bool]=None):
+    def call(self, hidden_state: tf.Tensor, training: Optional[bool] = None):
         hidden_state = self.linear(hidden_state, training=training)
-        
+
         # Before sending the hidden state to the batch normalization layer, we would have to
         # flatten the hidden states with start=0 and end=1.
         hidden_state_shape_list = shape_list(hidden_state)
-        hidden_state_reshape_list = [hidden_state_shape_list[0] * hidden_state_shape_list[1]] + hidden_state_shape_list[2:]
+        hidden_state_reshape_list = [
+            hidden_state_shape_list[0] * hidden_state_shape_list[1]
+        ] + hidden_state_shape_list[2:]
         flattened_hidden_state = tf.reshape(hidden_state, shape=hidden_state_reshape_list)
         batch_norm_hidden_state = self.batch_norm(flattened_hidden_state, training=training)
-        
+
         # Reshape the output of batch norm to have the same shape as the original hidden state
         hidden_state = tf.reshape(batch_norm_hidden_state, shape=shape_list(hidden_state))
         return hidden_state
@@ -222,27 +230,28 @@ class TFLevitSubsample(tf.keras.layers.Layer):
     """
     Layer to subsample the activatioin maps
     """
-    def __init__(self, stride, resolution, **kwargs):
-        super().__init__()
+
+    def __init__(self, stride, resolution, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.stride = stride
         self.resolution = resolution
 
-    def call(self, hidden_state):
+    def call(self, hidden_state: tf.Tensor, training: Optional[bool] = None):
         batch_size = tf.shape(hidden_state)[0]
         channels = tf.shape(hidden_state)[2]
-        
+
         reshaped_hidden_state = tf.reshape(
             hidden_state, shape=(batch_size, self.resolution, self.resolution, channels)
         )
         strided_hidden_state = reshaped_hidden_state[:, :: self.stride, :: self.stride]
         hidden_state = tf.reshape(strided_hidden_state, shape=(batch_size, -1, channels))
-        
+
         return hidden_state
 
 
 class TFLevitAttention(tf.keras.layers.Layer):
-    def __init__(self, hidden_sizes, key_dim, num_attention_heads, attention_ratio, resolution, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, hidden_sizes, key_dim, num_attention_heads, attention_ratio, resolution, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.num_attention_heads = num_attention_heads
         self.scale = key_dim**-0.5
         self.key_dim = key_dim
@@ -250,9 +259,13 @@ class TFLevitAttention(tf.keras.layers.Layer):
         self.out_dim_keys_values = attention_ratio * key_dim * num_attention_heads + key_dim * num_attention_heads * 2
         self.out_dim_projection = attention_ratio * key_dim * num_attention_heads
 
-        self.queries_keys_values = TFMLPLayerWithBN(hidden_sizes, self.out_dim_keys_values, name="queries_keys_values")
+        self.queries_keys_values = TFMLPLayerWithBN(
+            input_dim=hidden_sizes, output_dim=self.out_dim_keys_values, name="queries_keys_values"
+        )
         self.activation = hard_swish
-        self.projection = TFMLPLayerWithBN(self.out_dim_projection, hidden_sizes, bn_weight_init=0, name="projection")
+        self.projection = TFMLPLayerWithBN(
+            input_dim=self.out_dim_projection, output_dim=hidden_sizes, bn_weight_init=0, name="projection"
+        )
 
         # Build tuples of points in the entire resolution range of the pixel values
         points = list(itertools.product(range(resolution), range(resolution)))
@@ -261,21 +274,21 @@ class TFLevitAttention(tf.keras.layers.Layer):
         # Initialize the attention offsets and indices
         attention_offsets, indices = {}, []
 
-        # Iterate over the points generator and calculate the offset between the initial
+        # Iterate over the `points`` generator and calculate the offset between the initial
         # point (0, 0) and the rest of the points [(0, 1), (0, 2)...]
-        for p1 in points: # this iterates only once
-            for p2 in points: # iterate over all the points other than (0, 0)
+        for p1 in points:  # this iterates only once, wehre p1 is (0, 0)
+            for p2 in points:  # iterate over all the points other than (0, 0)
                 offset = (abs(p1[0] - p2[0]), abs(p1[1] - p2[1]))
                 if offset not in attention_offsets:
                     attention_offsets[offset] = len(attention_offsets)
                 indices.append(attention_offsets[offset])
-        
+
         # Store the attention offsets, indices and attention bias cache
         self.attention_offsets = attention_offsets
         self.indices = indices
         self.attention_bias_cache = {}
 
-    def build(self, input_shape):
+    def build(self, input_shape: tf.TensorShape):
         self.attention_biases = self.add_weight(
             shape=(self.num_attention_heads, len(self.attention_offsets)),
             initializer="zeros",
@@ -284,39 +297,38 @@ class TFLevitAttention(tf.keras.layers.Layer):
         )
         self.attention_bias_idxs = tf.Variable(
             initial_value=tf.reshape(self.indices, (self.len_points, self.len_points)),
-            trainable=False, # this is a registered buffer and not a parameter
+            trainable=False,  # this is a registered buffer and not a parameter
             dtype=tf.int32,
             name="attention_bias_idxs",
         )
         super().build(input_shape)
 
-    # # TODO @ariG23498
-    # @torch.no_grad()
-    # def train(self, mode=True):
-    #     super().train(mode)
-    #     if mode and self.attention_bias_cache:
-    #         self.attention_bias_cache = {}  # clear ab cache
-
-    def get_attention_biases(self, device, training=None):
+    def get_attention_biases(self, device, training: Optional[bool] = None):
         if training:
-            return self.attention_biases[:, self.attention_bias_idxs]
+            return tf.gather(self.attention_biases, self.attention_bias_idxs, axis=1)
         else:
             device_key = str(device)
             if device_key not in self.attention_bias_cache:
-                print("INFO biases cache", self.attention_biases.shape)
-                print("INFO biases index", self.attention_bias_idxs.shape)
-                self.attention_bias_cache[device_key] = self.attention_biases[:, self.attention_bias_idxs]
+                self.attention_bias_cache[device_key] = tf.gather(
+                    self.attention_biases, self.attention_bias_idxs, axis=1
+                )
             return self.attention_bias_cache[device_key]
 
-    def call(self, hidden_state, training=None):
+    def call(self, hidden_state: tf.Tensor, training: Optional[bool] = None):
+
+        # TODO: figure out the clearing cache mechanism
+        if training and self.attention_bias_cache:
+            self.attention_bias_cache = {}  # clear ab cache
+
         batch_size = tf.shape(hidden_state)[0]
         seq_length = tf.shape(hidden_state)[1]
         queries_keys_values = self.queries_keys_values(hidden_state)
 
-        # Reshape queries_keys_values
+        # Reshape `queries_keys_values`.
         reshaped_queries_keys_values = tf.reshape(
             queries_keys_values, shape=(batch_size, seq_length, self.num_attention_heads, -1)
         )
+        # Split the reshaped tensor into query, key, and value.
         query, key, value = tf.split(
             value=reshaped_queries_keys_values,
             num_or_size_splits=[self.key_dim, self.key_dim, self.attention_ratio * self.key_dim],
@@ -348,9 +360,10 @@ class TFLevitAttentionSubsample(tf.keras.layers.Layer):
         stride,
         resolution_in,
         resolution_out,
+        *args,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(*args, **kwargs)
         self.num_attention_heads = num_attention_heads
         self.scale = key_dim**-0.5
         self.key_dim = key_dim
@@ -359,11 +372,13 @@ class TFLevitAttentionSubsample(tf.keras.layers.Layer):
         self.out_dim_projection = attention_ratio * key_dim * num_attention_heads
         self.resolution_out = resolution_out
         # resolution_in is the intial resolution, resoloution_out is final resolution after downsampling
-        self.keys_values = TFMLPLayerWithBN(input_dim, self.out_dim_keys_values, name="keys_values")
-        self.queries_subsample = TFLevitSubsample(stride, resolution_in, name="queries_subsample")
-        self.queries = TFMLPLayerWithBN(input_dim, key_dim * num_attention_heads, name="queries")
+        self.keys_values = TFMLPLayerWithBN(
+            input_dim=input_dim, output_dim=self.out_dim_keys_values, name="keys_values"
+        )
+        self.queries_subsample = TFLevitSubsample(stride=stride, resolution=resolution_in, name="queries_subsample")
+        self.queries = TFMLPLayerWithBN(input_dim=input_dim, output_dim=key_dim * num_attention_heads, name="queries")
         self.activation = hard_swish
-        self.projection = TFMLPLayerWithBN(self.out_dim_projection, output_dim, name="projection")
+        self.projection = TFMLPLayerWithBN(input_dim=self.out_dim_projection, output_dim=output_dim, name="projection")
 
         self.attention_bias_cache = {}
 
@@ -382,7 +397,7 @@ class TFLevitAttentionSubsample(tf.keras.layers.Layer):
         self.attention_offsets = attention_offsets
         self.indices = indices
 
-    def build(self, input_shape):
+    def build(self, input_shape: tf.TensorShape):
         self.attention_biases = self.add_weight(
             shape=(self.num_attention_heads, len(self.attention_offsets)),
             initializer="zeros",
@@ -398,23 +413,23 @@ class TFLevitAttentionSubsample(tf.keras.layers.Layer):
         )
         super().build(input_shape)
 
-    # # TODO @ariG23498
-    # @torch.no_grad()
-    # def train(self, mode=True):
-    #     super().train(mode)
-    #     if mode and self.attention_bias_cache:
-    #         self.attention_bias_cache = {}  # clear ab cache
-
-    def get_attention_biases(self, device, training=None):
+    def get_attention_biases(self, device, training: Optional[bool] = None):
         if training:
-            return self.attention_biases[:, self.attention_bias_idxs]
+            return tf.gather(self.attention_biases, self.attention_bias_idxs, axis=1)
         else:
             device_key = str(device)
             if device_key not in self.attention_bias_cache:
-                self.attention_bias_cache[device_key] = self.attention_biases[:, self.attention_bias_idxs]
+                self.attention_bias_cache[device_key] = tf.gather(
+                    self.attention_biases, self.attention_bias_idxs, axis=1
+                )
             return self.attention_bias_cache[device_key]
 
-    def call(self, hidden_state, training=None):
+    def call(self, hidden_state: tf.Tensor, training: Optional[bool] = None):
+
+        # TODO: figure out the clearing cache mechanism
+        if training and self.attention_bias_cache:
+            self.attention_bias_cache = {}  # clear ab cache
+
         batch_size = tf.shape(hidden_state)[0]
         seq_length = tf.shape(hidden_state)[1]
 
@@ -451,13 +466,13 @@ class TFLevitMLPLayer(tf.keras.layers.Layer):
     MLP Layer with `2X` expansion in contrast to ViT with `4X`.
     """
 
-    def __init__(self, input_dim, hidden_dim, **kwargs):
-        super().__init__(**kwargs)
-        self.linear_up = TFMLPLayerWithBN(input_dim, hidden_dim, name="linear_up")
+    def __init__(self, input_dim, hidden_dim, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.linear_up = TFMLPLayerWithBN(input_dim=input_dim, output_dim=hidden_dim, name="linear_up")
         self.activation = hard_swish
-        self.linear_down = TFMLPLayerWithBN(hidden_dim, input_dim, name="linear_down")
+        self.linear_down = TFMLPLayerWithBN(input_dim=hidden_dim, output_dim=input_dim, name="linear_down")
 
-    def call(self, hidden_state, training=None):
+    def call(self, hidden_state: tf.Tensor, training: Optional[bool] = None):
         hidden_state = self.linear_up(hidden_state, training=training)
         hidden_state = self.activation(hidden_state)
         hidden_state = self.linear_down(hidden_state, training=training)
@@ -469,16 +484,18 @@ class TFLevitResidualLayer(tf.keras.layers.Layer):
     Residual Block for TFLeViT
     """
 
-    def __init__(self, module, drop_rate, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, module, drop_rate, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.module = module
         self.drop_rate = drop_rate
 
-    def call(self, hidden_state, training=None):
-        if training and self.drop_rate > 0:
+    def call(self, hidden_state: tf.Tensor, training: Optional[bool] = None):
+        if training and self.drop_rate > 0.0:
             rnd = tf.random.normal(shape=(tf.shape(hidden_state)[0], 1, 1), minval=0, maxval=1)
             rnd = tf.math.greater(rnd, self.drop_rate)
             rnd = tf.math.divide(rnd, (1 - self.drop_rate))
+            # Detach the gradient from `rnd`.
+            tf.stop_gradient(rnd)
             hidden_state = hidden_state + self.module(hidden_state) * rnd
             return hidden_state
         else:
@@ -503,30 +520,45 @@ class TFLevitStage(tf.keras.layers.Layer):
         mlp_ratio,
         down_ops,
         resolution_in,
+        *args,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(*args, **kwargs)
         self.layers = []
         self.config = config
         self.resolution_in = resolution_in
-        # resolution_in is the intial resolution, resolution_out is final resolution after downsampling
-        for index in range(depths):
+        # `resolution_in` is the intial resolution, `resolution_out` is final resolution after downsampling
+        index = 0
+        for _ in range(depths):
             self.layers.append(
                 TFLevitResidualLayer(
-                    TFLevitAttention(hidden_sizes, key_dim, num_attention_heads, attention_ratio, resolution_in),
-                    self.config.drop_path_rate,
+                    module=TFLevitAttention(
+                        hidden_sizes=hidden_sizes,
+                        key_dim=key_dim,
+                        num_attention_heads=num_attention_heads,
+                        attention_ratio=attention_ratio,
+                        resolution=resolution_in,
+                        name="module",
+                    ),
+                    drop_rate=self.config.drop_path_rate,
                     name=f"layers.{index}",
                 )
             )
+            index += 1  # Increment the index by 1
             if mlp_ratio > 0:
                 hidden_dim = hidden_sizes * mlp_ratio
                 self.layers.append(
                     TFLevitResidualLayer(
-                        TFLevitMLPLayer(hidden_sizes, hidden_dim),
-                        self.config.drop_path_rate,
+                        module=TFLevitMLPLayer(
+                            input_dim=hidden_sizes,
+                            hidden_dim=hidden_dim,
+                            name="module",
+                        ),
+                        drop_rate=self.config.drop_path_rate,
                         name=f"layers.{index}",
                     )
                 )
+                index += 1  # Increment the index by 1
 
         if down_ops[0] == "Subsample":
             self.resolution_out = (self.resolution_in - 1) // down_ops[5] + 1
@@ -539,24 +571,28 @@ class TFLevitStage(tf.keras.layers.Layer):
                     stride=down_ops[5],
                     resolution_in=resolution_in,
                     resolution_out=self.resolution_out,
-                    name=f"layers.{idx}",
+                    name=f"layers.{index}",
                 )
             )
+            index += 1  # Increment the index by 1
             self.resolution_in = self.resolution_out
             if down_ops[4] > 0:
                 hidden_dim = self.config.hidden_sizes[idx + 1] * down_ops[4]
                 self.layers.append(
                     TFLevitResidualLayer(
-                        TFLevitMLPLayer(self.config.hidden_sizes[idx + 1], hidden_dim),
-                        self.config.drop_path_rate,
-                        name=f"layers.{idx}",
-                    )
+                        module=TFLevitMLPLayer(
+                            input_dim=self.config.hidden_sizes[idx + 1], hidden_dim=hidden_dim, name="module"
+                        ),
+                        drop_rate=self.config.drop_path_rate,
+                        name=f"layers.{index}",
+                    ),
                 )
+                index += 1  # Increment the index by 1
 
     def get_resolution(self):
         return self.resolution_in
 
-    def call(self, hidden_state):
+    def call(self, hidden_state: tf.Tensor, training: Optional[bool] = None):
         for layer in self.layers:
             hidden_state = layer(hidden_state)
         return hidden_state
@@ -567,38 +603,43 @@ class TFLevitEncoder(tf.keras.layers.Layer):
     LeViT Encoder consisting of multiple `TFLevitStage` stages.
     """
 
-    def __init__(self, config, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, config, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.config = config
         resolution = self.config.image_size // self.config.patch_size
         self.stages = []
         self.config.down_ops.append([""])
 
-        # TODO ariG23498: add the index values to the layer names
         for stage_idx in range(len(config.depths)):
             stage = TFLevitStage(
-                config,
-                stage_idx,
-                config.hidden_sizes[stage_idx],
-                config.key_dim[stage_idx],
-                config.depths[stage_idx],
-                config.num_attention_heads[stage_idx],
-                config.attention_ratio[stage_idx],
-                config.mlp_ratio[stage_idx],
-                config.down_ops[stage_idx],
-                resolution,
+                config=config,
+                idx=stage_idx,
+                hidden_sizes=config.hidden_sizes[stage_idx],
+                key_dim=config.key_dim[stage_idx],
+                depths=config.depths[stage_idx],
+                num_attention_heads=config.num_attention_heads[stage_idx],
+                attention_ratio=config.attention_ratio[stage_idx],
+                mlp_ratio=config.mlp_ratio[stage_idx],
+                down_ops=config.down_ops[stage_idx],
+                resolution_in=resolution,
                 name=f"stages.{stage_idx}",
             )
             resolution = stage.get_resolution()
             self.stages.append(stage)
 
-    def call(self, hidden_state, output_hidden_states=False, return_dict=True, training=None):
+    def call(
+        self,
+        hidden_state: tf.Tensor,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+        training: Optional[bool] = None,
+    ):
         all_hidden_states = () if output_hidden_states else None
 
         for stage in self.stages:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_state,)
-            hidden_state = stage(hidden_state)
+            hidden_state = stage(hidden_state, training=training)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_state,)
@@ -613,65 +654,17 @@ class TFLevitClassificationLayer(tf.keras.layers.Layer):
     LeViT Classification Layer
     """
 
-    def __init__(self, input_dim, output_dim):
-        super().__init__()
+    def __init__(self, input_dim, output_dim, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         # The epsilon and momentum used here are the defaults in torch batch norm layer.
         self.batch_norm = tf.keras.layers.BatchNormalization(epsilon=1e-05, momentum=0.1, name="batch_norm")
-        self.linear = tf.keras.layers.Dense(units=output_dim, use_bias=False, name="linear")
+        self.linear = tf.keras.layers.Dense(units=output_dim, name="linear")
 
-    def call(self, hidden_state, training=None):
+    def call(self, hidden_state: tf.Tensor, training: Optional[bool] = None):
         hidden_state = self.batch_norm(hidden_state, training=training)
         logits = self.linear(hidden_state, training=training)
         return logits
-
-
-@keras_serializable
-class TFLevitMainLayer(tf.keras.layers.Layer):
-    config_class = LevitConfig
-
-    def __init__(self, config, **kwargs):
-        super().__init__(**kwargs)
-        self.config = config
-        self.patch_embeddings = TFLevitPatchEmbeddings(config, name="patch_embeddings")
-        self.encoder = TFLevitEncoder(config, name="encoder")
-
-    @unpack_inputs
-    def call(
-        self,
-        pixel_values: tf.Tensor = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = None,
-    ):
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        # Apply patch embeddings to the pixel values
-        embeddings = self.patch_embeddings(pixel_values, training=training)
-
-        # Apply encoder to the encoded pixel values
-        encoder_outputs = self.encoder(
-            embeddings,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-        )
-
-        # Obtain the `last_hidden_state`
-        last_hidden_state = encoder_outputs[0]  # encoder_outputs.last_hidden_state
-
-        # global average pooling, (batch_size, seq_length, hidden_sizes) -> (batch_size, hidden_sizes)
-        pooled_output = tf.math.reduce_mean(last_hidden_state, axis=1)
-
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
-
-        return TFBaseModelOutputWithPoolingAndNoAttention(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,  # only if the `output_hidden_states` is set to True
-        )
 
 
 class TFLevitPreTrainedModel(TFPreTrainedModel):
@@ -715,6 +708,54 @@ class TFLevitPreTrainedModel(TFPreTrainedModel):
         output = self.call(inputs)
 
         return self.serving_output(output)
+
+
+@keras_serializable
+class TFLevitMainLayer(tf.keras.layers.Layer):
+    config_class = LevitConfig
+
+    def __init__(self, config, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.config = config
+        self.patch_embeddings = TFLevitPatchEmbeddings(config=config, name="patch_embeddings")
+        self.encoder = TFLevitEncoder(config=config, name="encoder")
+
+    @unpack_inputs
+    def call(
+        self,
+        pixel_values: tf.Tensor = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = None,
+    ) -> Union[Tuple, TFBaseModelOutputWithPoolingAndNoAttention]:
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        # Apply patch embeddings to the pixel values
+        embeddings = self.patch_embeddings(pixel_values, training=training)
+
+        # Apply encoder to the encoded pixel values
+        encoder_outputs = self.encoder(
+            embeddings,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+
+        # Obtain the `last_hidden_state`
+        last_hidden_state = encoder_outputs[0]  # encoder_outputs.last_hidden_state
+
+        # global average pooling, (batch_size, seq_length, hidden_sizes) -> (batch_size, hidden_sizes)
+        pooled_output = tf.math.reduce_mean(last_hidden_state, axis=1)
+
+        if not return_dict:
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+
+        return TFBaseModelOutputWithPoolingAndNoAttention(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,  # only if the `output_hidden_states` is set to True
+        )
 
 
 LEVIT_START_DOCSTRING = r"""
@@ -780,8 +821,8 @@ LEVIT_INPUTS_DOCSTRING = r"""
     LEVIT_START_DOCSTRING,
 )
 class TFLevitModel(TFLevitPreTrainedModel):
-    def __init__(self, config, **kwargs):
-        super().__init__(config, **kwargs)
+    def __init__(self, config, *args, **kwargs):
+        super().__init__(config, *args, **kwargs)
 
         self.levit = TFLevitMainLayer(config=config, name="levit")
 
@@ -832,15 +873,17 @@ class TFLevitModel(TFLevitPreTrainedModel):
     LEVIT_START_DOCSTRING,
 )
 class TFLevitForImageClassification(TFLevitPreTrainedModel):
-    def __init__(self, config, **kwargs):
-        super().__init__(config, **kwargs)
+    def __init__(self, config, *args, **kwargs):
+        super().__init__(config, *args, **kwargs)
         self.config = config
         self.num_labels = config.num_labels
-        self.levit = TFLevitMainLayer(config, name="levit")
+        self.levit = TFLevitMainLayer(config=config, name="levit")
 
         # Classifier head
         self.classifier = (
-            TFLevitClassificationLayer(config.hidden_sizes[-1], config.num_labels, name="classifier")
+            TFLevitClassificationLayer(
+                input_dim=config.hidden_sizes[-1], output_dim=config.num_labels, name="classifier"
+            )
             if config.num_labels > 0
             else tf.identity
         )
@@ -888,8 +931,7 @@ class TFLevitForImageClassification(TFLevitPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                # TODO @ariG23498: Check with the dtypes (long and int in torch)
-                elif self.num_labels > 1 and (labels.dtype == tf.float64 or labels.dtype == tf.int64):
+                elif self.num_labels > 1 and (labels.dtype == tf.int64 or labels.dtype == tf.int32):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -927,20 +969,24 @@ class TFLevitForImageClassification(TFLevitPreTrainedModel):
     LEVIT_START_DOCSTRING,
 )
 class TFLevitForImageClassificationWithTeacher(TFLevitPreTrainedModel):
-    def __init__(self, config, **kwargs):
-        super().__init__(config, **kwargs)
+    def __init__(self, config, *args, **kwargs):
+        super().__init__(config, *args, **kwargs)
         self.config = config
         self.num_labels = config.num_labels
         self.levit = TFLevitMainLayer(config, name="levit")
 
         # Classifier head
         self.classifier = (
-            TFLevitClassificationLayer(config.hidden_sizes[-1], config.num_labels, name="classifier")
+            TFLevitClassificationLayer(
+                input_dim=config.hidden_sizes[-1], output_dim=config.num_labels, name="classifier"
+            )
             if config.num_labels > 0
             else tf.identity
         )
         self.classifier_distill = (
-            TFLevitClassificationLayer(config.hidden_sizes[-1], config.num_labels, name="classifier_distill")
+            TFLevitClassificationLayer(
+                input_dim=config.hidden_sizes[-1], output_dim=config.num_labels, name="classifier_distill"
+            )
             if config.num_labels > 0
             else tf.identity
         )
