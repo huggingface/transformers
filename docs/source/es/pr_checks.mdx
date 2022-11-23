@@ -18,7 +18,7 @@ limitations under the License.
 
 Cuando abres un _pull request_ en 🤗 Transformers, se ejecutarán una serie de verificaciones para asegurarte de que el _patch_ que estás agregando no rompa nada existente. Estas verificaciones son de cuatro tipos:
 - pruebas regulares
-- creación de la documentacion
+- creación de la documentación
 - estilo del código y documentación
 - consistencia del repositorio
 
@@ -71,7 +71,7 @@ Si estás interesado en compilar u obtener una vista previa de la documentación
 
 ## Estilo de código y documentación.
 
-El formato de código se aplica a todos los archivos fuente, los ejemplos y las pruebas utilizando `black` e `isort`. También tenemos una herramienta personalizada que se ocupa del formato de los archivos _docstrings_ y `rst` (`utils/style_doc.py`), así como del orden de las importaciones _lazy_ realizadas en los archivos `__init__.py` de Transformers (`utils /custom_init_isort.py`). Todo esto se puede probar ejecutando
+El formato de código se aplica a todos los archivos fuente, los ejemplos y las pruebas utilizando `black` e `isort`. También tenemos una herramienta personalizada que se ocupa del formato de los _docstrings_ y archivos `rst` (`utils/style_doc.py`), así como del orden de las importaciones _lazy_ realizadas en los archivos `__init__.py` de Transformers (`utils /custom_init_isort.py`). Todo esto se puede probar ejecutando
 
 ```bash
 make style
@@ -105,8 +105,8 @@ Esta instrucción verifica que:
 - Todos los archivos `__init__.py` tienen el mismo contenido en sus dos secciones (realizado por `utils/check_inits.py`)
 - Todo el código identificado como una copia de otro módulo es consistente con el original (realizado por `utils/check_copies.py`)
 - Todas las clases de configuración tienen al menos _checkpoint_ válido mencionado en sus _docstrings_ (realizado por `utils/check_config_docstrings.py`)
-- Las traducciones de los README y el índice del documento tienen la misma lista modelo que el README principal (realizado por `utils/check_copies.py`)
-- Las tablas generadas automáticamente en la documentación están actualizadas (realizadas por `utils/check_table.py`)
+- Las traducciones de los README y el índice del documento tienen la misma lista de modelos que el README principal (realizado por `utils/check_copies.py`)
+- Las tablas generadas automaticamente en la documentación están actualizadas (realizadas por `utils/check_table.py`)
 - La biblioteca tiene todos los objetos disponibles incluso si no están instaladas todas las dependencias opcionales (realizadas por `utils/check_dummies.py`)
 
 Si esta verificación falla, los primeros dos elementos requieren una reparación manual, los últimos cuatro pueden repararse automáticamente ejecutando el comando
