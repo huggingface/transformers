@@ -167,6 +167,8 @@ class SegformerImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         size = get_size_dict(size)
+        if "height" not in size or "width" not in size:
+            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
         return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
 
     def rescale(
@@ -228,7 +230,7 @@ class SegformerImageProcessor(BaseImageProcessor):
         do_rescale: bool,
         do_normalize: bool,
         size: Optional[Dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
+        resample: PILImageResampling = None,
         rescale_factor: Optional[float] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -325,7 +327,7 @@ class SegformerImageProcessor(BaseImageProcessor):
         segmentation_maps: Optional[ImageInput] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
+        resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,

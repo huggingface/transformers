@@ -859,11 +859,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
     ):
         batch_size, ngram_sequence_length, hidden_size = hidden_states.size()
 
-        assert list(hidden_states.size()) == [
-            batch_size,
-            ngram_sequence_length,
-            hidden_size,
-        ], (
+        assert list(hidden_states.size()) == [batch_size, ngram_sequence_length, hidden_size], (
             f"`hidden_states` should be of shape {batch_size, ngram_sequence_length, hidden_size}, but is of shape"
             f" {hidden_states.shape}"
         )
@@ -1774,6 +1770,8 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
     PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetModel(ProphetNetPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["decoder.word_embeddings.weight", "encoder.word_embeddings.weight"]
+
     def __init__(self, config: ProphetNetConfig):
         super().__init__(config)
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
@@ -1901,6 +1899,12 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
     PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [
+        "decoder.word_embeddings.weight",
+        "encoder.word_embeddings.weight",
+        "lm_head.weight",
+    ]
+
     def __init__(self, config: ProphetNetConfig):
         super().__init__(config)
         self.prophetnet = ProphetNetModel(config)
@@ -2111,6 +2115,8 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+
     def __init__(self, config: ProphetNetConfig):
         # set config for CLM
         config = copy.deepcopy(config)

@@ -890,6 +890,8 @@ class ViltPooler(nn.Module):
     VILT_START_DOCSTRING,
 )
 class ViltForMaskedLM(ViltPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["mlm_score.decoder.bias"]
+
     def __init__(self, config):
         super().__init__(config)
 
