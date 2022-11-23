@@ -48,8 +48,8 @@ else:
     ]
     _import_structure["modeling_maskformer_swin"] = [
         "MaskFormerSwinBackbone",
-        "MaskFormerSwinPreTrainedModel",
         "MaskFormerSwinModel",
+        "MaskFormerSwinPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -77,7 +77,7 @@ if TYPE_CHECKING:
         )
         from .modeling_maskformer_swin import (
             MaskFormerSwinBackbone,
-            MaskFormerSwinModel,
+            MaskformerSwinModel,
             MaskFormerSwinPreTrainedModel,
         )
 

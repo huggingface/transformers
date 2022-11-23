@@ -3368,20 +3368,6 @@ class MaskFormerSwinBackbone(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class MaskFormerSwinModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class MaskFormerSwinPreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class MBartForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 

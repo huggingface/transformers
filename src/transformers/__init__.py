@@ -1623,8 +1623,6 @@ else:
             "MaskFormerModel",
             "MaskFormerPreTrainedModel",
             "MaskFormerSwinBackbone",
-            "MaskFormerSwinModel",
-            "MaskFormerSwinPreTrainedModel",
         ]
     )
     _import_structure["models.markuplm"].extend(
@@ -4577,8 +4575,6 @@ if TYPE_CHECKING:
             MaskFormerModel,
             MaskFormerPreTrainedModel,
             MaskFormerSwinBackbone,
-            MaskFormerSwinModel,
-            MaskFormerSwinPreTrainedModel,
         )
         from .models.mbart import (
             MBartForCausalLM,

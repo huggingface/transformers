@@ -31,7 +31,8 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import MaskFormerSwinBackbone, MaskFormerSwinModel
+    from transformers import MaskFormerSwinBackbone
+    from transformers.models.maskformer import MaskFormerSwinModel
 
 
 class MaskFormerSwinModelTester:
