@@ -15,17 +15,18 @@
 
 import unittest
 
-from transformers import RemBertTokenizer, RemBertTokenizerFast
-from transformers.testing_utils import require_tokenizers
-from transformers.utils import is_torch_available
+from transformers.models.rembert.tokenization_rembert import RemBertTokenizer
+from transformers.models.rembert.tokenization_rembert_fast import RemBertTokenizerFast
 
+from transformers.testing_utils import get_tests_dir, is_torch_available, require_sentencepiece
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
+SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
+
 FRAMEWORK = "pt" if is_torch_available() else "tf"
 
-
-@require_tokenizers
+@require_sentencepiece
 class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = RemBertTokenizer
@@ -36,7 +37,8 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        tokenizer = RemBertTokenizer.from_pretrained("google/rembert")
+        # We have a SentencePiece fixture for testing
+        tokenizer = RemBertTokenizer(SAMPLE_VOCAB)
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_convert_token_and_id(self):
@@ -56,7 +58,7 @@ class RemBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(len(vocab_keys), 250300)
 
     def test_vocab_size(self):
-        self.assertEqual(self.get_tokenizer().vocab_size, 250300)
+        self.assertEqual(self.get_tokenizer().vocab_size, 1_000)
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
