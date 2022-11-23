@@ -26,7 +26,7 @@ from transformers.utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT
 
 
 def get_upernet_config(model_name):
-    backbone_config = SwinConfig(out_features=["stage1", "stage2", "stage3", "stage4"])
+    backbone_config = SwinConfig(output_hidden_states_before_downsampling=True, out_features=["stage1", "stage2", "stage3", "stage4"])
     config = UperNetConfig(backbone_config=backbone_config, num_labels=150)
 
     return config
@@ -38,28 +38,30 @@ def create_rename_keys(config):
 
     # fmt: off
     # stem
-    rename_keys.append(("backbone.downsample_layers.0.0.weight", "backbone.swin.embeddings.patch_embeddings.weight"))
-    rename_keys.append(("backbone.downsample_layers.0.0.bias", "backbone.swin.embeddings.patch_embeddings.bias"))
-    rename_keys.append(("backbone.downsample_layers.0.1.weight", "backbone.swin.embeddings.layernorm.weight"))
-    rename_keys.append(("backbone.downsample_layers.0.1.bias", "backbone.swin.embeddings.layernorm.bias"))
+    rename_keys.append(("backbone.patch_embed.projection.weight", "backbone.swin.embeddings.patch_embeddings.projection.weight"))
+    rename_keys.append(("backbone.patch_embed.projection.bias", "backbone.swin.embeddings.patch_embeddings.projection.bias"))
+    rename_keys.append(("backbone.patch_embed.norm.weight", "backbone.swin.embeddings.norm.weight"))
+    rename_keys.append(("backbone.patch_embed.norm.bias", "backbone.swin.embeddings.norm.bias"))
     # stages
     for i in range(len(config.backbone_config.depths)):
         for j in range(config.backbone_config.depths[i]):
-            rename_keys.append((f"backbone.stages.{i}.{j}.gamma", f"backbone.swin.encoder.stages.{i}.layers.{j}.layer_scale_parameter"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.depthwise_conv.weight", f"backbone.swin.encoder.stages.{i}.layers.{j}.dwconv.weight"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.depthwise_conv.bias", f"backbone.swin.encoder.stages.{i}.layers.{j}.dwconv.bias"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.norm.weight", f"backbone.swin.encoder.stages.{i}.layers.{j}.layernorm.weight"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.norm.bias", f"backbone.swin.encoder.stages.{i}.layers.{j}.layernorm.bias"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv1.weight", f"backbone.swin.encoder.stages.{i}.layers.{j}.pwconv1.weight"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv1.bias", f"backbone.swin.encoder.stages.{i}.layers.{j}.pwconv1.bias"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv2.weight", f"backbone.swin.encoder.stages.{i}.layers.{j}.pwconv2.weight"))
-            rename_keys.append((f"backbone.stages.{i}.{j}.pointwise_conv2.bias", f"backbone.swin.encoder.stages.{i}.layers.{j}.pwconv2.bias"))
-        if i > 0:
-            rename_keys.append((f"backbone.downsample_layers.{i}.0.weight", f"backbone.swin.encoder.stages.{i}.downsampling_layer.0.weight"))
-            rename_keys.append((f"backbone.downsample_layers.{i}.0.bias", f"backbone.swin.encoder.stages.{i}.downsampling_layer.0.bias"))
-            rename_keys.append((f"backbone.downsample_layers.{i}.1.weight", f"backbone.swin.encoder.stages.{i}.downsampling_layer.1.weight"))
-            rename_keys.append((f"backbone.downsample_layers.{i}.1.bias", f"backbone.swin.encoder.stages.{i}.downsampling_layer.1.bias"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.norm1.weight", f"backbone.swin.encoder.layers.{i}.blocks.{j}.layernorm_before.weight"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.norm1.bias", f"backbone.swin.encoder.layers.{i}.blocks.{j}.layernorm_before.bias"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.attn.w_msa.relative_position_bias_table", f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.relative_position_bias_table"))
+            # rename_keys.append((f"backbone.stages.{i}.blocks.{j}.attn.w_msa.relative_position_index", f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.relative_position_index"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.attn.w_msa.proj.weight", f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.output.dense.weight"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.attn.w_msa.proj.bias", f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.output.dense.bias"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.norm2.weight", f"backbone.swin.encoder.layers.{i}.blocks.{j}.layernorm_after.weight"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.norm2.bias", f"backbone.swin.encoder.layers.{i}.blocks.{j}.layernorm_after.bias"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.ffn.layers.0.0.weight", f"backbone.swin.encoder.layers.{i}.blocks.{j}.intermediate.dense.weight"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.ffn.layers.0.0.bias", f"backbone.swin.encoder.layers.{i}.blocks.{j}.intermediate.dense.bias"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.ffn.layers.1.weight", f"backbone.swin.encoder.layers.{i}.blocks.{j}.output.dense.weight"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.ffn.layers.1.bias", f"backbone.swin.encoder.layers.{i}.blocks.{j}.output.dense.bias"))
 
+        if i < 3:
+            rename_keys.append((f"backbone.stages.{i}.downsample.reduction.weight", f"backbone.swin.encoder.layers.{i}.downsample.reduction.weight"))
+            rename_keys.append((f"backbone.stages.{i}.downsample.norm.weight", f"backbone.swin.encoder.layers.{i}.downsample.norm.weight"))
+            rename_keys.append((f"backbone.stages.{i}.downsample.norm.bias", f"backbone.swin.encoder.layers.{i}.downsample.norm.bias"))
         rename_keys.append((f"backbone.norm{i}.weight", f"backbone.hidden_states_norms.{i}.weight"))
         rename_keys.append((f"backbone.norm{i}.bias", f"backbone.hidden_states_norms.{i}.bias"))
 

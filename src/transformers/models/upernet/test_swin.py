@@ -2,6 +2,7 @@ from transformers import SwinConfig, UperNetConfig, UperNetForSemanticSegmentati
 
 
 backbone_config = SwinConfig(
+    output_hidden_states_before_downsampling=True,
     out_features=["stage1", "stage2", "stage3", "stage4"],
 )
 
