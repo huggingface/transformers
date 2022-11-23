@@ -435,8 +435,7 @@ class OwlViTAttention(nn.Module):
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
         # For int8 compatibility, sometimes the `attn_probs` are in `fp32`
-        if attn_probs.dtype != value_states.dtype:
-            attn_probs = attn_probs.to(value_states.dtype)
+        attn_probs = attn_probs.to(value_states.dtype)
 
         attn_output = torch.bmm(attn_probs, value_states)
 
@@ -947,8 +946,7 @@ class OwlViTVisionTransformer(nn.Module):
 
         # Cast the input to the expected `dtype`
         expected_input_dtype = self.embeddings.patch_embedding.weight.dtype
-        if expected_input_dtype != pixel_values.dtype:
-            pixel_values = pixel_values.to(expected_input_dtype)
+        pixel_values = pixel_values.to(expected_input_dtype)
 
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layernorm(hidden_states)
