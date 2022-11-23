@@ -141,7 +141,15 @@ class ResNetModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (ResNetModel, ResNetForImageClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            ResNetModel,
+            ResNetForImageClassification,
+            ResNetBackbone,
+        )
+        if is_torch_available()
+        else ()
+    )
 
     fx_compatible = True
     test_pruning = False

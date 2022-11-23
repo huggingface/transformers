@@ -93,6 +93,7 @@ if is_torch_available():
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
         MODEL_FOR_AUDIO_XVECTOR_MAPPING,
+        MODEL_FOR_BACKBONE_MAPPING,
         MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
         MODEL_FOR_CAUSAL_LM_MAPPING,
         MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
@@ -502,7 +503,10 @@ class ModelTesterMixin:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
 
-            if model_class in get_values(MODEL_MAPPING):
+            if model_class in [
+                *get_values(MODEL_MAPPING),
+                *get_values(MODEL_FOR_BACKBONE_MAPPING),
+            ]:
                 continue
 
             model = model_class(config)
