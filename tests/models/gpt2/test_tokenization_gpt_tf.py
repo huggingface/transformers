@@ -15,21 +15,29 @@ if is_tf_available():
 
 
 TOKENIZER_CHECKPOINTS = ["gpt2"]
-TINY_MODEL_CHECKPOINT = "hf-internal-testing/tiny-random-gpt2"
+TINY_MODEL_CHECKPOINT = "gpt2"
 
 if is_tf_available():
 
-    class ModelToSave(tf.keras.Model):
+    class ModelToSave(tf.Module):
         def __init__(self, tokenizer):
             super().__init__()
             self.tokenizer = tokenizer
             config = AutoConfig.from_pretrained(TINY_MODEL_CHECKPOINT)
             self.model = TFGPT2LMHeadModel.from_config(config)
 
-        def call(self, inputs):
+        @tf.function(input_signature=(tf.TensorSpec((None,), tf.string, name="text"), ))
+        def serving(self, inputs):
             tokenized = self.tokenizer(inputs)
-            out = self.model.generate(**tokenized)
-            return out
+
+            input_ids_dense = tokenized["input_ids"].to_tensor()
+            input_mask = tf.cast(input_ids_dense > 0, tf.int32)
+            outputs = self.model(
+                input_ids=input_ids_dense,
+                attention_mask=input_mask,
+            )
+            
+            return outputs["logits"]
 
 
 @require_tensorflow_text
@@ -87,11 +95,18 @@ class GPTTokenizationTest(unittest.TestCase):
         for tf_tokenizer in self.tf_tokenizers:
             model = ModelToSave(tokenizer=tf_tokenizer)
             test_inputs = tf.convert_to_tensor(self.test_sentences)
-            out = model(test_inputs)  # Build model with some sample inputs
+            out = model.serving(test_inputs)  # Build model with some sample inputs
             with TemporaryDirectory() as tempdir:
                 save_path = Path(tempdir) / "saved.model"
-                model.save(save_path)
-                loaded_model = tf.keras.models.load_model(save_path)
-            loaded_output = loaded_model(test_inputs)
+                tf.saved_model.save(
+                    model,
+                    save_path,
+                    signatures={
+                        "serving_default":
+                            model.serving
+                    }
+                )
+                loaded_model = tf.saved_model.load(save_path)
+            loaded_output = loaded_model.signatures["serving_default"](test_inputs)["output_0"]
             # We may see small differences because the loaded model is compiled, so we need an epsilon for the test
             self.assertLessEqual(tf.reduce_max(tf.abs(out - loaded_output)), 1e-5)
