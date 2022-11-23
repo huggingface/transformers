@@ -177,7 +177,7 @@ class ChineseCLIPTextModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = ChineseCLIPModel(config=config)
+        model = ChineseCLIPTextModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
