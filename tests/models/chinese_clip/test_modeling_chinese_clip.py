@@ -65,6 +65,7 @@ class ChineseCLIPTextModelTester:
         is_training=True,
         use_input_mask=True,
         use_token_type_ids=True,
+        use_labels=True,
         vocab_size=99,
         hidden_size=32,
         num_hidden_layers=5,
@@ -77,6 +78,8 @@ class ChineseCLIPTextModelTester:
         type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
         scope=None,
     ):
         self.parent = parent
@@ -85,6 +88,7 @@ class ChineseCLIPTextModelTester:
         self.is_training = is_training
         self.use_input_mask = use_input_mask
         self.use_token_type_ids = use_token_type_ids
+        self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -97,6 +101,8 @@ class ChineseCLIPTextModelTester:
         self.type_vocab_size = type_vocab_size
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
+        self.num_labels = num_labels
+        self.num_choices = num_choices
         self.scope = scope
 
     def prepare_config_and_inputs(self):
@@ -110,9 +116,17 @@ class ChineseCLIPTextModelTester:
         if self.use_token_type_ids:
             token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
+        sequence_labels = None
+        token_labels = None
+        choice_labels = None
+        if self.use_labels:
+            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            choice_labels = ids_tensor([self.batch_size], self.num_choices)
+
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask
+        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
         """
@@ -134,7 +148,15 @@ class ChineseCLIPTextModelTester:
         )
 
     def prepare_config_and_inputs_for_decoder(self):
-        (config, input_ids, token_type_ids, input_mask) = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = self.prepare_config_and_inputs()
 
         config.is_decoder = True
         encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
@@ -145,17 +167,55 @@ class ChineseCLIPTextModelTester:
             input_ids,
             token_type_ids,
             input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
             encoder_hidden_states,
             encoder_attention_mask,
         )
 
-    def create_and_check_model(self, config, input_ids, token_type_ids, input_mask):
-        model = ChineseCLIPTextModel(config=config)
+    def create_and_check_model(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = ChineseCLIPModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+
+    def create_and_check_model_as_decoder(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
+    ):
+        config.add_cross_attention = True
+        model = ChineseCLIPTextModel(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+        )
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            encoder_hidden_states=encoder_hidden_states,
+        )
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
@@ -166,6 +226,9 @@ class ChineseCLIPTextModelTester:
             input_ids,
             token_type_ids,
             input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
         ) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
         return config, inputs_dict
@@ -254,7 +317,13 @@ class ChineseCLIPVisionModelTester:
 @require_torch
 class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (ChineseCLIPTextModel,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            ChineseCLIPModel,
+        )
+        if is_torch_available()
+        else ()
+    )
     fx_compatible = False
 
     # special case for ForPreTraining model
@@ -299,6 +368,9 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
             input_ids,
             token_type_ids,
             input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
             encoder_hidden_states,
             encoder_attention_mask,
         ) = self.model_tester.prepare_config_and_inputs_for_decoder()
@@ -310,6 +382,9 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
             input_ids,
             token_type_ids,
             input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
             encoder_hidden_states,
             encoder_attention_mask,
         )
@@ -319,25 +394,6 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ChineseCLIPModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-    @slow
-    @require_torch_gpu
-    def test_torchscript_device_change(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-
-            config.torchscript = True
-            model = model_class(config=config)
-
-            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            traced_model = torch.jit.trace(
-                model, (inputs_dict["input_ids"].to("cpu"), inputs_dict["attention_mask"].to("cpu"))
-            )
-
-            with tempfile.TemporaryDirectory() as tmp:
-                torch.jit.save(traced_model, os.path.join(tmp, "chinese_clip.pt"))
-                loaded = torch.jit.load(os.path.join(tmp, "chinese_clip.pt"), map_location=torch_device)
-                loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
 
 
 @require_torch
@@ -480,7 +536,7 @@ class ChineseCLIPModelTest(ModelTesterMixin, unittest.TestCase):
     test_attention_outputs = False
 
     def setUp(self):
-        text_kwargs = {"batch_size": 12}
+        text_kwargs = {"use_labels": False, "batch_size": 12}
         vision_kwargs = {"batch_size": 12}
         self.model_tester = ChineseCLIPModelTester(self, text_kwargs, vision_kwargs)
 
