@@ -338,7 +338,7 @@ class ChineseCLIPTextSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in ChineseCLIPModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in ChineseCLIPTextModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
