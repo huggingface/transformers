@@ -18,13 +18,8 @@
 import inspect
 import unittest
 
-from transformers import UperNetConfig
-from transformers.testing_utils import (
-    require_torch,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers import ConvNextConfig, UperNetConfig
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -47,45 +42,37 @@ class UperNetModelTester:
         self,
         parent,
         batch_size=13,
-        image_size=30,
-        patch_size=2,
+        image_size=32,
         num_channels=3,
+        num_stages=4,
+        hidden_sizes=[10, 20, 30, 40],
+        depths=[2, 2, 3, 2],
         is_training=True,
         use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
         type_sequence_label_size=10,
         initializer_range=0.02,
+        out_features=["stage2", "stage3", "stage4"],
+        num_labels=3,
         scope=None,
-        encoder_stride=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
-        self.patch_size = patch_size
         self.num_channels = num_channels
+        self.num_stages = num_stages
+        self.hidden_sizes = hidden_sizes
+        self.depths = depths
         self.is_training = is_training
         self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
+        self.out_features = out_features
+        self.num_labels = num_labels
         self.scope = scope
-        self.encoder_stride = encoder_stride
-
-        # in UperNet, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -98,21 +85,31 @@ class UperNetModelTester:
 
         return config, pixel_values, labels
 
-    def get_config(self):
-        return UperNetConfig(
-            image_size=self.image_size,
-            patch_size=self.patch_size,
+    def get_backbone_config(self):
+        return ConvNextConfig(
             num_channels=self.num_channels,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
+            num_stages=self.num_stages,
+            hidden_sizes=self.hidden_sizes,
+            depths=self.depths,
+            is_training=self.is_training,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-            encoder_stride=self.encoder_stride,
+            out_features=self.out_features,
+        )
+
+    def get_config(self):
+        return UperNetConfig(
+            backbone_config=self.get_backbone_config(),
+            hidden_size=512,
+            pool_scales=[1, 2, 3, 6],
+            use_auxiliary_head=True,
+            auxiliary_loss_weight=0.4,
+            auxiliary_in_channels=40,
+            auxiliary_channels=256,
+            auxiliary_num_convs=1,
+            auxiliary_concat_input=False,
+            loss_ignore_index=255,
+            num_labels=self.num_labels,
         )
 
     def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels):
@@ -120,7 +117,7 @@ class UperNetModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels, 4, 4))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -145,6 +142,7 @@ class UperNetModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = UperNetModelTester(self)
@@ -178,17 +176,9 @@ class UperNetModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_model(self):
+    def test_for_semantic_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_for_masked_image_modeling(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
-
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

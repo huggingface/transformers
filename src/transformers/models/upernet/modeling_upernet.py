@@ -26,6 +26,12 @@ from ...modeling_utils import PreTrainedModel
 from .configuration_upernet import UperNetConfig
 
 
+UPERNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/convnext-tiny-upernet",
+    # See all UperNet models at https://huggingface.co/models?filter=upernet
+]
+
+
 class ConvModule(nn.Module):
     """
     A convolutional block that bundles conv/norm/activation layers. This block simplifies the usage of convolution
