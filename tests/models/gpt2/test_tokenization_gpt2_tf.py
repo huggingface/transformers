@@ -26,18 +26,22 @@ if is_tf_available():
             config = AutoConfig.from_pretrained(TINY_MODEL_CHECKPOINT)
             self.model = TFGPT2LMHeadModel.from_config(config)
 
-        @tf.function(input_signature=(tf.TensorSpec((None,), tf.string, name="text"),))
-        def serving(self, inputs):
-            tokenized = self.tokenizer(inputs)
-
+        @tf.function(input_signature=(tf.TensorSpec((None,), tf.string, name="text"), ))
+        def serving(self, text):
+            
+            tokenized = self.tokenizer(text)
             input_ids_dense = tokenized["input_ids"].to_tensor()
+            
             input_mask = tf.cast(input_ids_dense > 0, tf.int32)
-            outputs = self.model(
+            # input_mask = tf.reshape(input_mask, [-1, MAX_SEQ_LEN])
+
+            
+            outputs = self.model.generate(
                 input_ids=input_ids_dense,
                 attention_mask=input_mask,
             )
-
-            return outputs["logits"]
+            
+            return outputs
 
 
 @require_tensorflow_text
@@ -92,7 +96,7 @@ class GPTTokenizationTest(unittest.TestCase):
     def test_saved_model(self):
         for tf_tokenizer in self.tf_tokenizers:
             model = ModelToSave(tokenizer=tf_tokenizer)
-            test_inputs = tf.convert_to_tensor(self.test_sentences)
+            test_inputs = tf.convert_to_tensor([self.test_sentences[0]])
             out = model.serving(test_inputs)  # Build model with some sample inputs
             with TemporaryDirectory() as tempdir:
                 save_path = Path(tempdir) / "saved.model"
@@ -100,4 +104,4 @@ class GPTTokenizationTest(unittest.TestCase):
                 loaded_model = tf.saved_model.load(save_path)
             loaded_output = loaded_model.signatures["serving_default"](test_inputs)["output_0"]
             # We may see small differences because the loaded model is compiled, so we need an epsilon for the test
-            self.assertLessEqual(tf.reduce_max(tf.abs(out - loaded_output)), 1e-5)
+            self.assertTrue(tf.reduce_all(out == loaded_output))

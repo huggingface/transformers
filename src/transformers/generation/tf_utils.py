@@ -1795,7 +1795,8 @@ class TFGenerationMixin:
             )
 
         # 6. Prepare `max_length` depending on other stopping criteria.
-        input_ids_seq_length = input_ids.shape[-1]
+        input_ids_shape = tf.shape(input_ids)
+        input_ids_seq_length = input_ids_shape[-1]
         if max_length is None and max_new_tokens is None:
             warnings.warn(
                 "Neither `max_length` nor `max_new_tokens` have been set, `max_length` will default to "
