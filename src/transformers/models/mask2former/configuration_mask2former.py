@@ -87,8 +87,6 @@ class Mask2FormerConfig(PretrainedConfig):
             feature strides corresponding to features generated from backbone network
         mask2former_num_feature_levels (`int`, *optional*, defaults to 3):
             Number of feature levels for Mask2former model
-        num_classes (`int`, *optional*, defaults to 81):
-            Number of segmentation labels / classes
     Raises:
         `ValueError`:
             Raised if the backbone model type selected is not in `["swin"]` or the decoder model type selected is not
@@ -126,9 +124,9 @@ class Mask2FormerConfig(PretrainedConfig):
         decoder_config: Optional[Dict] = None,
         init_std: float = 0.02,
         init_xavier_std: float = 1.0,
-        dice_weight: float = 1.0,
-        cross_entropy_weight: float = 1.0,
-        mask_weight: float = 20.0,
+        dice_weight: float = 5.0,
+        cross_entropy_weight: float = 2.0,
+        mask_weight: float = 5.0,
         output_auxiliary_logits: Optional[bool] = None,
         train_num_points: Optional[int] = 12544,
         importance_sample_ratio: Optional[float] = 0.75,
@@ -137,19 +135,19 @@ class Mask2FormerConfig(PretrainedConfig):
         common_stride: Optional[int] = 4,
         feature_strides: Optional[List[int]] = [4, 8, 16, 32],
         mask2former_num_feature_levels: Optional[int] = 3,
-        num_classes: int = 80,
         **kwargs,
     ):
         if backbone_config is None:
             # fall back to https://huggingface.co/microsoft/swin-base-patch4-window12-384-in22k
+            # https://huggingface.co/microsoft/swin-small-patch4-window7-224
             backbone_config = SwinConfig(
                 image_size=384,
                 in_channels=3,
                 patch_size=4,
-                embed_dim=128,
+                embed_dim=96,
                 depths=[2, 2, 18, 2],
-                num_heads=[4, 8, 16, 32],
-                window_size=12,
+                num_heads=[3, 6, 12, 24],
+                window_size=7,
                 drop_path_rate=0.3,
             )
         else:
@@ -163,7 +161,11 @@ class Mask2FormerConfig(PretrainedConfig):
 
         if decoder_config is None:
             # fall back to https://huggingface.co/facebook/detr-resnet-50
-            decoder_config = DetrConfig()
+            decoder_config = DetrConfig(
+                decoder_layers=10,
+                encoder_layers=0,
+                dropout=0.0,
+            )
         else:
             decoder_type = decoder_config.pop("model_type")
             if decoder_type not in self.decoders_supported:
@@ -203,7 +205,6 @@ class Mask2FormerConfig(PretrainedConfig):
         self.train_num_points = train_num_points
         self.importance_sample_ratio = importance_sample_ratio
         self.oversample_ratio = oversample_ratio
-        self.num_classes = num_classes
         # Pixel Decoder Config
         self.pixel_decoder_config = pixel_decoder_config
         self.pixel_decoder_config.feature_strides = feature_strides

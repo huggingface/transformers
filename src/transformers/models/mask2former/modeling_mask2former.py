@@ -1535,6 +1535,7 @@ class MaskedAttentionDecoder(nn.Module):
         self.layerdrop = config.decoder_layerdrop
         self.num_feature_levels = 3 #level embedding (3 scales)
         assert(self.config.decoder_layers) >= 1
+        print("decoder_layers:", config.decoder_layers)
         self.decoder_layers = config.decoder_layers - 1
         self.layers = nn.ModuleList([MaskedAttentionDecoderLayer(self.config) for _ in range(self.decoder_layers)])
         
@@ -1940,7 +1941,7 @@ class Mask2FormerLoss(nn.Module):
 
         super().__init__()
         requires_backends(self, ["scipy"])
-        self.num_labels = config.num_classes
+        self.num_labels = config.num_labels
         self.weight_dict = weight_dict
 
         # Weight to apply to the null class
@@ -2994,7 +2995,7 @@ class Mask2FormerPixelDecoder(nn.Module):
         self.num_fpn_levels = int(np.log2(self.stride) - np.log2(config.common_stride))
         self.mask2former_num_feature_levels = config.mask2former_num_feature_levels
 
-        self.multi_scale_deform_attn_module = Mask2FormerMSDAModel(config, feature_size, feature_channels)
+        self.multi_scale_deform_attn_module = Mask2FormerMSDAModel(config, feature_size, feature_channels[1:])
         self.feature_pyramid_network = Mask2FormerFPNModel(feature_channels, feature_size, self.num_fpn_levels)
         self.mask_projection = nn.Conv2d(feature_size, mask_feature_size, kernel_size=1, stride=1, padding=0)
         
@@ -3035,7 +3036,7 @@ class Mask2FormerPixelLevelModule(nn.Module):
             config=config.pixel_decoder_config,
             feature_size=config.feature_size,
             mask_feature_size=config.mask_feature_size,
-            feature_channels=self.encoder.outputs_shapes[1:], #[256, 512, 1024],
+            feature_channels=self.encoder.outputs_shapes, #[1:], #[256, 512, 1024],
         )
 
     def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> Mask2FormerPixelLevelModuleOutput:
@@ -3340,7 +3341,7 @@ class Mask2FormerForInstanceSegmentation(Mask2FormerPreTrainedModel):
         self.model = Mask2FormerModel(config)
         hidden_size = config.decoder_config.hidden_size
         # + 1 because we add the "null" class
-        self.class_predictor = nn.Linear(hidden_size, config.num_classes + 1)
+        self.class_predictor = nn.Linear(hidden_size, config.num_labels + 1)
 
         self.weight_dict = {
             "loss_cross_entropy": config.cross_entropy_weight,
