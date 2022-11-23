@@ -27,14 +27,6 @@ _import_structure = {
 }
 
 try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_biogpt_fast"] = ["BioGptTokenizerFast"]
-
-try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
@@ -51,12 +43,6 @@ else:
 if TYPE_CHECKING:
     from .configuration_biogpt import BIOGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, BioGptConfig
     from .tokenization_biogpt import BioGptTokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
 
     try:
         if not is_torch_available():
