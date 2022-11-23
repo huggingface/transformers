@@ -1,8 +1,7 @@
 import torch.nn as nn
 import torch
 from transformers.models.xlm_roberta.modeling_xlm_roberta import XLMRobertaModel
-from transformers.models.roberta.modeling_roberta import RobertaLMHead,RobertaPreTrainedModel
-from transformers.activations import ACT2FN
+from transformers.models.roberta.modeling_roberta import RobertaPreTrainedModel
 from typing import Optional
 from .configuration_altclip import RobertaSeriesConfig
 
@@ -18,11 +17,6 @@ class RobertaSeriesModelWithTransformation(RobertaPreTrainedModel):
         self.roberta = XLMRobertaModel(config)
         self.transformation = nn.Linear(config.hidden_size,config.project_dim)
         self.pre_LN = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        # we turn True only when we do postkd, otherwise it should be turn False 
-        self.add_lm_task = config.add_lm_task if hasattr(config,"add_lm_task") else False
-        self.config.tie_word_embeddings = self.add_lm_task
-        if self.add_lm_task:
-            self.lm_head = RobertaLMHead(config)
         self.pooler = lambda x: x[:,0]
         self.post_init()
         
@@ -45,11 +39,9 @@ class RobertaSeriesModelWithTransformation(RobertaPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        mode: Optional[str] = 'kd',
     ) :
         r"""
         """
@@ -82,21 +74,11 @@ class RobertaSeriesModelWithTransformation(RobertaPreTrainedModel):
         pooler_output = self.transformation(pooler_output)
         projection_state = self.transformation(outputs.last_hidden_state)
         
-        mlm_loss = None
-        if labels is not None and mode == 'lm' and self.add_lm_task:
-            prediction_scores = self.lm_head(sequence_output)
-            if labels is not None:
-                loss_fct = nn.CrossEntropyLoss()
-                mlm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-            else:
-                raise ValueError
-
         return {
             'pooler_output':pooler_output,
             'last_hidden_state':outputs.last_hidden_state,
             'hidden_states':outputs.hidden_states,
             'attentions':outputs.attentions,
             'projection_state':projection_state,
-            'mlm_loss':mlm_loss
         }
 

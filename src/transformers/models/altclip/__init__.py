@@ -25,8 +25,9 @@ from ...utils import is_torch_available
 
 
 _import_structure = {
-    "configuration_altclip": ["ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "AltClipConfig"],
-    "tokenization_altclip": ["AltClipTokenizer"],
+    "configuration_altclip": ["ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "AltCLIPConfig"],
+    "processing_altclip": ["AltCLIPProcessor"],
+    "tokenization_altclip": ["AltCLIPTokenizer"],
 }
 
 try:
@@ -35,7 +36,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_altclip_fast"] = ["AltClipTokenizerFast"]
+    _import_structure["tokenization_altclip_fast"] = ["AltCLIPTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -45,24 +46,16 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_altclip"] = [
         "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "AltClipForMaskedLM",
-        "AltClipForCausalLM",
-        "AltClipForMultipleChoice",
-        "AltClipForQuestionAnswering",
-        "AltClipForSequenceClassification",
-        "AltClipForTokenClassification",
-        "AltClipLayer",
-        "AltClipModel",
-        "AltClipPreTrainedModel",
-        "load_tf_weights_in_altclip",
+        "AltCLIPModel",
     ]
 
 
 
 
 if TYPE_CHECKING:
-    from .configuration_altclip import ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, AltClipConfig
-    from .tokenization_altclip import AltClipTokenizer
+    from .configuration_altclip import ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, AltCLIPConfig
+    from .tokenization_altclip import AltCLIPTokenizer
+    from .processing_altclip import AltCLIPProcessor
 
     try:
         if not is_tokenizers_available():
@@ -70,7 +63,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_altclip_fast import AltClipTokenizerFast
+        from .tokenization_altclip_fast import AltCLIPTokenizerFast
 
     try:
         if not is_torch_available():
@@ -80,16 +73,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_altclip import (
             ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            AltClipForMaskedLM,
-            AltClipForCausalLM,
-            AltClipForMultipleChoice,
-            AltClipForQuestionAnswering,
-            AltClipForSequenceClassification,
-            AltClipForTokenClassification,
-            AltClipLayer,
-            AltClipModel,
-            AltClipPreTrainedModel,
-            load_tf_weights_in_altclip,
+            AltCLIPModel,
         )
 
 

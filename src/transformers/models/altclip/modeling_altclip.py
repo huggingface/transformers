@@ -45,7 +45,7 @@ from ...pytorch_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
-from .configuration_altclip import AltClipConfig
+from .configuration_altclip import AltCLIPConfig
 
 
 from transformers.models.clip.modeling_clip import *
@@ -58,8 +58,8 @@ from .modeling_xlmr import RobertaSeriesModelWithTransformation
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "BAAI/AltCLIP"
-_CONFIG_FOR_DOC = "AltClipConfig"
-_TOKENIZER_FOR_DOC = "AltClipTokenizer"
+_CONFIG_FOR_DOC = "AltCLIPConfig"
+_TOKENIZER_FOR_DOC = "AltCLIPTokenizer"
 
 ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "BAAI/AltCLIP",

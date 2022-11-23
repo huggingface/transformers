@@ -39,7 +39,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "BAAI/AltCLIP": 1024,
 }
 
-class AltClipTokenizerFast(PreTrainedTokenizerFast):
+class AltCLIPTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" AltCLIP tokenizer (backed by HuggingFace's *tokenizers* library).
 

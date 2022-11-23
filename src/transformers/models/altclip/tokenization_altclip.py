@@ -36,7 +36,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "BAAI/AltCLIP": 1024,
 }
 
-class AltClipTokenizer(PreTrainedTokenizer):
+class AltCLIPTokenizer(PreTrainedTokenizer):
     """
     Construct a AltCLIP tokenizer. Based on byte-level Byte-Pair-Encoding.
 
@@ -178,7 +178,7 @@ class AltClipTokenizer(PreTrainedTokenizer):
             text = " " + text
         return (text, kwargs)
 
-class AltClipTokenizerFast(PreTrainedTokenizerFast):
+class AltCLIPTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" AltCLIP tokenizer (backed by HuggingFace's *tokenizers* library).
 
