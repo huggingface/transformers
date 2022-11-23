@@ -257,17 +257,24 @@ def compute_segments(
 def convert_segmentation_map_to_binary_masks(
     segmentation_map: "np.ndarray",
     instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
+    ignore_index: Optional[int] = None,
     reduce_labels: bool = False,
 ):
+    if reduce_labels and ignore_index is None:
+        raise ValueError("If `reduce_labels` is True, `ignore_index` must be provided.")
+
+    if reduce_labels:
+        segmentation_map = np.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
+
     # Get unique ids (class or instance ids based on input)
     all_labels = np.unique(segmentation_map)
 
     # Drop background label if applicable
-    if reduce_labels:
-        all_labels = all_labels[all_labels != 0]
+    if ignore_index is not None:
+        all_labels = all_labels[all_labels != ignore_index]
 
     # Generate a binary mask for each object instance
-    binary_masks = [np.ma.masked_where(segmentation_map == i, segmentation_map) for i in all_labels]
+    binary_masks = [(segmentation_map == i) for i in all_labels]
     binary_masks = np.stack(binary_masks, axis=0)  # (num_labels, height, width)
 
     # Convert instance ids to class ids
@@ -275,14 +282,10 @@ def convert_segmentation_map_to_binary_masks(
         labels = np.zeros(all_labels.shape[0])
 
         for label in all_labels:
-            class_id = instance_id_to_semantic_id[label]
-            labels[all_labels == label] = class_id
+            class_id = instance_id_to_semantic_id[label + 1 if reduce_labels else label]
+            labels[all_labels == label] = class_id - 1 if reduce_labels else class_id
     else:
         labels = all_labels
-
-    # Decrement labels by 1
-    if reduce_labels:
-        labels -= 1
 
     return binary_masks.astype(np.float32), labels.astype(np.int64)
 
@@ -510,12 +513,15 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         self,
         segmentation_map: "np.ndarray",
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
-        reduce_labels: bool = None,
+        ignore_index: Optional[int] = None,
+        reduce_labels: bool = False,
     ):
         reduce_labels = reduce_labels if reduce_labels is not None else self.reduce_labels
+        ignore_index = ignore_index if ignore_index is not None else self.ignore_index
         return convert_segmentation_map_to_binary_masks(
             segmentation_map=segmentation_map,
             instance_id_to_semantic_id=instance_id_to_semantic_id,
+            ignore_index=ignore_index,
             reduce_labels=reduce_labels,
         )
 
@@ -697,7 +703,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 for segmentation_map in segmentation_maps
             ]
         encoded_inputs = self.encode_inputs(
-            images, segmentation_maps, ignore_index, instance_id_to_semantic_id, return_tensors
+            images, segmentation_maps, instance_id_to_semantic_id, ignore_index, reduce_labels, return_tensors
         )
         return encoded_inputs
 
@@ -767,8 +773,9 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         self,
         pixel_values_list: List[ImageInput],
         segmentation_maps: ImageInput = None,
-        ignore_index: Optional[int] = None,
         instance_id_to_semantic_id: Optional[Union[List[Dict[int, int]], Dict[int, int]]] = None,
+        ignore_index: Optional[int] = None,
+        reduce_labels: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs
     ):
@@ -820,6 +827,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
               `mask_labels[i][j]` if `class_labels[i][j]`.
         """
         ignore_index = self.ignore_index if ignore_index is None else ignore_index
+        reduce_labels = self.reduce_labels if reduce_labels is None else reduce_labels
 
         if "pad_and_return_pixel_mask" in kwargs:
             warnings.warn(
@@ -841,7 +849,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 else:
                     instance_id = instance_id_to_semantic_id
                 # Use instance2class_id mapping per image
-                masks, classes = self.convert_segmentation_map_to_binary_masks(segmentation_map, instance_id)
+                masks, classes = self.convert_segmentation_map_to_binary_masks(segmentation_map, instance_id, ignore_index=ignore_index, reduce_labels=reduce_labels)
                 # We add an axis to make them compatible with the transformations library
                 # this will be removed in the future
                 masks = [mask[None, ...] for mask in masks]
