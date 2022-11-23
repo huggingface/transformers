@@ -1670,8 +1670,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "is_loaded_in_8bit", False):
             raise ValueError(
-                "You are assigning your `8-bit` model into a new device or casting it with a new `dtype`. Device and"
-                " `dtype` assignment is not supported for `8-bit` models. Please use the model as it is, since the"
+                "`.to` is not supported for `8-bit` models. Please use the model as it is, since the"
                 " model has already been set to the correct devices and casted to the correct `dtype`."
             )
         else:
@@ -1681,9 +1680,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "is_loaded_in_8bit", False):
             raise ValueError(
-                "You are calling `.half()` with your `8-bit` model."
-                " `.half()` is not supported for `8-bit` models. Please use the model as it is, since the"
-                " model has already been set to the correct devices and casted to the correct `dtype`."
+                "`.half()` is not supported for `8-bit` models. Please use the model as it is, since the"
+                " model has already been casted to the correct `dtype`."
             )
         else:
             return super().half(*args)
@@ -1692,9 +1690,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "is_loaded_in_8bit", False):
             raise ValueError(
-                "You are calling `.float()` with your `8-bit` model."
-                " `.float()` is not supported for `8-bit` models. Please use the model as it is, since the"
-                " model has already been set to the correct devices and casted to the correct `dtype`."
+                "`.float()` is not supported for `8-bit` models. Please use the model as it is, since the"
+                " model has already been casted to the correct `dtype`."
             )
         else:
             return super().float(*args)
