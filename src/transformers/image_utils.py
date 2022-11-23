@@ -72,7 +72,15 @@ def is_valid_image(img):
 
 
 def valid_images(imgs):
-    return all(is_valid_image(img) for img in imgs)
+    # If we have an list of images, make sure every image is valid
+    if isinstance(imgs, (list, tuple)):
+        for img in imgs:
+            if not valid_images(img):
+                return False
+    # If not a list of tuple, we have been given a single image or batched tensor of images
+    elif not is_valid_image(imgs):
+        return False
+    return True
 
 
 def is_batched(img):
@@ -364,7 +372,7 @@ class ImageFeatureExtractionMixin:
                 If `size` is an int and `default_to_square` is `True`, then image will be resized to (size, size). If
                 `size` is an int and `default_to_square` is `False`, then smaller edge of the image will be matched to
                 this number. i.e, if height > width, then image will be rescaled to (size * height / width, size).
-            resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
+            resample (`int`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 The filter to user for resampling.
             default_to_square (`bool`, *optional*, defaults to `True`):
                 How to convert `size` when it is a single int. If set to `True`, the `size` will be converted to a

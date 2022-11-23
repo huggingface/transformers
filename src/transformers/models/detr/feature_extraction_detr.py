@@ -24,8 +24,9 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
-from ...utils import TensorType, is_torch_available, logging
+from ...image_transforms import center_to_corners_format, corners_to_center_format, id_to_rgb, rgb_to_id
+from ...image_utils import ImageFeatureExtractionMixin
+from ...utils import TensorType, is_torch_available, is_torch_tensor, logging
 
 
 if is_torch_available():
@@ -36,28 +37,6 @@ logger = logging.get_logger(__name__)
 
 
 ImageInput = Union[Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]]
-
-
-# 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
-def center_to_corners_format(x):
-    """
-    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
-    (x_0, y_0, x_1, y_1).
-    """
-    center_x, center_y, width, height = x.unbind(-1)
-    b = [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)]
-    return torch.stack(b, dim=-1)
-
-
-def corners_to_center_format(x):
-    """
-    Converts a NumPy array of bounding boxes of shape (number of bounding boxes, 4) of corners format (x_0, y_0, x_1,
-    y_1) to center format (center_x, center_y, width, height).
-    """
-    x_transposed = x.T
-    x0, y0, x1, y1 = x_transposed[0], x_transposed[1], x_transposed[2], x_transposed[3]
-    b = [(x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0), (y1 - y0)]
-    return np.stack(b, axis=-1)
 
 
 def masks_to_boxes(masks):
@@ -91,33 +70,6 @@ def masks_to_boxes(masks):
     y_min = y_min.reshape(y_min.shape[0], -1).min(-1)
 
     return np.stack([x_min, y_min, x_max, y_max], 1)
-
-
-# 2 functions below copied from https://github.com/cocodataset/panopticapi/blob/master/panopticapi/utils.py
-# Copyright (c) 2018, Alexander Kirillov
-# All rights reserved.
-def rgb_to_id(color):
-    if isinstance(color, np.ndarray) and len(color.shape) == 3:
-        if color.dtype == np.uint8:
-            color = color.astype(np.int32)
-        return color[:, :, 0] + 256 * color[:, :, 1] + 256 * 256 * color[:, :, 2]
-    return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
-
-
-def id_to_rgb(id_map):
-    if isinstance(id_map, np.ndarray):
-        id_map_copy = id_map.copy()
-        rgb_shape = tuple(list(id_map.shape) + [3])
-        rgb_map = np.zeros(rgb_shape, dtype=np.uint8)
-        for i in range(3):
-            rgb_map[..., i] = id_map_copy % 256
-            id_map_copy //= 256
-        return rgb_map
-    color = []
-    for _ in range(3):
-        color.append(id_map % 256)
-        id_map //= 256
-    return color
 
 
 def binary_mask_to_rle(mask):
@@ -878,7 +830,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         """
         Converts the output of [`DetrForSegmentation`] into image segmentation predictions. Only supports PyTorch.
 
-        Parameters:
+        Args:
             outputs ([`DetrSegmentationOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`):
@@ -974,7 +926,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         """
         Converts the output of [`DetrForSegmentation`] into actual panoptic predictions. Only supports PyTorch.
 
-        Parameters:
+        Args:
             outputs ([`DetrSegmentationOutput`]):
                 Raw outputs of the model.
             processed_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`):
@@ -1151,7 +1103,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             else:
                 img_h, img_w = target_sizes.unbind(1)
 
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
             boxes = boxes * scale_fct[:, None, :]
 
         results = []
@@ -1165,13 +1117,15 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple[int, int]] = None):
         """
-        Args:
         Converts the output of [`DetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+
+        Args:
             outputs ([`DetrForSegmentation`]):
                 Raw outputs of the model.
             target_sizes (`List[Tuple[int, int]]`, *optional*, defaults to `None`):
                 A list of tuples (`Tuple[int, int]`) containing the target size (height, width) of each image in the
                 batch. If left to None, predictions will not be resized.
+
         Returns:
             `List[torch.Tensor]`:
                 A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
@@ -1219,8 +1173,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         return_coco_annotation: Optional[bool] = False,
     ) -> List[Dict]:
         """
-        Args:
         Converts the output of [`DetrForSegmentation`] into instance segmentation predictions. Only supports PyTorch.
+
+        Args:
             outputs ([`DetrForSegmentation`]):
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.5):
@@ -1236,6 +1191,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             return_coco_annotation (`bool`, *optional*):
                 Defaults to `False`. If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE)
                 format.
+
         Returns:
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- A tensor of shape `(height, width)` where each pixel represents a `segment_id` or
@@ -1301,9 +1257,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         target_sizes: Optional[List[Tuple[int, int]]] = None,
     ) -> List[Dict]:
         """
-        Args:
         Converts the output of [`DetrForSegmentation`] into image panoptic segmentation predictions. Only supports
         PyTorch.
+
+        Args:
             outputs ([`DetrForSegmentation`]):
                 The outputs from [`DetrForSegmentation`].
             threshold (`float`, *optional*, defaults to 0.5):
@@ -1321,6 +1278,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction in batch. If left to None, predictions will not be
                 resized.
+
         Returns:
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id` or

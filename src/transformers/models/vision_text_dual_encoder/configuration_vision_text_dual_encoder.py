@@ -35,9 +35,9 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_config_dict (`dict`):
+        text_config (`dict`):
             Dictionary of configuration options that defines text model config.
-        vision_config_dict (`dict`):
+        vision_config (`dict`):
             Dictionary of configuration options that defines vison model config.
         projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and vision projection layers.

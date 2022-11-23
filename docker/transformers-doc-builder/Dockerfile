@@ -10,7 +10,6 @@ RUN apt-get -y update && apt-get install -y libsndfile1-dev && apt install -y te
 # Torch needs to be installed before deepspeed
 RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed]
 
-RUN python3 -m pip install --no-cache-dir torch-scatter -f https://data.pyg.org/whl/torch-$(python -c "from torch import version; print(version.__version__.split('+')[0])")+cpu.html
 RUN python3 -m pip install --no-cache-dir torchvision git+https://github.com/facebookresearch/detectron2.git pytesseract
 RUN python3 -m pip install --no-cache-dir pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com
 RUN python3 -m pip install -U "itsdangerous<2.1.0"

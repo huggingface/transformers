@@ -125,6 +125,7 @@ _deps = [
     "jieba",
     "kenlm",
     "nltk",
+    "natten>=0.14.4",
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
@@ -156,8 +157,8 @@ _deps = [
     "sigopt",
     "librosa",
     "starlette",
-    "tensorflow-cpu>=2.3",
-    "tensorflow>=2.4",
+    "tensorflow-cpu>=2.4,<2.11",
+    "tensorflow>=2.4,<2.11",
     "tensorflow-text",
     "tf2onnx",
     "timeout-decorator",
@@ -283,6 +284,7 @@ extras["tf-speech"] = extras["audio"]
 extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
+extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
 
 
@@ -409,7 +411,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.24.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.25.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
