@@ -748,7 +748,10 @@ class SwinStage(nn.Module):
         if self.downsample is not None:
             height_downsampled, width_downsampled = (height + 1) // 2, (width + 1) // 2
             output_dimensions = (height, width, height_downsampled, width_downsampled)
+            print("Output dimensions: ", output_dimensions)
+            print("Hidden state before downsampling", hidden_states.shape)
             hidden_states = self.downsample(hidden_states_before_downsampling, input_dimensions)
+            print("Hidden state after downsampling", hidden_states.shape)
         else:
             output_dimensions = (height, width, height, width)
 

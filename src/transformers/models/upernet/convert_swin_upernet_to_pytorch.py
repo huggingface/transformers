@@ -26,7 +26,9 @@ from transformers.utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT
 
 
 def get_upernet_config(model_name):
-    backbone_config = SwinConfig(output_hidden_states_before_downsampling=True, out_features=["stage1", "stage2", "stage3", "stage4"])
+    backbone_config = SwinConfig(
+        output_hidden_states_before_downsampling=True, out_features=["stage1", "stage2", "stage3", "stage4"]
+    )
     config = UperNetConfig(backbone_config=backbone_config, num_labels=150)
 
     return config
@@ -48,7 +50,7 @@ def create_rename_keys(config):
             rename_keys.append((f"backbone.stages.{i}.blocks.{j}.norm1.weight", f"backbone.swin.encoder.layers.{i}.blocks.{j}.layernorm_before.weight"))
             rename_keys.append((f"backbone.stages.{i}.blocks.{j}.norm1.bias", f"backbone.swin.encoder.layers.{i}.blocks.{j}.layernorm_before.bias"))
             rename_keys.append((f"backbone.stages.{i}.blocks.{j}.attn.w_msa.relative_position_bias_table", f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.relative_position_bias_table"))
-            # rename_keys.append((f"backbone.stages.{i}.blocks.{j}.attn.w_msa.relative_position_index", f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.relative_position_index"))
+            rename_keys.append((f"backbone.stages.{i}.blocks.{j}.attn.w_msa.relative_position_index", f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.relative_position_index"))
             rename_keys.append((f"backbone.stages.{i}.blocks.{j}.attn.w_msa.proj.weight", f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.output.dense.weight"))
             rename_keys.append((f"backbone.stages.{i}.blocks.{j}.attn.w_msa.proj.bias", f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.output.dense.bias"))
             rename_keys.append((f"backbone.stages.{i}.blocks.{j}.norm2.weight", f"backbone.swin.encoder.layers.{i}.blocks.{j}.layernorm_after.weight"))
@@ -84,6 +86,32 @@ def rename_key(dct, old, new):
     dct[new] = val
 
 
+# we split up the matrix of each encoder layer into queries, keys and values
+def read_in_q_k_v(state_dict, backbone_config):
+    num_features = [int(backbone_config.embed_dim * 2**i) for i in range(len(backbone_config.depths))]
+    for i in range(len(backbone_config.depths)):
+        dim = num_features[i]
+        for j in range(backbone_config.depths[i]):
+            # fmt: off
+            # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
+            in_proj_weight = state_dict.pop(f"backbone.stages.{i}.blocks.{j}.attn.w_msa.qkv.weight")
+            in_proj_bias = state_dict.pop(f"backbone.stages.{i}.blocks.{j}.attn.w_msa.qkv.bias")
+            # next, add query, keys and values (in that order) to the state dict
+            state_dict[f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.query.weight"] = in_proj_weight[:dim, :]
+            state_dict[f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.query.bias"] = in_proj_bias[: dim]
+            state_dict[f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.key.weight"] = in_proj_weight[
+                dim : dim * 2, :
+            ]
+            state_dict[f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.key.bias"] = in_proj_bias[
+                dim : dim * 2
+            ]
+            state_dict[f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.value.weight"] = in_proj_weight[
+                -dim :, :
+            ]
+            state_dict[f"backbone.swin.encoder.layers.{i}.blocks.{j}.attention.self.value.bias"] = in_proj_bias[-dim :]
+            # fmt: on
+
+
 image_transforms = Compose(
     [Resize((512, 512)), ToTensor(), Normalize(mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD)]
 )
@@ -111,8 +139,11 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
+    read_in_q_k_v(state_dict, config.backbone_config)
 
-    model.load_state_dict(state_dict)
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+    assert missing_keys == ["backbone.swin.layernorm.weight", "backbone.swin.layernorm.bias"]
+    assert len(unexpected_keys) == 0, f"Unexpected keys: {unexpected_keys}"
 
     # verify on image
     url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"

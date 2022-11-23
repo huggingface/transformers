@@ -223,7 +223,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             SwinModel,
-            SwinBackbone,
+            # SwinBackbone,
             SwinForImageClassification,
             SwinForMaskedImageModeling,
         )
