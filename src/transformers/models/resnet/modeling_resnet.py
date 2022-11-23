@@ -456,7 +456,9 @@ class ResNetBackbone(ResNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(self, pixel_values: Optional[torch.FloatTensor] = None) -> BackboneOutput:
+    def forward(
+        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+    ) -> BackboneOutput:
         """
         Returns:
 
@@ -478,6 +480,11 @@ class ResNetBackbone(ResNetPreTrainedModel):
 
         >>> outputs = model(**inputs)
         ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
         outputs = self.resnet(pixel_values, output_hidden_states=True, return_dict=True)
 
         hidden_states = outputs.hidden_states
@@ -487,4 +494,14 @@ class ResNetBackbone(ResNetPreTrainedModel):
             if stage in self.out_features:
                 feature_maps += (hidden_states[idx],)
 
-        return BackboneOutput(feature_maps=feature_maps)
+        if not return_dict:
+            output = (feature_maps,)
+            if output_hidden_states:
+                output += (outputs.hidden_states,)
+            return output
+
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            attentions=None,
+        )
