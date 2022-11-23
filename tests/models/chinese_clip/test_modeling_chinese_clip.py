@@ -28,14 +28,25 @@ from transformers.testing_utils import require_torch, require_torch_gpu, require
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    _config_zero_init,
+    floats_tensor,
+    ids_tensor,
+    random_attention_mask,
+)
 
 
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import MODEL_FOR_PRETRAINING_MAPPING, ChineseCLIPModel, ChineseCLIPTextModel, ChineseCLIPVisionModel
+    from transformers import (
+        MODEL_FOR_PRETRAINING_MAPPING,
+        ChineseCLIPModel,
+        ChineseCLIPTextModel,
+        ChineseCLIPVisionModel,
+    )
     from transformers.models.chinese_clip.modeling_chinese_clip import CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -123,12 +134,7 @@ class ChineseCLIPTextModelTester:
         )
 
     def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask
-        ) = self.prepare_config_and_inputs()
+        (config, input_ids, token_type_ids, input_mask) = self.prepare_config_and_inputs()
 
         config.is_decoder = True
         encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
@@ -143,9 +149,7 @@ class ChineseCLIPTextModelTester:
             encoder_attention_mask,
         )
 
-    def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask
-    ):
+    def create_and_check_model(self, config, input_ids, token_type_ids, input_mask):
         model = ChineseCLIPTextModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -250,13 +254,7 @@ class ChineseCLIPVisionModelTester:
 @require_torch
 class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (
-        (
-            ChineseCLIPTextModel,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (ChineseCLIPTextModel,) if is_torch_available() else ()
     fx_compatible = False
 
     # special case for ForPreTraining model

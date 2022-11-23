@@ -40,14 +40,13 @@ CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ChineseCLIPTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ChineseCLIPModel`].
-    It is used to instantiate a CHINESE_CLIP model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    CHINESE_CLIP [OFA-Sys/chinese-clip-vit-base-patch16](https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16)
-    architecture.
+    Args:
+    This is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used to instantiate a
+    CHINESE_CLIP model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the CHINESE_CLIP
+    [OFA-Sys/chinese-clip-vit-base-patch16](https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16) architecture.
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-    Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the CHINESE_CLIP model. Defines the number of different tokens that can be represented
             by the `inputs_ids` passed when calling [`ChineseCLIPModel`] or [`TFChineseCLIPModel`].
@@ -323,7 +322,9 @@ class ChineseCLIPConfig(PretrainedConfig):
         self.initializer_factor = 1.0
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: ChineseCLIPTextConfig, vision_config: ChineseCLIPVisionConfig, **kwargs):
+    def from_text_vision_configs(
+        cls, text_config: ChineseCLIPTextConfig, vision_config: ChineseCLIPVisionConfig, **kwargs
+    ):
         r"""
         Instantiate a [`ChineseCLIPConfig`] (or a derived class) from Chinese-CLIP text model configuration and
         Chinese-CLIP vision model configuration. Returns:
