@@ -179,7 +179,7 @@ Now it's time to finally start coding. Our suggested starting point is the PyTor
 `modeling_brand_new_bert.py` inside `src/transformers/models/brand_new_bert/` into
 `modeling_tf_brand_new_bert.py`. The goal of this section is to modify the file and update the import structure of
 🤗 Transformers such that you can import `TFBrandNewBert` and
-`TFBrandNewBert.from_pretrained(model_repo, from_pt=True)` sucessfully loads a working TensorFlow *BrandNewBert* model.
+`TFBrandNewBert.from_pretrained(model_repo, from_pt=True)` successfully loads a working TensorFlow *BrandNewBert* model.
 
 Sadly, there is no prescription to convert a PyTorch model into TensorFlow. You can, however, follow our selection of
 tips to make the process as smooth as possible:
@@ -217,7 +217,7 @@ documentation pages. You can complete this part entirely following the patterns 
 ([example](https://github.com/huggingface/transformers/pull/18020/files)). Here's a list of the needed manual
 changes:
 - Include all public classes of *BrandNewBert* in `src/transformers/__init__.py`
-- Add *BrandNewBert* classes to the corresponing Auto classes in `src/transformers/models/auto/modeling_tf_auto.py`
+- Add *BrandNewBert* classes to the corresponding Auto classes in `src/transformers/models/auto/modeling_tf_auto.py`
 - Include the modeling file in the documentation test file list in `utils/documentation_tests.txt`
 - Add the lazy loading classes related to *BrandNewBert* in `src/transformers/utils/dummy_tf_objects.py`
 - Update the import structures for the public classes in `src/transformers/models/brand_new_bert/__init__.py`

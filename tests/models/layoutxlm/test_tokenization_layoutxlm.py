@@ -32,7 +32,6 @@ from transformers.testing_utils import (
     get_tests_dir,
     is_pt_tf_cross_test,
     require_pandas,
-    require_scatter,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -1176,7 +1175,6 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @require_torch
     @slow
-    @require_scatter
     def test_torch_encode_plus_sent_to_model(self):
         import torch
 
