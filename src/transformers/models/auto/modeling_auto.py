@@ -438,6 +438,7 @@ MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         ("mobilenet_v2", "MobileNetV2ForSemanticSegmentation"),
         ("mobilevit", "MobileViTForSemanticSegmentation"),
         ("segformer", "SegformerForSemanticSegmentation"),
+        ("upernet", "UperNetForSemanticSegmentation"),
     ]
 )
 

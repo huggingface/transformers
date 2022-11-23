@@ -38,7 +38,7 @@ class UperNetConfig(PretrainedConfig):
     Args:
         backbone_config (`PretrainedConfig`):
             The configuration of the backbone model.
-        hidden_size (:obj:`int`, `optional`, defaults to 512):
+        hidden_size (`int`, *optional*, defaults to 512):
             The number of hidden units in the convolutional layers.
         pool_scales (`Tuple[int]`, *optional*, defaults to `[1, 2, 3, 6]`):
             Pooling scales used in Pooling Pyramid Module applied on the last feature map.

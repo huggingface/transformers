@@ -690,6 +690,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "TensorFlowBenchmark",
     "TensorFlowBenchmarkArguments",
     "BitBackbone",
+    "ConvNextBackbone",
     "MaskFormerSwinBackbone",
     "ResNetBackbone",
     "AutoBackbone",
