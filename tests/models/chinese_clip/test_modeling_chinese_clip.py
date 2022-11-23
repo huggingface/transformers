@@ -319,7 +319,7 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            ChineseCLIPModel,
+            ChineseCLIPTextModel,
         )
         if is_torch_available()
         else ()
@@ -392,7 +392,7 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ChineseCLIPModel.from_pretrained(model_name)
+            model = ChineseCLIPTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
