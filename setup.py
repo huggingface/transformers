@@ -124,6 +124,7 @@ _deps = [
     "jaxlib>=0.1.65,<=0.3.6",
     "jieba",
     "kenlm",
+    "keras-nlp>=0.3.1",
     "nltk",
     "natten>=0.14.4",
     "numpy>=1.17",

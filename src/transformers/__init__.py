@@ -32,6 +32,7 @@ from .utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_flax_available,
+    is_keras_nlp_available,
     is_sentencepiece_available,
     is_speech_available,
     is_tensorflow_text_available,
@@ -693,6 +694,19 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.bert"].append("TFBertTokenizer")
+
+# keras-nlp-specific objects
+try:
+    if not is_keras_nlp_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_keras_nlp_objects
+
+    _import_structure["utils.dummy_keras_nlp_objects"] = [
+        name for name in dir(dummy_keras_nlp_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["models.gpt2"].append("TFGPT2Tokenizer")
 
 try:
     if not (is_sentencepiece_available() and is_speech_available()):
@@ -2647,6 +2661,7 @@ else:
             "TFGPT2MainLayer",
             "TFGPT2Model",
             "TFGPT2PreTrainedModel",
+            "TFGPT2Tokenizer",
         ]
     )
     _import_structure["models.gptj"].extend(
@@ -3828,6 +3843,16 @@ if TYPE_CHECKING:
         from .utils.dummy_tensorflow_text_objects import *
     else:
         from .models.bert import TFBertTokenizer
+
+    try:
+        if not is_keras_nlp_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        print("except")
+        from .utils.dummy_keras_nlp_objects import *
+    else:
+        print("import")
+        from .models.gpt2 import TFGPT2Tokenizer
 
     try:
         if not (is_speech_available() and is_sentencepiece_available()):
