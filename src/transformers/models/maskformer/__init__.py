@@ -77,7 +77,7 @@ if TYPE_CHECKING:
         )
         from .modeling_maskformer_swin import (
             MaskFormerSwinBackbone,
-            MaskformerSwinModel,
+            MaskFormerSwinModel,
             MaskFormerSwinPreTrainedModel,
         )
 
