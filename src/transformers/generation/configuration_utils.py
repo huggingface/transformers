@@ -604,9 +604,16 @@ class GenerationConfig(PushToHubMixin):
         config_dict = model_config.to_dict()
         config = cls.from_dict(config_dict, return_unused_kwargs=False)
 
-        # Handles a few special cases
-        if config.eos_token_id is None and hasattr(config_dict, "decoder"):
+        # Special cases:
+        # 1. eos_token_id defined in the decoder
+        if config.eos_token_id is None and "decoder" in config_dict:
             config.eos_token_id = config_dict["decoder"]["eos_token_id"]
+        # 2. RAG
+        if "generator" in config_dict:
+            config.bos_token_id = config_dict["generator"]["bos_token_id"]
+            config.eos_token_id = config_dict["generator"]["eos_token_id"]
+            config.pad_token_id = config_dict["generator"]["pad_token_id"]
+            config.decoder_start_token_id = config_dict["generator"]["decoder_start_token_id"]
 
         return config
 
