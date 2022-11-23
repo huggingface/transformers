@@ -849,7 +849,9 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 else:
                     instance_id = instance_id_to_semantic_id
                 # Use instance2class_id mapping per image
-                masks, classes = self.convert_segmentation_map_to_binary_masks(segmentation_map, instance_id, ignore_index=ignore_index, reduce_labels=reduce_labels)
+                masks, classes = self.convert_segmentation_map_to_binary_masks(
+                    segmentation_map, instance_id, ignore_index=ignore_index, reduce_labels=reduce_labels
+                )
                 # We add an axis to make them compatible with the transformations library
                 # this will be removed in the future
                 masks = [mask[None, ...] for mask in masks]
