@@ -1276,9 +1276,10 @@ FAN_INPUTS_DOCSTRING = r"""
 """
 
 
-class FANEmbeddings(FANPreTrainedModel):
+class FANEmbeddings(nn.Module):
     def __init__(self, config: FANConfig):
-        super().__init__(config)
+        super().__init__()
+        self.config = config
 
         img_size = to_2tuple(config.img_size)
         assert (img_size[0] % config.patch_size == 0) and (
@@ -1350,9 +1351,10 @@ class FANEmbeddings(FANPreTrainedModel):
         return hidden_states, (Hp, Wp), encoder_states
 
 
-class FANEncoderLayer(FANPreTrainedModel):
+class FANEncoderLayer(nn.Module):
     def __init__(self, config: FANConfig, index=0):
-        super().__init__(config)
+        super().__init__()
+        self.config = config
 
         img_size = to_2tuple(config.img_size)
         assert (img_size[0] % config.patch_size == 0) and (
@@ -1406,9 +1408,10 @@ class FANEncoderLayer(FANPreTrainedModel):
         return hidden_state, Hp, Wp, attn
 
 
-class FANEncoder(FANPreTrainedModel):
+class FANEncoder(nn.Module):
     def __init__(self, config: FANConfig):
-        super().__init__(config)
+        super().__init__()
+        self.config = config
         self.gradient_checkpointing = False
         img_size = to_2tuple(config.img_size)
         assert (img_size[0] % config.patch_size == 0) and (
@@ -1734,9 +1737,10 @@ class SegformerMLP(nn.Module):
         return hidden_states
 
 
-class FANDecodeHead(FANPreTrainedModel):
+class FANDecodeHead(nn.Module):
     def __init__(self, config: FANConfig):
-        super().__init__(config)
+        super().__init__()
+        self.config = config
         # linear layers which will unify the channel dimension of each of the encoder blocks to the same config.decoder_hidden_size
         mlps = []
         for in_channels in config.segmentation_in_channels:
