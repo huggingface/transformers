@@ -187,7 +187,7 @@ class TFAttention(tf.keras.layers.Layer):
             # past_key, past_value = tf.unstack(layer_past, axis=0)
             past_key = layer_past[0]
             past_value = layer_past[1]
-            
+
             key = tf.concat([past_key, key], axis=-2)
             value = tf.concat([past_value, value], axis=-2)
 

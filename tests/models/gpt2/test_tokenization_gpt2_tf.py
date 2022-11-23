@@ -26,21 +26,20 @@ if is_tf_available():
             config = AutoConfig.from_pretrained(TINY_MODEL_CHECKPOINT)
             self.model = TFGPT2LMHeadModel.from_config(config)
 
-        @tf.function(input_signature=(tf.TensorSpec((None,), tf.string, name="text"), ))
+        @tf.function(input_signature=(tf.TensorSpec((None,), tf.string, name="text"),))
         def serving(self, text):
-            
+
             tokenized = self.tokenizer(text)
             input_ids_dense = tokenized["input_ids"].to_tensor()
-            
+
             input_mask = tf.cast(input_ids_dense > 0, tf.int32)
             # input_mask = tf.reshape(input_mask, [-1, MAX_SEQ_LEN])
 
-            
             outputs = self.model.generate(
                 input_ids=input_ids_dense,
                 attention_mask=input_mask,
             )
-            
+
             return outputs
 
 
