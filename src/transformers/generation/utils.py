@@ -846,9 +846,8 @@ class GenerationMixin:
                 else begin_index + 1
             )
             if generation_config.forced_decoder_ids is not None:
-                begin_index += generation_config.forced_decoder_ids[-1][
-                    0
-                ]  # generation starts after the last token that is forced
+                # generation starts after the last token that is forced
+                begin_index += generation_config.forced_decoder_ids[-1][0]
             processors.append(
                 SuppressTokensAtBeginLogitsProcessor(generation_config.begin_suppress_tokens, begin_index)
             )
@@ -994,36 +993,17 @@ class GenerationMixin:
     ) -> Union[GenerateOutput, torch.LongTensor]:
         r"""
 
-        Generates sequences of token ids for models with a language modeling head. The method supports the following
-        generation methods for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
-
-            - *greedy decoding* by calling [`~generation.GenerationMixin.greedy_search`] if `num_beams=1` and
-              `do_sample=False`.
-            - *contrastive search* by calling [`~generation.GenerationMixin.contrastive_search`] if `penalty_alpha>0.`
-              and `top_k>1`
-            - *multinomial sampling* by calling [`~generation.GenerationMixin.sample`] if `num_beams=1` and
-              `do_sample=True`.
-            - *beam-search decoding* by calling [`~generation.GenerationMixin.beam_search`] if `num_beams>1` and
-              `do_sample=False`.
-            - *beam-search multinomial sampling* by calling [`~generation.GenerationMixin.beam_sample`] if
-              `num_beams>1` and `do_sample=True`.
-            - *diverse beam-search decoding* by calling [`~generation.GenerationMixin.group_beam_search`], if
-              `num_beams>1` and `num_beam_groups>1`.
-            - *constrained beam-search decoding* by calling [`~generation.GenerationMixin.constrained_beam_search`], if
-              `constraints!=None` or `force_words_ids!=None`.
+        Generates sequences of token ids for models with a language modeling head.
 
         <Tip warning={true}>
 
-        Apart from `inputs` and the other keyword arguments, all generation-controlling parameters will default to the
-        value of the corresponding attribute in `generation_config`. You can override these defaults by passing the
-        corresponding parameters to generate, e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
+        Apart from `inputs` and the other keyword arguments documented here, all generation-controlling parameters will
+        default to the value of the corresponding attribute in `generation_config`. You can override these defaults by
+        passing the corresponding parameters to generate, e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
 
         You can view the full list of attributes in [`~generation.GenerationConfig`].
 
         </Tip>
-
-        Most of these parameters are explained in more detail in [this blog
-        post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
             inputs (`torch.Tensor` of varying shape depending on the modality, *optional*):
@@ -1034,10 +1014,10 @@ class GenerationMixin:
             generation_config (`~generation.GenerationConfig`, *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
                 passed to generate matching the attributes of `generation_config` will override them. If
-                `generation_config` is not provided, a default will be used, with the following loading priority: 1)
-                from the `generation_config.json` model file, if it exists; 2) from the `self.config` model attribute,
-                containing a model configuration. Please note that unspecified parameters will inherit
-                [`~generation.GenerationConfig`]'s default values.
+                `generation_config` is not provided, the default will be used, which has the following loading
+                priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
+                configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
+                default values, whose documentation should be checked to parameterize generation.
             logits_processor (`LogitsProcessorList`, *optional*):
                 Custom logits processors that complement the default logits processors built from arguments and
                 generation config. If a logit processor is passed that is already created with the arguments or a
@@ -1079,66 +1059,10 @@ class GenerationMixin:
                     - [`~generation.SampleEncoderDecoderOutput`],
                     - [`~generation.BeamSearchEncoderDecoderOutput`],
                     - [`~generation.BeamSampleEncoderDecoderOutput`]
-
-        Examples:
-
-        Greedy Decoding:
-
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
-
-        >>> prompt = "Today I believe we can finally"
-        >>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
-
-        >>> # generate up to 30 tokens
-        >>> outputs = model.generate(input_ids, do_sample=False, max_length=30)
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Today I believe we can finally get to the point where we can make a difference in the lives of the people of the United States of America.\n']
-        ```
-
-        Multinomial Sampling:
-
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM
-        >>> import torch
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
-
-        >>> prompt = "Today I believe we can finally"
-        >>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
-
-        >>> # sample up to 30 tokens
-        >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
-        >>> outputs = model.generate(input_ids, do_sample=True, max_length=30)
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Today I believe we can finally get rid of discrimination," said Rep. Mark Pocan (D-Wis.).\n\n"Just look at the']
-        ```
-
-        Beam-search decoding:
-
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
-        >>> model = AutoModelForSeq2SeqLM.from_pretrained("Helsinki-NLP/opus-mt-en-de")
-
-        >>> sentence = "Paris is one of the densest populated areas in Europe."
-        >>> input_ids = tokenizer(sentence, return_tensors="pt").input_ids
-
-        >>> outputs = model.generate(input_ids, num_beams=5)
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Paris ist eines der dichtesten besiedelten Gebiete Europas.']
         ```"""
         # 1. Handle `generation_config` and kwargs that might update it
         if generation_config is None:
-            try:
-                generation_config = GenerationConfig.from_pretrained(self.config.name_or_path)
-            except EnvironmentError:
-                generation_config = GenerationConfig.from_model_config(self.config)
+            generation_config = self.generation_config
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
 
