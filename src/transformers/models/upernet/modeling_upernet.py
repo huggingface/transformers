@@ -27,7 +27,7 @@ from .configuration_upernet import UperNetConfig
 
 
 UPERNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/convnext-tiny-upernet",
+    "facebook/upernet-convnext-tiny",
     # See all UperNet models at https://huggingface.co/models?filter=upernet
 ]
 
@@ -272,16 +272,13 @@ class UperNetPreTrainedModel(PreTrainedModel):
     """
 
     config_class = UperNetConfig
+    main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        # if isinstance(module, nn.Linear):
-        #     # Slightly different from the TF version which uses truncated_normal for initialization
-        #     # cf https://github.com/pytorch/pytorch/pull/5617
-        #     module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        #     if module.bias is not None:
-        #         module.bias.data.zero_()
+        if isinstance(module, AutoBackbone):
+            module._init_weights
 
     # TODO look into weights initialization and gradient checkpointing
     # def _set_gradient_checkpointing(self, module, value=False):
