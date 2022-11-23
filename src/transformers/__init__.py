@@ -173,8 +173,8 @@ _import_structure = {
     "models.chinese_clip": [
         "CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ChineseCLIPConfig",
-        "ChineseCLIPVisionConfig",
         "ChineseCLIPProcessor",
+        "ChineseCLIPVisionConfig",
     ],
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
