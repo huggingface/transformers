@@ -380,7 +380,7 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, CLIPEncoder) or isinstance(module, BertEncoder):
+        if isinstance(module, ChineseCLIPEncoder) or isinstance(module, BertEncoder):
             module.gradient_checkpointing = value
 
 
