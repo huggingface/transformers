@@ -997,11 +997,12 @@ class GenerationMixin:
 
         <Tip warning={true}>
 
-        Apart from `inputs` and the other keyword arguments documented here, all generation-controlling parameters will
-        default to the value of the corresponding attribute in `generation_config`. You can override these defaults by
-        passing the corresponding parameters to generate, e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
+        Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
+        model's default generation configuration. You can override any `generation_config` by passing the corresponding
+        parameters to generate, e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
 
-        You can view the full list of attributes in [`~generation.GenerationConfig`].
+        For a complete overview of generate, check the [following
+        guide](https://huggingface.co/docs/transformers/en/main_classes/text_generation).
 
         </Tip>
 
@@ -1059,6 +1060,71 @@ class GenerationMixin:
                     - [`~generation.SampleEncoderDecoderOutput`],
                     - [`~generation.BeamSearchEncoderDecoderOutput`],
                     - [`~generation.BeamSampleEncoderDecoderOutput`]
+
+        Examples:
+
+        Greedy decoding, using the default generation configuration and ad hoc modifications:
+
+        ```python
+        >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+
+        >>> prompt = "Today I believe we can finally"
+        >>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+
+        >>> # Generate up to 30 tokens
+        >>> outputs = model.generate(input_ids, do_sample=False, max_length=30)
+        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        ['Today I believe we can finally get to the point where we can make a difference in the lives of the people of the United States of America.\n']
+        ```
+
+        Multinomial sampling, modifying an existing generation configuration:
+
+        ```python
+        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig
+        >>> import torch
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+
+        >>> prompt = "Today I believe we can finally"
+        >>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+
+        >>> # Sample up to 30 tokens
+        >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
+        >>> generation_config = GenerationConfig.from_pretrained("gpt2")
+        >>> generation_config.max_length = 30
+        >>> generation_config.do_sample = True
+        >>> outputs = model.generate(input_ids, generation_config=generation_config)
+        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        ['Today I believe we can finally get rid of discrimination," said Rep. Mark Pocan (D-Wis.).\n\n"Just look at the']
+        ```
+
+        Beam-search decoding, using a freshly initialized generation configuration:
+
+        ```python
+        >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
+        >>> model = AutoModelForSeq2SeqLM.from_pretrained("Helsinki-NLP/opus-mt-en-de")
+
+        >>> sentence = "Paris is one of the densest populated areas in Europe."
+        >>> input_ids = tokenizer(sentence, return_tensors="pt").input_ids
+
+        >>> generation_config = GenerationConfig(
+        ...     max_length=64,
+        ...     num_beams=5,
+        ...     bos_token_id=0,
+        ...     eos_token_id=0,
+        ...     decoder_start_token_id=58100,
+        ...     pad_token_id=58100,
+        ...     bad_words_ids=[[58100]],
+        ... )
+        >>> outputs = model.generate(input_ids, generation_config=generation_config)
+        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        ['Paris ist eines der dichtesten besiedelten Gebiete Europas.']
         ```"""
         # 1. Handle `generation_config` and kwargs that might update it
         if generation_config is None:

@@ -3,7 +3,6 @@ docs/source/es/quicktour.mdx
 docs/source/en/pipeline_tutorial.mdx
 docs/source/en/autoclass_tutorial.mdx
 docs/source/en/task_summary.mdx
-docs/source/en/main_classes/text_generation.mdx
 docs/source/en/model_doc/markuplm.mdx
 docs/source/en/model_doc/speech_to_text.mdx
 docs/source/en/model_doc/switch_transformers.mdx
