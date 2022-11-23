@@ -16,9 +16,8 @@
 
 
 import math
-import os
 import random
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -43,6 +42,7 @@ BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all BioGPT models at https://huggingface.co/models?filter=biogpt
 ]
 
+
 def triu_onnx(x, diagonal=0):
     l = x.shape[0]
     arange = torch.arange(l, device=x.device)
@@ -53,9 +53,17 @@ def triu_onnx(x, diagonal=0):
     mask = mask >= arange
     return x.masked_fill(mask == 0, 0)
 
+
 def fill_with_neg_inf(t):
     """FP16-compatible function that fills a input_ids with -inf."""
     return t.float().fill_(torch.finfo(t.dtype).min).type_as(t)
+
+
+def _reorder_buffer(attn_cache, new_order):
+    for k, input_buffer_k in attn_cache.items():
+        if input_buffer_k is not None:
+            attn_cache[k] = input_buffer_k.index_select(0, new_order)
+    return attn_cache
 
 
 class BioGptLearnedPositionalEmbedding(nn.Embedding):
@@ -482,7 +490,7 @@ class BioGptModel(BioGptPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = past_key_values[0]["self"]["prev_key"].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids) * self.embed_scale
@@ -493,9 +501,9 @@ class BioGptModel(BioGptPreTrainedModel):
 
         hidden_states = inputs_embeds + positions
 
-        causal_mask = triu_onnx(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len, dtype=self.embeddings.weight.dtype)), 1).to(
-        device=input_ids.device
-    )
+        causal_mask = triu_onnx(
+            fill_with_neg_inf(torch.zeros(tgt_len, tgt_len, dtype=self.embeddings.weight.dtype)), 1
+        ).to(device=input_ids.device)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -557,17 +565,6 @@ class BioGptModel(BioGptPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attns,
-        )
-
-        if not return_dict:
-            return (sequence_output,) + encoder_outputs[1:]
-
-        return BaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=sequence_output,
-            past_key_values=encoder_outputs.past_key_values,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions,
         )
 
 
@@ -688,7 +685,11 @@ class BioGptLMHeadModel(BioGptPreTrainedModel):
         }
 
     def _reorder_cache(self, past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
-        return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past
-        )
+        reordered_past = []
+        for layer_past in past:
+            # get the correct batch idx from decoder layer's batch dim for cross and self-attn
+            layer_past_new = {
+                attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
+            }
+            reordered_past.append(layer_past_new)
+        return reordered_past
