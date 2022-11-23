@@ -5471,6 +5471,7 @@ if TYPE_CHECKING:
             TFGPT2MainLayer,
             TFGPT2Model,
             TFGPT2PreTrainedModel,
+            TFGPT2Tokenizer,
         )
         from .models.gptj import (
             TFGPTJForCausalLM,

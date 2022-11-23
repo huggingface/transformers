@@ -1350,6 +1350,13 @@ class TFGPT2PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFGPT2Tokenizer(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFGPTJForCausalLM(metaclass=DummyObject):
     _backends = ["tf"]
 

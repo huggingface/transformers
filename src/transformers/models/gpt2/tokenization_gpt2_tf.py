@@ -9,7 +9,8 @@ from .tokenization_gpt2 import GPT2Tokenizer
 
 
 class TFGPT2Tokenizer(tf.keras.layers.Layer):
-    """This is an in-graph tokenizer for GPT2. It should be initialized similarly to other tokenizers, using the
+    """
+    This is an in-graph tokenizer for GPT2. It should be initialized similarly to other tokenizers, using the
     `from_pretrained()` method. It can also be initialized with the `from_tokenizer()` method, which imports settings
     from an existing standard tokenizer object.
 
@@ -22,6 +23,7 @@ class TFGPT2Tokenizer(tf.keras.layers.Layer):
         vocab (Dict[str, int]): Vocabulary dict for Byte Pair Tokenizer
         merges (List[str]): Merges list for Byte Pair Tokenizer
     """
+
     def __init__(self, vocab: Dict[str, int], merges: List[str]):
         super().__init__()
         self.tf_tokenizer = BytePairTokenizer(vocab, merges)
@@ -33,8 +35,14 @@ class TFGPT2Tokenizer(tf.keras.layers.Layer):
         Args:
             tokenizer (GPT2Tokenizer)
 
-        Returns:
-            TFGPT2Tokenizer: GPT2Tokenizer as TF layer
+        Examples:
+
+        ```python
+        from transformers import AutoTokenizer, TFGPT2Tokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        tf_tokenizer = TFGPT2Tokenizer.from_tokenizer(tokenizer)
+        ```
         """
         merges = [" ".join(m) for m in tokenizer.bpe_ranks.keys()]
         vocab = tokenizer.get_vocab()
@@ -47,8 +55,13 @@ class TFGPT2Tokenizer(tf.keras.layers.Layer):
         Args:
             pretrained_model_name_or_path (Union[str, os.PathLike]): Path to pretrained model
 
-        Returns:
-            TFGPT2Tokenizer: GPT2Tokenizer as TF layer
+        Examples:
+
+        ```python
+        from transformers import TFGPT2Tokenizer
+
+        tf_tokenizer = TFGPT2Tokenizer.from_pretrained("gpt2")
+        ```
         """
         tokenizer = GPT2Tokenizer.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
         return cls.from_tokenizer(tokenizer)
