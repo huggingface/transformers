@@ -1247,7 +1247,6 @@ class FANPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-# TODO: Update FAN Start Docstring
 FAN_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
@@ -1259,7 +1258,6 @@ FAN_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-# TODO: Create FAN Feature Extractor
 FAN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -1506,9 +1504,6 @@ class FANEncoder(FANPreTrainedModel):
                 tmp = tmp.reshape(batch_size, Hp * Wp, -1).permute(0, 2, 1).contiguous()
                 encoder_states + (tmp,)
             else:
-                # hidden_state_reshaped = (
-                #     current_hidden_state[:, 1:, :].reshape(batch_size, Hp, Wp, -1).permute(0, 3, 1, 2).contiguous()
-                # )
                 encoder_states = encoder_states + (current_hidden_state[:, 1:, :],)
 
         if not return_dict:
