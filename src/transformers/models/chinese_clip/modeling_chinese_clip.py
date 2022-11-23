@@ -108,7 +108,8 @@ class ChineseCLIPOutput(ModelOutput):
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`BertModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`ChineseCLIPVisionModel`].
+            The image embeddings obtained by applying the projection layer to the pooled output of
+            [`ChineseCLIPVisionModel`].
         text_model_output(`BaseModelOutputWithPoolingAndCrossAttentions`):
             The output of the [`BertModel`].
         vision_model_output(`BaseModelOutputWithPoolingAndCrossAttentions`):
@@ -675,12 +676,12 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
-        Returns:
-        Examples:
+        Returns: Examples:
         ```python
         >>> from PIL import Image
         >>> import requests
         >>> from transformers import CLIPProcessor, ChineseCLIPVisionModel
+
         >>> model = ChineseCLIPVisionModel.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
         >>> processor = CLIPProcessor.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
         >>> url = "https://clip-cn-beijing.oss-cn-beijing.aliyuncs.com/pokemon.jpeg"
