@@ -2082,6 +2082,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         )
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
+
+        for k in self.init_kwargs:
+            if hasattr(self, k):
+                tokenizer_config[k] = getattr(self, k)
+
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
         for file_id in self.vocab_files_names.keys():
