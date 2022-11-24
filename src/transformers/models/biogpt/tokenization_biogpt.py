@@ -15,8 +15,6 @@
 """Tokenization classes for BioGPT."""
 import json
 import os
-import re
-import unicodedata
 from typing import List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer
@@ -55,65 +53,12 @@ def get_pairs(word):
     return pairs
 
 
-def replace_unicode_punct(text):
-    """
-    Port of https://github.com/moses-smt/mosesdecoder/blob/master/scripts/tokenizer/replace-unicode-punctuation.perl
-    """
-    text = text.replace("，", ",")
-    text = re.sub(r"。\s*", ". ", text)
-    text = text.replace("、", ",")
-    text = text.replace("”", '"')
-    text = text.replace("“", '"')
-    text = text.replace("∶", ":")
-    text = text.replace("：", ":")
-    text = text.replace("？", "?")
-    text = text.replace("《", '"')
-    text = text.replace("》", '"')
-    text = text.replace("）", ")")
-    text = text.replace("！", "!")
-    text = text.replace("（", "(")
-    text = text.replace("；", ";")
-    text = text.replace("１", "1")
-    text = text.replace("」", '"')
-    text = text.replace("「", '"')
-    text = text.replace("０", "0")
-    text = text.replace("３", "3")
-    text = text.replace("２", "2")
-    text = text.replace("５", "5")
-    text = text.replace("６", "6")
-    text = text.replace("９", "9")
-    text = text.replace("７", "7")
-    text = text.replace("８", "8")
-    text = text.replace("４", "4")
-    text = re.sub(r"．\s*", ". ", text)
-    text = text.replace("～", "~")
-    text = text.replace("’", "'")
-    text = text.replace("…", "...")
-    text = text.replace("━", "-")
-    text = text.replace("〈", "<")
-    text = text.replace("〉", ">")
-    text = text.replace("【", "[")
-    text = text.replace("】", "]")
-    text = text.replace("％", "%")
-    return text
-
-
-def remove_non_printing_char(text):
-    """
-    Port of https://github.com/moses-smt/mosesdecoder/blob/master/scripts/tokenizer/remove-non-printing-char.perl
-    """
-    output = []
-    for char in text:
-        cat = unicodedata.category(char)
-        if cat.startswith("C"):
-            continue
-        output.append(char)
-    return "".join(output)
-
-
 class BioGptTokenizer(PreTrainedTokenizer):
     """
-    Construct a BioGPT tokenizer. Based on byte-level Byte-Pair-Encoding.
+    Construct an FAIRSEQ Transformer tokenizer. Moses tokenization followed by Byte-Pair Encoding.
+
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
         vocab_file (`str`):
@@ -133,22 +78,28 @@ class BioGptTokenizer(PreTrainedTokenizer):
 
             </Tip>
 
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
+            The end of sequence token.
+
+            <Tip>
+
+            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            The token used is the `sep_token`.
+
+            </Tip>
+
         sep_token (`str`, *optional*, defaults to `"</s>"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
             token of a sequence built with special tokens.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        cls_token (`str`, *optional*, defaults to `"</s>"`):
-            The classifier token which is used when doing sequence classification (classification of the whole sequence
-            instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        mask_token (`str`, *optional*, defaults to `"<special1>"`):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["input_ids"]
+    # model_input_names = ["input_ids"]
 
     def __init__(
         self,
@@ -157,22 +108,32 @@ class BioGptTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         bos_token="<s>",
         eos_token="</s>",
+        sep_token="</s>",
         pad_token="<pad>",
         **kwargs
     ):
-        super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, pad_token=pad_token, **kwargs)
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            sep_token=sep_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            **kwargs,
+        )
 
         try:
             import sacremoses
         except ImportError:
             raise ImportError(
-                "You need to install sacremoses to use XLMTokenizer. "
+                "You need to install sacremoses to use BioGptTokenizer. "
                 "See https://pypi.org/project/sacremoses/ for installation."
             )
 
+        self.lang = "en"
         self.sm = sacremoses
-        self.moses_tokenizer = self.sm.MosesTokenizer(lang="en")
-        self.moses_detokenizer = self.sm.MosesDetokenizer(lang="en")
+        # cache of sm.MosesTokenizer instance
+        self.cache_moses_tokenizer = dict()
+        self.cache_moses_detokenizer = dict()
 
         """ Initialisation"""
         with open(vocab_file, encoding="utf-8") as vocab_handle:
@@ -184,23 +145,27 @@ class BioGptTokenizer(PreTrainedTokenizer):
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
 
-    def moses_tokenize(self, text):
-        return self.moses_tokenizer.tokenize(text, aggressive_dash_splits=True, return_str=False, escape=True)
-
-    def moses_pipeline(self, text):
-        text = replace_unicode_punct(text)
-        text = self.moses_punct_norm(text)
-        text = remove_non_printing_char(text)
-        return text
-
     @property
     def vocab_size(self):
         """Returns vocab size"""
         return len(self.encoder)
 
     def get_vocab(self):
-        """Returns vocab as a dict"""
-        return self.encoder
+        return dict(self.encoder, **self.added_tokens_encoder)
+
+    def moses_tokenize(self, text, lang):
+        if lang not in self.cache_moses_tokenizer:
+            moses_tokenizer = self.sm.MosesTokenizer(lang=lang)
+            self.cache_moses_tokenizer[lang] = moses_tokenizer
+        return self.cache_moses_tokenizer[lang].tokenize(
+            text, aggressive_dash_splits=True, return_str=False, escape=True
+        )
+
+    def moses_detokenize(self, tokens, lang):
+        if lang not in self.cache_moses_detokenizer:
+            moses_detokenizer = self.sm.MosesDetokenizer(lang=lang)
+            self.cache_moses_detokenizer[lang] = moses_detokenizer
+        return self.cache_moses_detokenizer[lang].detokenize(tokens)
 
     def bpe(self, token):
         word = tuple(token[:-1]) + (token[-1] + "</w>",)
@@ -251,7 +216,7 @@ class BioGptTokenizer(PreTrainedTokenizer):
         if bypass_tokenizer:
             text = text.split()
         else:
-            text = self.moses_tokenize(text)
+            text = self.moses_tokenize(text, self.lang)
 
         split_tokens = []
         for token in text:
@@ -274,7 +239,7 @@ class BioGptTokenizer(PreTrainedTokenizer):
         tokens = [t.replace(" ", "").replace("</w>", " ") for t in tokens]
         tokens = "".join(tokens).split()
         # detokenize
-        text = self.moses_detokenizer.detokenize(tokens)
+        text = self.moses_detokenize(tokens, self.lang)
         return text
 
     def build_inputs_with_special_tokens(
@@ -285,7 +250,7 @@ class BioGptTokenizer(PreTrainedTokenizer):
         adding special tokens. A BioGPT sequence has the following format:
 
         - single sequence: `</s> X `
-        - pair of sequences: `</s> A </s></s> B </s>`
+        - pair of sequences: `</s> A </s> B `
 
         Args:
             token_ids_0 (`List[int]`):
@@ -297,9 +262,69 @@ class BioGptTokenizer(PreTrainedTokenizer):
             `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
-            return [self.eos_token_id] + token_ids_0
-        sep = [self.eos_token_id]
-        return token_ids_0 + sep + token_ids_1 + sep
+            return [self.sep_token_id] + token_ids_0
+        sep = [self.sep_token_id]
+        return sep + token_ids_0 + sep + token_ids_1
+
+    def get_special_tokens_mask(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+    ) -> List[int]:
+        """
+        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
+        special tokens using the tokenizer `prepare_for_model` method.
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not the token list is already formatted with special tokens for the model.
+
+        Returns:
+            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+        """
+        if already_has_special_tokens:
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+            )
+        # no bos used in fairseq
+        if token_ids_1 is not None:
+            return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
+        return [1] + ([0] * len(token_ids_0))
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A FAIRSEQ
+        Transformer sequence pair mask has the following format:
+
+        ```
+        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+        | first sequence    | second sequence |
+        ```
+
+        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
+
+        Creates a mask from the two sequences passed to be used in a sequence-pair classification task. An
+        FAIRSEQ_TRANSFORMER sequence pair mask has the following format:
+        """
+        sep = [self.sep_token_id]
+
+        # no bos used in fairseq
+        if token_ids_1 is None:
+            return len(token_ids_0 + sep) * [0]
+        return len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
