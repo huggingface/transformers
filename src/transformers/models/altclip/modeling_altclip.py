@@ -30,13 +30,12 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
+    BaseModelOutputWithPoolingAndprojection
 )
 from ...modeling_utils import PreTrainedModel, SequenceSummary
 from ...pytorch_utils import (
@@ -131,13 +130,13 @@ class AltCLIPTextModel(RobertaPreTrainedModel):
         pooler_output = self.transformation(pooler_output)
         projection_state = self.transformation(sequence_output)
         
-        return {
-            'pooler_output':pooler_output,
-            'last_hidden_state':outputs.last_hidden_state,
-            'hidden_states':outputs.hidden_states,
-            'attentions':outputs.attentions,
-            'projection_state':projection_state,
-        }
+        return BaseModelOutputWithPoolingAndprojection(
+            pooler_output=pooler_output,
+            last_hidden_state=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            projection_state=projection_state,
+        )
 
 @dataclass
 class AltCLIPOutput(CLIPOutput):
@@ -164,7 +163,7 @@ class AltCLIPModel(CLIPPreTrainedModel):
         vision_config = config.vision_config
 
         self.projection_dim = config.projection_dim
-        self.text_embed_dim = text_config.project_dim
+        self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
         self.text_model = AltCLIPTextModel(text_config)
@@ -215,7 +214,7 @@ class AltCLIPModel(CLIPPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        pooled_output = text_outputs['pooler_output']
+        pooled_output = text_outputs.pooler_output
         text_features = self.text_projection(pooled_output)
 
         return text_features
@@ -323,7 +322,7 @@ class AltCLIPModel(CLIPPreTrainedModel):
         image_embeds = self.visual_projection(image_embeds)
 
         # text_embeds = self.text_model.get_text_embeds(text_outputs['pooler_output'],clip_outputs[1])
-        text_embeds = text_outputs['pooler_output']
+        text_embeds = text_outputs.pooler_output
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features

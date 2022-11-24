@@ -105,14 +105,27 @@ class AltCLIPConfig(CLIPConfig):
         projection_dim=512, 
         logit_scale_init_value=2.6592, 
         **kwargs):
-        super().__init__(text_config_dict=text_config_dict, vision_config_dict=vision_config_dict, projection_dim=projection_dim, logit_scale_init_value=logit_scale_init_value, **kwargs)
+        super().__init__(vision_config_dict=vision_config_dict, projection_dim=projection_dim, logit_scale_init_value=logit_scale_init_value, **kwargs)
         if text_config_dict is None:
             text_config = {}
         else:
             text_config = text_config_dict
         # when reload the config from local, we need name to select which class should be instanced.
-        self.text_config = AltCLIPTextConfig(text_config)
+        self.text_config = text_config_dict
         self.text_model_name = text_model_name
         self.vision_model_name = vision_model_name
+    
+    # @classmethod
+    # def from_text_vision_configs(cls, text_config: AltCLIPTextConfig, vision_config, **kwargs):
+    #     r"""
+    #     Instantiate a [`CLIPConfig`] (or a derived class) from clip text model configuration and clip vision model
+    #     configuration.
+
+    #     Returns:
+    #         [`CLIPConfig`]: An instance of a configuration object
+    #     """
+    #     print(text_config)
+        
+    #     return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
     
