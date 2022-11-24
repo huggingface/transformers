@@ -1155,6 +1155,19 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         return cls(config, **kwargs)
 
+    def eager_serving(self, inputs):
+        """
+        Method used for serving the model. Intended not to be compiled with a tf.function decorator
+        so that we can use it to generate multiple signatures later.
+
+        Args:
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
     @tf.function(
         input_signature=[
             {
@@ -2253,7 +2266,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if saved_model:
             if signatures is None:
-                signatures = self.serving
+                if any(spec.dtype == tf.int64 for spec in self.serving.input_signature[0].values()):
+                    int32_spec = {key: tf.TensorSpec(shape=spec.shape, dtype=tf.int32 if spec.dtype == tf.int64 else spec.dtype, name=spec.name) for key, spec in self.serving.input_signature[0].items()}
+                    int32_serving = tf.function(self.eager_serving, input_signature=[int32_spec])
+                    signatures = {"serving_default": self.serving, "int32_serving": int32_serving}
+                else:
+                    signatures = self.serving
             saved_model_dir = os.path.join(save_directory, "saved_model", str(version))
             self.save(saved_model_dir, include_optimizer=False, signatures=signatures)
             logger.info(f"Saved model created in {saved_model_dir}")
