@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The OpenAI Team Authors and HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2022 The AI Sweden Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,20 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ gpt-sw3 configuration"""
-from collections import OrderedDict
-from typing import Any, List, Mapping, Optional
-
-from transformers import PreTrainedTokenizer, TensorType, is_torch_available
-
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfigWithPast, PatchingSpec
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "": "https://huggingface.co//resolve/main/config.json",
+    "": "https://huggingface.co//resolve/main/config.json", # TODO: ADD SOMETHING HERE!
 }
 
 
@@ -35,19 +28,19 @@ GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class GptSw3Config(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`GptSw3Model`] or a [`TFGptSw3Model`]. It is used to
-    instantiate a GPT-2 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the GPT-2
-    [gpt_sw3](https://huggingface.co/gpt_sw3) architecture.
+    instantiate a GPT-SW3 model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the GPT-SW3.
+    [gpt_sw3](https://huggingface.co/gpt_sw3) architecture. # TODO: add correct link.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50257):
-            Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
+        vocab_size (`int`, *optional*, defaults to 64000):
+            Vocabulary size of the GPT-SW3 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GptSw3Model`] or [`TFGptSw3Model`].
-        n_positions (`int`, *optional*, defaults to 1024):
+        n_positions (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         n_embd (`int`, *optional*, defaults to 768):
@@ -72,15 +65,12 @@ class GptSw3Config(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
             The dropout ratio to be used after the projection and activation.
-        scale_attn_weights (`bool`, *optional*, defaults to `True`):
-            Scale attention weights by dividing by sqrt(hidden_size)..
+        apply_query_key_layer_scaling (`bool`, *optional*, defaults to `True`):
+            Whether to scale the query and key by 1/sqrt(head_size).
+        normalize_attention_scores (`bool`, *optional*, defaults to `True`):
+            Whether to normalize attention scores prior to softmax.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        scale_attn_by_inverse_layer_idx (`bool`, *optional*, defaults to `False`):
-            Whether to additionally scale attention weights by `1 / layer_idx + 1`.
-        reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
-            Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
-            dot-product/softmax to float() when training with mixed precision.
 
     Example:
 
@@ -120,12 +110,11 @@ class GptSw3Config(PretrainedConfig):
         attn_pdrop=0.1,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
-        scale_attn_weights=True,
         use_cache=True,
         bos_token_id=3,
         eos_token_id=3,
-        scale_attn_by_inverse_layer_idx=True,
-        reorder_and_upcast_attn=False,
+        normalize_attention_scores=True,
+        apply_query_key_layer_scaling=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -140,93 +129,11 @@ class GptSw3Config(PretrainedConfig):
         self.attn_pdrop = attn_pdrop
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
-        self.scale_attn_weights = scale_attn_weights
         self.use_cache = use_cache
-        self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
-        self.reorder_and_upcast_attn = reorder_and_upcast_attn
+        self.normalize_attention_scores = normalize_attention_scores
+        self.apply_query_key_layer_scaling = apply_query_key_layer_scaling
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
-
-
-class GptSw3OnnxConfig(OnnxConfigWithPast):
-    def __init__(
-        self,
-        config: PretrainedConfig,
-        task: str = "default",
-        patching_specs: List[PatchingSpec] = None,
-        use_past: bool = False,
-    ):
-        super().__init__(config, task=task, patching_specs=patching_specs, use_past=use_past)
-        if not getattr(self._config, "pad_token_id", None):
-            # TODO: how to do that better?
-            self._config.pad_token_id = 0
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_inputs = OrderedDict({"input_ids": {0: "batch", 1: "sequence"}})
-        if self.use_past:
-            self.fill_with_past_key_values_(common_inputs, direction="inputs")
-            common_inputs["attention_mask"] = {0: "batch", 1: "past_sequence + sequence"}
-        else:
-            common_inputs["attention_mask"] = {0: "batch", 1: "sequence"}
-
-        return common_inputs
-
-    @property
-    def num_layers(self) -> int:
-        return self._config.n_layer
-
-    @property
-    def num_attention_heads(self) -> int:
-        return self._config.n_head
-
-    def generate_dummy_inputs(
-        self,
-        tokenizer: PreTrainedTokenizer,
-        batch_size: int = -1,
-        seq_length: int = -1,
-        is_pair: bool = False,
-        framework: Optional[TensorType] = None,
-    ) -> Mapping[str, Any]:
-        common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
-        )
-
-        # We need to order the input in the way they appears in the forward()
-        ordered_inputs = OrderedDict({"input_ids": common_inputs["input_ids"]})
-
-        # Need to add the past_keys
-        if self.use_past:
-            if not is_torch_available():
-                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
-            else:
-                import torch
-
-                batch, seqlen = common_inputs["input_ids"].shape
-                # Not using the same length for past_key_values
-                past_key_values_length = seqlen + 2
-                past_shape = (
-                    batch,
-                    self.num_attention_heads,
-                    past_key_values_length,
-                    self._config.hidden_size // self.num_attention_heads,
-                )
-                ordered_inputs["past_key_values"] = [
-                    (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(self.num_layers)
-                ]
-
-        ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
-        if self.use_past:
-            mask_dtype = ordered_inputs["attention_mask"].dtype
-            ordered_inputs["attention_mask"] = torch.cat(
-                [ordered_inputs["attention_mask"], torch.ones(batch, past_key_values_length, dtype=mask_dtype)], dim=1
-            )
-
-        return ordered_inputs
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 13
