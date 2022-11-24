@@ -25,21 +25,15 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from packaging import version
 
-from requests import HTTPError
-
 from . import __version__
 from .dynamic_module_utils import custom_object_save
 from .utils import (
     CONFIG_NAME,
-    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
-    EntryNotFoundError,
     PushToHubMixin,
-    RepositoryNotFoundError,
-    RevisionNotFoundError,
-    cached_path,
+    cached_file,
     copy_func,
-    hf_bucket_url,
-    is_offline_mode,
+    download_url,
+    extract_commit_hash,
     is_remote_url,
     is_torch_available,
     logging,
@@ -154,7 +148,10 @@ class PretrainedConfig(PushToHubMixin):
             Parameter for repetition penalty that will be used by default in the `generate` method of the model. 1.0
             means no penalty.
         length_penalty (`float`, *optional*, defaults to 1):
-            Exponential penalty to the length that will be used by default in the `generate` method of the model.
+            Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent to
+            the sequence length, which in turn is used to divide the score of the sequence. Since the score is the log
+            likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences, while
+            `length_penalty` < 0.0 encourages shorter sequences.
         no_repeat_ngram_size (`int`, *optional*, defaults to 0) -- Value that will be used by default in the
             `generate` method of the model for `no_repeat_ngram_size`. If set to int > 0, all ngrams of that size can
             only occur once.
@@ -302,6 +299,8 @@ class PretrainedConfig(PushToHubMixin):
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
         self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
         self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
+        self.suppress_tokens = kwargs.pop("suppress_tokens", None)
+        self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
@@ -359,6 +358,8 @@ class PretrainedConfig(PushToHubMixin):
 
         # Name or path to the pretrained checkpoint
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
+        # Config hash
+        self._commit_hash = kwargs.pop("_commit_hash", None)
 
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
@@ -477,13 +478,20 @@ class PretrainedConfig(PushToHubMixin):
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-            use_auth_token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `transformers-cli login` (stored in `~/.huggingface`).
+            use_auth_token (`str` or `bool`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
+                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
+
+                <Tip>
+
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+
+                </Tip>
+
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
                 If `False`, then this function returns just the final configuration object.
 
@@ -497,12 +505,6 @@ class PretrainedConfig(PushToHubMixin):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
                 by the `return_unused_kwargs` keyword parameter.
-
-        <Tip>
-
-        Passing `use_auth_token=True` is required when you want to use a private model.
-
-        </Tip>
 
         Returns:
             [`PretrainedConfig`]: The configuration object instantiated from this pretrained model.
@@ -555,6 +557,8 @@ class PretrainedConfig(PushToHubMixin):
         original_kwargs = copy.deepcopy(kwargs)
         # Get config dict associated with the base config file
         config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
+        if "_commit_hash" in config_dict:
+            original_kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
         # That config file may point us toward another config file to use.
         if "configuration_files" in config_dict:
@@ -580,6 +584,7 @@ class PretrainedConfig(PushToHubMixin):
         subfolder = kwargs.pop("subfolder", "")
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
+        commit_hash = kwargs.pop("_commit_hash", None)
 
         if trust_remote_code is True:
             logger.warning(
@@ -591,90 +596,62 @@ class PretrainedConfig(PushToHubMixin):
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
 
-        if is_offline_mode() and not local_files_only:
-            logger.info("Offline mode: forcing local_files_only=True")
-            local_files_only = True
-
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-        if os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)) or is_remote_url(
-            pretrained_model_name_or_path
-        ):
-            config_file = pretrained_model_name_or_path
+
+        is_local = os.path.isdir(pretrained_model_name_or_path)
+        if os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)):
+            # Special case when pretrained_model_name_or_path is a local file
+            resolved_config_file = pretrained_model_name_or_path
+            is_local = True
+        elif is_remote_url(pretrained_model_name_or_path):
+            configuration_file = pretrained_model_name_or_path
+            resolved_config_file = download_url(pretrained_model_name_or_path)
         else:
             configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME)
 
-            if os.path.isdir(os.path.join(pretrained_model_name_or_path, subfolder)):
-                config_file = os.path.join(pretrained_model_name_or_path, subfolder, configuration_file)
-            else:
-                config_file = hf_bucket_url(
+            try:
+                # Load from local folder or from cache or download from model Hub and cache
+                resolved_config_file = cached_file(
                     pretrained_model_name_or_path,
-                    filename=configuration_file,
+                    configuration_file,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
+                    use_auth_token=use_auth_token,
+                    user_agent=user_agent,
                     revision=revision,
-                    subfolder=subfolder if len(subfolder) > 0 else None,
-                    mirror=None,
+                    subfolder=subfolder,
+                    _commit_hash=commit_hash,
                 )
-
-        try:
-            # Load from URL or cache if already cached
-            resolved_config_file = cached_path(
-                config_file,
-                cache_dir=cache_dir,
-                force_download=force_download,
-                proxies=proxies,
-                resume_download=resume_download,
-                local_files_only=local_files_only,
-                use_auth_token=use_auth_token,
-                user_agent=user_agent,
-            )
-
-        except RepositoryNotFoundError:
-            raise EnvironmentError(
-                f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier listed on "
-                "'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token having "
-                "permission to this repo with `use_auth_token` or log in with `huggingface-cli login` and pass "
-                "`use_auth_token=True`."
-            )
-        except RevisionNotFoundError:
-            raise EnvironmentError(
-                f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for this "
-                f"model name. Check the model page at 'https://huggingface.co/{pretrained_model_name_or_path}' for "
-                "available revisions."
-            )
-        except EntryNotFoundError:
-            raise EnvironmentError(
-                f"{pretrained_model_name_or_path} does not appear to have a file named {configuration_file}."
-            )
-        except HTTPError as err:
-            raise EnvironmentError(
-                f"There was a specific connection error when trying to load {pretrained_model_name_or_path}:\n{err}"
-            )
-        except ValueError:
-            raise EnvironmentError(
-                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in"
-                f" the cached files and it looks like {pretrained_model_name_or_path} is not the path to a directory"
-                f" containing a {configuration_file} file.\nCheckout your internet connection or see how to run the"
-                " library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."
-            )
-        except EnvironmentError:
-            raise EnvironmentError(
-                f"Can't load config for '{pretrained_model_name_or_path}'. If you were trying to load it from "
-                "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
-                f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
-                f"containing a {configuration_file} file"
-            )
+                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
+            except EnvironmentError:
+                # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
+                # the original exception.
+                raise
+            except Exception:
+                # For any other exception, we throw a generic error.
+                raise EnvironmentError(
+                    f"Can't load the configuration of '{pretrained_model_name_or_path}'. If you were trying to load it"
+                    " from 'https://huggingface.co/models', make sure you don't have a local directory with the same"
+                    f" name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory"
+                    f" containing a {configuration_file} file"
+                )
 
         try:
             # Load config dict
             config_dict = cls._dict_from_json_file(resolved_config_file)
+            config_dict["_commit_hash"] = commit_hash
         except (json.JSONDecodeError, UnicodeDecodeError):
             raise EnvironmentError(
                 f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file."
             )
 
-        if resolved_config_file == config_file:
-            logger.info(f"loading configuration file {config_file}")
+        if is_local:
+            logger.info(f"loading configuration file {resolved_config_file}")
         else:
-            logger.info(f"loading configuration file {config_file} from cache at {resolved_config_file}")
+            logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
 
         return config_dict, kwargs
 
@@ -698,6 +675,9 @@ class PretrainedConfig(PushToHubMixin):
         # We remove them so they don't appear in `return_unused_kwargs`.
         kwargs.pop("_from_auto", None)
         kwargs.pop("_from_pipeline", None)
+        # The commit hash might have been updated in the `config_dict`, we don't want the kwargs to erase that update.
+        if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
+            kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
         config = cls(**config_dict)
 
@@ -801,6 +781,8 @@ class PretrainedConfig(PushToHubMixin):
             output["model_type"] = self.__class__.model_type
         if "_auto_class" in output:
             del output["_auto_class"]
+        if "_commit_hash" in output:
+            del output["_commit_hash"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__

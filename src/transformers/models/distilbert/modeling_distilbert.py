@@ -39,12 +39,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import (
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    is_torch_greater_than_1_6,
-    prune_linear_layer,
-)
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -106,10 +101,9 @@ class Embeddings(nn.Module):
 
         self.LayerNorm = nn.LayerNorm(config.dim, eps=1e-12)
         self.dropout = nn.Dropout(config.dropout)
-        if is_torch_greater_than_1_6:
-            self.register_buffer(
-                "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-            )
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
         """
@@ -585,6 +579,8 @@ class DistilBertModel(DistilBertPreTrainedModel):
     DISTILBERT_START_DOCSTRING,
 )
 class DistilBertForMaskedLM(DistilBertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["vocab_projector.weight"]
+
     def __init__(self, config: PretrainedConfig):
         super().__init__(config)
 

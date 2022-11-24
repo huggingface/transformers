@@ -24,29 +24,25 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 
-from requests import HTTPError
-
 from .dynamic_module_utils import custom_object_save
 from .utils import (
     FEATURE_EXTRACTOR_NAME,
-    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
-    EntryNotFoundError,
     PushToHubMixin,
-    RepositoryNotFoundError,
-    RevisionNotFoundError,
     TensorType,
-    cached_path,
+    cached_file,
     copy_func,
-    hf_bucket_url,
+    download_url,
     is_flax_available,
+    is_jax_tensor,
+    is_numpy_array,
     is_offline_mode,
     is_remote_url,
     is_tf_available,
     is_torch_available,
+    is_torch_device,
     logging,
     torch_required,
 )
-from .utils.generic import _is_jax, _is_numpy, _is_torch_device
 
 
 if TYPE_CHECKING:
@@ -156,10 +152,10 @@ class BatchFeature(UserDict):
             import jax.numpy as jnp  # noqa: F811
 
             as_tensor = jnp.array
-            is_tensor = _is_jax
+            is_tensor = is_jax_tensor
         else:
             as_tensor = np.asarray
-            is_tensor = _is_numpy
+            is_tensor = is_numpy_array
 
         # Do the tensor conversion in batch
         for key, value in self.items():
@@ -194,7 +190,7 @@ class BatchFeature(UserDict):
         # This check catches things like APEX blindly calling "to" on all inputs to a module
         # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
         # into a HalfTensor
-        if isinstance(device, str) or _is_torch_device(device) or isinstance(device, int):
+        if isinstance(device, str) or is_torch_device(device) or isinstance(device, int):
             self.data = {k: v.to(device=device) for k, v in self.data.items()}
         else:
             logger.warning(f"Attempting to cast a BatchFeature to type {str(device)}. This is not supported.")
@@ -257,13 +253,21 @@ class FeatureExtractionMixin(PushToHubMixin):
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-            use_auth_token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `transformers-cli login` (stored in `~/.huggingface`).
+            use_auth_token (`str` or `bool`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
+                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
+
+
+                <Tip>
+
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+
+                </Tip>
+
             return_unused_kwargs (`bool`, *optional*, defaults to `False`):
                 If `False`, then this function returns just the final feature extractor object. If `True`, then this
                 functions returns a `Tuple(feature_extractor, unused_kwargs)` where *unused_kwargs* is a dictionary
@@ -273,12 +277,6 @@ class FeatureExtractionMixin(PushToHubMixin):
                 The values in kwargs of any keys which are feature extractor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
                 controlled by the `return_unused_kwargs` keyword parameter.
-
-        <Tip>
-
-        Passing `use_auth_token=True` is required when you want to use a private model.
-
-        </Tip>
 
         Returns:
             A feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`].
@@ -388,64 +386,43 @@ class FeatureExtractionMixin(PushToHubMixin):
             local_files_only = True
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
+        is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):
             feature_extractor_file = os.path.join(pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME)
-        elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
+        if os.path.isfile(pretrained_model_name_or_path):
+            resolved_feature_extractor_file = pretrained_model_name_or_path
+            is_local = True
+        elif is_remote_url(pretrained_model_name_or_path):
             feature_extractor_file = pretrained_model_name_or_path
+            resolved_feature_extractor_file = download_url(pretrained_model_name_or_path)
         else:
-            feature_extractor_file = hf_bucket_url(
-                pretrained_model_name_or_path, filename=FEATURE_EXTRACTOR_NAME, revision=revision, mirror=None
-            )
-
-        try:
-            # Load from URL or cache if already cached
-            resolved_feature_extractor_file = cached_path(
-                feature_extractor_file,
-                cache_dir=cache_dir,
-                force_download=force_download,
-                proxies=proxies,
-                resume_download=resume_download,
-                local_files_only=local_files_only,
-                use_auth_token=use_auth_token,
-                user_agent=user_agent,
-            )
-
-        except RepositoryNotFoundError:
-            raise EnvironmentError(
-                f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier listed on "
-                "'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token having "
-                "permission to this repo with `use_auth_token` or log in with `huggingface-cli login` and pass "
-                "`use_auth_token=True`."
-            )
-        except RevisionNotFoundError:
-            raise EnvironmentError(
-                f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for this "
-                f"model name. Check the model page at 'https://huggingface.co/{pretrained_model_name_or_path}' for "
-                "available revisions."
-            )
-        except EntryNotFoundError:
-            raise EnvironmentError(
-                f"{pretrained_model_name_or_path} does not appear to have a file named {FEATURE_EXTRACTOR_NAME}."
-            )
-        except HTTPError as err:
-            raise EnvironmentError(
-                f"There was a specific connection error when trying to load {pretrained_model_name_or_path}:\n{err}"
-            )
-        except ValueError:
-            raise EnvironmentError(
-                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it in"
-                f" the cached files and it looks like {pretrained_model_name_or_path} is not the path to a directory"
-                f" containing a {FEATURE_EXTRACTOR_NAME} file.\nCheckout your internet connection or see how to run"
-                " the library in offline mode at"
-                " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
-            )
-        except EnvironmentError:
-            raise EnvironmentError(
-                f"Can't load feature extractor for '{pretrained_model_name_or_path}'. If you were trying to load it "
-                "from 'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
-                f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
-                f"containing a {FEATURE_EXTRACTOR_NAME} file"
-            )
+            feature_extractor_file = FEATURE_EXTRACTOR_NAME
+            try:
+                # Load from local folder or from cache or download from model Hub and cache
+                resolved_feature_extractor_file = cached_file(
+                    pretrained_model_name_or_path,
+                    feature_extractor_file,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
+                    use_auth_token=use_auth_token,
+                    user_agent=user_agent,
+                    revision=revision,
+                )
+            except EnvironmentError:
+                # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
+                # the original exception.
+                raise
+            except Exception:
+                # For any other exception, we throw a generic error.
+                raise EnvironmentError(
+                    f"Can't load feature extractor for '{pretrained_model_name_or_path}'. If you were trying to load"
+                    " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
+                    f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
+                    f" directory containing a {FEATURE_EXTRACTOR_NAME} file"
+                )
 
         try:
             # Load feature_extractor dict
@@ -458,12 +435,11 @@ class FeatureExtractionMixin(PushToHubMixin):
                 f"It looks like the config file at '{resolved_feature_extractor_file}' is not a valid JSON file."
             )
 
-        if resolved_feature_extractor_file == feature_extractor_file:
-            logger.info(f"loading feature extractor configuration file {feature_extractor_file}")
+        if is_local:
+            logger.info(f"loading configuration file {resolved_feature_extractor_file}")
         else:
             logger.info(
-                f"loading feature extractor configuration file {feature_extractor_file} from cache at"
-                f" {resolved_feature_extractor_file}"
+                f"loading configuration file {feature_extractor_file} from cache at {resolved_feature_extractor_file}"
             )
 
         return feature_extractor_dict, kwargs

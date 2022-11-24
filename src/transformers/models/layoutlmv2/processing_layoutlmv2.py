@@ -158,3 +158,7 @@ class LayoutLMv2Processor(ProcessorMixin):
         to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+    @property
+    def model_input_names(self):
+        return ["input_ids", "bbox", "token_type_ids", "attention_mask", "image"]

@@ -43,7 +43,7 @@ class MarianConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50265):
+        vocab_size (`int`, *optional*, defaults to 58101):
             Vocabulary size of the Marian model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`MarianModel`] or [`TFMarianModel`].
         d_model (`int`, *optional*, defaults to 1024):
@@ -76,10 +76,10 @@ class MarianConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         scale_embedding (`bool`, *optional*, defaults to `False`):
@@ -110,7 +110,7 @@ class MarianConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50265,
+        vocab_size=58101,
         decoder_vocab_size=None,
         max_position_embeddings=1024,
         encoder_layers=12,
@@ -392,3 +392,7 @@ class MarianOnnxConfig(OnnxSeq2SeqConfigWithPast):
             flattened_output = super(OnnxSeq2SeqConfigWithPast, self)._flatten_past_key_values_(
                 flattened_output, name, idx, t
             )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4

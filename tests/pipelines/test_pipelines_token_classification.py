@@ -25,14 +25,7 @@ from transformers import (
     pipeline,
 )
 from transformers.pipelines import AggregationStrategy, TokenClassificationArgumentHandler
-from transformers.testing_utils import (
-    is_pipeline_test,
-    nested_simplify,
-    require_tf,
-    require_torch,
-    require_torch_gpu,
-    slow,
-)
+from transformers.testing_utils import nested_simplify, require_tf, require_torch, require_torch_gpu, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -40,7 +33,6 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 VALID_INPUTS = ["A simple string", ["list of strings", "A simple string that is quite a bit longer"]]
 
 
-@is_pipeline_test
 class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
@@ -52,6 +44,8 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     def run_pipeline_test(self, token_classifier, _):
         model = token_classifier.model
         tokenizer = token_classifier.tokenizer
+        if not tokenizer.is_fast:
+            return  # Slow tokenizers do not return offsets mappings, so this test will fail
 
         outputs = token_classifier("A simple string")
         self.assertIsInstance(outputs, list)
@@ -284,9 +278,9 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             nested_simplify(output),
             [
-                {"entity": "I-PER", "score": 0.997, "word": "En", "start": 0, "end": 2, "index": 1},
-                {"entity": "I-PER", "score": 0.996, "word": "##zo", "start": 2, "end": 4, "index": 2},
-                {"entity": "I-ORG", "score": 0.999, "word": "UN", "start": 22, "end": 24, "index": 7},
+                {"entity": "I-PER", "score": 0.998, "word": "En", "start": 0, "end": 2, "index": 1},
+                {"entity": "I-PER", "score": 0.997, "word": "##zo", "start": 2, "end": 4, "index": 2},
+                {"entity": "I-ORG", "score": 0.999, "word": "UN", "start": 18, "end": 20, "index": 6},
             ],
         )
 
@@ -295,8 +289,8 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             nested_simplify(output),
             [
-                {"entity_group": "PER", "score": 0.996, "word": "Enzo", "start": 0, "end": 4},
-                {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 22, "end": 24},
+                {"entity_group": "PER", "score": 0.997, "word": "Enzo", "start": 0, "end": 4},
+                {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 18, "end": 20},
             ],
         )
 
@@ -305,8 +299,8 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             nested_simplify(output[:3]),
             [
-                {"entity_group": "PER", "score": 0.997, "word": "Enzo", "start": 0, "end": 4},
-                {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 22, "end": 24},
+                {"entity_group": "PER", "score": 0.998, "word": "Enzo", "start": 0, "end": 4},
+                {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 18, "end": 20},
             ],
         )
 
@@ -315,8 +309,8 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             nested_simplify(output[:3]),
             [
-                {"entity_group": "PER", "score": 0.997, "word": "Enzo", "start": 0, "end": 4},
-                {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 22, "end": 24},
+                {"entity_group": "PER", "score": 0.998, "word": "Enzo", "start": 0, "end": 4},
+                {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 18, "end": 20},
             ],
         )
 
@@ -325,8 +319,8 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             nested_simplify(output),
             [
-                {"entity_group": "PER", "score": 0.996, "word": "Enzo", "start": 0, "end": 4},
-                {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 22, "end": 24},
+                {"entity_group": "PER", "score": 0.997, "word": "Enzo", "start": 0, "end": 4},
+                {"entity_group": "ORG", "score": 0.999, "word": "UN", "start": 18, "end": 20},
             ],
         )
 
@@ -770,7 +764,6 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         )
 
 
-@is_pipeline_test
 class TokenClassificationArgumentHandlerTestCase(unittest.TestCase):
     def setUp(self):
         self.args_parser = TokenClassificationArgumentHandler()

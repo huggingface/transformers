@@ -854,7 +854,9 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
 
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
+                inputs_embeds.device
+            )
             combined_attention_mask = (
                 expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
             )
@@ -1085,6 +1087,8 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
     BLENDERBOT_START_DOCSTRING,
 )
 class BlenderbotModel(BlenderbotPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+
     def __init__(self, config: BlenderbotConfig):
         super().__init__(config)
 
@@ -1229,6 +1233,8 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel):
         r"encoder.version",
         r"decoder.version",
         r"lm_head.weight",
+        "decoder.embed_tokens.weight",
+        "encoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: BlenderbotConfig):
@@ -1317,7 +1323,7 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel):
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
             use_cache = False
-            if decoder_input_ids is None:
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
@@ -1418,6 +1424,8 @@ class BlenderbotDecoderWrapper(BlenderbotPreTrainedModel):
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Blenderbot, facebook/bart-base->facebook/blenderbot-400M-distill
 class BlenderbotForCausalLM(BlenderbotPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+
     def __init__(self, config):
         config = copy.deepcopy(config)
         config.is_decoder = True

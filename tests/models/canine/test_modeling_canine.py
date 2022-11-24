@@ -48,6 +48,8 @@ class CanineModelTester:
         use_input_mask=True,
         use_token_type_ids=True,
         use_labels=True,
+        # let's use a vocab size that's way bigger than BERT's one
+        vocab_size=100000,
         hidden_size=32,
         num_hidden_layers=5,
         num_attention_heads=4,
@@ -70,6 +72,7 @@ class CanineModelTester:
         self.use_input_mask = use_input_mask
         self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
+        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -86,8 +89,7 @@ class CanineModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        # let's use a vocab size that's way bigger than BERT's one
-        input_ids = ids_tensor([self.batch_size, self.seq_length], 100000)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         input_mask = None
         if self.use_input_mask:

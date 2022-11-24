@@ -17,8 +17,10 @@ import unittest
 
 import datasets
 import numpy as np
+import pytest
 
 from transformers import is_torch_available, is_vision_available
+from transformers.image_utils import ChannelDimension, get_channel_dimension_axis
 from transformers.testing_utils import require_torch, require_vision
 
 
@@ -29,7 +31,7 @@ if is_vision_available():
     import PIL.Image
 
     from transformers import ImageFeatureExtractionMixin
-    from transformers.image_utils import load_image
+    from transformers.image_utils import get_image_size, infer_channel_dimension_format, load_image
 
 
 def get_random_image(height, width):
@@ -58,13 +60,13 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         array3 = feature_extractor.to_numpy_array(image, rescale=False)
         self.assertTrue(array3.dtype, np.uint8)
         self.assertEqual(array3.shape, (3, 16, 32))
-        self.assertTrue(np.array_equal(array1, array3.astype(np.float32) / 255.0))
+        self.assertTrue(np.array_equal(array1, array3.astype(np.float32) * (1 / 255.0)))
 
         # Conversion with no rescale and not channel first
         array4 = feature_extractor.to_numpy_array(image, rescale=False, channel_first=False)
         self.assertTrue(array4.dtype, np.uint8)
         self.assertEqual(array4.shape, (16, 32, 3))
-        self.assertTrue(np.array_equal(array2, array4.astype(np.float32) / 255.0))
+        self.assertTrue(np.array_equal(array2, array4.astype(np.float32) * (1 / 255.0)))
 
     def test_conversion_array_to_array(self):
         feature_extractor = ImageFeatureExtractionMixin()
@@ -74,13 +76,13 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         array1 = feature_extractor.to_numpy_array(array)
         self.assertTrue(array1.dtype, np.float32)
         self.assertEqual(array1.shape, (3, 16, 32))
-        self.assertTrue(np.array_equal(array1, array.transpose(2, 0, 1).astype(np.float32) / 255.0))
+        self.assertTrue(np.array_equal(array1, array.transpose(2, 0, 1).astype(np.float32) * (1 / 255.0)))
 
         # Same with no permute
         array2 = feature_extractor.to_numpy_array(array, channel_first=False)
         self.assertTrue(array2.dtype, np.float32)
         self.assertEqual(array2.shape, (16, 32, 3))
-        self.assertTrue(np.array_equal(array2, array.astype(np.float32) / 255.0))
+        self.assertTrue(np.array_equal(array2, array.astype(np.float32) * (1 / 255.0)))
 
         # Force rescale to False
         array3 = feature_extractor.to_numpy_array(array, rescale=False)
@@ -110,13 +112,13 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         array1 = feature_extractor.to_numpy_array(array)
         self.assertTrue(array1.dtype, np.float32)
         self.assertEqual(array1.shape, (3, 16, 32))
-        self.assertTrue(np.array_equal(array1, array.transpose(2, 0, 1).astype(np.float32) / 255.0))
+        self.assertTrue(np.array_equal(array1, array.transpose(2, 0, 1).astype(np.float32) * (1 / 255.0)))
 
         # Same with no permute
         array2 = feature_extractor.to_numpy_array(array, channel_first=False)
         self.assertTrue(array2.dtype, np.float32)
         self.assertEqual(array2.shape, (16, 32, 3))
-        self.assertTrue(np.array_equal(array2, array.astype(np.float32) / 255.0))
+        self.assertTrue(np.array_equal(array2, array.astype(np.float32) * (1 / 255.0)))
 
         # Force rescale to False
         array3 = feature_extractor.to_numpy_array(array, rescale=False)
@@ -160,7 +162,7 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertTrue(np.array_equal(np.array(image2), array))
 
         # If the array has floating type, it's rescaled by default.
-        image3 = feature_extractor.to_pil_image(array.astype(np.float32) / 255.0)
+        image3 = feature_extractor.to_pil_image(array.astype(np.float32) * (1 / 255.0))
         self.assertTrue(isinstance(image3, PIL.Image.Image))
         self.assertTrue(np.array_equal(np.array(image3), array))
 
@@ -170,7 +172,7 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertTrue(np.array_equal(np.array(image4), array))
 
         # And with floats + channel first.
-        image5 = feature_extractor.to_pil_image(array.transpose(2, 0, 1).astype(np.float32) / 255.0)
+        image5 = feature_extractor.to_pil_image(array.transpose(2, 0, 1).astype(np.float32) * (1 / 255.0))
         self.assertTrue(isinstance(image5, PIL.Image.Image))
         self.assertTrue(np.array_equal(np.array(image5), array))
 
@@ -201,7 +203,7 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertTrue(np.array_equal(np.array(image4), array))
 
         # And with floats + channel first.
-        image5 = feature_extractor.to_pil_image(tensor.permute(2, 0, 1).float() / 255.0)
+        image5 = feature_extractor.to_pil_image(tensor.permute(2, 0, 1).float() * (1 / 255.0))
         self.assertTrue(isinstance(image5, PIL.Image.Image))
         self.assertTrue(np.array_equal(np.array(image5), array))
 
@@ -316,7 +318,7 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertEqual(normalized_image.shape, (3, 16, 32))
 
         # During the conversion rescale and channel first will be applied.
-        expected = array.transpose(2, 0, 1).astype(np.float32) / 255.0
+        expected = array.transpose(2, 0, 1).astype(np.float32) * (1 / 255.0)
         np_mean = np.array(mean).astype(np.float32)[:, None, None]
         np_std = np.array(std).astype(np.float32)[:, None, None]
         expected = (expected - np_mean) / np_std
@@ -485,3 +487,74 @@ class LoadImageTester(unittest.TestCase):
             img_arr_with_exif_transpose.shape,
             (500, 333, 3),
         )
+
+
+class UtilFunctionTester(unittest.TestCase):
+    def test_get_image_size(self):
+        # Test we can infer the size and channel dimension of an image.
+        image = np.random.randint(0, 256, (32, 64, 3))
+        self.assertEqual(get_image_size(image), (32, 64))
+
+        image = np.random.randint(0, 256, (3, 32, 64))
+        self.assertEqual(get_image_size(image), (32, 64))
+
+        # Test the channel dimension can be overriden
+        image = np.random.randint(0, 256, (3, 32, 64))
+        self.assertEqual(get_image_size(image, channel_dim=ChannelDimension.LAST), (3, 32))
+
+    def test_infer_channel_dimension(self):
+        # Test we fail with invalid input
+        with pytest.raises(ValueError):
+            infer_channel_dimension_format(np.random.randint(0, 256, (10, 10)))
+
+        with pytest.raises(ValueError):
+            infer_channel_dimension_format(np.random.randint(0, 256, (10, 10, 10, 10, 10)))
+
+        # Test we fail if neither first not last dimension is of size 3 or 1
+        with pytest.raises(ValueError):
+            infer_channel_dimension_format(np.random.randint(0, 256, (10, 1, 50)))
+
+        # Test we correctly identify the channel dimension
+        image = np.random.randint(0, 256, (3, 4, 5))
+        inferred_dim = infer_channel_dimension_format(image)
+        self.assertEqual(inferred_dim, ChannelDimension.FIRST)
+
+        image = np.random.randint(0, 256, (1, 4, 5))
+        inferred_dim = infer_channel_dimension_format(image)
+        self.assertEqual(inferred_dim, ChannelDimension.FIRST)
+
+        image = np.random.randint(0, 256, (4, 5, 3))
+        inferred_dim = infer_channel_dimension_format(image)
+        self.assertEqual(inferred_dim, ChannelDimension.LAST)
+
+        image = np.random.randint(0, 256, (4, 5, 1))
+        inferred_dim = infer_channel_dimension_format(image)
+        self.assertEqual(inferred_dim, ChannelDimension.LAST)
+
+        # We can take a batched array of images and find the dimension
+        image = np.random.randint(0, 256, (1, 3, 4, 5))
+        inferred_dim = infer_channel_dimension_format(image)
+        self.assertEqual(inferred_dim, ChannelDimension.FIRST)
+
+    def test_get_channel_dimension_axis(self):
+        # Test we correctly identify the channel dimension
+        image = np.random.randint(0, 256, (3, 4, 5))
+        inferred_axis = get_channel_dimension_axis(image)
+        self.assertEqual(inferred_axis, 0)
+
+        image = np.random.randint(0, 256, (1, 4, 5))
+        inferred_axis = get_channel_dimension_axis(image)
+        self.assertEqual(inferred_axis, 0)
+
+        image = np.random.randint(0, 256, (4, 5, 3))
+        inferred_axis = get_channel_dimension_axis(image)
+        self.assertEqual(inferred_axis, 2)
+
+        image = np.random.randint(0, 256, (4, 5, 1))
+        inferred_axis = get_channel_dimension_axis(image)
+        self.assertEqual(inferred_axis, 2)
+
+        # We can take a batched array of images and find the dimension
+        image = np.random.randint(0, 256, (1, 3, 4, 5))
+        inferred_axis = get_channel_dimension_axis(image)
+        self.assertEqual(inferred_axis, 1)

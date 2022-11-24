@@ -84,6 +84,8 @@ config_common_kwargs = {
     "sep_token_id": 9,
     "decoder_start_token_id": 10,
     "exponential_decay_length_penalty": (5, 1.01),
+    "suppress_tokens": [0, 1],
+    "begin_suppress_tokens": 2,
     "task_specific_params": {"translation": "some_params"},
     "problem_type": "regression",
 }
@@ -246,7 +248,7 @@ class ConfigPushToHubTester(unittest.TestCase):
         config.push_to_hub("test-config", use_auth_token=self._token)
 
         new_config = BertConfig.from_pretrained(f"{USER}/test-config")
-        for k, v in config.__dict__.items():
+        for k, v in config.to_dict().items():
             if k != "transformers_version":
                 self.assertEqual(v, getattr(new_config, k))
 
@@ -258,7 +260,7 @@ class ConfigPushToHubTester(unittest.TestCase):
             config.save_pretrained(tmp_dir, repo_id="test-config", push_to_hub=True, use_auth_token=self._token)
 
         new_config = BertConfig.from_pretrained(f"{USER}/test-config")
-        for k, v in config.__dict__.items():
+        for k, v in config.to_dict().items():
             if k != "transformers_version":
                 self.assertEqual(v, getattr(new_config, k))
 
@@ -269,7 +271,7 @@ class ConfigPushToHubTester(unittest.TestCase):
         config.push_to_hub("valid_org/test-config-org", use_auth_token=self._token)
 
         new_config = BertConfig.from_pretrained("valid_org/test-config-org")
-        for k, v in config.__dict__.items():
+        for k, v in config.to_dict().items():
             if k != "transformers_version":
                 self.assertEqual(v, getattr(new_config, k))
 
@@ -283,7 +285,7 @@ class ConfigPushToHubTester(unittest.TestCase):
             )
 
         new_config = BertConfig.from_pretrained("valid_org/test-config-org")
-        for k, v in config.__dict__.items():
+        for k, v in config.to_dict().items():
             if k != "transformers_version":
                 self.assertEqual(v, getattr(new_config, k))
 
@@ -323,7 +325,9 @@ class ConfigTestUtils(unittest.TestCase):
         base_config = PretrainedConfig()
         missing_keys = [key for key in base_config.__dict__ if key not in config_common_kwargs]
         # If this part of the test fails, you have arguments to addin config_common_kwargs above.
-        self.assertListEqual(missing_keys, ["is_encoder_decoder", "_name_or_path", "transformers_version"])
+        self.assertListEqual(
+            missing_keys, ["is_encoder_decoder", "_name_or_path", "_commit_hash", "transformers_version"]
+        )
         keys_with_defaults = [key for key, value in config_common_kwargs.items() if value == getattr(base_config, key)]
         if len(keys_with_defaults) > 0:
             raise ValueError(
@@ -345,17 +349,24 @@ class ConfigTestUtils(unittest.TestCase):
         # A mock response for an HTTP head request to emulate server down
         response_mock = mock.Mock()
         response_mock.status_code = 500
-        response_mock.headers = []
+        response_mock.headers = {}
         response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.json.return_value = {}
 
         # Download this model to make sure it's in the cache.
         _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("transformers.utils.hub.requests.head", return_value=response_mock) as mock_head:
+        with mock.patch("requests.request", return_value=response_mock) as mock_head:
             _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
+
+    def test_legacy_load_from_url(self):
+        # This test is for deprecated behavior and can be removed in v5
+        _ = BertConfig.from_pretrained(
+            "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/config.json"
+        )
 
 
 class ConfigurationVersioningTest(unittest.TestCase):

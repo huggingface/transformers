@@ -43,7 +43,7 @@ else:
 
 MT5TokenizerFast = T5TokenizerFast
 
-_import_structure = {"configuration_mt5": ["MT5Config"]}
+_import_structure = {"configuration_mt5": ["MT5Config", "MT5OnnxConfig"]}
 
 try:
     if not is_torch_available():
@@ -71,7 +71,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_mt5 import MT5Config
+    from .configuration_mt5 import MT5Config, MT5OnnxConfig
 
     try:
         if not is_torch_available():

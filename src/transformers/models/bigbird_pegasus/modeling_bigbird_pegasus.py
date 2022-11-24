@@ -1595,6 +1595,7 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
     config_class = BigBirdPegasusConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["BigBirdPegasusEncoderLayer", "BigBirdPegasusDecoderLayer"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1788,10 +1789,10 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
+        self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+
         if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = BigBirdPegasusLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -1806,13 +1807,13 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
 
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         r"""
         Args:
@@ -2082,10 +2083,10 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+
         if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = BigBirdPegasusLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -2116,7 +2117,9 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
 
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
+                inputs_embeds.device
+            )
             combined_attention_mask = (
                 expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
             )
@@ -2125,18 +2128,18 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
 
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         r"""
         Args:
@@ -2238,6 +2241,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
 
         # embed positions
         positions = self.embed_positions(input_shape, past_key_values_length)
+        positions = positions.to(inputs_embeds.device)
 
         hidden_states = inputs_embeds + positions
 
@@ -2346,6 +2350,8 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
 )
 # Copied from transformers.models.bart.modeling_bart.BartModel with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
 class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+
     def __init__(self, config: BigBirdPegasusConfig):
         super().__init__(config)
 
@@ -2476,7 +2482,12 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
 # Copied from transformers.models.bart.modeling_bart.BartForConditionalGeneration with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
 class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [r"final_logits_bias", r"lm_head.weight"]
+    _keys_to_ignore_on_load_missing = [
+        r"final_logits_bias",
+        r"lm_head.weight",
+        "encoder.embed_tokens.weight",
+        "decoder.embed_tokens.weight",
+    ]
 
     def __init__(self, config: BigBirdPegasusConfig):
         super().__init__(config)
@@ -2571,7 +2582,9 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        lm_logits = self.lm_head(outputs[0]) + self.final_logits_bias
+
+        lm_logits = self.lm_head(outputs[0])
+        lm_logits = lm_logits + self.final_logits_bias.to(lm_logits.device)
 
         masked_lm_loss = None
         if labels is not None:
@@ -2645,6 +2658,8 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
 )
 # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
 class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+
     def __init__(self, config: BigBirdPegasusConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = BigBirdPegasusModel(config)
@@ -2773,6 +2788,8 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
 )
 # Copied from transformers.models.bart.modeling_bart.BartForQuestionAnswering with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
 class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -2904,6 +2921,8 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
 
 
 class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+
     def __init__(self, config):
         config = copy.deepcopy(config)
         config.is_decoder = True

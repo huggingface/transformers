@@ -121,6 +121,12 @@ class TrainingArguments:
         default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
     )
     hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+    gradient_checkpointing: bool = field(
+        default=False,
+        metadata={
+            "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
+        },
+    )
 
     def __post_init__(self):
         if self.output_dir is not None:
@@ -186,7 +192,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -535,6 +541,9 @@ def main():
             dtype=getattr(jnp, model_args.dtype),
         )
 
+    if training_args.gradient_checkpointing:
+        model.enable_gradient_checkpointing()
+
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
 
@@ -775,8 +784,9 @@ def main():
 
         # ignore padded tokens from loss
         loss = loss * padding_mask
-        loss = loss.sum() / padding_mask.sum()
-        return loss
+        loss = loss.sum()
+        num_labels = padding_mask.sum()
+        return loss, num_labels
 
     # Define gradient update step fn
     def train_step(state, batch, label_smoothing_factor=0.0):
@@ -785,29 +795,38 @@ def main():
         def compute_loss(params):
             labels = batch.pop("labels")
             logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
-            loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
-            return loss
+            loss, num_labels = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
+            return loss, num_labels
 
-        grad_fn = jax.value_and_grad(compute_loss)
-        loss, grad = grad_fn(state.params)
-        grad = jax.lax.pmean(grad, "batch")
+        grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
+        (loss, num_labels), grad = grad_fn(state.params)
+        num_labels = jax.lax.psum(num_labels, "batch")
 
+        # true loss = total loss / total samples
+        loss = jax.lax.psum(loss, "batch")
+        loss = jax.tree_util.tree_map(lambda x: x / num_labels, loss)
+
+        # true grad = total grad / total samples
+        grad = jax.lax.psum(grad, "batch")
+        grad = jax.tree_util.tree_map(lambda x: x / num_labels, grad)
         new_state = state.apply_gradients(grads=grad, dropout_rng=new_dropout_rng)
 
         metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}
-        metrics = jax.lax.pmean(metrics, axis_name="batch")
-
         return new_state, metrics
 
     # Define eval fn
     def eval_step(params, batch, label_smoothing_factor=0.0):
         labels = batch.pop("labels")
         logits = model(**batch, params=params, train=False)[0]
-        loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
 
-        # summarize metrics
+        loss, num_labels = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
+        num_labels = jax.lax.psum(num_labels, "batch")
+
+        # true loss = total loss / total samples
+        loss = jax.lax.psum(loss, "batch")
+        loss = jax.tree_util.tree_map(lambda x: x / num_labels, loss)
+
         metrics = {"loss": loss}
-        metrics = jax.lax.pmean(metrics, axis_name="batch")
         return metrics
 
     # Define generation function
@@ -893,7 +912,7 @@ def main():
 
         # normalize eval metrics
         eval_metrics = get_metrics(eval_metrics)
-        eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
+        eval_metrics = jax.tree_util.tree_map(jnp.mean, eval_metrics)
 
         # compute ROUGE metrics
         rouge_desc = ""
@@ -914,7 +933,7 @@ def main():
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
-            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+            params = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state.params))
             model.save_pretrained(training_args.output_dir, params=params)
             tokenizer.save_pretrained(training_args.output_dir)
             if training_args.push_to_hub:
@@ -948,7 +967,7 @@ def main():
 
         # normalize prediction metrics
         pred_metrics = get_metrics(pred_metrics)
-        pred_metrics = jax.tree_map(jnp.mean, pred_metrics)
+        pred_metrics = jax.tree_util.tree_map(jnp.mean, pred_metrics)
 
         # compute ROUGE metrics
         rouge_desc = ""

@@ -161,6 +161,7 @@ class TFTrainingArguments(TrainingArguments):
             Whether to activate the XLA compilation or not.
     """
 
+    framework = "tf"
     tpu_name: Optional[str] = field(
         default=None,
         metadata={"help": "Name of TPU"},
@@ -187,9 +188,6 @@ class TFTrainingArguments(TrainingArguments):
     @tf_required
     def _setup_strategy(self) -> Tuple["tf.distribute.Strategy", int]:
         logger.info("Tensorflow: setting up strategy")
-
-        if self.xla:
-            tf.config.optimizer.set_jit(True)
 
         gpus = tf.config.list_physical_devices("GPU")
 
