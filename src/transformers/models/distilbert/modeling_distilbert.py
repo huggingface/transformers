@@ -260,7 +260,7 @@ class TransformerBlock(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
 
-        # Configure multi head attention nodes divide dimensions
+        # Configure multi-head attention nodes divide dimensions
         if config.dim % config.n_heads != 0:
             raise ValueError("config.n_heads (" + str(config.n_heads) + ") must divide config.dim (" + str(config.dim) + ") evenly")
         
