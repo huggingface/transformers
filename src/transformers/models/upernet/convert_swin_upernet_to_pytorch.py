@@ -150,6 +150,9 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     pixel_values = image_transforms(image).unsqueeze(0)
 
+    print("Sum of pixel values:", pixel_values.sum().item())
+    print("Mean of pixel values:", pixel_values.mean().item())
+
     with torch.no_grad():
         outputs = model(pixel_values)
 

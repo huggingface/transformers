@@ -265,6 +265,9 @@ class SwinEmbeddings(nn.Module):
 
         embeddings = self.dropout(embeddings)
 
+        print("Shape of embeddings before encoder:", embeddings.shape)
+        print("First values of embeddings before encoder:", embeddings[0,:3,:3])
+
         return embeddings, output_dimensions
 
 
@@ -343,14 +346,18 @@ class SwinPatchMerging(nn.Module):
 
         return input_feature
 
-    def forward(self, input_feature: torch.Tensor, input_dimensions: Tuple[int, int]) -> torch.Tensor:
+    def forward(self, input_feature: torch.Tensor, input_dimensions: Tuple[int, int], print_values=False) -> torch.Tensor:
         height, width = input_dimensions
         # `dim` is height * width
         batch_size, dim, num_channels = input_feature.shape
 
         input_feature = input_feature.view(batch_size, height, width, num_channels)
         # pad input to be disible by width and height, if needed
+        if print_values:
+            print("Shape of input_feature before padding:", input_feature.shape)
         input_feature = self.maybe_pad(input_feature, height, width)
+        if print_values:
+            print("Shape of input_feature after padding:", input_feature.shape)
         # [batch_size, height/2, width/2, num_channels]
         input_feature_0 = input_feature[:, 0::2, 0::2, :]
         # [batch_size, height/2, width/2, num_channels]
@@ -362,6 +369,10 @@ class SwinPatchMerging(nn.Module):
         # batch_size height/2 width/2 4*num_channels
         input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)
         input_feature = input_feature.view(batch_size, -1, 4 * num_channels)  # batch_size height/2*width/2 4*C
+
+        if print_values:
+            print("Shape of input_feature before norm:", input_feature.shape)
+            print("Input features before norm:", input_feature[0,:3,:3])
 
         input_feature = self.norm(input_feature)
         input_feature = self.reduction(input_feature)
@@ -734,6 +745,7 @@ class SwinStage(nn.Module):
         input_dimensions: Tuple[int, int],
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
+        print_values=False,
     ) -> Tuple[torch.Tensor]:
         height, width = input_dimensions
         for i, layer_module in enumerate(self.blocks):
@@ -744,11 +756,19 @@ class SwinStage(nn.Module):
 
             hidden_states = layer_outputs[0]
 
+            if print_values:
+                print(f"Shape of hidden states after block {i}:", hidden_states.shape)
+                print(f"First values of hidden states after block {i}:", hidden_states[0, :3, :3])
+
         hidden_states_before_downsampling = hidden_states
         if self.downsample is not None:
             height_downsampled, width_downsampled = (height + 1) // 2, (width + 1) // 2
             output_dimensions = (height, width, height_downsampled, width_downsampled)
-            hidden_states = self.downsample(hidden_states_before_downsampling, input_dimensions)
+            if print_values:
+                print("Input dimensions:", input_dimensions)
+            hidden_states = self.downsample(hidden_states_before_downsampling, input_dimensions, print_values)
+            if print_values:
+                print("Hidden states after downsampling:", hidden_states[0,:3,:3])
         else:
             output_dimensions = (height, width, height, width)
 
@@ -819,11 +839,16 @@ class SwinEncoder(nn.Module):
                     create_custom_forward(layer_module), hidden_states, input_dimensions, layer_head_mask
                 )
             else:
-                layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+                layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions, print_values=i==0)
 
             hidden_states = layer_outputs[0]
             hidden_states_before_downsampling = layer_outputs[1]
             output_dimensions = layer_outputs[2]
+
+            if i == 0:
+                print(f"Shape of hidden states before downsampling after stage {i}:", hidden_states_before_downsampling.shape)
+                print(f"First values of hidden states before downsampling after stage {i}:", hidden_states_before_downsampling[0, :3, :3])
+                print(f"First values of hidden states after stage {i}:", hidden_states[0, :3, :3])
 
             input_dimensions = (output_dimensions[-2], output_dimensions[-1])
 
@@ -1319,6 +1344,10 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
         )
 
         hidden_states = outputs.reshaped_hidden_states
+
+        # for idx, hidden_state in enumerate(outputs.hidden_states[1:]):
+        #     print(f"Stage {idx}:", hidden_state.shape)
+        #     print("First values of hidden states:", hidden_state[0,:3,:3])
 
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
