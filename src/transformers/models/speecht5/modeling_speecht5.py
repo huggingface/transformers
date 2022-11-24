@@ -2078,6 +2078,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
+        speaker_embeddings: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -2091,6 +2092,9 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
             Depending on which decoder is being used, the `decoder_input_values` are either: float values of log-mel
             filterbank features extracted from the raw speech waveform, or indices of decoder input sequence tokens in
             the vocabulary, or hidden states.
+
+        speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
+            Tensor containing the speaker embeddings.
 
         Returns:
 
@@ -2127,7 +2131,12 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
                 encoder_outputs[0].shape[1], attention_mask
             )
         else:
-            encoder_attention_mask = None
+            encoder_attention_mask = attention_mask
+
+        if isinstance(self.decoder, SpeechT5DecoderWithSpeechPrenet):
+            decoder_args = {"speaker_embeddings": speaker_embeddings}
+        else:
+            decoder_args = {}
 
         decoder_outputs = self.decoder(
             input_values=decoder_input_values,
@@ -2141,6 +2150,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **decoder_args,
         )
 
         if not return_dict:
@@ -2534,10 +2544,14 @@ class SpeechT5ForTTS(SpeechT5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        speaker_embeddings: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, Seq2SeqLMOutput]:
         r"""
         TODO
+
+        speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
+            Tensor containing the speaker embeddings.
 
         Returns:
 
@@ -2545,8 +2559,7 @@ class SpeechT5ForTTS(SpeechT5PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # TODO: how to implement this? (see the big `forward` in the original model)
-
+        # TODO: do we need this? would need to do this shift on the spectrogram
         # if labels is not None:
         #     if decoder_input_ids is None:
         #         decoder_input_ids = shift_tokens_right(
@@ -2564,34 +2577,35 @@ class SpeechT5ForTTS(SpeechT5PreTrainedModel):
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             use_cache=use_cache,
+            speaker_embeddings=speaker_embeddings,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
         )
 
-        # logits = self.speech_decoder_postnet(outputs[0])
+        _, features, _ = self.speech_decoder_postnet(outputs[0])
 
-        # loss = None
+        loss = None
         # if labels is not None:
         #     loss_fct = CrossEntropyLoss()
         #     loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
 
-        # if not return_dict:
-        #     output = (logits,) + outputs[1:]
-        #     return ((loss,) + output) if loss is not None else output
+        if not return_dict:
+            output = (features,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
 
-        # return Seq2SeqLMOutput(
-        #     loss=loss,
-        #     logits=logits,
-        #     past_key_values=outputs.past_key_values,
-        #     decoder_hidden_states=outputs.decoder_hidden_states,
-        #     decoder_attentions=outputs.decoder_attentions,
-        #     cross_attentions=outputs.cross_attentions,
-        #     encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-        #     encoder_hidden_states=outputs.encoder_hidden_states,
-        #     encoder_attentions=outputs.encoder_attentions,
-        # )
-        return outputs
+        # TODO: different output object?
+        return Seq2SeqLMOutput(
+            loss=loss,
+            logits=features,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )
 
     @torch.no_grad()
     def generate_speech(
