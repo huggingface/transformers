@@ -1,4 +1,4 @@
-""" PyTorch ViViT model. """
+""" PyTorch ViViT model."""
 
 import math
 
@@ -8,22 +8,11 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPooling,
-    ImageClassifierOutput,
-)
-from ...modeling_utils import (
-    PreTrainedModel,
-)
-from ...utils import logging
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
+from ...modeling_utils import PreTrainedModel
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_vivit import ViViTConfig
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+
 
 logger = logging.get_logger(__name__)
 
@@ -34,11 +23,11 @@ class TubeletEmbeddings(nn.Module):
     """
     Construct ViViT Tubelet embeddings.
 
-    This module turns a batch of videos of shape (batch_size, num_frames, num_channels,
-    height, width) into a tensor of shape (batch_size, seq_len, hidden_size) to be consumed by a Transformer encoder.
+    This module turns a batch of videos of shape (batch_size, num_frames, num_channels, height, width) into a tensor of
+    shape (batch_size, seq_len, hidden_size) to be consumed by a Transformer encoder.
 
-    The seq_len (the number of patches) equals (number of frames // tubelet_size[0]) * (height // tubelet_size[1]) * (width //
-    tubelet_size[2]).
+    The seq_len (the number of patches) equals (number of frames // tubelet_size[0]) * (height // tubelet_size[1]) *
+    (width // tubelet_size[2]).
     """
 
     def __init__(self, video_size, patch_size, num_channels=3, embed_dim=768):
@@ -180,7 +169,7 @@ class ViViTSelfOutput(nn.Module):
     def forward(self, hidden_states, input_tensor):
 
         hidden_states = self.dense(hidden_states)
-        
+
         hidden_states = self.dropout(hidden_states)
 
         return hidden_states
@@ -332,6 +321,7 @@ class ViViTEncoder(nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
+
 
 class ViViTPooler(nn.Module):
     def __init__(self, config):

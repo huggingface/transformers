@@ -1,4 +1,4 @@
-""" ViViT model configuration """
+""" ViViT model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -11,9 +11,9 @@ VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 class ViViTConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ViViTModel`]. It is used to instantiate a
-    ViViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the original ViViTModel architecture.
+    This is the configuration class to store the configuration of a [`ViViTModel`]. It is used to instantiate a ViViT
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the original ViViTModel architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
