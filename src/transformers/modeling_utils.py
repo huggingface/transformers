@@ -1024,12 +1024,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         self.config = config
         self.name_or_path = config.name_or_path
         self.warnings_issued = {}
-
-        if self.can_generate():
-            # May be overwritten during `from_pretrained()`, if there is a `generation_config.json` in the model folder
-            self.generation_config = GenerationConfig.from_model_config(config)
-        else:
-            self.generation_config = None
+        self.generation_config = None
 
     def post_init(self):
         """
@@ -2493,7 +2488,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         model.eval()
 
         # If it is a model with generation capabilities, attempt to set the generation config to an existing
-        # `generation_config.json` file. Otherwise, keep the generation config created from the model config.
+        # `generation_config.json` file.
         if model.can_generate():
             try:
                 generation_config = GenerationConfig.from_pretrained(
