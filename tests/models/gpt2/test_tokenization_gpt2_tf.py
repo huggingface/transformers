@@ -35,10 +35,10 @@ if is_tf_available():
             input_mask = tf.cast(input_ids_dense > 0, tf.int32)
             # input_mask = tf.reshape(input_mask, [-1, MAX_SEQ_LEN])
 
-            outputs = self.model.generate(
+            outputs = self.model(
                 input_ids=input_ids_dense,
                 attention_mask=input_mask,
-            )
+            )["logits"]
 
             return outputs
 
