@@ -218,7 +218,8 @@ class TFCoreModelTesterMixin:
             model = model_class(config)
             num_out = len(model(class_inputs_dict))
 
-            for key in list(class_inputs_dict.keys()):
+            for key in class_inputs_dict.keys():
+                # Check it's a tensor, in case the inputs dict has some bools in it too
                 if isinstance(class_inputs_dict[key], tf.Tensor) and class_inputs_dict[key].dtype.is_integer:
                     class_inputs_dict[key] = tf.cast(class_inputs_dict[key], tf.int64)
 
