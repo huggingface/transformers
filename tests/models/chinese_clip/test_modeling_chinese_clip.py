@@ -317,13 +317,7 @@ class ChineseCLIPVisionModelTester:
 @require_torch
 class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (
-        (
-            ChineseCLIPTextModel,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (ChineseCLIPTextModel,) if is_torch_available() else ()
     fx_compatible = False
 
     # special case for ForPreTraining model
