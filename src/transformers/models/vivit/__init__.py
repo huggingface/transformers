@@ -40,8 +40,8 @@ if TYPE_CHECKING:
     else:
         from .modelling_vivit import (
             VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-            ViViTModel,
             ViViTForVideoClassification,
+            ViViTModel,
             ViViTPreTrainedModel,
         )
 
