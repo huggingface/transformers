@@ -276,6 +276,10 @@ def collate_fn(examples):
 def main():
     args = parse_args()
 
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_mim_no_trainer", args)
+
 
 if __name__ == "__main__":
     main()
