@@ -151,7 +151,7 @@ class ResNetModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
 
-    fx_compatible = True
+    fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
