@@ -254,7 +254,6 @@ class TFEsmModelTest(TFModelTesterMixin, unittest.TestCase):
 
 @require_tf
 class TFEsmModelIntegrationTest(unittest.TestCase):
-
     @slow
     def test_inference_masked_lm(self):
         model = TFEsmForMaskedLM.from_pretrained("facebook/esm2_t6_8M_UR50D")
@@ -265,9 +264,13 @@ class TFEsmModelIntegrationTest(unittest.TestCase):
         self.assertEqual(list(output.numpy().shape), expected_shape)
         # compare the actual values for a slice.
         expected_slice = tf.constant(
-            [[[8.920963, -10.591399, -6.467397],
-              [-6.3980846, -13.913257, -1.1291938],
-              [-7.7815733, -13.951929, -3.7438734]]]
+            [
+                [
+                    [8.920963, -10.591399, -6.467397],
+                    [-6.3980846, -13.913257, -1.1291938],
+                    [-7.7815733, -13.951929, -3.7438734],
+                ]
+            ]
         )
         self.assertTrue(numpy.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-4))
 
@@ -279,8 +282,12 @@ class TFEsmModelIntegrationTest(unittest.TestCase):
         output = model(input_ids)[0]
         # compare the actual values for a slice.
         expected_slice = tf.constant(
-            [[[0.14422388, 0.5411936, 0.3249576],
-              [0.30342406, 0.00549317, 0.31096306],
-              [0.32278833, -0.24974644, 0.34135976]]]
+            [
+                [
+                    [0.14422388, 0.5411936, 0.3249576],
+                    [0.30342406, 0.00549317, 0.31096306],
+                    [0.32278833, -0.24974644, 0.34135976],
+                ]
+            ]
         )
         self.assertTrue(numpy.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-4))
