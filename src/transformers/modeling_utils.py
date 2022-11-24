@@ -1023,8 +1023,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
-        self.generation_config = None  # May be overwritten during `from_pretrained()`
         self.warnings_issued = {}
+        # May be overwritten during `from_pretrained()`, if there is a `generation_config.json` in the model folder
+        self.generation_config = GenerationConfig.from_model_config(config)
 
     def post_init(self):
         """
@@ -2478,8 +2479,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Set model in evaluation mode to deactivate DropOut modules by default
         model.eval()
 
-        # If it is a model with generation capabilities, load a default generation config (from the default path if
-        # it exists, otherwise from the model config)
+        # If it is a model with generation capabilities, attempt to set the generation config to an existing
+        # `generation_config.json` file. Otherwise, keep the generation config created from the model config.
         if hasattr(cls, "prepare_inputs_for_generation"):
             try:
                 generation_config = GenerationConfig.from_pretrained(
@@ -2496,9 +2497,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     _from_pipeline=from_pipeline,
                     **kwargs,
                 )
+                model.generation_config = generation_config
             except EnvironmentError:
-                generation_config = GenerationConfig.from_model_config(config)
-            model.generation_config = generation_config
+                pass
 
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:
