@@ -24,7 +24,6 @@ from transformers.testing_utils import slow
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-
 class BioGptTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = BioGptTokenizer
     test_rust_tokenizer = False
@@ -65,7 +64,6 @@ class BioGptTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             fp.write(json.dumps(vocab_tokens))
         with open(self.merges_file, "w") as fp:
             fp.write("\n".join(merges))
-
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
