@@ -395,6 +395,20 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
             model = ChineseCLIPTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    def test_training(self):
+        pass
+
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="ChineseCLIPTextModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(reason="ChineseCLIPTextModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_to_base(self):
+        pass
+
 
 @require_torch
 class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
