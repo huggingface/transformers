@@ -33,6 +33,7 @@ from ...modeling_outputs import (
     CausalLMOutput,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
+    Seq2SeqSpectrogramOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import torch_int_div
@@ -2524,7 +2525,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         return self.speecht5.get_decoder()
 
     @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Seq2SeqSpectrogramOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -2542,7 +2543,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
         speaker_embeddings: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, Seq2SeqLMOutput]:
+    ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
         r"""
         TODO
 
@@ -2579,7 +2580,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             return_dict=True,
         )
 
-        _, features, _ = self.speech_decoder_postnet(outputs[0])
+        _, spectrogram, _ = self.speech_decoder_postnet(outputs[0])
 
         loss = None
         # if labels is not None:
@@ -2587,13 +2588,12 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         #     loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
-            output = (features,) + outputs[1:]
+            output = (spectrogram,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        # TODO: different output object?
-        return Seq2SeqLMOutput(
+        return Seq2SeqSpectrogramOutput(
             loss=loss,
-            logits=features,
+            spectrogram=spectrogram,
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
