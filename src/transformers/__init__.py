@@ -2198,6 +2198,25 @@ else:
             "Speech2TextPreTrainedModel",
         ]
     )
+    _import_structure["models.speecht5"].extend(
+        [
+            "SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SpeechT5ForConditionalGeneration",
+            "SpeechT5ForCTC",
+            "SpeechT5ForTTS",
+            "SpeechT5ForPreTraining",
+            "SpeechT5Model",
+            "SpeechT5PreTrainedModel",
+        ]
+    )
+    _import_structure["models.whisper"].extend(
+        [
+            "WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "WhisperForConditionalGeneration",
+            "WhisperModel",
+            "WhisperPreTrainedModel",
+        ]
+    )
     _import_structure["models.speech_to_text_2"].extend(["Speech2Text2ForCausalLM", "Speech2Text2PreTrainedModel"])
     _import_structure["models.splinter"].extend(
         [
@@ -2436,17 +2455,6 @@ else:
             "Wav2Vec2ForXVector",
             "Wav2Vec2Model",
             "Wav2Vec2PreTrainedModel",
-        ]
-    )
-    _import_structure["models.speecht5"].extend(
-        [
-            "SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "SpeechT5ForConditionalGeneration",
-            "SpeechT5ForCTC",
-            "SpeechT5ForTTS",
-            "SpeechT5ForPreTraining",
-            "SpeechT5Model",
-            "SpeechT5PreTrainedModel",
         ]
     )
     _import_structure["models.wav2vec2_conformer"].extend(
