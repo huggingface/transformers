@@ -108,10 +108,13 @@ class DonutProcessor(ProcessorMixin):
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
 
-    def token2json(self, tokens, is_inner_value=False):
+    def token2json(self, tokens, is_inner_value=False, added_vocab=None):
         """
         Convert a (generated) token sequence into an ordered JSON format.
         """
+        if added_vocab is None:
+            added_vocab = self.tokenizer.get_added_vocab()
+
         output = dict()
 
         while tokens:
@@ -131,7 +134,7 @@ class DonutProcessor(ProcessorMixin):
                 if content is not None:
                     content = content.group(1).strip()
                     if r"<s_" in content and r"</s_" in content:  # non-leaf node
-                        value = self.token2json(content, is_inner_value=True)
+                        value = self.token2json(content, is_inner_value=True, added_vocab=added_vocab)
                         if value:
                             if len(value) == 1:
                                 value = value[0]
@@ -140,7 +143,7 @@ class DonutProcessor(ProcessorMixin):
                         output[key] = []
                         for leaf in content.split(r"<sep/>"):
                             leaf = leaf.strip()
-                            if leaf in self.tokenizer.get_added_vocab() and leaf[0] == "<" and leaf[-2:] == "/>":
+                            if leaf in added_vocab and leaf[0] == "<" and leaf[-2:] == "/>":
                                 leaf = leaf[1:-2]  # for categorical special tokens
                             output[key].append(leaf)
                         if len(output[key]) == 1:
@@ -148,7 +151,7 @@ class DonutProcessor(ProcessorMixin):
 
                 tokens = tokens[tokens.find(end_token) + len(end_token) :].strip()
                 if tokens[:6] == r"<sep/>":  # non-leaf nodes
-                    return [output] + self.token2json(tokens[6:], is_inner_value=True)
+                    return [output] + self.token2json(tokens[6:], is_inner_value=True, added_vocab=added_vocab)
 
         if len(output):
             return [output] if is_inner_value else output
