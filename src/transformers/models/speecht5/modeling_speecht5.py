@@ -433,6 +433,7 @@ class SpeechT5ScaledPositionalEncoding(nn.Module):
     """
     Scaled positional encoding, see §3.2 in https://arxiv.org/abs/1809.08895
     """
+
     def __init__(self, dropout, dim, max_len=5000):
         pe = torch.zeros(max_len, dim)
         position = torch.arange(0, max_len).unsqueeze(1)
@@ -685,9 +686,7 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
             config.max_speech_positions,
         )
 
-        self.speaker_embeds_layer = nn.Linear(
-            config.speaker_embedding_dim + config.hidden_size, config.hidden_size
-        )
+        self.speaker_embeds_layer = nn.Linear(config.speaker_embedding_dim + config.hidden_size, config.hidden_size)
 
     def forward(
         self,
@@ -1502,8 +1501,8 @@ class SpeechT5EncoderWithTextPrenet(SpeechT5PreTrainedModel):
 
 class SpeechT5EncoderWithoutPrenet(SpeechT5PreTrainedModel):
     """
-    This wrapper class is a helper class to correctly load pretrained checkpoints when used
-    in combination with [`SpeechT5Model`].
+    This wrapper class is a helper class to correctly load pretrained checkpoints when used in combination with
+    [`SpeechT5Model`].
     """
 
     def __init__(self, config: SpeechT5Config):
@@ -1869,8 +1868,8 @@ class SpeechT5DecoderWithTextPrenet(SpeechT5PreTrainedModel):
 
 class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
     """
-    This wrapper class is a helper class to correctly load pretrained checkpoints when used
-    in combination with [`SpeechT5Model`].
+    This wrapper class is a helper class to correctly load pretrained checkpoints when used in combination with
+    [`SpeechT5Model`].
     """
 
     def __init__(self, config: SpeechT5Config):
@@ -1930,7 +1929,8 @@ SPEECHT5_START_DOCSTRING = r"""
             [`SpeechT5EncoderWithoutPrenet`] will be used and the `input_values` are assumed to be hidden states.
         decoder ([`SpeechT5DecoderWithSpeechPrenet`] or [`SpeechT5DecoderWithTextPrenet`] or `None`):
             The Transformer dencoder module that applies the appropiate speech or text decoder prenet. If `None`,
-            [`SpeechT5DecoderWithoutPrenet`] will be used and the `decoder_input_values` are assumed to be hidden states.
+            [`SpeechT5DecoderWithoutPrenet`] will be used and the `decoder_input_values` are assumed to be hidden
+            states.
 """
 
 
@@ -2274,7 +2274,8 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
             attention_mask = (
                 attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
             )
-            input_lengths = self.speecht5.encoder.prenet._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+            input_lengths = self.speecht5.encoder.prenet._get_feat_extract_output_lengths(attention_mask.sum(-1))
+            input_lengths = input_lengths.to(torch.long)
 
             # assuming that padded tokens are filled with -100
             # when not being attended to
@@ -2322,10 +2323,10 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
 
         if config.vocab_size is None:
             raise ValueError(
-                f"You are trying to instantiate {self.__class__} with a configuration that "
-                "does not define the vocabulary size of the language model head. Please "
-                "instantiate the model as follows: `SpeechT5ForSpeechToText.from_pretrained(..., vocab_size=vocab_size)`. "
-                "or define `vocab_size` of your model's configuration."
+                f"You are trying to instantiate {self.__class__} with a configuration that does not define the"
+                " vocabulary size of the language model head. Please instantiate the model as follows:"
+                " `SpeechT5ForSpeechToText.from_pretrained(..., vocab_size=vocab_size)`. or define `vocab_size` of"
+                " your model's configuration."
             )
 
         speech_encoder = SpeechT5EncoderWithSpeechPrenet(config)
@@ -2494,20 +2495,18 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
     SPEECHT5_START_DOCSTRING,
 )
 class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-    ]
-    _keys_to_ignore_on_save = [
-    ]
+    _keys_to_ignore_on_load_missing = []
+    _keys_to_ignore_on_save = []
 
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)
 
         if config.vocab_size is None:
             raise ValueError(
-                f"You are trying to instantiate {self.__class__} with a configuration that "
-                "does not define the vocabulary size of the language model head. Please "
-                "instantiate the model as follows: `SpeechT5ForTextToSpeech.from_pretrained(..., vocab_size=vocab_size)`. "
-                "or define `vocab_size` of your model's configuration."
+                f"You are trying to instantiate {self.__class__} with a configuration that does not define the"
+                " vocabulary size of the language model head. Please instantiate the model as follows:"
+                " `SpeechT5ForTextToSpeech.from_pretrained(..., vocab_size=vocab_size)`. or define `vocab_size` of"
+                " your model's configuration."
             )
 
         text_encoder = SpeechT5EncoderWithTextPrenet(config)
@@ -2615,8 +2614,8 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         maxlenratio: float = 20.0,
     ) -> torch.FloatTensor:
         r"""
-        Converts a sequence of input tokens into a sequence of mel spectrograms, which can subsequently be turned
-        into a speech waveform using a vocoder.
+        Converts a sequence of input tokens into a sequence of mel spectrograms, which can subsequently be turned into
+        a speech waveform using a vocoder.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2636,8 +2635,8 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 Used to calculate the maximum allowed length for the output sequence.
 
         Returns:
-            `torch.FloatTensor` of shape `(output_sequence_length, config.num_mel_bins)` containing the
-            predicted mel spectrogram.
+            `torch.FloatTensor` of shape `(output_sequence_length, config.num_mel_bins)` containing the predicted mel
+            spectrogram.
         """
         encoder_attention_mask = torch.ones_like(input_ids)
 

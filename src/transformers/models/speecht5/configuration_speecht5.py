@@ -139,8 +139,8 @@ class SpeechT5Config(PretrainedConfig):
             step, irrespectively of `mask_feature_prob`. Only relevant if
             ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
         num_mel_bins (`int`, *optional*, defaults to 80):
-            Number of mel features used per input features. Used by the speech decoder pre-net.
-            Should correspond to the value used in the `SpeechT5Processor` class.
+            Number of mel features used per input features. Used by the speech decoder pre-net. Should correspond to
+            the value used in the `SpeechT5Processor` class.
         speech_decoder_prenet_units (`int`, *optional*, defaults to 256):
             Dimensionality of the layers in the speech decoder pre-net.
         speech_decoder_prenet_dropout (`float`, *optional*, defaults to 0.5):

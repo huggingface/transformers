@@ -25,9 +25,9 @@ import torch
 from transformers import (
     SpeechT5Config,
     SpeechT5ForCTC,
+    SpeechT5ForPreTraining,
     SpeechT5ForSpeechToText,
     SpeechT5ForTextToSpeech,
-    SpeechT5ForPreTraining,
     logging,
 )
 
@@ -118,8 +118,7 @@ MAPPING_T2S = {
     **MAPPING_SPEECH_DECODER_PRENET,
     **MAPPING_SPEECH_DECODER_POSTNET,
 }
-TOP_LEVEL_KEYS = [
-]
+TOP_LEVEL_KEYS = []
 IGNORE_KEYS = [
     "encoder.version",
     "encoder.layers.*.norm_k.weight",

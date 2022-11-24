@@ -5360,9 +5360,9 @@ if TYPE_CHECKING:
         from .models.speecht5 import (
             SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST,
             SpeechT5ForCTC,
+            SpeechT5ForPreTraining,
             SpeechT5ForSpeechToText,
             SpeechT5ForTextToSpeech,
-            SpeechT5ForPreTraining,
             SpeechT5Model,
             SpeechT5PreTrainedModel,
         )
