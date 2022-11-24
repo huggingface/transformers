@@ -696,12 +696,10 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
     ):
         # Dropout is always applied, even when evaluating. https://arxiv.org/abs/1712.05884
 
-        #TODO: remove training=False -- only used for testing!
-
         inputs_embeds = nn.functional.relu(self.layer1(input_values))
-        inputs_embeds = nn.functional.dropout(inputs_embeds, self.config.speech_decoder_prenet_dropout, training=False)
+        inputs_embeds = nn.functional.dropout(inputs_embeds, self.config.speech_decoder_prenet_dropout, training=True)
         inputs_embeds = nn.functional.relu(self.layer2(inputs_embeds))
-        inputs_embeds = nn.functional.dropout(inputs_embeds, self.config.speech_decoder_prenet_dropout, training=False)
+        inputs_embeds = nn.functional.dropout(inputs_embeds, self.config.speech_decoder_prenet_dropout, training=True)
 
         inputs_embeds = self.layer3(inputs_embeds)
         inputs_embeds = self.encode_positions(inputs_embeds)
