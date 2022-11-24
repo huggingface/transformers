@@ -96,7 +96,7 @@ _import_structure = {
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],
-    "generation": [],
+    "generation": ["GenerationConfig"],
     "hf_argparser": ["HfArgumentParser"],
     "integrations": [
         "is_clearml_available",
@@ -122,6 +122,10 @@ _import_structure = {
     "models": [],
     # Models
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
+    "models.audio_spectrogram_transformer": [
+        "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ASTConfig",
+    ],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CONFIG_MAPPING",
@@ -301,6 +305,7 @@ _import_structure = {
     "models.mluke": [],
     "models.mmbt": ["MMBTConfig"],
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
+    "models.mobilenet_v1": ["MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV1Config"],
     "models.mobilenet_v2": ["MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV2Config"],
     "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
@@ -673,6 +678,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_speech_objects) if not name.startswith("_")
     ]
 else:
+    _import_structure["models.audio_spectrogram_transformer"].append("ASTFeatureExtractor")
     _import_structure["models.mctct"].append("MCTCTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
 
@@ -731,6 +737,7 @@ else:
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
     _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
+    _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
     _import_structure["models.owlvit"].append("OwlViTFeatureExtractor")
@@ -898,6 +905,14 @@ else:
             "AlbertModel",
             "AlbertPreTrainedModel",
             "load_tf_weights_in_albert",
+        ]
+    )
+    _import_structure["models.audio_spectrogram_transformer"].extend(
+        [
+            "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ASTModel",
+            "ASTPreTrainedModel",
+            "ASTForAudioClassification",
         ]
     )
     _import_structure["models.auto"].extend(
@@ -1676,6 +1691,15 @@ else:
             "MobileBertModel",
             "MobileBertPreTrainedModel",
             "load_tf_weights_in_mobilebert",
+        ]
+    )
+    _import_structure["models.mobilenet_v1"].extend(
+        [
+            "MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MobileNetV1ForImageClassification",
+            "MobileNetV1Model",
+            "MobileNetV1PreTrainedModel",
+            "load_tf_weights_in_mobilenet_v1",
         ]
     )
     _import_structure["models.mobilenet_v2"].extend(
@@ -3268,6 +3292,9 @@ if TYPE_CHECKING:
 
     # Feature Extractor
     from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
+
+    # Generation
+    from .generation import GenerationConfig
     from .hf_argparser import HfArgumentParser
 
     # Integrations
@@ -3297,6 +3324,10 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.audio_spectrogram_transformer import (
+        AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ASTConfig,
+    )
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -3464,6 +3495,7 @@ if TYPE_CHECKING:
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mmbt import MMBTConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
+    from .models.mobilenet_v1 import MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV1Config
     from .models.mobilenet_v2 import MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV2Config
     from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
@@ -3794,6 +3826,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_speech_objects import *
     else:
+        from .models.audio_spectrogram_transformer import ASTFeatureExtractor
         from .models.mctct import MCTCTFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
 
@@ -3838,6 +3871,7 @@ if TYPE_CHECKING:
         from .models.layoutlmv3 import LayoutLMv3FeatureExtractor, LayoutLMv3ImageProcessor
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
         from .models.maskformer import MaskFormerFeatureExtractor
+        from .models.mobilenet_v1 import MobileNetV1FeatureExtractor, MobileNetV1ImageProcessor
         from .models.mobilenet_v2 import MobileNetV2FeatureExtractor, MobileNetV2ImageProcessor
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
         from .models.owlvit import OwlViTFeatureExtractor
@@ -3946,6 +3980,12 @@ if TYPE_CHECKING:
             AlbertModel,
             AlbertPreTrainedModel,
             load_tf_weights_in_albert,
+        )
+        from .models.audio_spectrogram_transformer import (
+            AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ASTForAudioClassification,
+            ASTModel,
+            ASTPreTrainedModel,
         )
         from .models.auto import (
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
@@ -4585,6 +4625,13 @@ if TYPE_CHECKING:
             MobileBertModel,
             MobileBertPreTrainedModel,
             load_tf_weights_in_mobilebert,
+        )
+        from .models.mobilenet_v1 import (
+            MOBILENET_V1_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MobileNetV1ForImageClassification,
+            MobileNetV1Model,
+            MobileNetV1PreTrainedModel,
+            load_tf_weights_in_mobilenet_v1,
         )
         from .models.mobilenet_v2 import (
             MOBILENET_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
