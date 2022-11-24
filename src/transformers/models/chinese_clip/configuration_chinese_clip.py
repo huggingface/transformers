@@ -44,7 +44,8 @@ class ChineseCLIPTextConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used to instantiate a
     CHINESE_CLIP model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the CHINESE_CLIP
-    [OFA-Sys/chinese-clip-vit-base-patch16](https://huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16) architecture.
+    [OFA-Sys/chinese-clip-vit-base-patch16](https:
+        //huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16) architecture.
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
         vocab_size (`int`, *optional*, defaults to 30522):
