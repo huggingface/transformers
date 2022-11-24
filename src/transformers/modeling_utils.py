@@ -1024,8 +1024,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         self.config = config
         self.name_or_path = config.name_or_path
         self.warnings_issued = {}
-        # May be overwritten during `from_pretrained()`, if there is a `generation_config.json` in the model folder
-        self.generation_config = GenerationConfig.from_model_config(config)
+
+        if self.can_generate():
+            # May be overwritten during `from_pretrained()`, if there is a `generation_config.json` in the model folder
+            self.generation_config = GenerationConfig.from_model_config(config)
+        else:
+            self.generation_config = None
 
     def post_init(self):
         """
@@ -1107,6 +1111,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         `torch.nn.Module`: The main body of the model.
         """
         return getattr(self, self.base_model_prefix, self)
+
+    def can_generate(self) -> bool:
+        """
+        Returns whether this model can generate sequences with `.generate()`.
+
+        Returns:
+            :bool: Whether this model can generate sequences with `.generate()`.
+        """
+        return hasattr(self, "prepare_inputs_for_generation")
 
     def get_input_embeddings(self) -> nn.Module:
         """
@@ -2481,7 +2494,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # If it is a model with generation capabilities, attempt to set the generation config to an existing
         # `generation_config.json` file. Otherwise, keep the generation config created from the model config.
-        if hasattr(cls, "prepare_inputs_for_generation"):
+        if model.can_generate():
             try:
                 generation_config = GenerationConfig.from_pretrained(
                     pretrained_model_name_or_path,
