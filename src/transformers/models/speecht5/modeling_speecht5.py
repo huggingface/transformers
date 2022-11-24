@@ -2545,10 +2545,16 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
         r"""
-        TODO
+        decoder_input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`):
+            Float values of input mel spectrogram.
 
+            SpeechT5 uses an all-zero spectrum as the starting token for `decoder_input_values` generation. If
+            `past_key_values` is used, optionally only the last `decoder_input_values` have to be input (see
+            `past_key_values`).
         speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
             Tensor containing the speaker embeddings.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            TODO
 
         Returns:
 
