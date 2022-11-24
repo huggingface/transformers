@@ -1157,8 +1157,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
     def eager_serving(self, inputs):
         """
-        Method used for serving the model. Intended not to be compiled with a tf.function decorator
-        so that we can use it to generate multiple signatures later.
+        Method used for serving the model. Intended not to be compiled with a tf.function decorator so that we can use
+        it to generate multiple signatures later.
 
         Args:
             inputs (`Dict[str, tf.Tensor]`):
@@ -2267,7 +2267,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if saved_model:
             if signatures is None:
                 if any(spec.dtype == tf.int64 for spec in self.serving.input_signature[0].values()):
-                    int32_spec = {key: tf.TensorSpec(shape=spec.shape, dtype=tf.int32 if spec.dtype == tf.int64 else spec.dtype, name=spec.name) for key, spec in self.serving.input_signature[0].items()}
+                    int32_spec = {
+                        key: tf.TensorSpec(
+                            shape=spec.shape, dtype=tf.int32 if spec.dtype == tf.int64 else spec.dtype, name=spec.name
+                        )
+                        for key, spec in self.serving.input_signature[0].items()
+                    }
                     int32_serving = tf.function(self.eager_serving, input_signature=[int32_spec])
                     signatures = {"serving_default": self.serving, "int32_serving": int32_serving}
                 else:
