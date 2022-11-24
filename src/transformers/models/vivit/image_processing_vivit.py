@@ -47,6 +47,7 @@ def make_batched(videos) -> List[List[ImageInput]]:
     raise ValueError(f"Could not make batched video from {videos}")
 
 
+# Copied from transformers.models.videomae.image_processing_videomae.VideoMAEImageProcessor with VideoMAE->ViViT
 class ViViTImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ViViT image processor.
