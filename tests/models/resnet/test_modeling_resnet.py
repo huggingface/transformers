@@ -18,8 +18,6 @@
 import inspect
 import unittest
 
-import numpy as np
-
 from transformers import ResNetConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
@@ -260,7 +258,7 @@ class ResNetModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="ResNet does not use feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
-    
+
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
