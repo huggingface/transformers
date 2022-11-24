@@ -256,28 +256,35 @@ class ModelTesterMixin:
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
+        def check_save_load(out1, out2):
+            # make sure we don't have nans
+            out_2 = out2.cpu().numpy()
+            out_2[np.isnan(out_2)] = 0
+
+            out_1 = out1.cpu().numpy()
+            out_1[np.isnan(out_1)] = 0
+            max_diff = np.amax(np.abs(out_1 - out_2))
+            self.assertLessEqual(max_diff, 1e-5)
+
         for model_class in self.all_model_classes:
             model = model_class(config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            out_2 = outputs[0].cpu().numpy()
-            out_2[np.isnan(out_2)] = 0
+                first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(tmpdirname)
                 model.to(torch_device)
                 with torch.no_grad():
-                    after_outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                    second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
 
-                # Make sure we don't have nans
-                out_1 = after_outputs[0].cpu().numpy()
-                out_1[np.isnan(out_1)] = 0
-                max_diff = np.amax(np.abs(out_1 - out_2))
-                self.assertLessEqual(max_diff, 1e-5)
+            if isinstance(first, tuple) and isinstance(second, tuple):
+                for tensor1, tensor2 in zip(first, second):
+                    check_save_load(tensor1, tensor2)
+            else:
+                check_save_load(first, second)
 
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

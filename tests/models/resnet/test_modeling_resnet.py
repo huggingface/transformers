@@ -257,6 +257,10 @@ class ResNetModelTest(ModelTesterMixin, unittest.TestCase):
 
                 check_hidden_states_output(inputs_dict, config, model_class)
 
+    @unittest.skip(reason="ResNet does not use feedforward chunking")
+    def test_feed_forward_chunking(self):
+        pass
+    
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
