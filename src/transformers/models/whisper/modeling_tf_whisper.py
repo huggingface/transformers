@@ -29,7 +29,13 @@ from ...modeling_tf_outputs import (
     TFSeq2SeqLMOutput,
     TFSeq2SeqModelOutput,
 )
-from ...modeling_tf_utils import TFModelInputType, TFCausalLanguageModelingLoss, TFPreTrainedModel, keras_serializable, unpack_inputs
+from ...modeling_tf_utils import (
+    TFCausalLanguageModelingLoss,
+    TFModelInputType,
+    TFPreTrainedModel,
+    keras_serializable,
+    unpack_inputs,
+)
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_whisper import WhisperConfig
