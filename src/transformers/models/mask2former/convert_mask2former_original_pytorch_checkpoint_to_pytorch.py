@@ -184,7 +184,7 @@ class OriginalMask2FormerConfigToFeatureExtractorConverter:
             size=model_input.MIN_SIZE_TEST,
             max_size=model_input.MAX_SIZE_TEST,
             num_labels=model.SEM_SEG_HEAD.NUM_CLASSES,
-            # ignore_index=dataset_catalog.ignore_label, #check
+            ignore_index=model.SEM_SEG_HEAD.IGNORE_VALUE
             size_divisibility=32,  # 32 is required by swin
         )
 
@@ -606,7 +606,6 @@ class OriginalMask2FormerCheckpointToOursConverter:
             rename_keys.append(
                 (f"{src_prefix}.transformer_ffn_layers.{i}.norm.bias", f"{dst_prefix}.layers.{i}.final_layer_norm.bias")
             )
-    
 
         return rename_keys
 
@@ -812,7 +811,6 @@ def get_model_name(checkpoint_file: Path):
 
 
 if __name__ == "__main__":
-
     parser = ArgumentParser(
         description="Command line to convert the original mask2formers (with swin backbone) to our implementations."
     )
