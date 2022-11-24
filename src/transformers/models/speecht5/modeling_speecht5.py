@@ -2586,12 +2586,11 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             return_dict=True,
         )
 
-        _, spectrogram, _ = self.speech_decoder_postnet(outputs[0])
+        _, spectrogram, logits = self.speech_decoder_postnet(outputs[0])
 
         loss = None
         # if labels is not None:
-        #     loss_fct = CrossEntropyLoss()
-        #     loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
+        #     TODO: the loss consists of a spectrogram loss but also for the stop token
 
         if not return_dict:
             output = (spectrogram,) + outputs[1:]
