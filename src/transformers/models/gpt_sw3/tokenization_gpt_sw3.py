@@ -8,7 +8,7 @@ import sentencepiece as spm
 import numpy as np
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...utils import logging, to_py_obj, is_torch_tensor
+from ...utils import logging, to_py_obj, is_torch_tensor, TensorType
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
@@ -135,44 +135,15 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
         return self.sp_model.decode(tokens)
 
-    # Almost 10x speedup to override this for batch encode, 2x speedup for single-text encode
-    def __call__(self, text: Union[str, List[str]], *args, **kwargs):
-
-        if isinstance(text, str):
-            text = self.preprocess_text(text)
-            token_ids = self.sp_model.encode(text)
-            attention_mask = [1 for _ in token_ids]
-        else:
-            text = [self.preprocess_text(t) for t in text]
-            token_ids = self.sp_model.encode(text)
-            attention_mask = [[1] * len(ids_list) for ids_list in token_ids]
-
-        out_dict = {"input_ids": token_ids, "attention_mask": attention_mask}
-        return out_dict
-
-    def to_py_obj_light(self, obj):
-        # Like to_py_obj but removes checks for UserDict, list of tuples, TF, and Jax
-        # This gives ~2x speedup compared to supporting everything, and ~0.5x speedup compared to only supporting list
-        if isinstance(obj, (np.ndarray, np.number)):  # tolist also works on 0d np arrays
-            return obj.tolist()
-        elif is_torch_tensor(obj):
-            return obj.detach().cpu().tolist()
-        else:
-            return obj
-
     # This method is not abstract, but overriding this ensures that e.g. bytes gets represented as intended
-    # Overriding decode instead of _decode yields significant speedup but removes some functionality
-    def decode(
-            self,
-            token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor"],
-            skip_special_tokens: bool = False,
-            clean_up_tokenization_spaces: bool = True,
-            spaces_between_special_tokens: bool = True,
-            **kwargs
+    def _decode(
+        self,
+        token_ids: List[int],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
+        spaces_between_special_tokens: bool = True,
+        **kwargs
     ) -> str:
-        # token_ids = to_py_obj(token_ids)
-        token_ids = self.to_py_obj_light(token_ids)
-
         return self.sp_model.decode(token_ids)
 
     def get_vocab(self) -> Dict[str, int]:
@@ -196,3 +167,53 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+    def _to_py_obj_light(self, obj):
+        # Like to_py_obj but removes checks for UserDict, list of tuples, TF, and Jax
+        # This gives ~2x speedup compared to supporting everything, and ~0.5x speedup compared to only supporting list
+        if isinstance(obj, (np.ndarray, np.number)):  # tolist also works on 0d np arrays
+            return obj.tolist()
+        elif is_torch_tensor(obj):
+            return obj.detach().cpu().tolist()
+        else:
+            return obj
+
+    # Overriding decode instead of _decode yields significant speedup but removes some functionality
+    def decode_fast(self, token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor"]) -> str:
+        # token_ids = to_py_obj(token_ids)
+        token_ids = self._to_py_obj_light(token_ids)
+
+        return self.sp_model.decode(token_ids)
+
+    # Fastest but only works for python ints or lists
+    def decode_faster(self, token_ids: Union[int, List[int]]) -> str:
+        # token_ids = to_py_obj(token_ids)
+
+        return self.sp_model.decode(token_ids)
+
+    def encode_fast(self, text: str, return_tensors: Optional[Union[str, TensorType]] = None) -> List[int]:
+        text = self.preprocess_text(text)
+        token_ids = self.sp_model.encode(text)
+        if return_tensors == "pt":
+            token_ids = torch.tensor(token_ids)
+        return token_ids
+
+    # Almost 10x speedup to override this for batch encode, 2x speedup for single-text encode
+    def call_fast(self, text: Union[str, List[str]], return_tensors: Optional[Union[str, TensorType]] = None
+                  ) -> Dict[str, Union[Any]]:
+
+        if isinstance(text, str):
+            text = self.preprocess_text(text)
+            token_ids = self.sp_model.encode(text)
+            attention_mask = [1 for _ in token_ids]
+        else:
+            text = [self.preprocess_text(t) for t in text]
+            token_ids = self.sp_model.encode(text)
+            attention_mask = [[1] * len(ids_list) for ids_list in token_ids]
+
+        if return_tensors == "pt":
+            token_ids = torch.tensor(token_ids)
+            attention_mask = torch.tensor(attention_mask)
+
+        out_dict = {"input_ids": token_ids, "attention_mask": attention_mask}
+        return out_dict
