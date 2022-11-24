@@ -63,6 +63,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("segformer", "SegformerImageProcessor"),
         ("swin", "ViTImageProcessor"),
         ("swinv2", "ViTImageProcessor"),
+        ("timesformer", "VideoMAEImageProcessor"),
         ("van", "ConvNextImageProcessor"),
         ("videomae", "VideoMAEImageProcessor"),
         ("vilt", "ViltImageProcessor"),
