@@ -56,6 +56,8 @@ class BioGptConfig(PretrainedConfig):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
+        activation_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for activations inside the fully connected layer.
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -63,6 +65,8 @@ class BioGptConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        scale_embedding (`bool`, *optional*, defaults to `False`):
+            Scale embeddings by diving by sqrt(d_model).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -95,6 +99,7 @@ class BioGptConfig(PretrainedConfig):
         max_position_embeddings=512,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
+        scale_embedding=False,
         use_cache=True,
         is_encoder_decoder=False,
         layerdrop=0.0,
@@ -115,6 +120,7 @@ class BioGptConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.scale_embedding = scale_embedding
         self.use_cache = use_cache
         self.is_encoder_decoder = is_encoder_decoder
         self.layerdrop = layerdrop
