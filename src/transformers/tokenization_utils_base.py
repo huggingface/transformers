@@ -898,24 +898,29 @@ class SpecialTokensMixin:
 
             if self.verbose:
                 logger.info(f"Assigning {value} to the {key} key of the tokenizer")
-                if key == "additional_special_tokens":
-                    additional_special_tokens = getattr(self, key)
-                    for x in value:
-                        if x not in additional_special_tokens:
-                            additional_special_tokens.append(x)
-                        self.additional_special_tokens = additional_special_tokens
-                else:
-                    setattr(self, key, value)
 
             if key == "additional_special_tokens":
                 assert isinstance(value, (list, tuple)) and all(
                     isinstance(t, (str, AddedToken)) for t in value
                 ), f"Tokens {value} for key {key} should all be str or AddedToken instances"
+
+                # This is a copy of `self._additional_special_tokens`
+                additional_special_tokens = getattr(self, key)
+                additional_special_tokens_set = set(additional_special_tokens)
+                to_add = []
+                for token in value:
+                    if str(token) not in additional_special_tokens_set and str(token) not in to_add:
+                        to_add.append(token)
+                # update the property
+                additional_special_tokens.extend(to_add)
+                self.additional_special_tokens = additional_special_tokens
+
                 added_tokens += self.add_tokens(value, special_tokens=True)
             else:
                 assert isinstance(
                     value, (str, AddedToken)
                 ), f"Token {value} for key {key} should be a str or an AddedToken instance"
+                setattr(self, key, value)
                 added_tokens += self.add_tokens([value], special_tokens=True)
 
         return added_tokens
