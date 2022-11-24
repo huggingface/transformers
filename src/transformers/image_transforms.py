@@ -145,7 +145,7 @@ def to_pil_image(
     image = np.squeeze(image, axis=-1) if image.shape[-1] == 1 else image
 
     # PIL.Image can only store uint8 values, so we rescale the image to be between 0 and 255 if needed.
-    do_rescale = isinstance(image.flat[0], float) if do_rescale is None else do_rescale
+    do_rescale = isinstance(image.flat[0], (float, np.float32, np.float64)) if do_rescale is None else do_rescale
     if do_rescale:
         image = rescale(image, 255)
     image = image.astype(np.uint8)
