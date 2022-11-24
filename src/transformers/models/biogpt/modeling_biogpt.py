@@ -482,28 +482,31 @@ class BioGptModel(BioGptPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = input_ids.size()
-            bsz, tgt_len = input_shape
+            input = input_ids
+            input_shape = input.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
+            input = inputs_embeds[:, :, -1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        bsz, tgt_len = input_shape
 
         # past_key_values_length
         past_key_values_length = past_key_values[0]["self"]["prev_key"].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            inputs_embeds = self.embeddings(input_ids) * self.embed_scale
+            inputs_embeds = self.embeddings(input) * self.embed_scale
 
         # embed positions
-        positions = self.embed_positions(input_ids, past_key_values_length)
+        positions = self.embed_positions(input, past_key_values_length)
         positions = positions.to(inputs_embeds.device)
 
         hidden_states = inputs_embeds + positions
 
         causal_mask = triu_onnx(
             fill_with_neg_inf(torch.zeros(tgt_len, tgt_len, dtype=self.embeddings.weight.dtype)), 1
-        ).to(device=input_ids.device)
+        ).to(device=inputs_embeds.device)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -572,6 +575,8 @@ class BioGptModel(BioGptPreTrainedModel):
     """BioGPT Model with a `language modeling` head on top for CLM fine-tuning.""", BIOGPT_START_DOCSTRING
 )
 class BioGptLMHeadModel(BioGptPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -665,23 +670,10 @@ class BioGptLMHeadModel(BioGptPreTrainedModel):
         if past:
             input_ids = input_ids[:, -1].unsqueeze(-1)
 
-        attention_mask = kwargs.get("attention_mask", None)
-        position_ids = kwargs.get("position_ids", None)
-
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
-        else:
-            position_ids = None
         return {
             "input_ids": input_ids,
             "past_key_values": past,
             "use_cache": kwargs.get("use_cache"),
-            "position_ids": position_ids,
-            "attention_mask": attention_mask,
         }
 
     def _reorder_cache(self, past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
