@@ -2864,7 +2864,7 @@ class Mask2FormerMSDAModel(nn.Module):
     
     def forward(self, features: List[Tensor], output_hidden_states: bool = False) -> Mask2FormerPixelDecoderOutput:
 
-        input_embeds, position_embeddings = self.embeddings(features)
+        input_embeds, position_embeddings = self.embeddings(features[1:])
 
         encoder_output = self.encoder(input_embeds, position_embeddings)
         
@@ -3044,7 +3044,7 @@ class Mask2FormerPixelLevelModule(nn.Module):
         for feature in features:
             print("pixfeatures:",feature.shape)
         print("Pixel output_hidden_states:",output_hidden_states)
-        decoder_output: Mask2FormerPixelDecoderOutput = self.decoder(features[1:])
+        decoder_output: Mask2FormerPixelDecoderOutput = self.decoder(features) #[1:])
         
         return Mask2FormerPixelLevelModuleOutput(
             encoder_last_hidden_state=features[-1] if output_hidden_states else (),
