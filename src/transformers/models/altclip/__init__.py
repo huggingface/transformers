@@ -25,18 +25,10 @@ from ...utils import is_torch_available
 
 
 _import_structure = {
-    "configuration_altclip": ["ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "AltCLIPConfig"],
+    "configuration_altclip": ["ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "AltCLIPConfig", "AltCLIPTextConfig"],
     "processing_altclip": ["AltCLIPProcessor"],
     "tokenization_altclip": ["AltCLIPTokenizer"],
 }
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_altclip_fast"] = ["AltCLIPTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -47,23 +39,16 @@ else:
     _import_structure["modeling_altclip"] = [
         "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "AltCLIPModel",
+        "AltCLIPTextModel",
     ]
 
 
 
 
 if TYPE_CHECKING:
-    from .configuration_altclip import ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, AltCLIPConfig
+    from .configuration_altclip import ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, AltCLIPConfig, AltCLIPTextConfig
     from .tokenization_altclip import AltCLIPTokenizer
     from .processing_altclip import AltCLIPProcessor
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_altclip_fast import AltCLIPTokenizerFast
 
     try:
         if not is_torch_available():
@@ -74,6 +59,7 @@ if TYPE_CHECKING:
         from .modeling_altclip import (
             ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             AltCLIPModel,
+            AltCLIPTextModel,
         )
 
 

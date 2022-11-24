@@ -121,7 +121,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
-    "models.altclip": ["ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "AltClipConfig", "AltClipTokenizer"],
+    "models.altclip": ["ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "AltCLIPConfig", "AltCLIPTextConfig", "AltCLIPProcessor"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -856,7 +856,8 @@ else:
     _import_structure["models.altclip"].extend(
         [
             "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "AltClipModel",
+            "AltCLIPModel",
+            "AltCLIPTextModel",
         ]
     )
 
@@ -3299,7 +3300,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.altclip import ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, AltClipConfig
+    from .models.altclip import ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, AltCLIPConfig, AltCLIPTextConfig, AltCLIPProcessor
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -3942,16 +3943,8 @@ if TYPE_CHECKING:
 
         from .models.altclip import (
             ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            AltClipForMaskedLM,
-            AltClipForCausalLM,
-            AltClipForMultipleChoice,
-            AltClipForQuestionAnswering,
-            AltClipForSequenceClassification,
-            AltClipForTokenClassification,
-            AltClipLayer,
-            AltClipModel,
-            AltClipPreTrainedModel,
-            load_tf_weights_in_altclip,
+            AltCLIPModel,
+            AltCLIPTextModel,
         )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
