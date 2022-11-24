@@ -1677,22 +1677,25 @@ class GenerationMixin:
         ['DeepMind Company is a company that focuses on the development and commercialization of artificial intelligence (AI). DeepMind’s mission is to help people understand and solve problems that are difficult to solve in the world today.\n\nIn this post, we talk about the benefits of deep learning in business and how it']
         ```"""
         # init values
+        generation_config = (
+            self.generation_config
+            if self.generation_config is not None
+            else GenerationConfig.from_model_config(self.config)
+        )
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
-        output_attentions = (
-            output_attentions if output_attentions is not None else self.generation_config.output_attentions
-        )
+        pad_token_id = pad_token_id if pad_token_id is not None else generation_config.pad_token_id
+        eos_token_id = eos_token_id if eos_token_id is not None else generation_config.eos_token_id
+        output_scores = output_scores if output_scores is not None else generation_config.output_scores
+        output_attentions = output_attentions if output_attentions is not None else generation_config.output_attentions
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.generation_config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else generation_config.output_hidden_states
         )
         return_dict_in_generate = (
             return_dict_in_generate
             if return_dict_in_generate is not None
-            else self.generation_config.return_dict_in_generate
+            else generation_config.return_dict_in_generate
         )
 
         # init attention / hidden states / scores tuples
@@ -2030,6 +2033,11 @@ class GenerationMixin:
         ["It might be possible to get a better understanding of the nature of the problem, but it's not"]
         ```"""
         # init values
+        generation_config = (
+            self.generation_config
+            if self.generation_config is not None
+            else GenerationConfig.from_model_config(self.config)
+        )
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
@@ -2039,19 +2047,17 @@ class GenerationMixin:
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
-        output_attentions = (
-            output_attentions if output_attentions is not None else self.generation_config.output_attentions
-        )
+        pad_token_id = pad_token_id if pad_token_id is not None else generation_config.pad_token_id
+        eos_token_id = eos_token_id if eos_token_id is not None else generation_config.eos_token_id
+        output_scores = output_scores if output_scores is not None else generation_config.output_scores
+        output_attentions = output_attentions if output_attentions is not None else generation_config.output_attentions
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.generation_config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else generation_config.output_hidden_states
         )
         return_dict_in_generate = (
             return_dict_in_generate
             if return_dict_in_generate is not None
-            else self.generation_config.return_dict_in_generate
+            else generation_config.return_dict_in_generate
         )
 
         # init attention / hidden states / scores tuples
@@ -2281,6 +2287,11 @@ class GenerationMixin:
         ['Today is a beautiful day, and a wonderful day.\n\nI was lucky enough to meet the']
         ```"""
         # init values
+        generation_config = (
+            self.generation_config
+            if self.generation_config is not None
+            else GenerationConfig.from_model_config(self.config)
+        )
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
@@ -2291,19 +2302,17 @@ class GenerationMixin:
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         logits_warper = logits_warper if logits_warper is not None else LogitsProcessorList()
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
-        output_attentions = (
-            output_attentions if output_attentions is not None else self.generation_config.output_attentions
-        )
+        pad_token_id = pad_token_id if pad_token_id is not None else generation_config.pad_token_id
+        eos_token_id = eos_token_id if eos_token_id is not None else generation_config.eos_token_id
+        output_scores = output_scores if output_scores is not None else generation_config.output_scores
+        output_attentions = output_attentions if output_attentions is not None else generation_config.output_attentions
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.generation_config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else generation_config.output_hidden_states
         )
         return_dict_in_generate = (
             return_dict_in_generate
             if return_dict_in_generate is not None
-            else self.generation_config.return_dict_in_generate
+            else generation_config.return_dict_in_generate
         )
 
         # init attention / hidden states / scores tuples
@@ -2536,6 +2545,11 @@ class GenerationMixin:
         ['Wie alt bist du?']
         ```"""
         # init values
+        generation_config = (
+            self.generation_config
+            if self.generation_config is not None
+            else GenerationConfig.from_model_config(self.config)
+        )
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
@@ -2547,19 +2561,17 @@ class GenerationMixin:
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         if len(stopping_criteria) == 0:
             warnings.warn("You don't have defined any stopping_criteria, this will likely loop forever", UserWarning)
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
-        output_attentions = (
-            output_attentions if output_attentions is not None else self.generation_config.output_attentions
-        )
+        pad_token_id = pad_token_id if pad_token_id is not None else generation_config.pad_token_id
+        eos_token_id = eos_token_id if eos_token_id is not None else generation_config.eos_token_id
+        output_scores = output_scores if output_scores is not None else generation_config.output_scores
+        output_attentions = output_attentions if output_attentions is not None else generation_config.output_attentions
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.generation_config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else generation_config.output_hidden_states
         )
         return_dict_in_generate = (
             return_dict_in_generate
             if return_dict_in_generate is not None
-            else self.generation_config.return_dict_in_generate
+            else generation_config.return_dict_in_generate
         )
 
         batch_size = len(beam_scorer._beam_hyps)
@@ -2862,6 +2874,11 @@ class GenerationMixin:
         ['Wie alt bist du?']
         ```"""
         # init values
+        generation_config = (
+            self.generation_config
+            if self.generation_config is not None
+            else GenerationConfig.from_model_config(self.config)
+        )
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
@@ -2871,19 +2888,17 @@ class GenerationMixin:
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
-        output_attentions = (
-            output_attentions if output_attentions is not None else self.generation_config.output_attentions
-        )
+        pad_token_id = pad_token_id if pad_token_id is not None else generation_config.pad_token_id
+        eos_token_id = eos_token_id if eos_token_id is not None else generation_config.eos_token_id
+        output_scores = output_scores if output_scores is not None else generation_config.output_scores
+        output_attentions = output_attentions if output_attentions is not None else generation_config.output_attentions
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.generation_config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else generation_config.output_hidden_states
         )
         return_dict_in_generate = (
             return_dict_in_generate
             if return_dict_in_generate is not None
-            else self.generation_config.return_dict_in_generate
+            else generation_config.return_dict_in_generate
         )
 
         batch_size = len(beam_scorer._beam_hyps)
@@ -3175,6 +3190,11 @@ class GenerationMixin:
         ['Wie alt bist du?']
         ```"""
         # init values
+        generation_config = (
+            self.generation_config
+            if self.generation_config is not None
+            else GenerationConfig.from_model_config(self.config)
+        )
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
@@ -3184,19 +3204,17 @@ class GenerationMixin:
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
-        output_attentions = (
-            output_attentions if output_attentions is not None else self.generation_config.output_attentions
-        )
+        pad_token_id = pad_token_id if pad_token_id is not None else generation_config.pad_token_id
+        eos_token_id = eos_token_id if eos_token_id is not None else generation_config.eos_token_id
+        output_scores = output_scores if output_scores is not None else generation_config.output_scores
+        output_attentions = output_attentions if output_attentions is not None else generation_config.output_attentions
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.generation_config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else generation_config.output_hidden_states
         )
         return_dict_in_generate = (
             return_dict_in_generate
             if return_dict_in_generate is not None
-            else self.generation_config.return_dict_in_generate
+            else generation_config.return_dict_in_generate
         )
 
         batch_size = len(beam_scorer._beam_hyps)
@@ -3546,6 +3564,11 @@ class GenerationMixin:
         ['Wie alt sind Sie?']
         ```"""
         # init values
+        generation_config = (
+            self.generation_config
+            if self.generation_config is not None
+            else GenerationConfig.from_model_config(self.config)
+        )
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
@@ -3557,19 +3580,17 @@ class GenerationMixin:
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         if len(stopping_criteria) == 0:
             warnings.warn("You don't have defined any stopping_criteria, this will likely loop forever", UserWarning)
-        pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
-        output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
-        output_attentions = (
-            output_attentions if output_attentions is not None else self.generation_config.output_attentions
-        )
+        pad_token_id = pad_token_id if pad_token_id is not None else generation_config.pad_token_id
+        eos_token_id = eos_token_id if eos_token_id is not None else generation_config.eos_token_id
+        output_scores = output_scores if output_scores is not None else generation_config.output_scores
+        output_attentions = output_attentions if output_attentions is not None else generation_config.output_attentions
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.generation_config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else generation_config.output_hidden_states
         )
         return_dict_in_generate = (
             return_dict_in_generate
             if return_dict_in_generate is not None
-            else self.generation_config.return_dict_in_generate
+            else generation_config.return_dict_in_generate
         )
 
         # init attention / hidden states / scores tuples
