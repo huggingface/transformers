@@ -56,14 +56,14 @@ _CONFIG_FOR_DOC = "GptSw3Config"
 _TOKENIZER_FOR_DOC = "GptSw3Tokenizer"
 
 GPT_SW3_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "",
+    "",  # TODO: Add models
     # See all gpt-sw3 models at https://huggingface.co/models?filter=gpt-sw3
 ]
 
 
 class ScaleMaskSoftmax(torch.nn.Module):
     """
-    fused operation: scaling + mask + softmax # TODO: Check if it really is fused in this implementation
+    fused operation: scaling + mask + softmax # TODO: Check if it really is fused in this implementation or update the doc
     match the behavior of fused softmax and torch softmax.
     This is a workaround for https://github.com/NVIDIA/apex/issues/1493.
     Arguments:
@@ -93,7 +93,7 @@ class ScaleMaskSoftmax(torch.nn.Module):
         if not (self.scale is None or softmax_in_fp32):
             raise RuntimeError("softmax should be in fp32 when scaled")
 
-    def forward(self, input, mask):
+    def forward(self, input, attention_mask, causal_mask):
         # [b, np, sq, sk]
         assert input.dim() == 4
         if self.input_in_float16 and self.softmax_in_fp32:
@@ -101,11 +101,16 @@ class ScaleMaskSoftmax(torch.nn.Module):
 
         if self.scale is not None:
             input = input * self.scale
-        mask_output = input.masked_fill_(mask, -10000.0) if mask is not None else input
+        mask_output = input.masked_fill_(causal_mask, -10000.0) if causal_mask is not None else input
+
+        if attention_mask is not None:
+            # Apply the attention mask
+            mask_output = mask_output + attention_mask
+
         probs = torch.nn.Softmax(dim=-1)(mask_output)
 
         # This is to handle all zeros in the mask.
-        all_k_masked = mask.all(axis=-1)
+        all_k_masked = causal_mask.all(axis=-1)
         zero_attention_mask = (1.0 - all_k_masked.float())[:, :, :, None]
         probs = probs * zero_attention_mask
 
@@ -123,7 +128,7 @@ class CoreAttention(torch.nn.Module):
         layer_idx,
         num_attention_heads,
         hidden_size,
-        precision=32,  # TODO: Find out how this is sent into the model in nemo
+        precision='bf16',  # TODO: Find out how this is sent into the model in nemo
         apply_query_key_layer_scaling=True,
         attention_dropout=0.1,
         normalize_attention_scores=True,  # Verified that this is used in nemo gpt
@@ -140,7 +145,7 @@ class CoreAttention(torch.nn.Module):
         self.attention_softmax_in_fp32 = False
         if self.apply_query_key_layer_scaling:
             self.attention_softmax_in_fp32 = True
-        self.layer_number = max(1, layer_idx)
+        self.layer_idx = max(1, layer_idx)
         # If True, will scale attention scores by 1 / sqrt(hidden_size_per_attention_head).
         # This arg has been provided mostly to support weight conversion of Huggingface models. (ex: T5v1.1)
         self.normalize_attention_scores = normalize_attention_scores
@@ -151,7 +156,7 @@ class CoreAttention(torch.nn.Module):
         coeff = None
         self.norm_factor = math.sqrt(self.hidden_size_per_attention_head)
         if self.apply_query_key_layer_scaling:
-            coeff = self.layer_number
+            coeff = self.layer_idx
             self.norm_factor *= coeff
 
         self.scale_mask_softmax = ScaleMaskSoftmax(
@@ -169,7 +174,16 @@ class CoreAttention(torch.nn.Module):
         key_layer,
         value_layer,
         attention_mask,
+        causal_mask,
+        layer_past=None,
     ):
+        # s := sequence length
+        # b := batch size
+        # h := hidden size
+        # np := number of attention heads
+        # hn := hidden size of attention heads
+        # sk := sequence length of key
+        # sq := sequence length of query
 
         # ===================================
         # Raw attention scores. [b, np, s, s]
@@ -184,7 +198,7 @@ class CoreAttention(torch.nn.Module):
         key_layer = key_layer.view(output_size[3], output_size[0] * output_size[1], -1)
 
         # preallocting input tensor: [b * np, sq, sk]
-        matmul_input_buffer = torch.empty(
+        matmul_input_buffer = torch.zeros(
             output_size[0] * output_size[1],
             output_size[2],
             output_size[3],
@@ -193,23 +207,43 @@ class CoreAttention(torch.nn.Module):
         )
 
         # Raw attention scores. [b * np, sq, sk]
-        matmul_result = torch.baddbmm(
-            matmul_input_buffer,
-            query_layer.transpose(0, 1),  # [b * np, sq, hn]
-            key_layer.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
-            beta=0.0,
-            alpha=(1.0 / self.norm_factor) if self.normalize_attention_scores else 1.0,
-        )
+        if query_layer.device == torch.device('cpu'):
+            # We have this due to a bug in pytorch where torch.badbmm gives random nans on cpu
+            # https://github.com/pytorch/pytorch/issues/80588
+            matmul_result = torch.bmm(
+                query_layer.transpose(0, 1),  # [b * np, sq, hn]
+                key_layer.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
+            ) * (1.0 / self.norm_factor) if self.normalize_attention_scores else 1.0
+        else:
+            matmul_result = torch.baddbmm(
+                matmul_input_buffer,
+                query_layer.transpose(0, 1),  # [b * np, sq, hn]
+                key_layer.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
+                beta=0.0,
+                alpha=(1.0 / self.norm_factor) if self.normalize_attention_scores else 1.0,
+            )
 
         # change view to [b, np, sq, sk]
         attention_scores = matmul_result.view(*output_size)
 
+        # ==================================================
+        # Update attention mask for inference. [b, np, sq, sk]
+        # ==================================================
+
+        # if use_cache:
+        with torch.no_grad():
+            if layer_past is not None:
+                causal_mask = causal_mask[
+                                 ..., attention_scores.size(3) - 1, : attention_scores.size(3)
+                                 ].unsqueeze(2)
+            else:
+                causal_mask = causal_mask[..., : attention_scores.size(3), : attention_scores.size(3)]
+
         # ===========================
         # Attention probs and dropout
         # ===========================
-
         # attention scores and attention mask [b, np, sq, sk]
-        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask)
+        attention_probs = self.scale_mask_softmax(attention_scores, attention_mask, causal_mask)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -254,7 +288,7 @@ class GptSw3Attention(nn.Module):
         precision = 32                                      # TODO: Verify that this is correct # TODO: use from config
         apply_query_key_layer_scaling = True                # This is verified correct          # TODO: use from config
         attention_dropout = 0.1                             # TODO: Verify that this is correct # TODO: use from config
-        self.get_key_value = True                           # TODO: Verify that this is correct
+        self.get_key_value = True                           # TODO: Verify that this is correct # TODO: Safely remove this
         self.layer_idx = max(1, layer_idx)  # In nemo megatron they use max(1, layer_number) instead of layer_number+1.
 
         self.hidden_size = config.hidden_size
@@ -291,20 +325,27 @@ class GptSw3Attention(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-        get_key_value: Optional[bool] = False,
     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
+        # Self-attention layer takes input with size [s, b, h]
+        # and returns output of the same size.
 
+
+        # The Nemo attention assumes that the input hidden states have [sq, b, h] shape.
+        # Huggingface input hidden states have [b, sq, h] shape.
         # hidden_states: [b, sq, h] -> [sq, b, h]
         hidden_states = hidden_states.transpose(0, 1)
+
+        # If no attention mask is provided, we just make a causal mask.
+        sq, b, h = hidden_states.shape
+        # TODO: Figure out how to create attention mask with use_cache=True
+        causal_mask = torch.tril(torch.ones((b, 2048, 2048), device=hidden_states.device)).view(b, 1, 2048, 2048)
+        causal_mask = causal_mask < 0.5
 
         # sq := sequence length
         # b := batch size
         # h := hidden size
         # np := number of attention heads
         # hn := hidden size of attention heads
-
-        # Causal mask (lower triangular) and attention mask.
-        # causal_mask = (attention_mask.transpose(2, 3) * attention_mask).tril() < 0.5
 
         # hidden_states: [sq, b, h]
         # Attention heads [sq, b, h] -> [sq, b, (np * 3 * hn)]
@@ -321,14 +362,25 @@ class GptSw3Attention(nn.Module):
         (query_layer, key_layer, value_layer) = self._split_tensor_along_last_dim(mixed_x_layer, 3)
 
         if layer_past is not None:
-            # TODO: Follow hf caching format, wich means convert it to gpt-sw3 compatible format here.
+            # TODO: Follow hf caching format, which means convert it to gpt-sw3 compatible format here.
             past_key, past_value = layer_past
+
+            # Rearrange dimensions from hf to nemo format.
+            # key: [b, np, hn, sq] -> [sq, b, np, hn]
+            past_key = past_key.permute(3, 0, 1, 2)
+            # value: [b, np, sq, hn] -> [sq, b, np, hn]
+            past_value = past_value.permute(2, 0, 1, 3)
+
             key_layer = torch.cat((past_key, key_layer), dim=0)
             value_layer = torch.cat((past_value, value_layer), dim=0)
 
         if use_cache is True:
-            # TODO: Follow hf caching format, convert to hf caching format before saving.
-            present = (key_layer, value_layer)
+            # Rearrange dimensions from nemo to hf format.
+            # key: [sq, b, np, hn] -> [b, np, hn, sq]  # TODO: Verify that this is the hf format.
+            stored_key_layer = key_layer.permute(1, 2, 3, 0)
+            # value: [sq, b, np, hn] -> [b, np, sq, hn]  # TODO: Verify that this is the hf format.
+            stored_value_layer = value_layer.permute(1, 2, 0, 3)
+            present = (stored_key_layer, stored_value_layer)
         else:
             present = None
 
@@ -336,21 +388,23 @@ class GptSw3Attention(nn.Module):
             query_layer,
             key_layer,
             value_layer,
+            attention_mask,
             causal_mask,
             layer_past=layer_past,
-            get_key_value=get_key_value,
         )
 
         attn_output = self.c_proj(attn_output)
 
         # [sq, b, h] -> [b, sq, h]
         attn_output = attn_output.transpose(0, 1)
-        attn_weights = attn_weights.transpose(0, 1)
+        attn_weights = None  # attn_weights  # TODO: Figure out correct dim order and shape for attn_weights.
 
         outputs = (attn_output, present)
         if output_attentions:
             outputs += (attn_weights,)
 
+        # outputs is either (attn_output, present) or (attn_output, present, attn_weights)
+        # if use_cache is set to True present is a tuple with (key_layer, value_layer), if False present is None
         return outputs  # output, present, (attentions)
 
 
@@ -412,6 +466,9 @@ class GptSw3Block(nn.Module):
 
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
+
+        # att_outputs is either (attn_output, present) or (attn_output, present, attn_weights)
+        # if use_cache is set to True present is a tuple with (key_layer, value_layer), if False present is None
         attn_outputs = self.attn(
             hidden_states,
             layer_past=layer_past,
@@ -419,17 +476,20 @@ class GptSw3Block(nn.Module):
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
-        attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
-        outputs = attn_outputs[1:]
+        attn_output = attn_outputs[0]   # attn_outputs[0]: attn_output
+        outputs = attn_outputs[1:]      # attn_outputs[1:]: present, attn_weights
+
         # residual connection
         hidden_states = attn_output + residual
 
         residual = hidden_states
         hidden_states = self.ln_2(hidden_states)
         feed_forward_hidden_states = self.mlp(hidden_states)
+
         # residual connection
         hidden_states = residual + feed_forward_hidden_states
 
+        # TODO: Make sure cache works correctly. Outputs comes from attention so need to verify what is returned.
         if use_cache:
             outputs = (hidden_states,) + outputs
         else:
@@ -801,15 +861,13 @@ class GptSw3Model(GptSw3PreTrainedModel):
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
             attention_mask = attention_mask[:, None, None, :]
 
-            # We make the attention mask into a causal mask of dimensions [batch_size, 1, seq_length, seq_length]
-            attention_mask = (attention_mask.transpose(2, 3) * attention_mask).tril() < 0.5
-        else:
-            # If no attention mask is provided, we just make a causal mask.
-            seq_length = input_shape[-1]
-            attention_mask = torch.tril(torch.ones((batch_size, seq_length, seq_length), device=device)).view(
-                batch_size, 1, seq_length, seq_length
-            )
-            attention_mask = attention_mask < 0.5
+            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+            # masked positions, this operation will create a tensor which is 0.0 for
+            # positions we want to attend and the dtype's smallest value for masked positions.
+            # Since we are adding it to the raw scores before the softmax, this is
+            # effectively the same as removing these entirely.
+            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+            attention_mask = (1.0 - attention_mask) * -10000.0  # torch.finfo(self.dtype).min
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
@@ -839,8 +897,6 @@ class GptSw3Model(GptSw3PreTrainedModel):
                 # Ensure that attention_mask is always on the same device as hidden_states
                 if attention_mask is not None:
                     attention_mask = attention_mask.to(hidden_states.device)
-                if isinstance(head_mask, torch.Tensor):
-                    head_mask = head_mask.to(hidden_states.device)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -864,7 +920,6 @@ class GptSw3Model(GptSw3PreTrainedModel):
                     hidden_states,
                     None,
                     attention_mask,
-                    head_mask[i],
                     encoder_hidden_states,
                     encoder_attention_mask,
                 )
@@ -873,7 +928,6 @@ class GptSw3Model(GptSw3PreTrainedModel):
                     hidden_states,
                     layer_past=layer_past,
                     attention_mask=attention_mask,
-                    head_mask=head_mask[i],
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
                     use_cache=use_cache,
@@ -886,8 +940,8 @@ class GptSw3Model(GptSw3PreTrainedModel):
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (outputs[3 if use_cache else 2],)
+                # if self.config.add_cross_attention:
+                #     all_cross_attentions = all_cross_attentions + (outputs[3 if use_cache else 2],)
 
             # Model Parallel: If it's the last layer for that device, put things on the next device
             if self.model_parallel:
