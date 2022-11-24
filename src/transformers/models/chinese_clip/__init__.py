@@ -51,6 +51,7 @@ else:
         "ChineseCLIPModel",
         "ChineseCLIPPreTrainedModel",
         "ChineseCLIPTextModel",
+        "ChineseCLIPTextPreTrainedModel",
         "ChineseCLIPVisionModel",
     ]
 
@@ -83,6 +84,7 @@ if TYPE_CHECKING:
             ChineseCLIPModel,
             ChineseCLIPPreTrainedModel,
             ChineseCLIPTextModel,
+            ChineseCLIPTextPreTrainedModel,
             ChineseCLIPVisionModel,
         )
 
