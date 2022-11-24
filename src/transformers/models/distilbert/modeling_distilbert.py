@@ -88,8 +88,7 @@ def _create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
     out[:, 0::2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
     out[:, 1::2] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
     out.detach_()
-    
-    
+
 
 class Embeddings(nn.Module):
     def __init__(self, config: PretrainedConfig):
@@ -145,8 +144,9 @@ class MultiHeadSelfAttention(nn.Module):
 
         # Split evenly into the multiples of multiheads
         if self.dim % self.n_heads != 0:
-            raise ValueError("self.n_heads (" + str(self.n_heads) + ") must divide self.dim (" + str(self.dim) + ") evenly")
-       
+            raise ValueError(
+                "self.n_heads (" + str(self.n_heads) + ") must divide self.dim (" + str(self.dim) + ") evenly"
+            )
 
         self.q_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
         self.k_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
@@ -262,8 +262,9 @@ class TransformerBlock(nn.Module):
 
         # Configure multi-head attention nodes divide dimensions
         if config.dim % config.n_heads != 0:
-            raise ValueError("config.n_heads (" + str(config.n_heads) + ") must divide config.dim (" + str(config.dim) + ") evenly")
-        
+            raise ValueError(
+                "config.n_heads (" + str(config.n_heads) + ") must divide config.dim (" + str(config.dim) + ") evenly"
+            )
 
         self.attention = MultiHeadSelfAttention(config)
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
@@ -301,7 +302,7 @@ class TransformerBlock(nn.Module):
         else:  # To handle these `output_attentions` or `output_hidden_states` cases returning tuples
             if type(sa_output) != tuple:
                 raise TypeError("sa_output must be a tuple but it is " + str(type(sa_output)) + " type")
-            
+
             sa_output = sa_output[0]
         sa_output = self.sa_layer_norm(sa_output + x)  # (bs, seq_length, dim)
 
@@ -330,7 +331,7 @@ class Transformer(nn.Module):
         output_hidden_states: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[BaseModelOutput, Tuple[torch.Tensor, ...]]:  # docstyle-ignore
-    
+
         """
         Parameters:
             x: torch.tensor(bs, seq_length, dim) Input sequence embedded.
@@ -359,14 +360,18 @@ class Transformer(nn.Module):
             hidden_state = layer_outputs[-1]
 
             if output_attentions:
-                if len(layer_outputs)!=2:
-                    raise ValueError("The length of the layer_outputs should be 2, but it is " + str(len(layer_outputs)))
-                
+                if len(layer_outputs) != 2:
+                    raise ValueError(
+                        "The length of the layer_outputs should be 2, but it is " + str(len(layer_outputs))
+                    )
+
                 attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)
             else:
                 if len(layer_outputs) != 1:
-                     raise ValueError("The length of the layer_outputs should be 1, but it is " + str(len(layer_outputs)))
+                    raise ValueError(
+                        "The length of the layer_outputs should be 1, but it is " + str(len(layer_outputs))
+                    )
 
         # Add last layer
         if output_hidden_states:
@@ -826,7 +831,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         self.qa_outputs = nn.Linear(config.dim, config.num_labels)
         if config.num_labels != 2:
             raise ValueError("config.num_labels should be 2, but it is " + str(config.num_labels))
-       
+
         self.dropout = nn.Dropout(config.qa_dropout)
 
         # Initialize weights and apply final processing
