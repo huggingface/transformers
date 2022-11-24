@@ -29,7 +29,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, random_atte
 
 
 if is_torch_available():
-    from transformers import SpeechT5ForConditionalGeneration, SpeechT5ForCTC, SpeechT5ForPreTraining, SpeechT5Model
+    from transformers import SpeechT5ForSpeechToText, SpeechT5ForCTC, SpeechT5ForTextToSpeech, SpeechT5ForPreTraining, SpeechT5Model
 
 
 class SpeechT5ModelTester:
@@ -84,7 +84,7 @@ class SpeechT5ModelTester:
 @require_torch
 class SpeechT5ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (SpeechT5ForConditionalGeneration, SpeechT5ForCTC, SpeechT5Model, SpeechT5ForPreTraining)
+        (SpeechT5ForSpeechToText, SpeechT5ForCTC, SpeechT5ForTextToSpeech, SpeechT5Model, SpeechT5ForPreTraining)
         if is_torch_available()
         else ()
     )

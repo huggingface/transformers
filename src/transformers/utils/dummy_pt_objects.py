@@ -5508,7 +5508,7 @@ class Speech2Text2PreTrainedModel(metaclass=DummyObject):
 SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class SpeechT5ForConditionalGeneration(metaclass=DummyObject):
+class SpeechT5ForSpeechToText(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

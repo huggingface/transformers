@@ -2166,11 +2166,150 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         )
 
 
+class SpeechT5EncoderWrapper(SpeechT5PreTrainedModel):
+    """
+    This wrapper class is a helper class to correctly load pretrained checkpoints for the CTC model.
+    """
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.encoder = SpeechT5EncoderWithSpeechPrenet(config)
+
+    def forward(self, *args, **kwargs):
+        return self.encoder(*args, **kwargs)
+
+
+@add_start_docstrings(
+    """SpeechT5 Encoder Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
+    SPEECHT5_START_DOCSTRING,
+)
+class SpeechT5ForCTC(SpeechT5PreTrainedModel):
+    _keys_to_ignore_on_load_missing = [
+        r"speech_encoder_prenet.pos_sinusoidal_embed.weights",
+    ]
+    _keys_to_ignore_on_save = [
+        r"speech_encoder_prenet.pos_sinusoidal_embed.weights",
+    ]
+
+    def __init__(self, config: SpeechT5Config):
+        super().__init__(config)
+
+        self.speecht5 = SpeechT5EncoderWrapper(config)
+        self.dropout = nn.Dropout(config.final_dropout)
+
+        if config.vocab_size is None:
+            raise ValueError(
+                f"You are trying to instantiate {self.__class__} with a configuration that "
+                "does not define the vocabulary size of the language model head. Please "
+                "instantiate the model as follows: `SpeechT5ForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
+                "or define `vocab_size` of your model's configuration."
+            )
+
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        self.speecht5.encoder.prenet.freeze_feature_encoder()
+
+    @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_PROCESSOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=CausalLMOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_CTC_EXPECTED_OUTPUT,
+        expected_loss=_CTC_EXPECTED_LOSS,
+    )
+    def forward(
+        self,
+        input_values: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+    ) -> Union[Tuple, CausalLMOutput]:
+        r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
+            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
+            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
+            and conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
+
+        labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
+            Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
+            the sequence length of the output logits. Indices are selected in `[-100, 0, ..., config.vocab_size - 1]`.
+            All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
+            config.vocab_size - 1]`.
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.speecht5(
+            input_values=input_values,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+        )
+
+        hidden_states = outputs[0]
+        hidden_states = self.dropout(hidden_states)
+
+        logits = self.lm_head(hidden_states)
+
+        loss = None
+        if labels is not None:
+
+            if labels.max() >= self.config.vocab_size:
+                raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
+
+            # retrieve loss input_lengths from attention_mask
+            attention_mask = (
+                attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
+            )
+            input_lengths = self.speecht5.encoder.prenet._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+
+            # assuming that padded tokens are filled with -100
+            # when not being attended to
+            labels_mask = labels >= 0
+            target_lengths = labels_mask.sum(-1)
+            flattened_targets = labels.masked_select(labels_mask)
+
+            # ctc_loss doesn't support fp16
+            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
+
+            with torch.backends.cudnn.flags(enabled=False):
+                loss = nn.functional.ctc_loss(
+                    log_probs,
+                    flattened_targets,
+                    input_lengths,
+                    target_lengths,
+                    blank=self.config.pad_token_id,
+                    reduction=self.config.ctc_loss_reduction,
+                    zero_infinity=self.config.ctc_zero_infinity,
+                )
+
+        if not return_dict:
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
+            return ((loss,) + output) if loss is not None else output
+
+        return CausalLMOutput(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+        )
+
+
 @add_start_docstrings(
     """SpeechT5 Model with a speech encoder and a text decoder.""",
     SPEECHT5_START_DOCSTRING,
 )
-class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
+class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"speech_encoder_prenet.pos_sinusoidal_embed.weights",
     ]
@@ -2185,7 +2324,7 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
             raise ValueError(
                 f"You are trying to instantiate {self.__class__} with a configuration that "
                 "does not define the vocabulary size of the language model head. Please "
-                "instantiate the model as follows: `SpeechT5ForConditionalGeneration.from_pretrained(..., vocab_size=vocab_size)`. "
+                "instantiate the model as follows: `SpeechT5ForSpeechToText.from_pretrained(..., vocab_size=vocab_size)`. "
                 "or define `vocab_size` of your model's configuration."
             )
 
@@ -2350,150 +2489,11 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
         return reordered_past
 
 
-class SpeechT5EncoderWrapper(SpeechT5PreTrainedModel):
-    """
-    This wrapper class is a helper class to correctly load pretrained checkpoints for the CTC model.
-    """
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.encoder = SpeechT5EncoderWithSpeechPrenet(config)
-
-    def forward(self, *args, **kwargs):
-        return self.encoder(*args, **kwargs)
-
-
-@add_start_docstrings(
-    """SpeechT5 Encoder Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
-    SPEECHT5_START_DOCSTRING,
-)
-class SpeechT5ForCTC(SpeechT5PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"speech_encoder_prenet.pos_sinusoidal_embed.weights",
-    ]
-    _keys_to_ignore_on_save = [
-        r"speech_encoder_prenet.pos_sinusoidal_embed.weights",
-    ]
-
-    def __init__(self, config: SpeechT5Config):
-        super().__init__(config)
-
-        self.speecht5 = SpeechT5EncoderWrapper(config)
-        self.dropout = nn.Dropout(config.final_dropout)
-
-        if config.vocab_size is None:
-            raise ValueError(
-                f"You are trying to instantiate {self.__class__} with a configuration that "
-                "does not define the vocabulary size of the language model head. Please "
-                "instantiate the model as follows: `SpeechT5ForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
-                "or define `vocab_size` of your model's configuration."
-            )
-
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def freeze_feature_encoder(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
-        not be updated during training.
-        """
-        self.speecht5.encoder.prenet.freeze_feature_encoder()
-
-    @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_CTC_EXPECTED_OUTPUT,
-        expected_loss=_CTC_EXPECTED_LOSS,
-    )
-    def forward(
-        self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, CausalLMOutput]:
-        r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
-            and conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
-
-        labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
-            Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
-            the sequence length of the output logits. Indices are selected in `[-100, 0, ..., config.vocab_size - 1]`.
-            All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
-            config.vocab_size - 1]`.
-        """
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.speecht5(
-            input_values=input_values,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-        )
-
-        hidden_states = outputs[0]
-        hidden_states = self.dropout(hidden_states)
-
-        logits = self.lm_head(hidden_states)
-
-        loss = None
-        if labels is not None:
-
-            if labels.max() >= self.config.vocab_size:
-                raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
-
-            # retrieve loss input_lengths from attention_mask
-            attention_mask = (
-                attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
-            )
-            input_lengths = self.speecht5.encoder.prenet._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-
-            # assuming that padded tokens are filled with -100
-            # when not being attended to
-            labels_mask = labels >= 0
-            target_lengths = labels_mask.sum(-1)
-            flattened_targets = labels.masked_select(labels_mask)
-
-            # ctc_loss doesn't support fp16
-            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
-
-            with torch.backends.cudnn.flags(enabled=False):
-                loss = nn.functional.ctc_loss(
-                    log_probs,
-                    flattened_targets,
-                    input_lengths,
-                    target_lengths,
-                    blank=self.config.pad_token_id,
-                    reduction=self.config.ctc_loss_reduction,
-                    zero_infinity=self.config.ctc_zero_infinity,
-                )
-
-        if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
-
-        return CausalLMOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
-        )
-
-
 @add_start_docstrings(
     """SpeechT5 Model with a text encoder and a speech decoder.""",
     SPEECHT5_START_DOCSTRING,
 )
-class SpeechT5ForTTS(SpeechT5PreTrainedModel):
+class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
     _keys_to_ignore_on_load_missing = [
     ]
     _keys_to_ignore_on_save = [
@@ -2506,7 +2506,7 @@ class SpeechT5ForTTS(SpeechT5PreTrainedModel):
             raise ValueError(
                 f"You are trying to instantiate {self.__class__} with a configuration that "
                 "does not define the vocabulary size of the language model head. Please "
-                "instantiate the model as follows: `SpeechT5ForTTS.from_pretrained(..., vocab_size=vocab_size)`. "
+                "instantiate the model as follows: `SpeechT5ForTextToSpeech.from_pretrained(..., vocab_size=vocab_size)`. "
                 "or define `vocab_size` of your model's configuration."
             )
 

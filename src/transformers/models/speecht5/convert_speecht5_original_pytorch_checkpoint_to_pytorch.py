@@ -24,9 +24,9 @@ import torch
 
 from transformers import (
     SpeechT5Config,
-    SpeechT5ForConditionalGeneration,
     SpeechT5ForCTC,
-    SpeechT5ForTTS,
+    SpeechT5ForSpeechToText,
+    SpeechT5ForTextToSpeech,
     SpeechT5ForPreTraining,
     logging,
 )
@@ -377,13 +377,13 @@ def convert_speecht5_checkpoint(
         #         processor = SpeechT5Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
         #         processor.save_pretrained(pytorch_dump_folder_path)
 
-        model = SpeechT5ForConditionalGeneration(config)
+        model = SpeechT5ForSpeechToText(config)
     elif task == "ctc":
         model = SpeechT5ForCTC(config)
     elif task == "t2s":
         config.max_speech_positions = 1876
         config.max_text_positions = 600
-        model = SpeechT5ForTTS(config)
+        model = SpeechT5ForTextToSpeech(config)
     elif task == "pretrain":
         model = SpeechT5ForPreTraining(config)
     else:
