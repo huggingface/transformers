@@ -40,12 +40,12 @@ The code snippet below shows how to compute image & text features and similariti
 >>> # compute image feature
 >>> inputs = processor(images=image, return_tensors="pt")
 >>> image_features = model.get_image_features(**inputs)
->>> image_features = image_features / image_features.norm(p=2, dim=-1, keepdim=True) # normalize
+>>> image_features = image_features / image_features.norm(p=2, dim=-1, keepdim=True)  # normalize
 
 >>> # compute text features
 >>> inputs = tokenizer(texts, padding=True, return_tensors="pt")
 >>> text_features = model.get_text_features(**inputs)
->>> text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True) # normalize
+>>> text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True)  # normalize
 
 >>> # compute image-text similarity scores
 >>> inputs = processor(text=texts, images=image, return_tensors="pt", padding=True)
