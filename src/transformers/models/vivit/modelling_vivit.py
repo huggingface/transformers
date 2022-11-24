@@ -11,21 +11,34 @@ from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    SequenceClassifierOutput,
+    ImageClassifierOutput,
 )
 from ...modeling_utils import (
     PreTrainedModel,
 )
 from ...utils import logging
 from .configuration_vivit import ViViTConfig
-
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 
 logger = logging.get_logger(__name__)
 
+_CONFIG_FOR_DOC = "ViViTConfig"
+
+
 class TubeletEmbeddings(nn.Module):
     """
-    Video to Tubelet Embedding.
+    Construct ViViT Tubelet embeddings.
 
+    This module turns a batch of videos of shape (batch_size, num_frames, num_channels,
+    height, width) into a tensor of shape (batch_size, seq_len, hidden_size) to be consumed by a Transformer encoder.
+
+    The seq_len (the number of patches) equals (number of frames // tubelet_size[0]) * (height // tubelet_size[1]) * (width //
+    tubelet_size[2]).
     """
 
     def __init__(self, video_size, patch_size, num_channels=3, embed_dim=768):
@@ -58,6 +71,9 @@ class TubeletEmbeddings(nn.Module):
 class ViViTEmbeddings(nn.Module):
     """
     ViViT Embeddings.
+
+    Creates embeddings from a video using TubeletEmbeddings, adds CLS token and positional embeddings.
+
     """
 
     def __init__(self, config):
@@ -90,6 +106,7 @@ class ViViTEmbeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->ViViT
 class ViViTSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -148,6 +165,7 @@ class ViViTSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->ViViT
 class ViViTSelfOutput(nn.Module):
     """
     The residual connection is defined in ViTLayer instead of here (as is the case with other models), due to the
@@ -223,7 +241,7 @@ class ViViTOutput(nn.Module):
 
 
 class ViViTLayer(nn.Module):
-    """This corresponds to the Block class in the timm implementation."""
+    """This corresponds to the EncoderBlock class in the scenic/vivit implementation."""
 
     def __init__(self, config):
         super().__init__()
@@ -362,6 +380,44 @@ class ViViTPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
+VIVIT_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`ViViTConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+VIVIT_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`ViViTFeatureExtractor`]. See
+            [`ViViTFeatureExtractor.__call__`] for details.
+
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+@add_start_docstrings(
+    "The bare ViViT Model transformer outputting raw hidden-states without any specific head on top.",
+    VIVIT_START_DOCSTRING,
+)
 class ViViTModel(ViViTPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
@@ -387,6 +443,8 @@ class ViViTModel(ViViTPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @add_start_docstrings_to_model_forward(VIVIT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values=None,
@@ -395,6 +453,51 @@ class ViViTModel(ViViTPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from decord import VideoReader, cpu
+        >>> import numpy as np
+
+        >>> from transformers import ViViTFeatureExtractor, ViViTModel
+        >>> from huggingface_hub import hf_hub_download
+
+
+        >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+        ...     converted_len = int(clip_len * frame_sample_rate)
+        ...     end_idx = np.random.randint(converted_len, seg_len)
+        ...     start_idx = end_idx - converted_len
+        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
+        ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
+        ...     return indices
+
+
+        >>> # video clip consists of 300 frames (10 seconds at 30 FPS)
+        >>> file_path = hf_hub_download(
+        ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
+        ... )
+        >>> videoreader = VideoReader(file_path, num_threads=1, ctx=cpu(0))
+
+        >>> # sample 16 frames
+        >>> videoreader.seek(0)
+        >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=4, seg_len=len(videoreader))
+        >>> video = videoreader.get_batch(indices).asnumpy()
+
+        >>> feature_extractor = ViViTFeatureExtractor.from_pretrained("jegormeister/vivit-b-16x2-kinetics400")
+        >>> model = ViViTModel.from_pretrained("jegormeister/vivit-b-16x2-kinetics400")
+
+        >>> # prepare video for the model
+        >>> inputs = feature_extractor(list(video), return_tensors="pt")
+
+        >>> # forward pass
+        >>> outputs = model(**inputs)
+        >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 3137, 768]
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -430,6 +533,11 @@ class ViViTModel(ViViTPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """ViViT Model transformer with a video classification head on top (a linear layer on top of the final hidden state of
+    the [CLS] token) e.g. for ImageNet.""",
+    VIVIT_START_DOCSTRING,
+)
 class ViViTForVideoClassification(ViViTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -443,6 +551,8 @@ class ViViTForVideoClassification(ViViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @add_start_docstrings_to_model_forward(VIVIT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values=None,
@@ -453,6 +563,59 @@ class ViViTForVideoClassification(ViViTPreTrainedModel):
         interpolate_pos_encoding=None,
         return_dict=None,
     ):
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from decord import VideoReader, cpu
+        >>> import torch
+        >>> import numpy as np
+
+        >>> from transformers import ViViTFeatureExtractor, ViViTForVideoClassification
+        >>> from huggingface_hub import hf_hub_download
+
+        >>> np.random.seed(0)
+
+
+        >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+        ...     converted_len = int(clip_len * frame_sample_rate)
+        ...     end_idx = np.random.randint(converted_len, seg_len)
+        ...     start_idx = end_idx - converted_len
+        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
+        ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
+        ...     return indices
+
+
+        >>> # video clip consists of 300 frames (10 seconds at 30 FPS)
+        >>> file_path = hf_hub_download(
+        ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
+        ... )
+        >>> videoreader = VideoReader(file_path, num_threads=1, ctx=cpu(0))
+
+        >>> # sample 16 frames
+        >>> videoreader.seek(0)
+        >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=4, seg_len=len(videoreader))
+        >>> video = videoreader.get_batch(indices).asnumpy()
+
+        >>> feature_extractor = ViViTFeatureExtractor.from_pretrained("jegormeister/vivit-b-16x2-kinetics400")
+        >>> model = ViViTForVideoClassification.from_pretrained("jegormeister/vivit-b-16x2-kinetics400")
+
+        >>> inputs = feature_extractor(list(video), return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+        ...     logits = outputs.logits
+
+        >>> # model predicts one of the 400 Kinetics-400 classes
+        >>> predicted_label = logits.argmax(-1).item()
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.vivit(
@@ -481,7 +644,7 @@ class ViViTForVideoClassification(ViViTPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
+        return ImageClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
