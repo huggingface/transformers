@@ -126,6 +126,9 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     checkpoint_url = model_name_to_url[model_name]
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["state_dict"]
 
+    for name, param in state_dict.items():
+        print(name, param.shape)
+
     config = get_upernet_config(model_name)
     model = UperNetForSemanticSegmentation(config)
     model.eval()

@@ -18,6 +18,8 @@ URL: https://github.com/open-mmlab/mmsegmentation/tree/master/configs/swin
 
 Update: there seems to be an incompatibility with this version, due to a new implementation
 of their downsampling operation using nn.Unfold.
+
+TODO we need to update the parameters as shown here: https://github.com/open-mmlab/mmdetection/blob/31c84958f54287a8be2b99cbf87a6dcf12e57753/mmdet/models/utils/ckpt_convert.py#L96.
 """
 
 import argparse
@@ -123,12 +125,45 @@ image_transforms = Compose(
 )
 
 
+def correct_unfold_reduction_order(x):
+    out_channel, in_channel = x.shape
+    x = x.reshape(out_channel, 4, in_channel // 4)
+    x = x[:, [0, 2, 1, 3], :].transpose(1,
+                                        2).reshape(out_channel, in_channel)
+    return x
+
+
+def reverse_correct_unfold_reduction_order(x):
+    out_channel, in_channel = x.shape
+    x = x.reshape(out_channel, in_channel // 4, 4)
+    x = x[:, :, [0, 2, 1, 3]].transpose(1,
+                                        2).reshape(out_channel, in_channel)
+
+    return x
+
+def correct_unfold_norm_order(x):
+    in_channel = x.shape[0]
+    x = x.reshape(4, in_channel // 4)
+    x = x[[0, 2, 1, 3], :].transpose(0, 1).reshape(in_channel)
+    return x
+
+
+def reverse_correct_unfold_norm_order(x):
+    in_channel = x.shape[0]
+    x = x.reshape(in_channel // 4, 4)
+    x = x[:, [0, 2, 1, 3]].transpose(0, 1).reshape(in_channel)
+    return x
+
+
 def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     model_name_to_url = {
-        "upernet-swin-tiny": "https://download.openmmlab.com/mmsegmentation/v0.5/swin/upernet_swin_tiny_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K/upernet_swin_tiny_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K_20210531_112542-e380ad3e.pth",
+        "upernet-swin-tiny-mmsegmentation": "https://download.openmmlab.com/mmsegmentation/v0.5/swin/upernet_swin_tiny_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K/upernet_swin_tiny_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K_20210531_112542-e380ad3e.pth",
     }
     checkpoint_url = model_name_to_url[model_name]
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["state_dict"]
+
+    for name, param in state_dict.items():
+        print(name, param.shape)
 
     config = get_upernet_config(model_name)
     model = UperNetForSemanticSegmentation(config)
@@ -146,6 +181,14 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
     read_in_q_k_v(state_dict, config.backbone_config)
+
+    # fix downsample parameters
+    for key, value in state_dict.items():
+        if "downsample" in key:
+            if "reduction" in key:
+                state_dict[key] = reverse_correct_unfold_reduction_order(value)
+            if "norm" in key:
+                state_dict[key] = reverse_correct_unfold_norm_order(value)
 
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     assert missing_keys == ["backbone.swin.layernorm.weight", "backbone.swin.layernorm.bias"]
@@ -188,7 +231,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="upernet-swin-tiny",
+        default="upernet-swin-tiny-mmsegmentation",
         type=str,
         choices=["upernet-swin-tiny", "upernet-swin-small"],
         help="Name of the Swin + UperNet model you'd like to convert.",
