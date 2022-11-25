@@ -354,6 +354,22 @@ def main():
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
 
+    # Initialize our dataset.
+    ds = load_dataset(
+        args.dataset_name,
+        args.dataset_config_name,
+        data_files=args.data_files,
+        cache_dir=args.cache_dir,
+        use_auth_token=True if args.use_auth_token else None,
+    )
+
+    # If we don't have a validation split, split off a percentage of train as validation.
+    args.train_val_split = None if "validation" in ds.keys() else args.train_val_split
+    if isinstance(args.train_val_split, float) and args.train_val_split > 0.0:
+        split = ds["train"].train_test_split(args.train_val_split)
+        ds["train"] = split["train"]
+        ds["validation"] = split["test"]
+
 
 if __name__ == "__main__":
     main()
