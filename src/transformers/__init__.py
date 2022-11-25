@@ -2661,7 +2661,6 @@ else:
             "TFGPT2MainLayer",
             "TFGPT2Model",
             "TFGPT2PreTrainedModel",
-            "TFGPT2Tokenizer",
         ]
     )
     _import_structure["models.gptj"].extend(
@@ -5469,7 +5468,6 @@ if TYPE_CHECKING:
             TFGPT2MainLayer,
             TFGPT2Model,
             TFGPT2PreTrainedModel,
-            TFGPT2Tokenizer,
         )
         from .models.gptj import (
             TFGPTJForCausalLM,
