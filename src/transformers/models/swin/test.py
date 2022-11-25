@@ -1,5 +1,7 @@
-from transformers import SwinConfig, SwinBackbone
 import torch
+
+from transformers import SwinBackbone, SwinConfig
+
 
 config = SwinConfig(
     output_hidden_states_before_downsampling=True,
