@@ -142,7 +142,7 @@ class MultiHeadSelfAttention(nn.Module):
         self.dim = config.dim
         self.dropout = nn.Dropout(p=config.attention_dropout)
 
-        # Split evenly into the multiples of multiheads
+        # Have an even number of multi heads that divide the dimensions
         if self.dim % self.n_heads != 0:
             raise ValueError(
                 "self.n_heads (" + str(self.n_heads) + ") must divide self.dim (" + str(self.dim) + ") evenly"
@@ -260,7 +260,7 @@ class TransformerBlock(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
 
-        # Configure multi-head attention nodes divide dimensions
+        # Have an even number of Configure multi-heads
         if config.dim % config.n_heads != 0:
             raise ValueError(
                 "config.n_heads (" + str(config.n_heads) + ") must divide config.dim (" + str(config.dim) + ") evenly"
