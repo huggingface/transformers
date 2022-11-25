@@ -74,7 +74,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->BioGpt
+# Copied from transformers.models.opt.modeling_opt.OPTLearnedPositionalEmbedding with OPT->BioGpt
 class BioGptLearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -86,13 +86,15 @@ class BioGptLearnedPositionalEmbedding(nn.Embedding):
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
-    def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
-        """`input_ids' shape is expected to be [bsz x seqlen]."""
+    def forward(self, attention_mask: torch.LongTensor, past_key_values_length: int = 0):
+        """`input_ids_shape` is expected to be [bsz x seqlen]."""
+        attention_mask = attention_mask.long()
 
-        bsz, seq_len = input_ids.shape[:2]
-        positions = torch.arange(
-            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
-        ).expand(bsz, -1)
+        # create positions depending on attention_mask
+        positions = (torch.cumsum(attention_mask, dim=1).type_as(attention_mask) * attention_mask).long() - 1
+
+        # cut positions if `past_key_values_length` is > 0
+        positions = positions[:, past_key_values_length:]
 
         return super().forward(positions + self.offset)
 
@@ -456,6 +458,7 @@ class BioGptModel(BioGptPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -520,13 +523,14 @@ class BioGptModel(BioGptPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input) * self.embed_scale
 
+        if attention_mask is None:
+            attention_mask = torch.ones(inputs_embeds.shape[:2], dtype=torch.bool, device=inputs_embeds.device)
+        # embed positions
+        positions = self.embed_positions(attention_mask, past_key_values_length)
+
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
-
-        # embed positions
-        positions = self.embed_positions(input, past_key_values_length)
-        positions = positions.to(inputs_embeds.device)
 
         hidden_states = inputs_embeds + positions
 
@@ -534,7 +538,7 @@ class BioGptModel(BioGptPreTrainedModel):
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        all_cross_attentions = ()
+        all_cross_attentions = None
         next_decoder_cache = () if use_cache else None
 
         for idx, decoder_layer in enumerate(self.layers):
@@ -696,7 +700,7 @@ class BioGptLMHeadModel(BioGptPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, attention_mask, past=None, **kwargs):
 
         # only last token for inputs_ids if past is defined in kwargs
         if past:
@@ -704,6 +708,7 @@ class BioGptLMHeadModel(BioGptPreTrainedModel):
 
         return {
             "input_ids": input_ids,
+            "attention_mask": attention_mask,
             "past_key_values": past,
             "use_cache": kwargs.get("use_cache"),
         }
