@@ -370,6 +370,31 @@ def main():
         ds["train"] = split["train"]
         ds["validation"] = split["test"]
 
+    # Create config
+    # Distributed training:
+    # The .from_pretrained methods guarantee that only one local process can concurrently
+    # download model & vocab.
+    config_kwargs = {
+        "cache_dir": args.cache_dir,
+        "revision": args.model_revision,
+        "use_auth_token": True if args.use_auth_token else None,
+    }
+    if args.config_name_or_path:
+        config = AutoConfig.from_pretrained(args.config_name_or_path, **config_kwargs)
+    elif args.model_name_or_path:
+        config = AutoConfig.from_pretrained(args.model_name_or_path, **config_kwargs)
+    else:
+        config = CONFIG_MAPPING[args.model_type]()
+        logger.warning("You are instantiating a new config instance from scratch.")
+        if args.config_overrides is not None:
+            logger.info(f"Overriding config: {args.config_overrides}")
+            config.update_from_string(args.config_overrides)
+            logger.info(f"New config: {config}")
+
+    # make sure the decoder_type is "simmim" (only relevant for BEiT)
+    if hasattr(config, "decoder_type"):
+        config.decoder_type = "simmim"
+
 
 if __name__ == "__main__":
     main()
