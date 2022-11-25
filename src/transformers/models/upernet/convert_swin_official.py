@@ -12,7 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Swin Transformer + UperNet checkpoints from mmsegmentation."""
+"""Convert Swin Transformer + UperNet checkpoints from the official implementation.
+
+URL: https://github.com/SwinTransformer/Swin-Transformer-Semantic-Segmentation/tree/main"""
 
 import argparse
 
@@ -150,19 +152,16 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     pixel_values = image_transforms(image).unsqueeze(0)
 
-    print("Sum of pixel values:", pixel_values.sum().item())
-    print("Mean of pixel values:", pixel_values.mean().item())
-
     with torch.no_grad():
         outputs = model(pixel_values)
+        logits = outputs.logits
 
-    # TODO assert values
-    # expected_slice = torch.tensor(
-    #     [[-8.8110, -7.5399, -7.5429], [-8.5200, -7.0736, -7.2054], [-8.5220, -7.2897, -7.3901]]
-    # )
-    # print("Logits:", outputs.logits[0, 0, :3, :3])
-    # assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4)
-    # print("Looks ok!")
+    expected_slice = torch.tensor(
+        [[-7.4093, -5.8781, -6.0287], [-6.6374, -5.0819, -5.3752], [-6.4314, -5.0489, -5.1885]]
+    )
+    assert logits.shape == (1, 150, 128, 128)
+    assert torch.allclose(logits[0, 0, :3, :3], expected_slice, atol=1e-4)
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")

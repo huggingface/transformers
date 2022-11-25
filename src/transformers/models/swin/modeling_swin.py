@@ -664,7 +664,7 @@ class SwinLayer(nn.Module):
         hidden_states, pad_values = self.maybe_pad(hidden_states, height, width)
 
         if print_values:
-            print("Hidden states after padding:", hidden_states[0,0,:3,:3])
+            print("Hidden states after padding:", hidden_states[0, 0, :3, :3])
 
         if print_values:
             print("Shift size:", self.shift_size)
@@ -677,7 +677,7 @@ class SwinLayer(nn.Module):
             shifted_hidden_states = hidden_states
 
         if print_values:
-            print("Hidden states after cyclic shift:", shifted_hidden_states[0,0,:3,:3])
+            print("Hidden states after cyclic shift:", shifted_hidden_states[0, 0, :3, :3])
 
         # partition windows
         hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
@@ -687,8 +687,8 @@ class SwinLayer(nn.Module):
             attn_mask = attn_mask.to(hidden_states_windows.device)
 
         if print_values:
-            print("Hidden states before attention:", hidden_states_windows[0,:3,:3])
-        
+            print("Hidden states before attention:", hidden_states_windows[0, :3, :3])
+
         attention_outputs = self.attention(
             hidden_states_windows, attn_mask, head_mask, output_attentions=output_attentions
         )
@@ -696,7 +696,7 @@ class SwinLayer(nn.Module):
         attention_output = attention_outputs[0]
 
         if print_values:
-            print("Hidden states after attention:", attention_output[0,:3,:3])
+            print("Hidden states after attention:", attention_output[0, :3, :3])
 
         attention_windows = attention_output.view(-1, self.window_size, self.window_size, channels)
         shifted_windows = window_reverse(attention_windows, self.window_size, height_pad, width_pad)
@@ -720,7 +720,7 @@ class SwinLayer(nn.Module):
         layer_output = hidden_states + self.output(layer_output)
 
         if print_values:
-            print("Final Hidden states of block:", layer_output[0,:3,:3])
+            print("Final Hidden states of block:", layer_output[0, :3, :3])
 
         layer_outputs = (layer_output, attention_outputs[1]) if output_attentions else (layer_output,)
         return layer_outputs
@@ -765,7 +765,9 @@ class SwinStage(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions, print_values=print_values)
+            layer_outputs = layer_module(
+                hidden_states, input_dimensions, layer_head_mask, output_attentions, print_values=print_values
+            )
 
             hidden_states = layer_outputs[0]
 

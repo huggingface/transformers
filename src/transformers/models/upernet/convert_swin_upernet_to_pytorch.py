@@ -12,7 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Swin Transformer + UperNet checkpoints from mmsegmentation."""
+"""Convert Swin Transformer + UperNet checkpoints from mmsegmentation.
+
+URL: https://github.com/open-mmlab/mmsegmentation/tree/master/configs/swin
+
+Update: there seems to be an incompatibility with this version, due to a new implementation
+of their downsampling operation using nn.Unfold.
+"""
 
 import argparse
 
@@ -155,6 +161,7 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     with torch.no_grad():
         outputs = model(pixel_values)
+        print(outputs.keys())
 
     # TODO assert values
     # expected_slice = torch.tensor(
