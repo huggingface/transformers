@@ -176,7 +176,7 @@ class DonutImageProcessor(BaseImageProcessor):
             random_padding (`bool`, *optional*, defaults to `False`):
                 Whether to use random padding or not.
             data_format (`str` or `ChannelDimension`, *optional*):
-                The data format of the output image. If `None`, the same format as the input image is used.
+                The data format of the output image. If unset, the same format as the input image is used.
         """
         output_height, output_width = size["height"], size["width"]
         input_height, input_width = get_image_size(image)
@@ -219,8 +219,8 @@ class DonutImageProcessor(BaseImageProcessor):
                 The size `{"height": h, "width": w}` to resize the image to.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 The resampling filter to use.
-            data_format (`Optional[Union[str, ChannelDimension]]`, *optional*, defaults to `None`):
-                The data format of the output image. If `None`, the same format as the input image is used.
+            data_format (`Optional[Union[str, ChannelDimension]]`, *optional*):
+                The data format of the output image. If unset, the same format as the input image is used.
         """
         output_size = (size["height"], size["width"])
         return resize(image, size=output_size, resample=resample, reducing_gap=2.0, data_format=data_format, **kwargs)
@@ -304,12 +304,12 @@ class DonutImageProcessor(BaseImageProcessor):
         do_thumbnail: bool = None,
         do_align_long_axis: bool = None,
         do_pad: bool = None,
+        random_padding: bool = False,
         do_rescale: bool = None,
         rescale_factor: float = None,
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        random_padding: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         **kwargs
@@ -323,29 +323,32 @@ class DonutImageProcessor(BaseImageProcessor):
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
-                the longest edge resized to keep the input aspect ratio.
+                Size of the image after resizing. Shortest edge of the image is resized to min(size["height"],
+                size["width"]) with the longest edge resized to keep the input aspect ratio.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
                 has an effect if `do_resize` is set to `True`.
             do_thumbnail (`bool`, *optional*, defaults to `self.do_thumbnail`):
-                Whether to use thumbnail instead of resize. Only has an effect if `do_resize` is set to `True`. # FIXME
+                Whether to resize the image using thumbnail method.
             do_align_long_axis (`bool`, *optional*, defaults to `self.do_align_long_axis`):
-                Whether to align the long axis of the image to the horizontal axis. Only has an effect if `do_resize`
-                is set to `True`. # FIXME
+                Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
-                Whether to pad the image. Only has an effect if `do_resize` is set to `True`. # FIXME
+                Whether to pad the image. If `random_padding` is set to `True`, each image is padded with a random
+                amont of padding on each size, up to the largest image size in the batch. Otherwise, all images are
+                padded to the largest image size in the batch.
+            random_padding (`bool`, *optional*, defaults to `self.random_padding`):
+                Whether to use random padding when padding the image. If `True`, each image in the batch with be padded
+                with a random amount of padding on each side up to the size of the largest image in the batch.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image.
+                Whether to rescale the image pixel values.
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
             image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
+                Image mean to use for normalization.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
-                `True`.
+                Image standard deviation to use for normalization.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.

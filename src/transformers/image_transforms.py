@@ -228,26 +228,26 @@ def resize(
     return_numpy: bool = True,
 ) -> np.ndarray:
     """
-    Resizes *image* to (h, w) specified by *size* using the PIL library.
+    Resizes `image` to `(h, w)` specified by `size` using the PIL library.
 
     Args:
-        image (*PIL.Image.Image* or *np.ndarray* or *torch.Tensor*):
+        image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
             The image to resize.
-        size (*Tuple[int, int]*):
+        size (`Tuple[int, int]`):
             The size to use for resizing the image.
-        resample (*int*, *optional*, defaults to *PILImageResampling.BILINEAR*):
+        resample (`int`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             The filter to user for resampling.
-        reducing_gap (*int*, *optional*):
+        reducing_gap (`int`, *optional*):
             Apply optimization by resizing the image in two steps. The bigger `reducing_gap`, the closer the result to
             the fair resampling. See corresponding Pillow documentation for more details.
-        data_format (*ChannelDimension*, *optional*):
-            The channel dimension format of the output image. If *None*, will use the inferred format from the input.
-        return_numpy (*bool*, *optional*, defaults to *True*):
-            Whether or not to return the resized image as a numpy array. If False a *PIL.Image.Image* object is
+        data_format (`ChannelDimension`, *optional*):
+            The channel dimension format of the output image. If unset, will use the inferred format from the input.
+        return_numpy (`bool`, *optional*, defaults to `True`):
+            Whether or not to return the resized image as a numpy array. If False a `PIL.Image.Image` object is
             returned.
 
     Returns:
-        *np.ndarray*: The resized image.
+        `np.ndarray`: The resized image.
     """
     if not len(size) == 2:
         raise ValueError("size must have 2 elements")
@@ -294,7 +294,7 @@ def normalize(
         std (`float` or `Iterable[float]`):
             The standard deviation to use for normalization.
         data_format (`ChannelDimension`, *optional*):
-            The channel dimension format of the output image. If `None`, will use the inferred format from the input.
+            The channel dimension format of the output image. If unset, will use the inferred format from the input.
     """
     if isinstance(image, PIL.Image.Image):
         warnings.warn(
