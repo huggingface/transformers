@@ -2084,7 +2084,7 @@ class Mask2FormerLoss(nn.Module):
             # Sample point coordinates
             point_coordinates = self.sample_points_using_uncertainty(
                 pred_masks,
-                lambda logits: calculate_uncertainty(logits),
+                lambda logits: self.calculate_uncertainty(logits),
                 self.num_points,
                 self.oversample_ratio,
                 self.importance_sample_ratio,
