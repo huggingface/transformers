@@ -2332,7 +2332,7 @@ if is_torch_available():
 
         optim_test_params.append(
             (
-                TrainingArguments(OptimizerNames.ADAMW_APEX_FUSED, output_dir="None"),
+                TrainingArguments(optim=OptimizerNames.ADAMW_APEX_FUSED, output_dir="None"),
                 apex.optimizers.FusedAdam,
                 default_adam_kwargs,
             )
