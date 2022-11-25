@@ -27,10 +27,6 @@ from ...utils import TensorType, is_torch_available, logging
 if is_torch_available():
     import torch
     from torch import Tensor, nn
-    from torch.nn.functional import interpolate
-
-    if TYPE_CHECKING:
-        from transformers.models.mask2former.modeling_mask2former import Mask2FormerForInstanceSegmentationOutput
 
 logger = logging.get_logger(__name__)
 
@@ -60,8 +56,8 @@ def binary_mask_to_rle(mask):
 # Copied from transformers.models.detr.feature_extraction_detr.convert_segmentation_to_rle
 def convert_segmentation_to_rle(segmentation):
     """
-    Converts given segmentation map of shape (height, width) to the run-length encoding (RLE) format.
     Args:
+    Converts given segmentation map of shape (height, width) to the run-length encoding (RLE) format.
         segmentation (`torch.Tensor` or `numpy.array`):
             A segmentation map of shape `(height, width)` where each value denotes a segment or class id.
     Returns:
@@ -81,9 +77,9 @@ def convert_segmentation_to_rle(segmentation):
 # Copied from transformers.models.detr.feature_extraction_detr.remove_low_and_no_objects
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
     """
+    Args:
     Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
     `labels`.
-    Args:
         masks (`torch.Tensor`):
             A tensor of shape `(num_queries, height, width)`.
         scores (`torch.Tensor`):
@@ -608,9 +604,9 @@ class Mask2FormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtraction
         self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None
     ) -> "torch.Tensor":
         """
+        Args:
         Converts the output of [`MaskFormerForInstanceSegmentation`] into semantic segmentation maps. Only supports
         PyTorch.
-        Args:
             outputs ([`MaskFormerForInstanceSegmentation`]):
                 Raw outputs of the model.
             target_sizes (`List[Tuple[int, int]]`, *optional*, defaults to `None`):
@@ -663,9 +659,9 @@ class Mask2FormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtraction
         return_coco_annotation: Optional[bool] = False,
     ) -> List[Dict]:
         """
+        Args:
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into instance segmentation predictions. Only
         supports PyTorch.
-        Args:
             outputs ([`MaskFormerForInstanceSegmentation`]):
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.5):
@@ -745,9 +741,9 @@ class Mask2FormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtraction
         target_sizes: Optional[List[Tuple[int, int]]] = None,
     ) -> List[Dict]:
         """
+        Args:
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image panoptic segmentation
         predictions. Only supports PyTorch.
-        Args:
             outputs ([`MaskFormerForInstanceSegmentationOutput`]):
                 The outputs from [`MaskFormerForInstanceSegmentation`].
             threshold (`float`, *optional*, defaults to 0.5):

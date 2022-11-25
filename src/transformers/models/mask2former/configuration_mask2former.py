@@ -25,7 +25,9 @@ from ..swin import SwinConfig
 
 
 MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "shivi/mask2former-instance-swin-small-coco": "https://huggingface.co/shivi/mask2former-instance-swin-small-coco/resolve/main/config.json",
+    "shivi/mask2former-instance-swin-small-coco": (
+        "https://huggingface.co/shivi/mask2former-instance-swin-small-coco/resolve/main/config.json"
+    ),
 }
 
 
@@ -37,8 +39,8 @@ class Mask2FormerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Mask2FormerModel`]. It is used to instantiate a
     Mask2Former model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Mask2Former
-    [shivi/mask2former-instance-swin-small-coco](https://huggingface.co/shivi/mask2former-instance-swin-small-coco) architecture trained
-    on [ADE20k-150](https://huggingface.co/datasets/scene_parse_150).
+    [shivi/mask2former-instance-swin-small-coco](https://huggingface.co/shivi/mask2former-instance-swin-small-coco)
+    architecture trained on [ADE20k-150](https://huggingface.co/datasets/scene_parse_150).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -108,7 +110,7 @@ class Mask2FormerConfig(PretrainedConfig):
     ```
 
     """
-    model_type = "maskformer" #or mask2former?
+    model_type = "maskformer"  # or mask2former?
     attribute_map = {"hidden_size": "mask_feature_size"}
     backbones_supported = ["swin"]
     decoders_supported = ["detr"]
@@ -217,7 +219,11 @@ class Mask2FormerConfig(PretrainedConfig):
 
     @classmethod
     def from_backbone_decoder_pixel_decoder_configs(
-        cls, backbone_config: PretrainedConfig, decoder_config: PretrainedConfig, pixel_decoder_config: PretrainedConfig,  **kwargs
+        cls,
+        backbone_config: PretrainedConfig,
+        decoder_config: PretrainedConfig,
+        pixel_decoder_config: PretrainedConfig,
+        **kwargs
     ):
         """Instantiate a [`Mask2FormerConfig`] (or a derived class) from a pre-trained backbone model configuration, DETR model
         configuration and Deformable Detr model configuration.

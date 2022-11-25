@@ -96,8 +96,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("m2m_100", "M2M100Model"),
         ("marian", "MarianModel"),
         ("markuplm", "MarkupLMModel"),
-        ("maskformer", "MaskFormerModel"),
         ("mask2former", "Mask2FormerModel"),
+        ("maskformer", "MaskFormerModel"),
         ("mbart", "MBartModel"),
         ("mctct", "MCTCTModel"),
         ("megatron-bert", "MegatronBertModel"),
@@ -422,8 +422,8 @@ MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Instance Segmentation mapping
-        ("maskformer", "MaskFormerForInstanceSegmentation"),
         ("mask2former", "Mask2FormerForInstanceSegmentation"),
+        ("maskformer", "MaskFormerForInstanceSegmentation"),
     ]
 )
 
