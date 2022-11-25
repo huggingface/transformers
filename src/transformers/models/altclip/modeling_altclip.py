@@ -100,7 +100,7 @@ class AltCLIPTextModel(XLMRobertaPreTrainedModel):
         r"""
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else True
         
         outputs = self.roberta(
             input_ids=input_ids,
@@ -129,7 +129,7 @@ class AltCLIPTextModel(XLMRobertaPreTrainedModel):
         
         return BaseModelOutputWithPoolingAndprojection(
             pooler_output=pooler_output,
-            last_hidden_state=outputs.last_hidden_state,
+            last_hidden_state=outputs[0],
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             projection_state=projection_state,

@@ -279,7 +279,6 @@ class AltCLIPModelTest(ModelTesterMixin, unittest.TestCase):
         configs_no_init = _config_zero_init(config)
         model = self.model_class(config=configs_no_init)
         for name, param in model.named_parameters():
-            print('name is -------->', name)
             if param.requires_grad:
                 # check if `logit_scale` is initilized as per the original implementation
                 if name == "logit_scale":

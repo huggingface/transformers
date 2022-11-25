@@ -109,5 +109,3 @@ class AltCLIPConfig(CLIPConfig):
         # when reload the config from local, we need name to select which class should be instanced.
         self.text_config_dict = text_config_dict
         self.text_config = AltCLIPTextConfig(**text_config_dict)
-        self.text_model_name = text_model_name
-        self.vision_model_name = vision_model_name
