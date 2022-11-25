@@ -1302,6 +1302,7 @@ class BaseModelOutputWithPoolingAndprojection(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+        projection_state (`tuple(torch.FloatTensor)`,
     """
 
     last_hidden_state: torch.FloatTensor = None
