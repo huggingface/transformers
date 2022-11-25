@@ -465,6 +465,15 @@ def main():
         mask_ratio=args.mask_ratio,
     )
 
+    def preprocess_images(examples):
+        """Preprocess a batch of images by applying transforms + creating a corresponding mask, indicating
+        which patches to mask."""
+
+        examples["pixel_values"] = [transforms(image) for image in examples[image_column_name]]
+        examples["mask"] = [mask_generator() for i in range(len(examples[image_column_name]))]
+
+        return examples
+
 
 if __name__ == "__main__":
     main()
