@@ -16,6 +16,7 @@
 import argparse
 import logging
 import os
+import math
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
@@ -46,6 +47,8 @@ from transformers import (
     HfArgumentParser,
     Trainer,
     TrainingArguments,
+    SchedulerType,
+    get_scheduler,
 )
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, get_full_repo_name, send_example_telemetry
@@ -258,7 +261,25 @@ def parse_args():
         default=0.0,
         help="Weight decay to use.",
     )
-
+    parser.add_argument(
+        "--max_train_steps",
+        type=int,
+        default=None,
+        help="Total number of training steps to perform. If provided, overrides num_train_epochs.",
+    )
+    parser.add_argument(
+        "--lr_scheduler_type",
+        type=SchedulerType,
+        default="linear",
+        help="The scheduler type to use.",
+        choices=["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"],
+    )
+    parser.add_argument(
+        "--num_warmup_steps",
+        type=int,
+        default=0,
+        help="Number of steps for the warmup in the lr scheduler.",
+    )
     args = parser.parse_args()
 
     # Sanity checks
@@ -531,6 +552,23 @@ def main():
         },
     ]
     optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
+
+    # Note -> the training dataloader needs to be prepared before we grab his length below (cause its length will be
+    # shorter in multiprocess)
+
+    # Scheduler and math around the number of training steps.
+    overrode_max_train_steps = False
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    if args.max_train_steps is None:
+        args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
+        overrode_max_train_steps = True
+
+    lr_scheduler = get_scheduler(
+        name=args.lr_scheduler_type,
+        optimizer=optimizer,
+        num_warmup_steps=args.num_warmup_steps * args.gradient_accumulation_steps,
+        num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
+    )
 
 
 if __name__ == "__main__":
