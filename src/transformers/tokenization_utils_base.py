@@ -475,7 +475,7 @@ class BatchEncoding(UserDict):
                 or 1) the provided word index belongs to.
 
         Returns:
-            Optional [`~tokenization_utils_base.TokenSpan`] Span of tokens in the encoded sequence. Returns `None` if
+            Optional [`~tokenization_utils_base.TokenSpan`]: Span of tokens in the encoded sequence. Returns `None` if
             no tokens correspond to the word.
         """
 
