@@ -2025,9 +2025,9 @@ class UtilsFunctionsTest(unittest.TestCase):
                 return pixel_values, output_attentions, output_hidden_states, return_dict
 
         dummy_model = DummyModel()
-        input_ids = tf.constant([0, 1, 2, 3], dtype=tf.int64)
-        past_key_values = tf.constant([4, 5, 6, 7], dtype=tf.int64)
-        pixel_values = tf.constant([8, 9, 10, 11], dtype=tf.int64)
+        input_ids = tf.constant([0, 1, 2, 3], dtype=tf.int32)
+        past_key_values = tf.constant([4, 5, 6, 7], dtype=tf.int32)
+        pixel_values = tf.constant([8, 9, 10, 11], dtype=tf.int32)
 
         # test case 1: Pass inputs as keyword arguments; Booleans are inherited from the config.
         output = dummy_model.call(input_ids=input_ids, past_key_values=past_key_values)
