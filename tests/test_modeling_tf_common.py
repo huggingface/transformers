@@ -1663,7 +1663,7 @@ class TFModelTesterMixin:
             model = model_class(config)
             model(**prepared_for_class)  # No assertion, we're just checking this doesn't throw an error
             int32_prepared_for_class = {
-                key: tf.cast(tensor, tf.int64) if isinstance(tensor, tf.Tensor) and tensor.dtype.is_integer else tensor
+                key: tf.cast(tensor, tf.int32) if isinstance(tensor, tf.Tensor) and tensor.dtype.is_integer else tensor
                 for key, tensor in prepared_for_class.items()
             }
             model(**int32_prepared_for_class)  # No assertion, we're just checking this doesn't throw an error
