@@ -457,6 +457,14 @@ def main():
         ]
     )
 
+    # create mask generator
+    mask_generator = MaskGenerator(
+        input_size=args.image_size,
+        mask_patch_size=args.mask_patch_size,
+        model_patch_size=args.patch_size,
+        mask_ratio=args.mask_ratio,
+    )
+
 
 if __name__ == "__main__":
     main()
