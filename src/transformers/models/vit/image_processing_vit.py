@@ -193,6 +193,7 @@ class ViTImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
+        float_precision: Optional[str] = None,
         **kwargs,
     ):
         """
@@ -231,6 +232,8 @@ class ViTImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - Unset: Use the channel dimension format of the input image.
+            float_precision (`str`, *optional*):
+                The output floating point precision [float16, float32, double, bfloat16]
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
@@ -273,4 +276,4 @@ class ViTImageProcessor(BaseImageProcessor):
         images = [to_channel_dimension_format(image, data_format) for image in images]
 
         data = {"pixel_values": images}
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors, float_precision=float_precision)

@@ -70,9 +70,15 @@ class BatchFeature(UserDict):
             initialization.
     """
 
-    def __init__(self, data: Optional[Dict[str, Any]] = None, tensor_type: Union[None, str, TensorType] = None):
+    def __init__(
+        self,
+        data: Optional[Dict[str, Any]] = None,
+        tensor_type: Union[None, str, TensorType] = None,
+        float_precision: Optional[str] = None,
+    ):
         super().__init__(data)
         self.convert_to_tensors(tensor_type=tensor_type)
+        self.cast_to_dtype(tensor_type=tensor_type, float_precision=float_precision)
 
     def __getitem__(self, item: str) -> Union[Any]:
         """
@@ -108,6 +114,102 @@ class BatchFeature(UserDict):
     # Copied from transformers.tokenization_utils_base.BatchEncoding.items
     def items(self):
         return self.data.items()
+
+    def cast_to_dtype(
+        self, tensor_type: Optional[Union[str, TensorType]] = None, float_precision: Optional[str] = None
+    ):
+        """
+        Maybe cast the input tensors (floating point tensors only) to the desired precision
+
+        Args:
+            tensor_type (`str` or [`~utils.TensorType`], *optional*):
+                The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
+                `None`, no modification is done.
+            float_precision (`str`, *optional*):
+                The output floating point precision [float16, float32, double, bfloat16]
+        """
+        if (float_precision is None) or (tensor_type is None):
+            return self
+
+        # Convert to TensorType
+        if not isinstance(tensor_type, TensorType):
+            tensor_type = TensorType(tensor_type)
+
+        # Get a function reference for the correct framework
+        if tensor_type == TensorType.TENSORFLOW:
+            if not is_tf_available():
+                raise ImportError(
+                    "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
+                )
+            import tensorflow as tf
+
+            target_framework = tf
+            cast_fun = tf.cast
+
+            def is_floating(x):
+                return x.dtype in (tf.float16, tf.float32, tf.double, tf.bfloat16)
+
+            is_tensor = tf.is_tensor
+
+        elif tensor_type == TensorType.PYTORCH:
+            if not is_torch_available():
+                raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
+            import torch
+
+            target_framework = torch
+
+            def cast_fun(x, dtype):
+                x.to(dtype=dtype)
+
+            def is_floating(x):
+                return x.dtype in (torch.float16, torch.float32, torch.double, torch.bfloat16)
+
+            is_tensor = torch.is_tensor
+
+        # Jax tensors
+        elif tensor_type == TensorType.JAX:
+            if not is_flax_available():
+                raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
+            import jax.numpy as jnp  # noqa: F811
+
+            target_framework = jnp
+
+            def cast_fun(x, dtype):
+                x.astype(dtype=dtype)
+
+            def is_floating(x):
+                return x.dtype in (jnp.float16, jnp.float32, jnp.double, jnp.bfloat16)
+
+            is_tensor = is_jax_tensor
+        # np arrays
+        else:
+            target_framework = np
+
+            def cast_fun(x, dtype):
+                return x.astype(dtype=dtype)
+
+            def is_floating(x):
+                return x.dtype in (np.half, np.single, np.double, np.longdouble)
+
+            is_tensor = is_numpy_array
+
+        if hasattr(target_framework, float_precision):
+            target_dtype = getattr(target_framework, float_precision)
+        else:
+            raise ValueError(
+                f"Failed to import the`dtype` {target_dtype} from the framework {target_framework} - please use a"
+                " supported",
+                " `dtype` for your targetted framework.",
+            )
+
+        # Do the tensor conversion in batch
+        for key, value in self.items():
+            # sanity check that we check for only tensors
+            if is_tensor(value):
+                if is_floating(value):
+                    self[key] = cast_fun(value, target_dtype)
+
+        return self
 
     def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None):
         """
