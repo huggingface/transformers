@@ -433,6 +433,17 @@ def main():
     else:
         logger.info("Training new model from scratch")
         model = AutoModelForMaskedImageModeling.from_config(config)
+        
+    column_names = ds["train"].column_names
+
+    if args.image_column_name is not None:
+        image_column_name = args.image_column_name
+    elif "image" in column_names:
+        image_column_name = "image"
+    elif "img" in column_names:
+        image_column_name = "img"
+    else:
+        image_column_name = column_names[0]
 
 
 if __name__ == "__main__":
