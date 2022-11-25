@@ -16,10 +16,11 @@
 
 URL: https://github.com/open-mmlab/mmsegmentation/tree/master/configs/swin
 
-Update: there seems to be an incompatibility with this version, due to a new implementation
-of their downsampling operation using nn.Unfold.
+Update: there seems to be an incompatibility with this version, due to a new implementation of their downsampling
+operation using nn.Unfold.
 
-TODO we need to update the parameters as shown here: https://github.com/open-mmlab/mmdetection/blob/31c84958f54287a8be2b99cbf87a6dcf12e57753/mmdet/models/utils/ckpt_convert.py#L96.
+TODO we need to update the parameters as shown here:
+https://github.com/open-mmlab/mmdetection/blob/31c84958f54287a8be2b99cbf87a6dcf12e57753/mmdet/models/utils/ckpt_convert.py#L96.
 """
 
 import argparse
@@ -34,8 +35,21 @@ from transformers.utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT
 
 
 def get_upernet_config(model_name):
+    if "tiny" in model_name:
+        embed_dim = 96
+        depths = (2, 2, 6, 2)
+        num_heads = (3, 6, 12, 24)
+    elif "small" in model_name:
+        embed_dim = 96
+        depths = (2, 2, 18, 2)
+        num_heads = (3, 6, 12, 24)
+
     backbone_config = SwinConfig(
-        output_hidden_states_before_downsampling=True, out_features=["stage1", "stage2", "stage3", "stage4"]
+        embed_dim=embed_dim,
+        depths=depths,
+        num_heads=num_heads,
+        output_hidden_states_before_downsampling=True,
+        out_features=["stage1", "stage2", "stage3", "stage4"],
     )
     config = UperNetConfig(backbone_config=backbone_config, num_labels=150)
 
@@ -128,18 +142,17 @@ image_transforms = Compose(
 def correct_unfold_reduction_order(x):
     out_channel, in_channel = x.shape
     x = x.reshape(out_channel, 4, in_channel // 4)
-    x = x[:, [0, 2, 1, 3], :].transpose(1,
-                                        2).reshape(out_channel, in_channel)
+    x = x[:, [0, 2, 1, 3], :].transpose(1, 2).reshape(out_channel, in_channel)
     return x
 
 
 def reverse_correct_unfold_reduction_order(x):
     out_channel, in_channel = x.shape
     x = x.reshape(out_channel, in_channel // 4, 4)
-    x = x[:, :, [0, 2, 1, 3]].transpose(1,
-                                        2).reshape(out_channel, in_channel)
+    x = x[:, :, [0, 2, 1, 3]].transpose(1, 2).reshape(out_channel, in_channel)
 
     return x
+
 
 def correct_unfold_norm_order(x):
     in_channel = x.shape[0]
@@ -158,9 +171,10 @@ def reverse_correct_unfold_norm_order(x):
 def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     model_name_to_url = {
         "upernet-swin-tiny-mmsegmentation": "https://download.openmmlab.com/mmsegmentation/v0.5/swin/upernet_swin_tiny_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K/upernet_swin_tiny_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K_20210531_112542-e380ad3e.pth",
+        "upernet-swin-small-mmsegmentation": "https://download.openmmlab.com/mmsegmentation/v0.5/swin/upernet_swin_small_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K/upernet_swin_small_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K_20210526_192015-ee2fff1c.pth",
     }
     checkpoint_url = model_name_to_url[model_name]
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["state_dict"]
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)["state_dict"]
 
     for name, param in state_dict.items():
         print(name, param.shape)
@@ -204,8 +218,10 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     with torch.no_grad():
         outputs = model(pixel_values)
-        print(outputs.keys())
+        logits = outputs.logits
 
+    print(logits.shape)
+    print("First values of logits:", logits[0,0,:3,:3])
     # TODO assert values
     # expected_slice = torch.tensor(
     #     [[-8.8110, -7.5399, -7.5429], [-8.5200, -7.0736, -7.2054], [-8.5220, -7.2897, -7.3901]]
@@ -233,7 +249,7 @@ if __name__ == "__main__":
         "--model_name",
         default="upernet-swin-tiny-mmsegmentation",
         type=str,
-        choices=["upernet-swin-tiny", "upernet-swin-small"],
+        choices=["upernet-swin-tiny-mmsegmentation", "upernet-swin-small-mmsegmentation"],
         help="Name of the Swin + UperNet model you'd like to convert.",
     )
     parser.add_argument(
