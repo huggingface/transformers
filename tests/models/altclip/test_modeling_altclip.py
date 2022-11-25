@@ -161,21 +161,19 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_gradient_checkpointing_enable_disable(self):
-        # config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
     
-        # if not AltCLIPTextModel.supports_gradient_checkpointing:
-        #     pass
+        if not AltCLIPTextModel.supports_gradient_checkpointing:
+            pass
 
-        # # at init model should have gradient checkpointing disabled
-        # model = AltCLIPTextModel(config)
-        # self.assertFalse(model.is_gradient_checkpointing)
+        # at init model should have gradient checkpointing disabled
+        model = AltCLIPTextModel(config)
+        self.assertFalse(model.is_gradient_checkpointing)
 
-        # # check enable works
-        # model.gradient_checkpointing_enable()
-        # print(model)
-        # print(model.is_gradient_checkpointing)
-        # self.assertTrue(model.is_gradient_checkpointing)
-        pass
+        # check enable works
+        model.gradient_checkpointing_enable()
+        print(model.is_gradient_checkpointing)
+        self.assertTrue(model.is_gradient_checkpointing)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -240,7 +238,7 @@ class AltCLIPModelTester:
         return AltCLIPConfig(text_config_dict=text_config, vision_config_dict=vision_config.to_dict(), projection_dim=64)
 
     def create_and_check_model(
-            self, config, input_ids, pixel_values, attention_mask):
+            self, config, input_ids, attention_mask, pixel_values):
         model = AltCLIPModel(config=config)
         model.to(torch_device)
         model.eval()

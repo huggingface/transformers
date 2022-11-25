@@ -51,7 +51,7 @@ from transformers.models.clip.modeling_clip import *
 import torch.nn as nn
 import torch
 from transformers.models.clip.modeling_clip import CLIPOutput
-from transformers.models.xlm_roberta.modeling_xlm_roberta import XLMRobertaModel
+from transformers.models.xlm_roberta.modeling_xlm_roberta import XLMRobertaModel, XLMRobertaPreTrainedModel
 from transformers.models.roberta.modeling_roberta import RobertaLMHead,RobertaPreTrainedModel
 
 
@@ -66,7 +66,7 @@ ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all AltCLIP models at https://huggingface.co/models?filter=altclip
 ]
 
-class AltCLIPTextModel(RobertaPreTrainedModel):
+class AltCLIPTextModel(XLMRobertaPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
@@ -301,18 +301,18 @@ class AltCLIPModel(CLIPPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
