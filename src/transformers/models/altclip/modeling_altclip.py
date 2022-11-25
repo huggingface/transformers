@@ -59,7 +59,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "BAAI/AltCLIP"
 _CONFIG_FOR_DOC = "AltCLIPConfig"
-_TOKENIZER_FOR_DOC = "AltCLIPTokenizer"
 
 ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "BAAI/AltCLIP",

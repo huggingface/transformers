@@ -27,7 +27,6 @@ from ...utils import is_torch_available
 _import_structure = {
     "configuration_altclip": ["ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "AltCLIPConfig", "AltCLIPTextConfig"],
     "processing_altclip": ["AltCLIPProcessor"],
-    "tokenization_altclip": ["AltCLIPTokenizer"],
 }
 
 try:
@@ -47,7 +46,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_altclip import ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, AltCLIPConfig, AltCLIPTextConfig
-    from .tokenization_altclip import AltCLIPTokenizer
     from .processing_altclip import AltCLIPProcessor
 
     try:
