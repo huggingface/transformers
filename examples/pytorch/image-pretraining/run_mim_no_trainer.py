@@ -407,7 +407,7 @@ def main():
             "encoder_stride": args.encoder_stride,
         }
     )
-    
+
     # create feature extractor
     if args.feature_extractor_name:
         feature_extractor = AutoFeatureExtractor.from_pretrained(args.feature_extractor_name, **config_kwargs)
@@ -419,6 +419,20 @@ def main():
             for conf, feature_extractor_class in FEATURE_EXTRACTOR_MAPPING.items()
         }
         feature_extractor = FEATURE_EXTRACTOR_TYPES[args.model_type]()
+
+    # create model
+    if args.model_name_or_path:
+        model = AutoModelForMaskedImageModeling.from_pretrained(
+            args.model_name_or_path,
+            from_tf=bool(".ckpt" in args.model_name_or_path),
+            config=config,
+            cache_dir=args.cache_dir,
+            revision=args.model_revision,
+            use_auth_token=True if args.use_auth_token else None,
+        )
+    else:
+        logger.info("Training new model from scratch")
+        model = AutoModelForMaskedImageModeling.from_config(config)
 
 
 if __name__ == "__main__":
