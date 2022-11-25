@@ -1,6 +1,11 @@
 import os
 import unicodedata
 import re
+import torch
+# In src/transformers/tokenization_utils_base.py
+# if TYPE_CHECKING:
+#     if is_torch_available():
+#         import torch
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -46,14 +51,27 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
             do_lower_case=False,
             remove_space=False,
             keep_accents=False,
-            unk_token="<|endoftext|>",
-            bos_token="<|endoftext|>",
-            eos_token="<|endoftext|>",
             sp_model_kwargs: Optional[Dict[str, Any]] = None,
             **kwargs
     ) -> None:
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+
+        # TODO: set special tokens according to this if-statement
+        name_or_path = kwargs.get("name_or_path")
+        # print(name_or_path)
+        if "gpt-sw3-7b" in name_or_path or "-OLD" in name_or_path:
+            self.is_old_tokenizer = True
+            pad_token = "<unk>"
+            unk_token = pad_token
+            eos_token = "<|endoftext|>"
+            bos_token = eos_token
+        else:
+            self.is_old_tokenizer = False
+            pad_token = "<pad>"
+            unk_token = "<unk>"
+            eos_token = "<|endoftext|>"
+            bos_token = "<s>"
 
         super().__init__(
             do_lower_case=do_lower_case,
@@ -62,6 +80,7 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
+            pad_token=pad_token,
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
@@ -200,20 +219,21 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
 
     # Almost 10x speedup to override this for batch encode, 2x speedup for single-text encode
     def call_fast(self, text: Union[str, List[str]], return_tensors: Optional[Union[str, TensorType]] = None
-                  ) -> Dict[str, Union[Any]]:
+                  ) -> Dict[str, Union[List[int], List[List[int]], "torch.Tensor"]]:
 
         if isinstance(text, str):
             text = self.preprocess_text(text)
             token_ids = self.sp_model.encode(text)
-            attention_mask = [1 for _ in token_ids]
+            # attention_mask = [1 for _ in token_ids]
         else:
             text = [self.preprocess_text(t) for t in text]
             token_ids = self.sp_model.encode(text)
-            attention_mask = [[1] * len(ids_list) for ids_list in token_ids]
+            # attention_mask = [[1] * len(ids_list) for ids_list in token_ids]
 
         if return_tensors == "pt":
             token_ids = torch.tensor(token_ids)
-            attention_mask = torch.tensor(attention_mask)
+            # attention_mask = torch.tensor(attention_mask)
 
-        out_dict = {"input_ids": token_ids, "attention_mask": attention_mask}
+        # out_dict = {"input_ids": token_ids, "attention_mask": attention_mask}
+        out_dict = {"input_ids": token_ids}
         return out_dict
