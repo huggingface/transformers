@@ -3848,10 +3848,8 @@ if TYPE_CHECKING:
         if not is_keras_nlp_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
-        print("except")
         from .utils.dummy_keras_nlp_objects import *
     else:
-        print("import")
         from .models.gpt2 import TFGPT2Tokenizer
 
     try:
