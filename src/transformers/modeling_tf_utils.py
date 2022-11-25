@@ -2266,15 +2266,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if saved_model:
             if signatures is None:
-                if any(spec.dtype == tf.int64 for spec in self.serving.input_signature[0].values()):
-                    int32_spec = {
+                if any(spec.dtype == tf.int32 for spec in self.serving.input_signature[0].values()):
+                    int64_spec = {
                         key: tf.TensorSpec(
-                            shape=spec.shape, dtype=tf.int32 if spec.dtype == tf.int64 else spec.dtype, name=spec.name
+                            shape=spec.shape, dtype=tf.int64 if spec.dtype == tf.int32 else spec.dtype, name=spec.name
                         )
                         for key, spec in self.serving.input_signature[0].items()
                     }
-                    int32_serving = tf.function(self.eager_serving, input_signature=[int32_spec])
-                    signatures = {"serving_default": self.serving, "int32_serving": int32_serving}
+                    int64_serving = tf.function(self.eager_serving, input_signature=[int64_spec])
+                    signatures = {"serving_default": self.serving, "int64_serving": int64_serving}
                 else:
                     signatures = self.serving
             saved_model_dir = os.path.join(save_directory, "saved_model", str(version))
