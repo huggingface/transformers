@@ -1643,7 +1643,7 @@ class TFModelTesterMixin:
             if metrics:
                 self.assertTrue(len(accuracy1) == len(accuracy3) > 0, "Missing metrics!")
 
-    def test_int64_support(self):
+    def test_int_support(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             prepared_for_class = self._prepare_for_class(
@@ -1662,19 +1662,25 @@ class TFModelTesterMixin:
             }
             model = model_class(config)
             model(**prepared_for_class)  # No assertion, we're just checking this doesn't throw an error
+            int32_prepared_for_class = {
+                key: tf.cast(tensor, tf.int64) if isinstance(tensor, tf.Tensor) and tensor.dtype.is_integer else tensor
+                for key, tensor in prepared_for_class.items()
+            }
+            model(**int32_prepared_for_class)  # No assertion, we're just checking this doesn't throw an error
 
-            # After testing that the model accepts int64 inputs, confirm that its dummies are int64 by default too
+            # After testing that the model accepts all int inputs, confirm that its dummies are int32
             for key, tensor in model.dummy_inputs.items():
                 self.assertTrue(isinstance(tensor, tf.Tensor), "Dummy inputs should be tf.Tensor!")
                 if tensor.dtype.is_integer:
-                    self.assertTrue(tensor.dtype == tf.int64, "Integer dummy inputs should be tf.int64!")
+                    self.assertTrue(tensor.dtype == tf.int32, "Integer dummy inputs should be tf.int32!")
 
+            # Also confirm that the serving sig uses int32
             if hasattr(model, "serving"):
                 serving_sig = model.serving.input_signature
                 for key, tensor_spec in serving_sig[0].items():
                     if tensor_spec.dtype.is_integer:
                         self.assertTrue(
-                            tensor_spec.dtype == tf.int64, "Serving signatures should use tf.int64 for ints!"
+                            tensor_spec.dtype == tf.int32, "Serving signatures should use tf.int32 for ints!"
                         )
 
     def test_generate_with_headmasking(self):
