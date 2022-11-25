@@ -252,6 +252,13 @@ def parse_args():
         default=8,
         help="Batch size (per device) for the training dataloader.",
     )
+    parser.add_argument(
+        "--weight_decay",
+        type=float,
+        default=0.0,
+        help="Weight decay to use.",
+    )
+
     args = parser.parse_args()
 
     # Sanity checks
@@ -509,6 +516,21 @@ def main():
         collate_fn=collate_fn,
         batch_size=args.per_device_eval_batch_size,
     )
+
+    # Optimizer
+    # Split weights in two groups, one with weight decay and the other not.
+    no_decay = ["bias", "LayerNorm.weight"]
+    optimizer_grouped_parameters = [
+        {
+            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "weight_decay": args.weight_decay,
+        },
+        {
+            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            "weight_decay": 0.0,
+        },
+    ]
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
 
 if __name__ == "__main__":
