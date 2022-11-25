@@ -115,6 +115,46 @@ class MixedInt8Test(BaseMixedInt8Test):
         with self.assertWarns(UserWarning), tempfile.TemporaryDirectory() as tmpdirname:
             self.model_8bit.save_pretrained(tmpdirname)
 
+    def test_device_and_dtype_assignment(self):
+        r"""
+        Test whether trying to cast (or assigning a device to) a model after converting it in 8-bit will throw an error.
+        Checks also if other models are casted correctly.
+        """
+        with self.assertRaises(ValueError):
+            # Tries with `str`
+            self.model_8bit.to("cpu")
+
+        with self.assertRaises(ValueError):
+            # Tries with a `dtype``
+            self.model_8bit.to(torch.float16)
+
+        with self.assertRaises(ValueError):
+            # Tries with a `device`
+            self.model_8bit.to(torch.device("cuda:0"))
+
+        with self.assertRaises(ValueError):
+            # Tries with a `device`
+            self.model_8bit.float()
+
+        with self.assertRaises(ValueError):
+            # Tries with a `device`
+            self.model_8bit.half()
+
+        # Test if we did not break anything
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+
+        self.model_fp16 = self.model_fp16.to(torch.float32)
+        _ = self.model_fp16.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+
+        # Check this does not throw an error
+        _ = self.model_fp16.to("cpu")
+
+        # Check this does not throw an error
+        _ = self.model_fp16.half()
+
+        # Check this does not throw an error
+        _ = self.model_fp16.float()
+
 
 class MixedInt8ModelClassesTest(BaseMixedInt8Test):
     def setUp(self):

@@ -1475,9 +1475,10 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         # Loop over query images
         best_class_embeds = []
         best_box_indices = []
+        pred_boxes_device = pred_boxes_as_corners.device
 
         for i in range(query_image_features.shape[0]):
-            each_query_box = torch.tensor([[0, 0, 1, 1]])
+            each_query_box = torch.tensor([[0, 0, 1, 1]], device=pred_boxes_device)
             each_query_pred_boxes = pred_boxes_as_corners[i]
             ious, _ = box_iou(each_query_box, each_query_pred_boxes)
 
