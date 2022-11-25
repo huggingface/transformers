@@ -159,7 +159,7 @@ class BatchFeature(UserDict):
             target_framework = torch
 
             def cast_fun(x, dtype):
-                x.to(dtype=dtype)
+                return x.to(dtype=dtype)
 
             def is_floating(x):
                 return x.dtype in (torch.float16, torch.float32, torch.double, torch.bfloat16)
@@ -175,7 +175,7 @@ class BatchFeature(UserDict):
             target_framework = jnp
 
             def cast_fun(x, dtype):
-                x.astype(dtype=dtype)
+                return x.astype(dtype=dtype)
 
             def is_floating(x):
                 return x.dtype in (jnp.float16, jnp.float32, jnp.double, jnp.bfloat16)
