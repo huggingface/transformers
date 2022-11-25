@@ -609,6 +609,9 @@ def main():
         experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
         accelerator.init_trackers("mlm_no_trainer", experiment_config)
 
+    # Train!
+    total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
+
 
 if __name__ == "__main__":
     main()
