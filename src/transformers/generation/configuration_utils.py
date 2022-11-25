@@ -604,7 +604,8 @@ class GenerationConfig(PushToHubMixin):
         config_dict = model_config.to_dict()
         config = cls.from_dict(config_dict, return_unused_kwargs=False)
 
-        # Special case: some models have generation attributes set in the decoder. Use them if the attribute is unset.
+        # Special case: some models have generation attributes set in the decoder. Use them if still unset in the
+        # generation config.
         for decoder_name in ("decoder", "generator"):
             if decoder_name in config_dict:
                 default_generation_config = GenerationConfig()

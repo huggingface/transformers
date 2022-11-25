@@ -1459,7 +1459,10 @@ class RagTokenForGeneration(RagPreTrainedModel):
         """
         # Handle `generation_config` and kwargs that might update it
         if generation_config is None:
-            generation_config = self.generation_config
+            if self.generation_config is not None:
+                generation_config = self.generation_config
+            else:
+                generation_config = GenerationConfig.from_model_config(self.config)
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
 
