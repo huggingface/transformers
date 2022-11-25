@@ -570,6 +570,17 @@ def main():
         num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
     )
 
+    # Prepare everything with our `accelerator`.
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+        model,
+        optimizer,
+        train_dataloader,
+        eval_dataloader,
+        lr_scheduler,
+    )
+    
+    
+
 
 if __name__ == "__main__":
     main()
