@@ -20,7 +20,7 @@ import math
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
-from accelerate import Accelerator
+from accelerate import Accelerator, DistributedType
 import datasets
 from datasets import load_dataset
 from pathlib import Path
@@ -578,8 +578,10 @@ def main():
         eval_dataloader,
         lr_scheduler,
     )
-    
-    
+
+    # On TPU, the tie weights in our model have been disconnected, so we need to restore the ties.
+    if accelerator.distributed_type == DistributedType.TPU:
+        model.tie_weights()
 
 
 if __name__ == "__main__":
