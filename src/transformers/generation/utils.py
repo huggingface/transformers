@@ -621,12 +621,15 @@ class GenerationMixin:
             return torch.ones((batch_size, 1), dtype=torch.long, device=device) * decoder_start_token_id
 
     def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
-        decoder_start_token_id = (
-            decoder_start_token_id
-            if decoder_start_token_id is not None
-            else self.generation_config.decoder_start_token_id
+        generation_config = (
+            self.generation_config
+            if self.generation_config is not None
+            else GenerationConfig.from_model_config(self.config)
         )
-        bos_token_id = bos_token_id if bos_token_id is not None else self.generation_config.bos_token_id
+        decoder_start_token_id = (
+            decoder_start_token_id if decoder_start_token_id is not None else generation_config.decoder_start_token_id
+        )
+        bos_token_id = bos_token_id if bos_token_id is not None else generation_config.bos_token_id
 
         if decoder_start_token_id is not None:
             return decoder_start_token_id
