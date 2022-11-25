@@ -68,6 +68,8 @@ class NatConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        layer_scale_init_value (`float`, *optional*, defaults to 0.0):
+            The initial value for the layer scale. Disabled if <=0.
 
     Example:
 
@@ -107,6 +109,7 @@ class NatConfig(PretrainedConfig):
         patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
+        layer_scale_init_value=0.0,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -130,3 +133,4 @@ class NatConfig(PretrainedConfig):
         # we set the hidden_size attribute in order to make Nat work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
+        self.layer_scale_init_value = layer_scale_init_value
