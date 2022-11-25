@@ -433,7 +433,7 @@ def main():
     else:
         logger.info("Training new model from scratch")
         model = AutoModelForMaskedImageModeling.from_config(config)
-        
+
     column_names = ds["train"].column_names
 
     if args.image_column_name is not None:
@@ -444,6 +444,18 @@ def main():
         image_column_name = "img"
     else:
         image_column_name = column_names[0]
+
+    # transformations as done in original SimMIM paper
+    # source: https://github.com/microsoft/SimMIM/blob/main/data/data_simmim.py
+    transforms = Compose(
+        [
+            Lambda(lambda img: img.convert("RGB") if img.mode != "RGB" else img),
+            RandomResizedCrop(args.image_size, scale=(0.67, 1.0), ratio=(3.0 / 4.0, 4.0 / 3.0)),
+            RandomHorizontalFlip(),
+            ToTensor(),
+            Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std),
+        ]
+    )
 
 
 if __name__ == "__main__":
