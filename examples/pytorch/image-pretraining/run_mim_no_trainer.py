@@ -395,6 +395,11 @@ def main():
     if hasattr(config, "decoder_type"):
         config.decoder_type = "simmim"
 
+    # adapt config
+    args.image_size = args.image_size if args.image_size is not None else config.image_size
+    args.patch_size = args.patch_size if args.patch_size is not None else config.patch_size
+    args.encoder_stride = args.encoder_stride if args.encoder_stride is not None else config.encoder_stride
+
 
 if __name__ == "__main__":
     main()
