@@ -601,6 +601,14 @@ def main():
     if checkpointing_steps is not None and checkpointing_steps.isdigit():
         checkpointing_steps = int(checkpointing_steps)
 
+    # We need to initialize the trackers we use, and also store our configuration.
+    # The trackers initializes automatically on the main process.
+    if args.with_tracking:
+        experiment_config = vars(args)
+        # TensorBoard cannot log Enums, need the raw value
+        experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
+        accelerator.init_trackers("mlm_no_trainer", experiment_config)
+
 
 if __name__ == "__main__":
     main()
