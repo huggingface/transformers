@@ -17,14 +17,19 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_torch_available,
-)
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {"configuration_efficientformer": ["EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "EfficientformerConfig", "EfficientformerOnnxConfig"]}
+_import_structure = {"configuration_efficientformer": ["EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "EfficientFormerConfig", "EfficientFormerOnnxConfig"]}
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["feature_extraction_efficientformer"] = ["EfficientFormerFeatureExtractor"]
+    _import_structure["image_processing_efficientformer"] = ["EfficientFormerImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -34,14 +39,18 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_efficientformer"] = [
         "EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "EfficientformerForImageClassification",
-        "EfficientformerForMaskedImageModeling",
-        "EfficientformerModel",
-        "EfficientformerPreTrainedModel",
+        "EfficientFormerForImageClassification",
+        "EfficientFormerForMaskedImageModeling",
+        "EfficientFormerModel",
+        "EfficientFormerPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_efficientformer import EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientformerConfig, EfficientformerOnnxConfig
+    from .configuration_efficientformer import (
+        EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        EfficientFormerConfig,
+        EfficientFormerOnnxConfig,
+    )
 
     try:
         if not is_torch_available():
@@ -51,10 +60,10 @@ if TYPE_CHECKING:
     else:
         from .modeling_efficientformer import (
             EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            EfficientformerForImageClassification,
-            EfficientformerForMaskedImageModeling,
-            EfficientformerModel,
-            EfficientformerPreTrainedModel,
+            EfficientFormerForImageClassification,
+            EfficientFormerForMaskedImageModeling,
+            EfficientFormerModel,
+            EfficientFormerPreTrainedModel,
         )
 
 else:

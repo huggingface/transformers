@@ -12,13 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Efficientformer model. """
+""" Testing suite for the PyTorch EfficientFormer model. """
 
 
 import inspect
 import unittest
+from typing import Optional, Tuple, Dict, Union
 
-from transformers import EfficientformerConfig
+from transformers import EfficientFormerConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -30,35 +31,44 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import EfficientformerForImageClassification, EfficientformerForMaskedImageModeling, EfficientformerModel
-    from transformers.models.efficientformer.modeling_efficientformer import EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import (
+        EfficientFormerForImageClassification,
+        EfficientFormerForMaskedImageModeling,
+        EfficientFormerModel,
+    )
+    from transformers.models.efficientformer.modeling_efficientformer import (
+        EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+    )
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import EfficientFormerFeatureExtractor
 
 
-class EfficientformerModelTester:
+class EfficientFormerModelTester:
     def __init__(
         self,
+        # TODO: type
         parent,
-        batch_size=13,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
-        is_training=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        type_sequence_label_size=10,
-        initializer_range=0.02,
+        batch_size: int = 13,
+        image_size: int = 224,
+        patch_size: int = 2,
+        num_channels: int = 3,
+        is_training: bool = True,
+        use_labels: bool = True,
+        hidden_size: int = 448,  # output of the encoder
+        # TODO: not sure
+        num_hidden_layers: int = 7,  # For the l1
+        num_attention_heads: int = 8,
+        intermediate_size: int = 37,
+        hidden_act: str = "gelu",
+        hidden_dropout_prob: float = 0.1,
+        attention_probs_dropout_prob: float = 0.1,
+        type_sequence_label_size: int = 10,
+        initializer_range: float = 0.02,
+        # TODO: type?
         scope=None,
         encoder_stride=2,
     ):
@@ -81,11 +91,17 @@ class EfficientformerModelTester:
         self.scope = scope
         self.encoder_stride = encoder_stride
 
-        # in Efficientformer, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
+        # in EfficientFormer, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
+        # num_patches = (image_size // patch_size) ** 2
+
+        # TODO: Wrronly calculated.
+        # config = self.get_config()
+        # m = EfficientFormerConvStem(config, config.embed_dims)
+        # num_patches = ((image_size**2) / 16**2) // patch_size
+        num_patches = 48
         self.seq_length = num_patches + 1
 
-    def prepare_config_and_inputs(self):
+    def prepare_config_and_inputs(self) -> Tuple[EfficientFormerConfig, torch.Tensor, torch.Tensor]:
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         labels = None
@@ -93,11 +109,10 @@ class EfficientformerModelTester:
             labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
         config = self.get_config()
-
         return config, pixel_values, labels
 
-    def get_config(self):
-        return EfficientformerConfig(
+    def get_config(self) -> EfficientFormerConfig:
+        return EfficientFormerConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -113,15 +128,19 @@ class EfficientformerModelTester:
             encoder_stride=self.encoder_stride,
         )
 
-    def create_and_check_model(self, config, pixel_values, labels):
-        model = EfficientformerModel(config=config)
+    def create_and_check_model(
+        self, config: EfficientFormerConfig, pixel_values: torch.Tensor, labels: torch.Tensor
+    ) -> None:
+        model = EfficientFormerModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_for_masked_image_modeling(self, config, pixel_values, labels):
-        model = EfficientformerForMaskedImageModeling(config=config)
+    def create_and_check_for_masked_image_modeling(
+        self, config: EfficientFormerConfig, pixel_values: torch.Tensor, labels: torch.Tensor
+    ) -> None:
+        model = EfficientFormerForMaskedImageModeling(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -131,7 +150,7 @@ class EfficientformerModelTester:
 
         # test greyscale images
         config.num_channels = 1
-        model = EfficientformerForMaskedImageModeling(config)
+        model = EfficientFormerForMaskedImageModeling(config)
         model.to(torch_device)
         model.eval()
 
@@ -139,9 +158,11 @@ class EfficientformerModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.image_size, self.image_size))
 
-    def create_and_check_for_image_classification(self, config, pixel_values, labels):
+    def create_and_check_for_image_classification(
+        self, config: EfficientFormerConfig, pixel_values: torch.Tensor, labels: torch.Tensor
+    ) -> None:
         config.num_labels = self.type_sequence_label_size
-        model = EfficientformerForImageClassification(config)
+        model = EfficientFormerForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
@@ -149,7 +170,7 @@ class EfficientformerModelTester:
 
         # test greyscale images
         config.num_channels = 1
-        model = EfficientformerForImageClassification(config)
+        model = EfficientFormerForImageClassification(config)
         model.to(torch_device)
         model.eval()
 
@@ -157,7 +178,7 @@ class EfficientformerModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
-    def prepare_config_and_inputs_for_common(self):
+    def prepare_config_and_inputs_for_common(self) -> Tuple[EfficientFormerConfig, Dict[str, torch.Tensor]]:
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
@@ -169,17 +190,18 @@ class EfficientformerModelTester:
 
 
 @require_torch
-class EfficientformerModelTest(ModelTesterMixin, unittest.TestCase):
+class EfficientFormerModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as Efficientformer does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as EfficientFormer does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (
         (
-            EfficientformerModel,
-            EfficientformerForImageClassification,
-            EfficientformerForMaskedImageModeling,
+            EfficientFormerModel,
+            EfficientFormerForImageClassification,
+            # Not implemented yet
+            # EfficientFormerForMaskedImageModeling,
         )
         if is_torch_available()
         else ()
@@ -190,18 +212,20 @@ class EfficientformerModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
 
-    def setUp(self):
-        self.model_tester = EfficientformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=EfficientformerConfig, has_text_modality=False, hidden_size=37)
+    def setUp(self) -> None:
+        self.model_tester = EfficientFormerModelTester(self)
+        self.config_tester = ConfigTester(
+            self, config_class=EfficientFormerConfig, has_text_modality=False, hidden_size=37
+        )
 
-    def test_config(self):
+    def test_config(self) -> None:
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="Efficientformer does not use inputs_embeds")
+    @unittest.skip(reason="EfficientFormer does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_common_attributes(self) -> None:
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -210,7 +234,7 @@ class EfficientformerModelTest(ModelTesterMixin, unittest.TestCase):
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
-    def test_forward_signature(self):
+    def test_forward_signature(self) -> None:
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -222,11 +246,12 @@ class EfficientformerModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_model(self):
+    def test_model(self) -> None:
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_masked_image_modeling(self):
+    @unittest.skip(reason="EfficientFormer does not implement masked image modeling yet")
+    def test_for_masked_image_modeling(self) -> None:
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
 
@@ -235,28 +260,34 @@ class EfficientformerModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
     @slow
-    def test_model_from_pretrained(self):
+    def test_model_from_pretrained(self) -> None:
         for model_name in EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = EfficientformerModel.from_pretrained(model_name)
+            model = EfficientFormerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
-def prepare_img():
+def prepare_img() -> Image.Image:
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
 
 
 @require_torch
 @require_vision
-class EfficientformerModelIntegrationTest(unittest.TestCase):
+class EfficientFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return ViTFeatureExtractor.from_pretrained("snap-research/efficientformer-l1") if is_vision_available() else None
+    def default_feature_extractor(self) -> Union[EfficientFormerFeatureExtractor, None]:
+        return (
+            EfficientFormerFeatureExtractor.from_pretrained("snap-research/efficientformer-l1")
+            if is_vision_available()
+            else None
+        )
 
     @slow
-    def test_inference_image_classification_head(self):
-        model = EfficientformerForImageClassification.from_pretrained("snap-research/efficientformer-l1").to(torch_device)
+    def test_inference_image_classification_head(self) -> None:
+        model = EfficientFormerForImageClassification.from_pretrained("snap-research/efficientformer-l1").to(
+            torch_device
+        )
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -271,8 +302,8 @@ class EfficientformerModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits[0].shape, expected_shape)
         self.assertEqual(outputs.logits[1].shape, expected_shape)
 
-        expected_slice_1 = torch.tensor([-0.8568,  0.3356, -0.1594]).to(torch_device)
-        expected_slice_2 = torch.tensor([-1.4141,  1.7621,  0.5935]).to(torch_device)
+        expected_slice_1 = torch.tensor([-0.8568, 0.3356, -0.1594]).to(torch_device)
+        expected_slice_2 = torch.tensor([-1.4141, 1.7621, 0.5935]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0][:3], expected_slice_1, atol=1e-4))
         self.assertTrue(torch.allclose(outputs.logits[1][:3], expected_slice_2, atol=1e-4))

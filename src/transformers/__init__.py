@@ -407,7 +407,7 @@ _import_structure = {
     "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig", "VisionTextDualEncoderProcessor"],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
-    "models.efficientformer": ["EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "EfficientformerConfig"],
+    "models.efficientformer": ["EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "EfficientFormerConfig"],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
     "models.wav2vec2": [
@@ -730,6 +730,7 @@ else:
     _import_structure["models.conditional_detr"].append("ConditionalDetrFeatureExtractor")
     _import_structure["models.donut"].append("DonutFeatureExtractor")
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
+    _import_structure["models.efficientformer"].extend(["EfficientFormerFeatureExtractor", "EfficientFormerImageProcessor"])
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaProcessor", "FlavaImageProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
@@ -2176,10 +2177,10 @@ else:
     _import_structure["models.efficientformer"].extend(
         [
             "EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "EfficientformerForImageClassification",
-            "EfficientformerForMaskedImageModeling",
-            "EfficientformerModel",
-            "EfficientformerPreTrainedModel",
+            "EfficientFormerForImageClassification",
+            "EfficientFormerForMaskedImageModeling",
+            "EfficientFormerModel",
+            "EfficientFormerPreTrainedModel",
         ]
     )
     _import_structure["models.vit_mae"].extend(
@@ -3580,7 +3581,7 @@ if TYPE_CHECKING:
     from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
-    from .models.efficientformer import EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientformerConfig
+    from .models.efficientformer import EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientFormerConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
     from .models.wav2vec2 import (
@@ -3859,6 +3860,7 @@ if TYPE_CHECKING:
         from .models.clip import CLIPFeatureExtractor, CLIPImageProcessor
         from .models.conditional_detr import ConditionalDetrFeatureExtractor
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
+        from .models.efficientformer import EfficientFormerFeatureExtractor, EfficientFormerImageProcessor
         from .models.deformable_detr import DeformableDetrFeatureExtractor
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
         from .models.detr import DetrFeatureExtractor
@@ -5042,10 +5044,10 @@ if TYPE_CHECKING:
         )
         from .models.efficientformer import (
             EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            EfficientformerForImageClassification,
-            EfficientformerForMaskedImageModeling,
-            EfficientformerModel,
-            EfficientformerPreTrainedModel,
+            EfficientFormerForImageClassification,
+            EfficientFormerForMaskedImageModeling,
+            EfficientFormerModel,
+            EfficientFormerPreTrainedModel,
         )
         from .models.vit_mae import (
             VIT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST,
