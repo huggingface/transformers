@@ -604,13 +604,14 @@ class GenerationConfig(PushToHubMixin):
         config_dict = model_config.to_dict()
         config = cls.from_dict(config_dict, return_unused_kwargs=False)
 
-        # Special cases: tokens defined in nested parts of the config
-        for component_name in ("decoder", "generator"):
-            if component_name in config_dict:
-                config.bos_token_id = config_dict[component_name]["bos_token_id"]
-                config.eos_token_id = config_dict[component_name]["eos_token_id"]
-                config.pad_token_id = config_dict[component_name]["pad_token_id"]
-                config.decoder_start_token_id = config_dict[component_name]["decoder_start_token_id"]
+        # Special case: some models have generation attributes set in the decoder. Use them if the attribute is unset.
+        for decoder_name in ("decoder", "generator"):
+            if decoder_name in config_dict:
+                default_generation_config = GenerationConfig()
+                decoder_config = config_dict[decoder_name]
+                for attr in config.to_dict().keys():
+                    if attr in decoder_config and getattr(config, attr) == getattr(default_generation_config, attr):
+                        setattr(config, attr, decoder_config[attr])
 
         return config
 
