@@ -57,6 +57,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("layoutlm", "TFLayoutLMModel"),
         ("layoutlmv3", "TFLayoutLMv3Model"),
         ("led", "TFLEDModel"),
+        ("levit", "TFLevitModel"),
         ("longformer", "TFLongformerModel"),
         ("lxmert", "TFLxmertModel"),
         ("marian", "TFMarianModel"),
