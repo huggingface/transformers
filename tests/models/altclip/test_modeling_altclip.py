@@ -160,28 +160,10 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_gradient_checkpointing_enable_disable(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-    
-        if not AltCLIPTextModel.supports_gradient_checkpointing:
-            pass
-
-        # at init model should have gradient checkpointing disabled
-        model = AltCLIPTextModel(config)
-        self.assertFalse(model.is_gradient_checkpointing)
-
-        # check enable works
-        model.gradient_checkpointing_enable()
-        print(model.is_gradient_checkpointing)
-        self.assertTrue(model.is_gradient_checkpointing)
-
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_torch_fx_output_loss(self):
-        pass
-#----------------------------------------------------------
     def test_training(self):
         pass
 
@@ -297,6 +279,7 @@ class AltCLIPModelTest(ModelTesterMixin, unittest.TestCase):
         configs_no_init = _config_zero_init(config)
         model = self.model_class(config=configs_no_init)
         for name, param in model.named_parameters():
+            print('name is -------->', name)
             if param.requires_grad:
                 # check if `logit_scale` is initilized as per the original implementation
                 if name == "logit_scale":
