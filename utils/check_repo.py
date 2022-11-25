@@ -47,6 +47,7 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "ResNetBackbone",  # Backbones have their own tests.
     "CLIPSegDecoder",  # Building part of bigger (tested) model.
     "TableTransformerEncoder",  # Building part of bigger (tested) model.
     "TableTransformerDecoder",  # Building part of bigger (tested) model.
@@ -177,7 +178,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "PLBartDecoderWrapper",
     "BeitForMaskedImageModeling",
     "CLIPTextModel",
+    "CLIPTextModelWithProjection",
     "CLIPVisionModel",
+    "CLIPVisionModelWithProjection",
     "GroupViTTextModel",
     "GroupViTVisionModel",
     "TFCLIPTextModel",
@@ -666,6 +669,8 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "PyTorchBenchmarkArguments",
     "TensorFlowBenchmark",
     "TensorFlowBenchmarkArguments",
+    "ResNetBackbone",
+    "AutoBackbone",
 ]
 
 

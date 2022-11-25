@@ -98,6 +98,7 @@ class CLIPTextConfig(PretrainedConfig):
         vocab_size=49408,
         hidden_size=512,
         intermediate_size=2048,
+        projection_dim=512,
         num_hidden_layers=12,
         num_attention_heads=8,
         max_position_embeddings=77,
@@ -117,6 +118,7 @@ class CLIPTextConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
+        self.projection_dim = projection_dim
         self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -204,6 +206,7 @@ class CLIPVisionConfig(PretrainedConfig):
         self,
         hidden_size=768,
         intermediate_size=3072,
+        projection_dim=512,
         num_hidden_layers=12,
         num_attention_heads=12,
         num_channels=3,
@@ -221,6 +224,7 @@ class CLIPVisionConfig(PretrainedConfig):
 
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
+        self.projection_dim = projection_dim
         self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads

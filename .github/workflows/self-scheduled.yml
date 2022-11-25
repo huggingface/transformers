@@ -204,7 +204,11 @@ jobs:
 
   run_examples_gpu:
     name: Examples directory
-    runs-on: [self-hosted, single-gpu-docker]
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [single-gpu]
+    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -231,19 +235,19 @@ jobs:
         working-directory: /transformers
         run: |
           pip install -r examples/pytorch/_tests_requirements.txt
-          python3 -m pytest -v --make-reports=single-gpu_examples_gpu examples/pytorch
+          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_examples_gpu examples/pytorch
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/single-gpu_examples_gpu/failures_short.txt
+        run: cat /transformers/reports/${{ matrix.machine_type }}_examples_gpu/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
-          name: single-gpu_run_examples_gpu
-          path: /transformers/reports/single-gpu_examples_gpu
+          name: ${{ matrix.machine_type }}_run_examples_gpu
+          path: /transformers/reports/${{ matrix.machine_type }}_examples_gpu
 
   run_pipelines_torch_gpu:
     name: PyTorch pipelines

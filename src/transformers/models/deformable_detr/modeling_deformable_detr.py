@@ -35,6 +35,7 @@ from ...file_utils import (
     is_scipy_available,
     is_timm_available,
     is_torch_cuda_available,
+    is_vision_available,
     replace_return_docstrings,
     requires_backends,
 )
@@ -57,6 +58,9 @@ if is_torch_cuda_available() and is_ninja_available():
         MultiScaleDeformableAttention = None
 else:
     MultiScaleDeformableAttention = None
+
+if is_vision_available():
+    from transformers.image_transforms import center_to_corners_format
 
 
 class MultiScaleDeformableAttentionFunction(Function):
@@ -2415,17 +2419,6 @@ def generalized_box_iou(boxes1, boxes2):
     area = width_height[:, :, 0] * width_height[:, :, 1]
 
     return iou - (area - union) / area
-
-
-# Copied from transformers.models.detr.modeling_detr.center_to_corners_format
-def center_to_corners_format(x):
-    """
-    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
-    (x_0, y_0, x_1, y_1).
-    """
-    center_x, center_y, width, height = x.unbind(-1)
-    b = [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)]
-    return torch.stack(b, dim=-1)
 
 
 # Copied from transformers.models.detr.modeling_detr._max_by_axis

@@ -681,8 +681,9 @@ def main():
             if args.push_to_hub:
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
+            all_results = {f"eval_{k}": v for k, v in eval_metrics.items()}
             with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
-                json.dump({"eval_overall_accuracy": eval_metrics["overall_accuracy"]}, f)
+                json.dump(all_results, f)
 
 
 if __name__ == "__main__":
