@@ -239,6 +239,12 @@ def parse_args():
             "Only applicable when `--with_tracking` is passed."
         ),
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="A seed for reproducible training.",
+    )
     args = parser.parse_args()
 
     # Sanity checks
@@ -473,6 +479,16 @@ def main():
         examples["mask"] = [mask_generator() for i in range(len(examples[image_column_name]))]
 
         return examples
+
+    if args.max_train_samples is not None:
+        ds["train"] = ds["train"].shuffle(seed=args.seed).select(range(args.max_train_samples))
+    # Set the training transforms
+    ds["train"].set_transform(preprocess_images)
+
+    if args.max_eval_samples is not None:
+        ds["validation"] = ds["validation"].shuffle(seed=args.seed).select(range(args.max_eval_samples))
+    # Set the validation transforms
+    ds["validation"].set_transform(preprocess_images)
 
 
 if __name__ == "__main__":
