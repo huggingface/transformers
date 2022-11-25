@@ -407,6 +407,18 @@ def main():
             "encoder_stride": args.encoder_stride,
         }
     )
+    
+    # create feature extractor
+    if args.feature_extractor_name:
+        feature_extractor = AutoFeatureExtractor.from_pretrained(args.feature_extractor_name, **config_kwargs)
+    elif args.model_name_or_path:
+        feature_extractor = AutoFeatureExtractor.from_pretrained(args.model_name_or_path, **config_kwargs)
+    else:
+        FEATURE_EXTRACTOR_TYPES = {
+            conf.model_type: feature_extractor_class
+            for conf, feature_extractor_class in FEATURE_EXTRACTOR_MAPPING.items()
+        }
+        feature_extractor = FEATURE_EXTRACTOR_TYPES[args.model_type]()
 
 
 if __name__ == "__main__":
