@@ -250,20 +250,12 @@ def convert_biogpt_checkpoint_to_pytorch(biogpt_checkpoint_path, pytorch_dump_fo
     for k in ignore_keys:
         model_state_dict.pop(k, None)
 
-    layer_names = [x[16:] for x in list(model_state_dict.keys())[2:18]]
-
-    model_state_dict["biogpt.embeddings.weight"] = model_state_dict.pop("decoder.embed_tokens.weight")
-    model_state_dict["biogpt.embed_positions.weight"] = model_state_dict.pop("decoder.embed_positions.weight")
-
-    for layer in range(model_conf["num_hidden_layers"]):
-        for layer_name in layer_names:
-            fs_name = f"decoder.layers.{layer}{layer_name}"
-            hf_name = f"biogpt.layers.{layer}{layer_name}"
-            model_state_dict[hf_name] = model_state_dict.pop(fs_name)
-
-    model_state_dict["biogpt.layer_norm.weight"] = model_state_dict.pop("decoder.layer_norm.weight")
-    model_state_dict["biogpt.layer_norm.bias"] = model_state_dict.pop("decoder.layer_norm.bias")
-    model_state_dict["lm_head.weight"] = model_state_dict.pop("decoder.output_projection.weight")
+    layer_names = list(model_state_dict.keys())
+    for layer_name in layer_names:
+        if layer_name.endswith("output_projection.weight"):
+            model_state_dict[layer_name.replace("decoder.", "")] = model_state_dict.pop(layer_name)
+        else:
+            model_state_dict[layer_name.replace("decoder", "biogpt")] = model_state_dict.pop(layer_name)
 
     config = BioGptConfig.from_pretrained(pytorch_dump_folder_path)
     model_new = BioGptLMHeadModel(config)

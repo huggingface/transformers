@@ -448,7 +448,7 @@ class BioGptModel(BioGptPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
 
-        self.embeddings = nn.Embedding(config.vocab_size, self.embed_dim, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, self.embed_dim, self.padding_idx)
         self.embed_positions = BioGptLearnedPositionalEmbedding(config.max_position_embeddings, self.embed_dim)
 
         self.layers = nn.ModuleList(
@@ -461,10 +461,10 @@ class BioGptModel(BioGptPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.embeddings = value
+        self.embed_tokens = value
 
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask
@@ -528,7 +528,7 @@ class BioGptModel(BioGptPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            inputs_embeds = self.embeddings(input) * self.embed_scale
+            inputs_embeds = self.embed_tokens(input) * self.embed_scale
 
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
@@ -625,22 +625,22 @@ class BioGptModel(BioGptPreTrainedModel):
     """BioGPT Model with a `language modeling` head on top for CLM fine-tuning.""", BIOGPT_START_DOCSTRING
 )
 class BioGptLMHeadModel(BioGptPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+    _keys_to_ignore_on_load_missing = ["output_projection.weight"]
 
     def __init__(self, config):
         super().__init__(config)
 
         self.biogpt = BioGptModel(config)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.output_projection = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
-        return self.lm_head
+        return self.output_projection
 
     def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
+        self.output_projection = new_embeddings
 
     @add_start_docstrings_to_model_forward(BIOGPT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -683,7 +683,7 @@ class BioGptLMHeadModel(BioGptPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        prediction_scores = self.lm_head(sequence_output)
+        prediction_scores = self.output_projection(sequence_output)
 
         lm_loss = None
         if labels is not None:
