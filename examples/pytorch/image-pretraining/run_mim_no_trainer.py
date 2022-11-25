@@ -280,6 +280,12 @@ def parse_args():
         default=0,
         help="Number of steps for the warmup in the lr scheduler.",
     )
+    parser.add_argument(
+        "--checkpointing_steps",
+        type=str,
+        default=None,
+        help="Whether the various states should be saved at the end of every n steps, or 'epoch' for each epoch.",
+    )
     args = parser.parse_args()
 
     # Sanity checks
@@ -589,6 +595,11 @@ def main():
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
     # Afterwards we recalculate our number of training epochs
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
+
+    # Figure out how many steps we should save the Accelerator states
+    checkpointing_steps = args.checkpointing_steps
+    if checkpointing_steps is not None and checkpointing_steps.isdigit():
+        checkpointing_steps = int(checkpointing_steps)
 
 
 if __name__ == "__main__":
