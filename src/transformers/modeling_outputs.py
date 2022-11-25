@@ -1302,7 +1302,11 @@ class BaseModelOutputWithPoolingAndprojection(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        projection_state (`tuple(torch.FloatTensor)`,
+
+        projection_state (`tuple(torch.FloatTensor)`, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` of shape `(batch_size,config.project_dim)`.
+
+            Text embeddings before the projection layer, used to mimic the last hidden state of the teacher encoder.
     """
 
     last_hidden_state: torch.FloatTensor = None
