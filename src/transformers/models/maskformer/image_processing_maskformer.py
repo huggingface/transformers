@@ -750,9 +750,9 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 The value to use for the padding if `mode` is `"constant"`.
             return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return a pixel mask.
-            input_channel_dimension (`ChannelDimension`, *optional*, defaults to `None`):
+            input_channel_dimension (`ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be inferred from the input image.
-            data_format (`str` or `ChannelDimension`, *optional*, defaults to `None`):
+            data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         pad_size = get_max_height_width(images)
@@ -926,7 +926,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         Args:
             outputs ([`MaskFormerForInstanceSegmentation`]):
                 Raw outputs of the model.
-            target_sizes (`List[Tuple[int, int]]`, *optional*, defaults to `None`):
+            target_sizes (`List[Tuple[int, int]]`, *optional*):
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
         Returns:
