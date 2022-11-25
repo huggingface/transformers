@@ -27,6 +27,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
 from datasets import load_dataset
 from accelerate.utils import set_seed
 from huggingface_hub import Repository
@@ -244,6 +245,12 @@ def parse_args():
         type=int,
         default=None,
         help="A seed for reproducible training.",
+    )
+    parser.add_argument(
+        "--per_device_train_batch_size",
+        type=int,
+        default=8,
+        help="Batch size (per device) for the training dataloader.",
     )
     args = parser.parse_args()
 
@@ -489,6 +496,19 @@ def main():
         ds["validation"] = ds["validation"].shuffle(seed=args.seed).select(range(args.max_eval_samples))
     # Set the validation transforms
     ds["validation"].set_transform(preprocess_images)
+
+    # DataLoaders creation:
+    train_dataloader = DataLoader(
+        ds["train"],
+        shuffle=True,
+        collate_fn=collate_fn,
+        batch_size=args.per_device_train_batch_size,
+    )
+    eval_dataloader = DataLoader(
+        ds["validation"],
+        collate_fn=collate_fn,
+        batch_size=args.per_device_eval_batch_size,
+    )
 
 
 if __name__ == "__main__":
