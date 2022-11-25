@@ -1634,7 +1634,7 @@ class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         return {
-            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int64),
+            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32),
         }
 
     @tf.function(
@@ -1821,7 +1821,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
             dtype=tf.float32,
         )
         return {
-            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int64),
+            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32),
             "pixel_values": VISION_DUMMY_INPUTS,
         }
 

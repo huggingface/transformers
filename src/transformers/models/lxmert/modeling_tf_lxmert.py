@@ -655,7 +655,7 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
         """
         batch_size = 2
         num_visual_features = 10
-        input_ids = tf.constant([[3, 5, 6], [2, 3, 4]], dtype=tf.int64)
+        input_ids = tf.constant([[3, 5, 6], [2, 3, 4]], dtype=tf.int32)
         visual_feats = tf.random.uniform((batch_size, num_visual_features, self.config.visual_feat_dim))
         visual_pos = tf.random.uniform((batch_size, num_visual_features, 4))
 
@@ -1246,7 +1246,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         """
         batch_size = 2
         num_visual_features = 10
-        input_ids = tf.constant([[3, 5, 6], [2, 3, 4]], dtype=tf.int64)
+        input_ids = tf.constant([[3, 5, 6], [2, 3, 4]], dtype=tf.int32)
         visual_feats = tf.random.uniform((batch_size, num_visual_features, self.config.visual_feat_dim))
         visual_pos = tf.random.uniform((batch_size, num_visual_features, 4))
 

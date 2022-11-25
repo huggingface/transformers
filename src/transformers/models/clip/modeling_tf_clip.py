@@ -1247,7 +1247,7 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
             dtype=tf.float32,
         )
         return {
-            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int64),
+            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32),
             "pixel_values": VISION_DUMMY_INPUTS,
         }
 

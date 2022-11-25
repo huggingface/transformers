@@ -579,7 +579,7 @@ class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
                     self.config.input_feat_per_channel * self.config.input_channels,  # input channels
                 ]
             ),
-            "decoder_input_ids": tf.constant([[2, 3]], dtype=tf.int64),
+            "decoder_input_ids": tf.constant([[2, 3]], dtype=tf.int32),
         }
 
     def _get_feat_extract_output_lengths(self, input_lengths: tf.Tensor):
