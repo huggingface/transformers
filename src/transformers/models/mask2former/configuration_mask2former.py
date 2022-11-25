@@ -110,7 +110,7 @@ class Mask2FormerConfig(PretrainedConfig):
     ```
 
     """
-    model_type = "maskformer"  # or mask2former?
+    model_type = "mask2former"
     attribute_map = {"hidden_size": "mask_feature_size"}
     backbones_supported = ["swin"]
     decoders_supported = ["detr"]
