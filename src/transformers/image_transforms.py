@@ -239,7 +239,7 @@ def resize(
             The filter to user for resampling.
         reducing_gap (*int*, *optional*):
             Apply optimization by resizing the image in two steps. The bigger `reducing_gap`, the closer the result to
-            the fair resampling. See Pillow documentation for more details.
+            the fair resampling. See corresponding Pillow documentation for more details.
         data_format (*ChannelDimension*, *optional*):
             The channel dimension format of the output image. If *None*, will use the inferred format from the input.
         return_numpy (*bool*, *optional*, defaults to *True*):
