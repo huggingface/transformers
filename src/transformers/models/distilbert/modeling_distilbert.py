@@ -145,7 +145,7 @@ class MultiHeadSelfAttention(nn.Module):
         # Have an even number of multi heads that divide the dimensions
         if self.dim % self.n_heads != 0:
             raise ValueError(
-                "self.n_heads (" + str(self.n_heads) + ") must divide self.dim (" + str(self.dim) + ") evenly"
+                f"self.n_heads: {self.n_heads} must divide self.dim: {str(self.dim)} evenly"
             )
 
         self.q_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
