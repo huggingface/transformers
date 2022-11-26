@@ -145,9 +145,7 @@ class MultiHeadSelfAttention(nn.Module):
         # Have an even number of multi heads that divide the dimensions
         if self.dim % self.n_heads != 0:
             # Raise value errors for even multi-head attention nodes
-            raise ValueError(
-                 f"self.n_heads: {self.n_heads} must divide self.dim: {str(self.dim)} evenly"
-            )
+            raise ValueError(f"self.n_heads: {self.n_heads} must divide self.dim: {str(self.dim)} evenly")
 
         self.q_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
         self.k_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
@@ -263,9 +261,7 @@ class TransformerBlock(nn.Module):
 
         # Have an even number of Configure multi-heads
         if config.dim % config.n_heads != 0:
-            raise ValueError(
-                f"config.n_heads {config.n_heads} must divide config.dim {config.dim} evenly"
-            )
+            raise ValueError(f"config.n_heads {config.n_heads} must divide config.dim {config.dim} evenly")
 
         self.attention = MultiHeadSelfAttention(config)
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
@@ -362,17 +358,13 @@ class Transformer(nn.Module):
 
             if output_attentions:
                 if len(layer_outputs) != 2:
-                    raise ValueError(
-                        f"The length of the layer_outputs should be 2, but it is {len(layer_outputs)}"
-                    )
+                    raise ValueError(f"The length of the layer_outputs should be 2, but it is {len(layer_outputs)}")
 
                 attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)
             else:
                 if len(layer_outputs) != 1:
-                    raise ValueError(
-                        f"The length of the layer_outputs should be 1, but it is {len(layer_outputs)}"
-                    )
+                    raise ValueError(f"The length of the layer_outputs should be 1, but it is {len(layer_outputs)}")
 
         # Add last layer
         if output_hidden_states:
@@ -831,7 +823,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         self.distilbert = DistilBertModel(config)
         self.qa_outputs = nn.Linear(config.dim, config.num_labels)
         if config.num_labels != 2:
-            raise ValueError ( f"config.num_labels should be 2, but it is {(config.num_labels)}")
+            raise ValueError(f"config.num_labels should be 2, but it is {(config.num_labels)}")
 
         self.dropout = nn.Dropout(config.qa_dropout)
 
