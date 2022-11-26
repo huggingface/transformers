@@ -370,7 +370,7 @@ class Transformer(nn.Module):
             else:
                 if len(layer_outputs) != 1:
                     raise ValueError(
-                        "The length of the layer_outputs should be 1, but it is " + str(len(layer_outputs))
+                        f"The length of the layer_outputs should be 1, but it is {len(layer_outputs)}"
                     )
 
         # Add last layer
