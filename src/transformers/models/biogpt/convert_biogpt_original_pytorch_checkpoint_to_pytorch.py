@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The HuggingFace Inc. team.
+# Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -159,23 +159,24 @@ def rewrite_dict_keys(d):
 def convert_biogpt_checkpoint_to_pytorch(biogpt_checkpoint_path, pytorch_dump_folder_path):
 
     # prep
-    assert os.path.exists(biogpt_checkpoint_path)
+    if not os.path.exists(biogpt_checkpoint_path):
+        raise ValueError(f"path {biogpt_checkpoint_path} does not exist!")
     os.makedirs(pytorch_dump_folder_path, exist_ok=True)
     print(f"Writing results to {pytorch_dump_folder_path}")
 
     # handle various types of models
 
     checkpoint_file = os.path.join(biogpt_checkpoint_path, "checkpoint.pt")
-    assert os.path.isfile(checkpoint_file)
-
+    if not os.path.isfile(checkpoint_file):
+        raise ValueError(f"path to the file {checkpoint_file} does not exist!")
     chkpt = torch.load(checkpoint_file, map_location="cpu")
 
     args = chkpt["cfg"]["model"]
 
     # dicts
     dict_file = os.path.join(biogpt_checkpoint_path, "dict.txt")
-    assert os.path.isfile(dict_file)
-
+    if not os.path.isfile(dict_file):
+        raise ValueError(f"path to the file {dict_file} does not exist!")
     src_dict = Dictionary.load(dict_file)
     src_vocab = rewrite_dict_keys(src_dict.indices)
     src_vocab_size = len(src_vocab)
@@ -186,7 +187,8 @@ def convert_biogpt_checkpoint_to_pytorch(biogpt_checkpoint_path, pytorch_dump_fo
 
     # merges_file (bpecodes)
     bpecodes_file = os.path.join(biogpt_checkpoint_path, "bpecodes")
-    assert os.path.isfile(bpecodes_file)
+    if not os.path.isfile(bpecodes_file):
+        raise ValueError(f"path to the file {bpecodes_file} does not exist!")
 
     merges_file = os.path.join(pytorch_dump_folder_path, VOCAB_FILES_NAMES["merges_file"])
     shutil.copyfile(bpecodes_file, merges_file)
