@@ -362,7 +362,7 @@ class Transformer(nn.Module):
             if output_attentions:
                 if len(layer_outputs) != 2:
                     raise ValueError(
-                        "The length of the layer_outputs should be 2, but it is " + str(len(layer_outputs))
+                       f"The length of the layer_outputs should be 2, but it is {len(layer_outputs)}"
                     )
 
                 attentions = layer_outputs[0]
