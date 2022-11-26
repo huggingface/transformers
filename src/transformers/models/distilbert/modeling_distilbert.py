@@ -823,7 +823,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         self.distilbert = DistilBertModel(config)
         self.qa_outputs = nn.Linear(config.dim, config.num_labels)
         if config.num_labels != 2:
-            raise ValueError(f"config.num_labels should be 2, but it is {(config.num_labels)}")
+            raise ValueError(f"config.num_labels should be 2, but it is {config.num_labels}")
 
         self.dropout = nn.Dropout(config.qa_dropout)
 
