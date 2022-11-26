@@ -618,7 +618,7 @@ class BioGptModel(BioGptPreTrainedModel):
 @add_start_docstrings(
     """BioGPT Model with a `language modeling` head on top for CLM fine-tuning.""", BIOGPT_START_DOCSTRING
 )
-class BioGptLMHeadModel(BioGptPreTrainedModel):
+class BioGptForCausalLM(BioGptPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["output_projection.weight"]
 
     def __init__(self, config):

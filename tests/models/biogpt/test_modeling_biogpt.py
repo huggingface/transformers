@@ -28,7 +28,7 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attenti
 if is_torch_available():
     import torch
 
-    from transformers import BioGptLMHeadModel, BioGptModel, BioGptTokenizer
+    from transformers import BioGptForCausalLM, BioGptModel, BioGptTokenizer
     from transformers.models.biogpt.modeling_biogpt import BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -142,7 +142,7 @@ class BioGptModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = BioGptLMHeadModel(config=config)
+        model = BioGptForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -228,7 +228,7 @@ class BioGptModelTester:
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args, gradient_checkpointing=False
     ):
-        model = BioGptLMHeadModel(config)
+        model = BioGptForCausalLM(config)
         model.to(torch_device)
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
@@ -264,8 +264,8 @@ class BioGptModelTester:
 @require_torch
 class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (BioGptModel, BioGptLMHeadModel) if is_torch_available() else ()
-    all_generative_model_classes = (BioGptLMHeadModel,) if is_torch_available() else ()
+    all_model_classes = (BioGptModel, BioGptForCausalLM) if is_torch_available() else ()
+    all_generative_model_classes = (BioGptForCausalLM,) if is_torch_available() else ()
     test_pruning = False
 
     def setUp(self):
@@ -303,7 +303,7 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     @slow
     def test_batch_generation(self):
-        model = BioGptLMHeadModel.from_pretrained("kamalkraj/biogpt")
+        model = BioGptForCausalLM.from_pretrained("kamalkraj/biogpt")
         model.to(torch_device)
         tokenizer = BioGptTokenizer.from_pretrained("kamalkraj/biogpt")
 
@@ -356,7 +356,7 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 class BioGptModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_lm_head_model(self):
-        model = BioGptLMHeadModel.from_pretrained("kamalkraj/biogpt")
+        model = BioGptForCausalLM.from_pretrained("kamalkraj/biogpt")
         input_ids = torch.tensor([[2, 4805, 9, 656, 21]])
         output = model(input_ids)[0]
 
@@ -374,7 +374,7 @@ class BioGptModelIntegrationTest(unittest.TestCase):
     @slow
     def test_biogpt_generation(self):
         tokenizer = BioGptTokenizer.from_pretrained("kamalkraj/biogpt")
-        model = BioGptLMHeadModel.from_pretrained("kamalkraj/biogpt")
+        model = BioGptForCausalLM.from_pretrained("kamalkraj/biogpt")
         model.to(torch_device)
 
         torch.manual_seed(0)

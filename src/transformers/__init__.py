@@ -862,7 +862,7 @@ else:
     _import_structure["models.biogpt"].extend(
         [
             "BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "BioGptLMHeadModel",
+            "BioGptForCausalLM",
             "BioGptModel",
             "BioGptPreTrainedModel",
         ]
@@ -4114,7 +4114,7 @@ if TYPE_CHECKING:
         # PyTorch model imports
         from .models.biogpt import (
             BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BioGptLMHeadModel,
+            BioGptForCausalLM,
             BioGptModel,
             BioGptPreTrainedModel,
         )

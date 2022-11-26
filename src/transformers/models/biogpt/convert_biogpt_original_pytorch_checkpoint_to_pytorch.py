@@ -22,7 +22,7 @@ import shutil
 
 import torch
 
-from transformers import BioGptConfig, BioGptLMHeadModel
+from transformers import BioGptConfig, BioGptForCausalLM
 from transformers.models.biogpt.tokenization_biogpt import VOCAB_FILES_NAMES
 from transformers.tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from transformers.utils import WEIGHTS_NAME, logging
@@ -196,7 +196,7 @@ def convert_biogpt_checkpoint_to_pytorch(biogpt_checkpoint_path, pytorch_dump_fo
 
     model_conf = {
         "activation_dropout": args["activation_dropout"],
-        "architectures": ["BioGptLMHeadModel"],
+        "architectures": ["BioGptForCausalLM"],
         "attention_probs_dropout_prob": args["attention_dropout"],
         "bos_token_id": 0,
         "eos_token_id": 2,
@@ -258,7 +258,7 @@ def convert_biogpt_checkpoint_to_pytorch(biogpt_checkpoint_path, pytorch_dump_fo
             model_state_dict[layer_name.replace("decoder", "biogpt")] = model_state_dict.pop(layer_name)
 
     config = BioGptConfig.from_pretrained(pytorch_dump_folder_path)
-    model_new = BioGptLMHeadModel(config)
+    model_new = BioGptForCausalLM(config)
 
     # check that it loads ok
     model_new.load_state_dict(model_state_dict)

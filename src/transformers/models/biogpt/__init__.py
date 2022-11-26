@@ -34,7 +34,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_biogpt"] = [
         "BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "BioGptLMHeadModel",
+        "BioGptForCausalLM",
         "BioGptModel",
         "BioGptPreTrainedModel",
     ]
@@ -52,7 +52,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_biogpt import (
             BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BioGptLMHeadModel,
+            BioGptForCausalLM,
             BioGptModel,
             BioGptPreTrainedModel,
         )

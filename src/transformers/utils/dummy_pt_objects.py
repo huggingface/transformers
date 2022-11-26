@@ -995,7 +995,7 @@ class BigBirdPegasusPreTrainedModel(metaclass=DummyObject):
 BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class BioGptLMHeadModel(metaclass=DummyObject):
+class BioGptForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
