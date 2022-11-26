@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -93,5 +93,5 @@ class BioGptTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
         encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
 
-        assert encoded_sentence == [2] + text
-        assert encoded_pair == [2] + text + [2] + text_2
+        self.assertTrue(encoded_sentence == [2] + text)
+        self.assertTrue(encoded_pair == [2] + text + [2] + text_2)
