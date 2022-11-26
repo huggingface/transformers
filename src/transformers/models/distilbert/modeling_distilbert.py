@@ -144,7 +144,7 @@ class MultiHeadSelfAttention(nn.Module):
 
         # Have an even number of multi heads that divide the dimensions
         if self.dim % self.n_heads != 0:
-            # Raise value errors for even multi head nodes
+            # Raise value errors for even multi head attention nodes
             raise ValueError(
                  f"self.n_heads: {self.n_heads} must divide self.dim: {str(self.dim)} evenly"
             )
