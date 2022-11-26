@@ -301,7 +301,7 @@ class TransformerBlock(nn.Module):
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
         else:  # To handle these `output_attentions` or `output_hidden_states` cases returning tuples
             if type(sa_output) != tuple:
-                raise TypeError("sa_output must be a tuple but it is " + str(type(sa_output)) + " type")
+                raise TypeError(f"sa_output must be a tuple but it is {type(sa_output)} type")
 
             sa_output = sa_output[0]
         sa_output = self.sa_layer_norm(sa_output + x)  # (bs, seq_length, dim)
