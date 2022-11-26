@@ -146,7 +146,7 @@ class MultiHeadSelfAttention(nn.Module):
         if self.dim % self.n_heads != 0:
             # Raise value errors for even multi head nodes
             raise ValueError(
-                "self.n_heads (" + str(self.n_heads) + ") must divide self.dim (" + str(self.dim) + ") evenly"
+                 f"self.n_heads: {self.n_heads} must divide self.dim: {str(self.dim)} evenly"
             )
 
         self.q_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
@@ -264,7 +264,7 @@ class TransformerBlock(nn.Module):
         # Have an even number of Configure multi-heads
         if config.dim % config.n_heads != 0:
             raise ValueError(
-                "config.n_heads (" + str(config.n_heads) + ") must divide config.dim (" + str(config.dim) + ") evenly"
+                f"config.n_heads {config.n_heads} must divide config.dim {config.dim} evenly"
             )
 
         self.attention = MultiHeadSelfAttention(config)
@@ -302,7 +302,7 @@ class TransformerBlock(nn.Module):
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
         else:  # To handle these `output_attentions` or `output_hidden_states` cases returning tuples
             if type(sa_output) != tuple:
-                raise TypeError("sa_output must be a tuple but it is " + str(type(sa_output)) + " type")
+                raise TypeError(f"sa_output must be a tuple but it is {type(sa_output)} type")
 
             sa_output = sa_output[0]
         sa_output = self.sa_layer_norm(sa_output + x)  # (bs, seq_length, dim)
@@ -363,7 +363,7 @@ class Transformer(nn.Module):
             if output_attentions:
                 if len(layer_outputs) != 2:
                     raise ValueError(
-                        "The length of the layer_outputs should be 2, but it is " + str(len(layer_outputs))
+                        f"The length of the layer_outputs should be 2, but it is {len(layer_outputs)}"
                     )
 
                 attentions = layer_outputs[0]
@@ -371,7 +371,7 @@ class Transformer(nn.Module):
             else:
                 if len(layer_outputs) != 1:
                     raise ValueError(
-                        "The length of the layer_outputs should be 1, but it is " + str(len(layer_outputs))
+                        f"The length of the layer_outputs should be 1, but it is {len(layer_outputs)}"
                     )
 
         # Add last layer
@@ -831,7 +831,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         self.distilbert = DistilBertModel(config)
         self.qa_outputs = nn.Linear(config.dim, config.num_labels)
         if config.num_labels != 2:
-            raise ValueError("config.num_labels should be 2, but it is " + str(config.num_labels))
+            raise ValueError ( f"config.num_labels should be 2, but it is {(config.num_labels)}")
 
         self.dropout = nn.Dropout(config.qa_dropout)
 
