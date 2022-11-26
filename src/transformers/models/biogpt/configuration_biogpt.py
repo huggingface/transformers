@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Team and Microsoft Research AI4Science All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ class BioGptConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 42384):
             Vocabulary size of the BioGPT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~BioGptModel`] or [`~TFBioGptModel`].
+            `inputs_ids` passed when calling [`~BioGptModel`].
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 24):
@@ -71,7 +71,7 @@ class BioGptConfig(PretrainedConfig):
         is_encoder_decoder (`bool`, *optional*, defaults to `False`):
             Whether this is an encoder/decoder model.
         layerdrop (`float`, *optional*, defaults to 0.0):
-            Google "layerdrop arxiv", as its not explainable in one line.
+            Please refer to the paper about LayerDrop: https://arxiv.org/abs/1909.11556 for further details
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
         pad_token_id (`int`, *optional*, defaults to 1)
