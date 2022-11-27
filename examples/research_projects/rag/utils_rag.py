@@ -217,7 +217,7 @@ def exact_match_score(prediction, ground_truth):
 def calculate_exact_match(output_lns: List[str], reference_lns: List[str]) -> Dict:
     assert len(output_lns) == len(reference_lns)
     em = 0
-    for hypo, pred in zip(output_lns, reference_lns):
+    for pred,hypo in zip(output_lns, reference_lns):
         em += exact_match_score(hypo, pred)
     if len(output_lns) > 0:
         em /= len(output_lns)
