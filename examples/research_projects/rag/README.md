@@ -13,7 +13,7 @@ Read more about RAG  at https://arxiv.org/abs/2005.11401.
 
 # Note
 
-⚠️ This project should be run with pytorch-lightning==1.3.1 which has a potential security vulnerability
+⚠️ This project should be run with pytorch-lightning==1.5.10, only with `--distributed_retriever ray`
 
 # Finetuning
 
