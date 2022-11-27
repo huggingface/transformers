@@ -218,7 +218,7 @@ def calculate_exact_match(output_lns: List[str], reference_lns: List[str]) -> Di
     assert len(output_lns) == len(reference_lns)
     em = 0
     for pred,hypo in zip(output_lns, reference_lns):
-        em += exact_match_score(hypo, pred)
+        em += exact_match_score(pred, hypo)
     if len(output_lns) > 0:
         em /= len(output_lns)
     return {"em": em}
