@@ -267,13 +267,12 @@ class BaseTransformer(pl.LightningModule):
 
 
 class InitCallback(pl.Callback):
-    """Current Callback only works when --distributed_retriever is passed as ray"""
+    """Current Callback only works when --distributed_retriever is passed as ray."""
     # This method is better that using a custom DDP plugging with the latest pytorch-lightning (@shamanez)
     def on_sanity_check_start(self, trainer, pl_module):
         if (
             trainer.is_global_zero and trainer.global_rank == 0
         ):  # we initialize the retriever only on master worker with RAY. In new pytorch-lightning accelorators are removed.
-            # should set distributed_retriever as ray. if not, it results in socket error
             pl_module.model.rag.retriever.init_retrieval(pl_module.hparams.distributed_port)  # better to use hook functions.
 
 
