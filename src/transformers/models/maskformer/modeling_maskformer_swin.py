@@ -19,7 +19,7 @@ states before downsampling, which is different from the default Swin Transformer
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 from torch import Tensor, nn
@@ -478,7 +478,6 @@ class MaskFormerSwinOutput(nn.Module):
 class MaskFormerSwinLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
         super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.shift_size = shift_size
         self.window_size = config.window_size
         self.input_resolution = input_resolution
@@ -871,8 +870,22 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel):
     def channels(self):
         return [self.out_feature_channels[name] for name in self.out_features]
 
-    def forward(self, pixel_values) -> List[Tensor]:
-        outputs = self.model(pixel_values, output_hidden_states=True, return_dict=True)
+    def forward(
+        self,
+        pixel_values: Tensor,
+        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> BackboneOutput:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
+        outputs = self.model(
+            pixel_values, output_hidden_states=True, output_attentions=output_attentions, return_dict=True
+        )
 
         # we skip the stem
         hidden_states = outputs.hidden_states[1:]
@@ -897,4 +910,16 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel):
             if stage in self.out_features:
                 feature_maps += (hidden_state_permuted,)
 
-        return BackboneOutput(feature_maps=feature_maps)
+        if not return_dict:
+            output = (feature_maps,)
+            if output_hidden_states:
+                output += (outputs.hidden_states,)
+            if output_attentions:
+                output += (outputs.attentions,)
+            return output
+
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            attentions=outputs.attentions,
+        )

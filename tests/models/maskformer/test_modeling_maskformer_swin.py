@@ -164,7 +164,14 @@ class MaskFormerSwinModelTester:
 @require_torch
 class MaskFormerSwinModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (MaskFormerSwinModel,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            MaskFormerSwinModel,
+            MaskFormerSwinBackbone,
+        )
+        if is_torch_available()
+        else ()
+    )
     fx_compatible = False
     test_torchscript = False
     test_pruning = False
@@ -195,8 +202,12 @@ class MaskFormerSwinModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_backbone(*config_and_inputs)
 
+    @unittest.skip("Swin does not use inputs_embeds")
     def test_inputs_embeds(self):
-        # Swin does not use inputs_embeds
+        pass
+
+    @unittest.skip("Swin does not support feedforward chunking")
+    def test_feed_forward_chunking(self):
         pass
 
     def test_model_common_attributes(self):
@@ -222,6 +233,10 @@ class MaskFormerSwinModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="MaskFormerSwin is only used as backbone and doesn't support output_attentions")
     def test_attention_outputs(self):
+        pass
+
+    @unittest.skip(reason="MaskFormerSwin is only used as an internal backbone")
+    def test_save_load_fast_init_to_base(self):
         pass
 
     def check_hidden_states_output(self, inputs_dict, config, model_class, image_size):
