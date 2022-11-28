@@ -17,10 +17,7 @@ import argparse
 import logging
 import math
 import os
-import sys
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 import datasets
 import numpy as np
@@ -41,13 +38,9 @@ from transformers import (
     AutoConfig,
     AutoFeatureExtractor,
     AutoModelForMaskedImageModeling,
-    HfArgumentParser,
     SchedulerType,
-    Trainer,
-    TrainingArguments,
     get_scheduler,
 )
-from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, get_full_repo_name, send_example_telemetry
 from transformers.utils.versions import require_version
 
