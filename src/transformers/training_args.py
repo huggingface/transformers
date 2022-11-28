@@ -1414,7 +1414,7 @@ class TrainingArguments:
                 raise ImportError("--deepspeed requires deepspeed: `pip install deepspeed`.")
             import deepspeed
 
-            deepspeed.init_distributed()
+            deepspeed.init_distributed(timeout=timedelta(seconds=self.ddp_timeout))
 
             # workaround for setups like notebooks where the launcher can't be used,
             # but deepspeed requires a dist env.
