@@ -50,7 +50,7 @@ class ChineseCLIPTextConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the CHINESE_CLIP model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`ChineseCLIPModel`] or [`TFChineseCLIPModel`].
+            by the `inputs_ids` passed when calling [`ChineseCLIPModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
