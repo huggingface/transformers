@@ -25,11 +25,11 @@ def extract_warnings_from_single_artifact(artifact_zip_path, targets):
                         continue
                     with z.open(filename) as f:
                         for line in f:
-                            line = line.decode("UTF-8").strip()
-                            # we don't care which tests trigger the warning, but need to clean up `buffer`
+                            line = line.decode("UTF-8")
                             if "warnings summary (final)" in line:
                                 continue
-                            elif line.startswith("tests/"):
+                            # This means we are outside the body of a warning
+                            elif not line.startswith(" "):
                                 # process a single warning and move it to `target_warnings`.
                                 if len(buffer) > 0:
                                     warning = "\n".join(buffer)
@@ -39,6 +39,7 @@ def extract_warnings_from_single_artifact(artifact_zip_path, targets):
                                     buffer = []
                                 continue
                             else:
+                                line = line.strip()
                                 buffer.append(line)
     except Exception:
         logger.warning(
