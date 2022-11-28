@@ -218,6 +218,11 @@ class TFCoreModelTesterMixin:
             model = model_class(config)
             num_out = len(model(class_inputs_dict))
 
+            for key in class_inputs_dict.keys():
+                # Check it's a tensor, in case the inputs dict has some bools in it too
+                if isinstance(class_inputs_dict[key], tf.Tensor) and class_inputs_dict[key].dtype.is_integer:
+                    class_inputs_dict[key] = tf.cast(class_inputs_dict[key], tf.int32)
+
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=True)
                 saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")

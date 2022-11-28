@@ -998,10 +998,10 @@ class TFLayoutLMv3PreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "bbox": tf.TensorSpec((None, None, 4), tf.int64, name="bbox"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "bbox": tf.TensorSpec((None, None, 4), tf.int32, name="bbox"),
                 "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
         ]
     )

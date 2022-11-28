@@ -687,7 +687,7 @@ class TFTransfoXLPreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
             }
         ]
     )

@@ -585,10 +585,10 @@ def input_processing(func, config, **kwargs):
 
     cast_output = dict()
     for key, val in output.items():
-        if isinstance(val, tf.Tensor) and val.dtype == tf.int32:
-            cast_output[key] = tf.cast(val, tf.int64)
-        elif isinstance(val, np.ndarray) and val.dtype == np.int32:
-            cast_output[key] = val.astype(np.int64)
+        if isinstance(val, tf.Tensor) and val.dtype == tf.int64:
+            cast_output[key] = tf.cast(val, tf.int32)
+        elif isinstance(val, np.ndarray) and val.dtype == np.int64:
+            cast_output[key] = val.astype(np.int32)
         else:
             cast_output[key] = val
 
@@ -1115,7 +1115,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         return {
-            "input_ids": tf.constant(DUMMY_INPUTS),
+            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32),
         }
 
     @property
@@ -1155,12 +1155,25 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         return cls(config, **kwargs)
 
+    def eager_serving(self, inputs):
+        """
+        Method used for serving the model. Intended not to be compiled with a tf.function decorator so that we can use
+        it to generate multiple signatures later.
+
+        Args:
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int64, name="token_type_ids"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
             }
         ]
     )
@@ -2253,7 +2266,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if saved_model:
             if signatures is None:
-                signatures = self.serving
+                if any(spec.dtype == tf.int32 for spec in self.serving.input_signature[0].values()):
+                    int64_spec = {
+                        key: tf.TensorSpec(
+                            shape=spec.shape, dtype=tf.int64 if spec.dtype == tf.int32 else spec.dtype, name=spec.name
+                        )
+                        for key, spec in self.serving.input_signature[0].items()
+                    }
+                    int64_serving = tf.function(self.eager_serving, input_signature=[int64_spec])
+                    signatures = {"serving_default": self.serving, "int64_serving": int64_serving}
+                else:
+                    signatures = self.serving
             saved_model_dir = os.path.join(save_directory, "saved_model", str(version))
             self.save(saved_model_dir, include_optimizer=False, signatures=signatures)
             logger.info(f"Saved model created in {saved_model_dir}")

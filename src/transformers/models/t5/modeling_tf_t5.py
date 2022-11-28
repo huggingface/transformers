@@ -878,8 +878,8 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
 
     @property
     def dummy_inputs(self):
-        inputs = tf.constant(DUMMY_INPUTS)
-        input_mask = tf.constant(DUMMY_MASK)
+        inputs = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
+        input_mask = tf.constant(DUMMY_MASK, dtype=tf.int32)
         dummy_inputs = {
             "input_ids": inputs,
             "decoder_input_ids": inputs,
@@ -890,10 +890,10 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int64, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int64, name="decoder_attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
             }
         ]
     )
@@ -1575,7 +1575,7 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
 
     @property
     def dummy_inputs(self):
-        return {"input_ids": tf.constant(DUMMY_INPUTS)}
+        return {"input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32)}
 
     def get_encoder(self):
         return self.encoder
