@@ -28,7 +28,7 @@ BIOGPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class BioGptConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~BioGptModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`BioGptModel`]. It is used to instantiate an
     BioGPT model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the BioGPT
     [kamalkraj/biogpt](https://huggingface.co/kamalkraj/biogpt) architecture.
@@ -40,7 +40,7 @@ class BioGptConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 42384):
             Vocabulary size of the BioGPT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~BioGptModel`].
+            `inputs_ids` passed when calling [`BioGptModel`].
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 24):
