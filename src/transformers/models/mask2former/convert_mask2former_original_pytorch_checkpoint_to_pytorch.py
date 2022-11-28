@@ -197,6 +197,9 @@ class OriginalMask2FormerCheckpointToOursConverter:
     def pop_all(self, renamed_keys: List[Tuple[str, str]], dst_state_dict: StateDict, src_state_dict: StateDict):
         for src_key, dst_key in renamed_keys:
             dst_state_dict[dst_key] = src_state_dict.pop(src_key)
+            """
+            print(src_key) print(dst_key) print(dst_state_dict[dst_key]) print()
+            """
 
     def replace_backbone(self, dst_state_dict: StateDict, src_state_dict: StateDict, config: Mask2FormerConfig):
         dst_prefix: str = "pixel_level_module.encoder"
@@ -453,7 +456,6 @@ class OriginalMask2FormerCheckpointToOursConverter:
         src_prefix: str = "sem_seg_head.pixel_decoder"
 
         self.replace_backbone(dst_state_dict, src_state_dict, self.config)
-
         self.replace_deform_attn_encoder(dst_state_dict, src_state_dict)
 
         def rename_keys_for_conv(detectron_conv: str, mine_conv: str):
@@ -687,7 +689,8 @@ class OriginalMask2FormerCheckpointToOursConverter:
         logger.info(f"Not copied keys are {pformat(src_state_dict.keys())}")
         logger.info("🙌 Done")
 
-        mask2former.load_state_dict(mask2former.state_dict())  # load_state_dict(dst_state_dict)
+        state_dict = {key: dst_state_dict[key] for key in dst_state_dict.to_track.keys()}
+        mask2former.load_state_dict(state_dict)
 
         return mask2former
 
@@ -717,7 +720,6 @@ class OriginalMask2FormerCheckpointToOursConverter:
                 / "swin"
                 / f"{checkpoint.parents[0].stem}.yaml"
             )
-
             yield config, checkpoint
 
 
@@ -728,6 +730,11 @@ def test(
 
         original_model = original_model.eval()
         our_model = our_model.eval()
+        """
+        state_dict = our_model.state_dict() for key, value in state_dict.items():
+            if key.startswith("model.pixel_level_module.encoder"):
+                print(key) print(value) print()
+        """
 
         im = prepare_img()
 
@@ -751,7 +758,6 @@ def test(
         for original_model_feature, our_model_feature in zip(
             original_model_backbone_features.values(), our_model_output.encoder_hidden_states
         ):
-
             assert torch.allclose(
                 original_model_feature, our_model_feature, atol=1e-3
             ), "The backbone features are not the same."
@@ -861,7 +867,6 @@ if __name__ == "__main__":
     for config_file, checkpoint_file in OriginalMask2FormerCheckpointToOursConverter.using_dirs(
         checkpoints_dir, config_dir
     ):
-
         feature_extractor = OriginalMask2FormerConfigToFeatureExtractorConverter()(
             setup_cfg(Args(config_file=config_file))
         )
@@ -874,8 +879,6 @@ if __name__ == "__main__":
         DetectionCheckpointer(original_model).load(str(checkpoint_file))
 
         config: Mask2FormerConfig = OriginalMask2FormerConfigToOursConverter()(original_config)
-        print("Conversion successfull!!")
-        print(config)
         mask2former = Mask2FormerModel(config=config).eval()
 
         converter = OriginalMask2FormerCheckpointToOursConverter(original_model, config)
@@ -890,7 +893,7 @@ if __name__ == "__main__":
         )
 
         # commenting test model for now due to mismatch in feature values -> need to fix
-        # test(original_model, mask2former_for_instance_segmentation, feature_extractor)
+        test(original_model, mask2former_for_instance_segmentation, feature_extractor)
 
         model_name = get_model_name(checkpoint_file)
         logger.info(f"🪄 Saving {model_name}")
@@ -911,3 +914,4 @@ if __name__ == "__main__":
             commit_message="Add model",
             use_temp_dir=True,
         )
+

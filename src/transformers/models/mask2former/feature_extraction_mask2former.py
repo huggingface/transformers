@@ -14,7 +14,7 @@
 # limitations under the License.
 """Feature extractor class for Mask2Former."""
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 from PIL import Image
@@ -56,8 +56,9 @@ def binary_mask_to_rle(mask):
 # Copied from transformers.models.detr.feature_extraction_detr.convert_segmentation_to_rle
 def convert_segmentation_to_rle(segmentation):
     """
-    Args:
     Converts given segmentation map of shape (height, width) to the run-length encoding (RLE) format.
+
+    Args:
         segmentation (`torch.Tensor` or `numpy.array`):
             A segmentation map of shape `(height, width)` where each value denotes a segment or class id.
     Returns:
@@ -77,9 +78,10 @@ def convert_segmentation_to_rle(segmentation):
 # Copied from transformers.models.detr.feature_extraction_detr.remove_low_and_no_objects
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
     """
-    Args:
     Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
     `labels`.
+
+    Args:
         masks (`torch.Tensor`):
             A tensor of shape `(num_queries, height, width)`.
         scores (`torch.Tensor`):
@@ -660,7 +662,7 @@ class Mask2FormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtraction
     ) -> List[Dict]:
         """
         Args:
-        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into instance segmentation predictions. Only
+        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into instance segmentation predictions. Only:
         supports PyTorch.
             outputs ([`MaskFormerForInstanceSegmentation`]):
                 Raw outputs of the model.
