@@ -15,29 +15,25 @@
 
 import argparse
 import logging
-import os
 import math
+import os
 import sys
 from dataclasses import dataclass, field
-from typing import Optional
-from accelerate import Accelerator, DistributedType
-import datasets
-from datasets import load_dataset
 from pathlib import Path
+from typing import Optional
 
-
+import datasets
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
-from tqdm.auto import tqdm
 from datasets import load_dataset
-from accelerate.utils import set_seed
-from huggingface_hub import Repository
-
-
+from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Lambda, Normalize, RandomHorizontalFlip, RandomResizedCrop, ToTensor
+from tqdm.auto import tqdm
 
 import transformers
+from accelerate import Accelerator, DistributedType
+from accelerate.utils import set_seed
+from huggingface_hub import Repository
 from transformers import (
     CONFIG_MAPPING,
     FEATURE_EXTRACTOR_MAPPING,
@@ -46,9 +42,9 @@ from transformers import (
     AutoFeatureExtractor,
     AutoModelForMaskedImageModeling,
     HfArgumentParser,
+    SchedulerType,
     Trainer,
     TrainingArguments,
-    SchedulerType,
     get_scheduler,
 )
 from transformers.trainer_utils import get_last_checkpoint
@@ -751,6 +747,20 @@ def main():
             if args.output_dir is not None:
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
+
+    if args.with_tracking:
+        accelerator.end_training()
+
+    if args.output_dir is not None:
+        accelerator.wait_for_everyone()
+        unwrapped_model = accelerator.unwrap_model(model)
+        unwrapped_model.save_pretrained(
+            args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+        )
+        if accelerator.is_main_process:
+            feature_extractor.save_pretrained(args.output_dir)
+            if args.push_to_hub:
+                repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
 
 
 if __name__ == "__main__":
