@@ -13,14 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Feature extraction class for Trillsson_efficient."""
+import math
 from typing import List, Optional, Union
 
 import numpy as np
-import math
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -68,23 +69,23 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
     model_input_names = ["input_values"]
 
     def __init__(
-            self,
-            feature_size=1,
-            sampling_rate=16000,
-            padding_value=0.0,
-            do_normalize=True,
-            return_attention_mask=False,
-            num_mel_bins=80,
-            log_floor=1e-12,
-            log_additive_offset=0.001,
-            window_length_secs=0.025,
-            hop_length_secs=0.010,
-            f_max=7500.0,
-            f_min=125.0,
-            mel_high_frequency_q=1127.0,
-            mel_break_frequency_hertz=700.0,
-            fft_length=None,
-            **kwargs
+        self,
+        feature_size=1,
+        sampling_rate=16000,
+        padding_value=0.0,
+        do_normalize=True,
+        return_attention_mask=False,
+        num_mel_bins=80,
+        log_floor=1e-12,
+        log_additive_offset=0.001,
+        window_length_secs=0.025,
+        hop_length_secs=0.010,
+        f_max=7500.0,
+        f_min=125.0,
+        mel_high_frequency_q=1127.0,
+        mel_break_frequency_hertz=700.0,
+        fft_length=None,
+        **kwargs
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.return_attention_mask = return_attention_mask
@@ -197,8 +198,7 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
         fft_shape = [dim if dim != -1 else None for dim in fft_length]
 
         # Edge case: skip empty tensors.
-        if (input_tensor.ndim is not None and
-                any(dim == 0 for dim in input_tensor.shape)):
+        if input_tensor.ndim is not None and any(dim == 0 for dim in input_tensor.shape):
             return input_tensor
 
         # Slice the last FFT-rank dimensions from input_tensor's shape.
@@ -209,8 +209,7 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
             if is_reverse and fft_shape[-1] is not None:
                 fft_shape[-1] = fft_shape[-1] // 2 + 1
 
-            paddings = [[0, max(fft_dim - input_dim, 0)] for
-                        fft_dim, input_dim in zip(fft_shape, input_fft_shape)]
+            paddings = [[0, max(fft_dim - input_dim, 0)] for fft_dim, input_dim in zip(fft_shape, input_fft_shape)]
 
             if any(pad > 0 for _, pad in paddings):
                 outer_paddings = [[0, 0]] * max((input_tensor.ndim - 1), 0)
@@ -219,22 +218,17 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
             return input_tensor
 
     def _mel_to_hertz(self, mel_values):
-        """Converts frequencies in `mel_values` from the mel scale to linear scale.
-        """
-        return self.mel_break_frequency_hertz * (
-                np.exp(mel_values / self.mel_high_frequency_q) - 1.0
-        )
+        """Converts frequencies in `mel_values` from the mel scale to linear scale."""
+        return self.mel_break_frequency_hertz * (np.exp(mel_values / self.mel_high_frequency_q) - 1.0)
 
     def _hertz_to_mel(self, frequencies_hertz):
-        """Converts frequencies in `frequencies_hertz` in Hertz to the mel scale.
-        """
-        return self.mel_high_frequency_q * np.log(
-            1.0 + (frequencies_hertz / self.mel_break_frequency_hertz))
+        """Converts frequencies in `frequencies_hertz` in Hertz to the mel scale."""
+        return self.mel_high_frequency_q * np.log(1.0 + (frequencies_hertz / self.mel_break_frequency_hertz))
 
     def frame(self, signal, frame_length, frame_step, pad_end=False, pad_value=0, axis=-1):
         """Expands `signal`'s `axis` dimension into frames of `frame_length`"""
 
-        assert signal.ndim >= 1, f"Expect input waveform is not None"
+        assert signal.ndim >= 1, "Expect input waveform is not None"
 
         result_shape = self._infer_frame_shape(signal, frame_length, frame_step, pad_end, axis)
         signal_shape = signal.shape
@@ -242,7 +236,8 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
         # Axis can be negative. Convert it to positive.
         axis = range(len(signal_shape))[axis]
         outer_dimensions, length_samples, inner_dimensions = np.split(
-            signal_shape, indices_or_sections=[axis, axis + 1])
+            signal_shape, indices_or_sections=[axis, axis + 1]
+        )
         length_samples = length_samples.item()
 
         num_outer_dimensions = outer_dimensions.size
@@ -250,22 +245,24 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
 
         # If padding is requested, pad the input signal tensor with pad_value.
         if pad_end:
-            assert pad_value is not None, f"Expect pad value is not None if do pad end"
+            assert pad_value is not None, "Expect pad value is not None if do pad end"
 
             # Calculate number of frames, using double negatives to round up.
             num_frames = -(-length_samples // frame_step)
 
             # Pad the signal by up to frame_length samples based on how many samples
             # are remaining starting from last_frame_position.
-            pad_samples = np.maximum(
-                0, frame_length + frame_step * (num_frames - 1) - length_samples)
+            pad_samples = np.maximum(0, frame_length + frame_step * (num_frames - 1) - length_samples)
 
             # Pad the inner dimension of signal by pad_samples.
-            paddings = np.concatenate([
-                np.zeros([num_outer_dimensions, 2], dtype=pad_samples.dtype),
-                np.array([[0, pad_samples]]),
-                np.zeros([num_inner_dimensions, 2], dtype=pad_samples.dtype)
-            ], 0)
+            paddings = np.concatenate(
+                [
+                    np.zeros([num_outer_dimensions, 2], dtype=pad_samples.dtype),
+                    np.array([[0, pad_samples]]),
+                    np.zeros([num_inner_dimensions, 2], dtype=pad_samples.dtype),
+                ],
+                0,
+            )
 
             signal = np.pad(signal, paddings, constant_values=pad_value)
 
@@ -282,25 +279,20 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
         subframes_per_hop = frame_step // subframe_length
         num_subframes = length_samples // subframe_length
 
-        subframe_shape = np.concatenate([
-            outer_dimensions,
-            [num_subframes, subframe_length],
-            inner_dimensions], 0)
+        subframe_shape = np.concatenate([outer_dimensions, [num_subframes, subframe_length], inner_dimensions], 0)
 
         subframes = np.reshape(signal, subframe_shape)
 
-        frame_selector = np.reshape(
-            np.arange(num_frames) * subframes_per_hop, [num_frames, 1])
+        frame_selector = np.reshape(np.arange(num_frames) * subframes_per_hop, [num_frames, 1])
 
-        subframe_selector = np.reshape(
-            np.arange(subframes_per_frame), [1, subframes_per_frame])
+        subframe_selector = np.reshape(np.arange(subframes_per_frame), [1, subframes_per_frame])
 
         selector = frame_selector + subframe_selector
 
         frames = np.reshape(
             np.take(subframes, selector, axis=axis),
-            np.concatenate([outer_dimensions, [num_frames, frame_length], inner_dimensions],
-                           0))
+            np.concatenate([outer_dimensions, [num_frames, frame_length], inner_dimensions], 0),
+        )
 
         # Check the result shape
         if result_shape:
@@ -309,13 +301,13 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
         return frames
 
     def linear_to_mel_weight_matrix(
-            self,
-            num_mel_bins=20,
-            num_spectrogram_bins=129,
-            sample_rate=8000,
-            lower_edge_hertz=125.0,
-            upper_edge_hertz=3800.0,
-            dtype=np.float32,
+        self,
+        num_mel_bins=20,
+        num_spectrogram_bins=129,
+        sample_rate=8000,
+        lower_edge_hertz=125.0,
+        upper_edge_hertz=3800.0,
+        dtype=np.float32,
     ):
         """Returns a matrix to warp linear scale spectrograms to the [mel scale][mel].
         https://en.wikipedia.org/wiki/Mel_scale
@@ -324,35 +316,31 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
         # HTK excludes the spectrogram DC bin.
         bands_to_zero = 1
         nyquist_hertz = sample_rate / 2.0
-        linear_frequencies = np.linspace(
-            0.0, nyquist_hertz, num_spectrogram_bins, dtype=dtype)[bands_to_zero:]
-        spectrogram_bins_mel = np.expand_dims(
-            self._hertz_to_mel(linear_frequencies), 1)
+        linear_frequencies = np.linspace(0.0, nyquist_hertz, num_spectrogram_bins, dtype=dtype)[bands_to_zero:]
+        spectrogram_bins_mel = np.expand_dims(self._hertz_to_mel(linear_frequencies), 1)
 
         # Compute num_mel_bins triples of (lower_edge, center, upper_edge). The
         # center of each band is the lower and upper edge of the adjacent bands.
         # Accordingly, we divide [lower_edge_hertz, upper_edge_hertz] into
         # num_mel_bins + 2 pieces.
         band_edges_mel = self.frame(
-            np.linspace(self._hertz_to_mel(lower_edge_hertz),
-                        self._hertz_to_mel(upper_edge_hertz),
-                        num_mel_bins + 2), frame_length=3, frame_step=1)
+            np.linspace(self._hertz_to_mel(lower_edge_hertz), self._hertz_to_mel(upper_edge_hertz), num_mel_bins + 2),
+            frame_length=3,
+            frame_step=1,
+        )
 
         # Split the triples up and reshape them into [1, num_mel_bins] tensors.
-        lower_edge_mel, center_mel, upper_edge_mel = tuple(np.reshape(
-            t, [1, num_mel_bins]) for t in np.split(
-            band_edges_mel, 3, axis=1))
+        lower_edge_mel, center_mel, upper_edge_mel = tuple(
+            np.reshape(t, [1, num_mel_bins]) for t in np.split(band_edges_mel, 3, axis=1)
+        )
 
         # Calculate lower and upper slopes for every spectrogram bin.
         # Line segments are linear in the mel domain, not Hertz.
-        lower_slopes = (spectrogram_bins_mel - lower_edge_mel) / (
-                center_mel - lower_edge_mel)
-        upper_slopes = (upper_edge_mel - spectrogram_bins_mel) / (
-                upper_edge_mel - center_mel)
+        lower_slopes = (spectrogram_bins_mel - lower_edge_mel) / (center_mel - lower_edge_mel)
+        upper_slopes = (upper_edge_mel - spectrogram_bins_mel) / (upper_edge_mel - center_mel)
 
         # Intersect the line segments with each other and zero.
-        mel_weights_matrix = np.maximum(
-            0.0, np.minimum(lower_slopes, upper_slopes))
+        mel_weights_matrix = np.maximum(0.0, np.minimum(lower_slopes, upper_slopes))
 
         # Re-add the zeroed lower bins we sliced out above.
         return np.pad(mel_weights_matrix, [[bands_to_zero, 0], [0, 0]])
@@ -363,8 +351,7 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
         if fft_length is None:
             fft_length = int(2 ** np.ceil(np.log(frame_length) / np.log(2.0)))
 
-        framed_signals = self.frame(
-            signals, frame_length, frame_step, pad_end=pad_end)
+        framed_signals = self.frame(signals, frame_length, frame_step, pad_end=pad_end)
 
         # window the framed signals.
         window = self.hann_window(frame_length, dtype=framed_signals.dtype)
@@ -406,14 +393,14 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
         return log_mel
 
     def compute_feature(
-            self,
-            input_values: List[np.ndarray],
-            sampling_rate: int,
-            required_length: int,
-            pad_mode: str,
-            frame_width: int,
-            frame_hop: int,
-            padding: bool = False,
+        self,
+        input_values: List[np.ndarray],
+        sampling_rate: int,
+        required_length: int,
+        pad_mode: str,
+        frame_width: int,
+        frame_hop: int,
+        padding: bool = False,
     ) -> List[np.ndarray]:
         """Compute the feature"""
         extracted_input_values = []
@@ -446,17 +433,17 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
         return extracted_input_values
 
     def __call__(
-            self,
-            raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-            sampling_rate: Optional[int] = None,
-            frame_hop: Optional[int] = 7,
-            required_length: Optional[int] = 32000,
-            num_mel_bins: Optional[int] = 80,
-            frame_width: Optional[int] = 195,
-            pad_mode: Optional[str] = "symmetric",
-            return_tensors: Optional[Union[str, TensorType]] = None,
-            padding: Optional[bool] = False,
-            **kwargs
+        self,
+        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        sampling_rate: Optional[int] = None,
+        frame_hop: Optional[int] = 7,
+        required_length: Optional[int] = 32000,
+        num_mel_bins: Optional[int] = 80,
+        frame_width: Optional[int] = 195,
+        pad_mode: Optional[str] = "symmetric",
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        padding: Optional[bool] = False,
+        **kwargs
     ) -> BatchFeature:
         """
         Main method to compute and prepare for the model one or several sequence(s). sequences.
@@ -507,9 +494,9 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
         if not isinstance(raw_speech[0], np.ndarray):
             raw_speech = [np.asarray(array, dtype=np.float32) for array in raw_speech]
         elif (
-                not isinstance(raw_speech, np.ndarray)
-                and isinstance(raw_speech[0], np.ndarray)
-                and raw_speech[0].dtype is np.dtype(np.float64)
+            not isinstance(raw_speech, np.ndarray)
+            and isinstance(raw_speech[0], np.ndarray)
+            and raw_speech[0].dtype is np.dtype(np.float64)
         ):
             raw_speech = [array.astype(np.float32) for array in raw_speech]
         elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):

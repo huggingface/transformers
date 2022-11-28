@@ -21,25 +21,22 @@ import warnings
 from dataclasses import dataclass, field
 from random import randint
 from typing import Optional
-import torch
 
 import datasets
 import numpy as np
+import torch
 from datasets import DatasetDict, load_dataset
 
 import evaluate
-
 import transformers
 from transformers import (
     AutoConfig,
-    AutoFeatureExtractor,
-    AutoModelForAudioClassification,
-    Trillsson_efficientModel,
-    Trillsson_efficientFeatureExtractor,
-    Trillsson_efficientForSequenceClassification,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
+    Trillsson_efficientFeatureExtractor,
+    Trillsson_efficientForSequenceClassification,
+    Trillsson_efficientModel,
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint
@@ -67,10 +64,8 @@ def random_subsample(wav: np.ndarray, max_length: float, sample_rate: int = 1600
 @dataclass
 class DataTrainingArguments:
     """
-    Arguments pertaining to what data we are going to input our model for training and eval.
-    Using `HfArgumentParser` we can turn this class
-    into argparse arguments to be able to specify them on
-    the command line.
+    Arguments pertaining to what data we are going to input our model for training and eval. Using `HfArgumentParser`
+    we can turn this class into argparse arguments to be able to specify them on the command line.
     """
 
     dataset_name: Optional[str] = field(default=None, metadata={"help": "Name of a dataset from the datasets package"})
@@ -290,15 +285,22 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
+
     class AudioClassificationCollator:
         def __init__(self, feature_extractor):
             self.feature_extractor = feature_extractor
-    
+
         def __call__(self, batch):
-            encodings = self.feature_extractor([x["input_values"] for x in batch], sampling_rate=feature_extractor.sampling_rate, return_tensors='pt', padding=True)
-            encodings['labels'] = torch.tensor([x['labels'] for x in batch], dtype=torch.long)
-            return encodings 
-    data_collator  = AudioClassificationCollator(feature_extractor)
+            encodings = self.feature_extractor(
+                [x["input_values"] for x in batch],
+                sampling_rate=feature_extractor.sampling_rate,
+                return_tensors="pt",
+                padding=True,
+            )
+            encodings["labels"] = torch.tensor([x["labels"] for x in batch], dtype=torch.long)
+            return encodings
+
+    data_collator = AudioClassificationCollator(feature_extractor)
     # `datasets` takes care of automatically loading and resampling the audio,
     # so we just need to set the correct target sampling rate.
     raw_datasets = raw_datasets.cast_column(
@@ -391,7 +393,7 @@ def main():
         # Set the validation transforms
         raw_datasets["eval"].set_transform(val_transforms, output_all_columns=False)
 
-    print(raw_datasets["train"][3]['input_values'].shape)
+    print(raw_datasets["train"][3]["input_values"].shape)
 
     # Initialize our trainer
     trainer = Trainer(
