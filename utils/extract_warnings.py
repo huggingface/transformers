@@ -108,5 +108,5 @@ if __name__ == "__main__":
     # extract warnings from artifacts
     selected_warnings = extract_warnings(args.output_dir, args.targets)
     selected_warnings = sorted(list(selected_warnings))
-    with open("selected_warnings.json", "w", encoding="UTF-8") as fp:
+    with open(os.path.join(args.output_dir, "selected_warnings.json"), "w", encoding="UTF-8") as fp:
         json.dump(selected_warnings, fp, ensure_ascii=False, indent=4)
