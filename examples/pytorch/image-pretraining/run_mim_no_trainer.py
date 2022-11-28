@@ -653,6 +653,10 @@ def main():
             resume_step = int(training_difference.replace("step_", "")) * args.gradient_accumulation_steps
             starting_epoch = resume_step // len(train_dataloader)
             resume_step -= starting_epoch * len(train_dataloader)
+            
+    # update the progress_bar if load from checkpoint
+    progress_bar.update(starting_epoch * num_update_steps_per_epoch)
+    completed_steps = starting_epoch * num_update_steps_per_epoch
 
 
 if __name__ == "__main__":
