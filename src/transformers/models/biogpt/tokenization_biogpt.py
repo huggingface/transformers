@@ -315,9 +315,6 @@ class BioGptTokenizer(PreTrainedTokenizer):
 
         Returns:
             `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
-
-        Creates a mask from the two sequences passed to be used in a sequence-pair classification task. An
-        FAIRSEQ_TRANSFORMER sequence pair mask has the following format:
         """
         sep = [self.sep_token_id]
 
