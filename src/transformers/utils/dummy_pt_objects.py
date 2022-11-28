@@ -4794,6 +4794,30 @@ def load_tf_weights_in_transfo_xl(*args, **kwargs):
     requires_backends(load_tf_weights_in_transfo_xl, ["torch"])
 
 
+TRILLSSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class Trillsson_efficientForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Trillsson_efficientModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Trillsson_efficientPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 TROCR_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

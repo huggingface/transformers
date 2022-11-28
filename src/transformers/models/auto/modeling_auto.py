@@ -550,6 +550,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertForSequenceClassification"),
         ("tapas", "TapasForSequenceClassification"),
         ("transfo-xl", "TransfoXLForSequenceClassification"),
+        ("trillsson_efficient", "Trillsson_efficientForSequenceClassification"),
         ("xlm", "XLMForSequenceClassification"),
         ("xlm-roberta", "XLMRobertaForSequenceClassification"),
         ("xlm-roberta-xl", "XLMRobertaXLForSequenceClassification"),

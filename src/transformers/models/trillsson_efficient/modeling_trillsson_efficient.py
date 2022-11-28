@@ -497,7 +497,6 @@ class Trillsson_efficientModel(Trillsson_efficientPreTrainedModel):
                 )
                 input_channel = output_channel
                 current_num_blocks += 1
-        # self.block = nn.Sequential(*layers)
 
         # building last several layers
         if config.depth_multiplier > 1.0:
