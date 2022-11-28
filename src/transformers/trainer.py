@@ -1372,11 +1372,6 @@ class Trainer:
         if not training:
             return model
 
-        # Add torchrun support for XLA, but currently DDP doesn't work with torch.distributed XLA backend yet
-        # https://github.com/pytorch/pytorch/issues/79164
-        if is_torch_tpu_available() and os.environ.get("WORLD_SIZE"):
-            return model
-
         # Distributed training (should be after apex fp16 initialization)
         if self.sharded_ddp is not None:
             # Sharded DDP!
