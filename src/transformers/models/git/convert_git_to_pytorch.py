@@ -211,7 +211,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     model.eval()
 
     assert missing_keys == ["git.embeddings.position_ids", "git.image_encoder.vision_model.embeddings.position_ids"]
-    assert len(unexpected_keys) == 0
+    assert unexpected_keys == ["git.image_encoder.visual_projection.weight"]
 
     # verify results
     image_processor = CLIPImageProcessor()

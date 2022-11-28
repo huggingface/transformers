@@ -1024,22 +1024,26 @@ class GITVisionTransformer(nn.Module):
         )
 
 
+@add_start_docstrings(
+    """The vision model from CLIP, used in GIT, without any head or projection on top.""",
+    GIT_START_DOCSTRING,
+)
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionModel with CLIP->GIT, openai/clip-vit-base-patch32->microsoft/git-base
 class GITVisionModel(GITPreTrainedModel):
     config_class = GITVisionConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: GITConfig):
+    def __init__(self, config: GITVisionConfig):
         super().__init__(config)
         self.vision_model = GITVisionTransformer(config)
-
-        # TODO remove, don't think this is actually used
-        self.visual_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
+    @add_start_docstrings_to_model_forward(GIT_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=GITVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1047,31 +1051,36 @@ class GITVisionModel(GITPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import GITProcessor, GITVisionModel
+
+        >>> model = GITVisionModel.from_pretrained("microsoft/git-base")
+        >>> processor = GITProcessor.from_pretrained("microsoft/git-base")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled CLS states
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vision_outputs = self.vision_model(
+        return self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        return vision_outputs
-
-        # pooled_output = vision_outputs[1]  # pooled_output
-
-        # image_embeds = self.visual_projection(pooled_output)
-
-        # if not return_dict:
-        #     outputs = (image_embeds, vision_outputs[0]) + vision_outputs[2:]
-        #     return tuple(output for output in outputs if output is not None)
-
-        # return GITVisionModelOutput(
-        #     image_embeds=image_embeds,
-        #     last_hidden_state=vision_outputs.last_hidden_state,
-        #     hidden_states=vision_outputs.hidden_states,
-        #     attentions=vision_outputs.attentions,
-        # )
 
 
 class GITProjection(nn.Module):
