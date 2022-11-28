@@ -3969,6 +3969,8 @@ if TYPE_CHECKING:
             top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
+
+        # PyTorch model imports
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -4110,8 +4112,6 @@ if TYPE_CHECKING:
             BigBirdPegasusModel,
             BigBirdPegasusPreTrainedModel,
         )
-
-        # PyTorch model imports
         from .models.biogpt import (
             BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BioGptForCausalLM,
