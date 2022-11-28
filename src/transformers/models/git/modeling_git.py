@@ -145,7 +145,7 @@ class GITSelfAttention(nn.Module):
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.image_patch_tokens = int((config.vision_config.image_size / config.vision_config.patch_size)**2 + 1)
+        self.image_patch_tokens = int((config.vision_config.image_size / config.vision_config.patch_size) ** 2 + 1)
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
@@ -177,8 +177,12 @@ class GITSelfAttention(nn.Module):
         if past_key_value is not None:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
-            key_layer = torch.cat([key_layer[:, :, :self.image_patch_tokens, :], past_key_value[0], key_layer[:, :, -1:, :]], dim=2)
-            value_layer = torch.cat([value_layer[:, :, :self.image_patch_tokens, :], past_key_value[1], value_layer[:, :, -1:, :]], dim=2)
+            key_layer = torch.cat(
+                [key_layer[:, :, : self.image_patch_tokens, :], past_key_value[0], key_layer[:, :, -1:, :]], dim=2
+            )
+            value_layer = torch.cat(
+                [value_layer[:, :, : self.image_patch_tokens, :], past_key_value[1], value_layer[:, :, -1:, :]], dim=2
+            )
         else:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
@@ -194,7 +198,10 @@ class GITSelfAttention(nn.Module):
         # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
         # if encoder bi-directional self-attention `past_key_value` is always `None`
         # NOTE: like in other caches, we store the text component. In GIT it means we discard the image component.
-        past_key_value = (key_layer[:, :, self.image_patch_tokens:, :], value_layer[:, :, self.image_patch_tokens:, :])
+        past_key_value = (
+            key_layer[:, :, self.image_patch_tokens :, :],
+            value_layer[:, :, self.image_patch_tokens :, :],
+        )
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -1262,7 +1269,10 @@ class GITModel(GITPreTrainedModel):
         tgt_mask = self._generate_future_mask(seq_length, embedding_output.dtype, embedding_output.device)
 
         extended_attention_mask = self.create_attention_mask(
-            tgt=embedding_output, memory=projected_visual_features, tgt_mask=tgt_mask, past_key_values_length=past_key_values_length
+            tgt=embedding_output,
+            memory=projected_visual_features,
+            tgt_mask=tgt_mask,
+            past_key_values_length=past_key_values_length,
         )
 
         encoder_outputs = self.encoder(

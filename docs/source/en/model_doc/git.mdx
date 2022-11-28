@@ -14,75 +14,48 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The GIT model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The GIT model was proposed in [GIT: A Generative Image-to-text Transformer for Vision and Language](https://arxiv.org/abs/2205.14100) by
+Jianfeng Wang, Zhengyuan Yang, Xiaowei Hu, Linjie Li, Kevin Lin, Zhe Gan, Zicheng Liu, Ce Liu, Lijuan Wang. GIT is a decoder-only Transformer
+that leverages [CLIP](clip)'s vision encoder to condition the model on vision inputs besides text. The model obtains state-of-the-art results on
+image captioning and visual question answering benchmarks.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*In this paper, we design and train a Generative Image-to-text Transformer, GIT, to unify vision-language tasks such as image/video captioning and question answering. While generative models provide a consistent network architecture between pre-training and fine-tuning, existing work typically contains complex structures (uni/multi-modal encoder/decoder) and depends on external modules such as object detectors/taggers and optical character recognition (OCR). In GIT, we simplify the architecture as one image encoder and one text decoder under a single language modeling task. We also scale up the pre-training data and the model size to boost the model performance. Without bells and whistles, our GIT establishes new state of the arts on 12 challenging benchmarks with a large margin. For instance, our model surpasses the human performance for the first time on TextCaps (138.2 vs. 125.5 in CIDEr). Furthermore, we present a new scheme of generation-based image classification and scene text recognition, achieving decent performance on standard benchmarks.*
 
 Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [nielsr](https://huggingface.co/nielsr).
+The original code can be found [here](https://github.com/microsoft/GenerativeImage2Text).
 
+
+## GITProcessor
+
+[[autodoc]] GITProcessor
+    - __call__
+
+## GITVisionConfig
+
+[[autodoc]] GITVisionConfig
+
+## GITVisionModel
+
+[[autodoc]] GITVisionModel
+    - forward
 
 ## GITConfig
 
 [[autodoc]] GITConfig
     - all
 
-## GIT specific outputs
-
-[[autodoc]] models.git.modeling_git.GITForPreTrainingOutput
-
-[[autodoc]] models.git.modeling_tf_git.TFGITForPreTrainingOutput
-
-[[autodoc]] models.git.modeling_flax_git.FlaxGITForPreTrainingOutput
-
 ## GITModel
 
 [[autodoc]] GITModel
     - forward
 
-## GITForPreTraining
+## GITForCausalLM
 
-[[autodoc]] GITForPreTraining
-    - forward
-
-## GITLMHeadModel
-
-[[autodoc]] GITLMHeadModel
-    - forward
-
-## GITForMaskedLM
-
-[[autodoc]] GITForMaskedLM
-    - forward
-
-## GITForNextSentencePrediction
-
-[[autodoc]] GITForNextSentencePrediction
-    - forward
-
-## GITForSequenceClassification
-
-[[autodoc]] GITForSequenceClassification
-    - forward
-
-## GITForMultipleChoice
-
-[[autodoc]] GITForMultipleChoice
-    - forward
-
-## GITForTokenClassification
-
-[[autodoc]] GITForTokenClassification
-    - forward
-
-## GITForQuestionAnswering
-
-[[autodoc]] GITForQuestionAnswering
+[[autodoc]] GITForCausalLM
     - forward
