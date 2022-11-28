@@ -145,6 +145,7 @@ class GITSelfAttention(nn.Module):
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.image_patch_tokens = int((config.vision_config.image_size / config.vision_config.patch_size)**2 + 1)
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
@@ -176,8 +177,8 @@ class GITSelfAttention(nn.Module):
         if past_key_value is not None:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
-            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+            key_layer = torch.cat([key_layer[:, :, :self.image_patch_tokens, :], past_key_value[0], key_layer[:, :, -1:, :]], dim=2)
+            value_layer = torch.cat([value_layer[:, :, :self.image_patch_tokens, :], past_key_value[1], value_layer[:, :, -1:, :]], dim=2)
         else:
             key_layer = self.transpose_for_scores(self.key(hidden_states))
             value_layer = self.transpose_for_scores(self.value(hidden_states))
@@ -192,7 +193,8 @@ class GITSelfAttention(nn.Module):
         # all previous decoder key/value_states. Further calls to uni-directional self-attention
         # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
         # if encoder bi-directional self-attention `past_key_value` is always `None`
-        past_key_value = (key_layer, value_layer)
+        # NOTE: like in other caches, we store the text component. In GIT it means we discard the image component.
+        past_key_value = (key_layer[:, :, self.image_patch_tokens:, :], value_layer[:, :, self.image_patch_tokens:, :])
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -1116,14 +1118,14 @@ class GITModel(GITPreTrainedModel):
         mask = mask.masked_fill(mask == 1, float("-inf"))
         return mask
 
-    def create_attention_mask(self, tgt, memory, tgt_mask, memory_key_padding_mask=None):
+    def create_attention_mask(self, tgt, memory, tgt_mask, past_key_values_length, memory_key_padding_mask=None):
         num_tgt = tgt.shape[1]
         num_memory = memory.shape[1]
         device = tgt.device
         dtype = tgt.dtype
         top_left = torch.zeros((num_memory, num_memory), device=device, dtype=dtype)
         top_right = torch.full(
-            (num_memory, num_tgt),
+            (num_memory, num_tgt + past_key_values_length),
             float("-inf"),
             device=tgt.device,
             dtype=dtype,
@@ -1133,6 +1135,14 @@ class GITModel(GITPreTrainedModel):
             dtype=dtype,
             device=tgt_mask.device,
         )
+
+        if past_key_values_length > 0:
+            tgt_mask = torch.zeros(
+                (tgt_mask.shape[0], tgt_mask.shape[0] + past_key_values_length),
+                dtype=dtype,
+                device=tgt_mask.device,
+            )
+
         left = torch.cat((top_left, bottom_left), dim=0)
         right = torch.cat((top_right, tgt_mask.to(dtype)), dim=0)
 
@@ -1145,7 +1155,7 @@ class GITModel(GITPreTrainedModel):
         zero_negative_infinity = torch.zeros_like(memory_key_padding_mask, dtype=tgt.dtype)
         zero_negative_infinity[memory_key_padding_mask] = float("-inf")
         full_attention_mask = full_attention_mask.expand(
-            (memory_key_padding_mask.shape[0], num_memory + num_tgt, num_memory + num_tgt)
+            (memory_key_padding_mask.shape[0], num_memory + num_tgt, num_memory + past_key_values_length + num_tgt)
         )
         full_attention_mask = full_attention_mask.clone()
         origin_left = full_attention_mask[:, :, :num_memory]
@@ -1252,7 +1262,7 @@ class GITModel(GITPreTrainedModel):
         tgt_mask = self._generate_future_mask(seq_length, embedding_output.dtype, embedding_output.device)
 
         extended_attention_mask = self.create_attention_mask(
-            tgt=embedding_output, memory=projected_visual_features, tgt_mask=tgt_mask
+            tgt=embedding_output, memory=projected_visual_features, tgt_mask=tgt_mask, past_key_values_length=past_key_values_length
         )
 
         encoder_outputs = self.encoder(
@@ -1376,15 +1386,14 @@ class GITForCausalLM(GITPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=True, **kwargs):
-        input_shape = input_ids.shape
+        # cut decoder_input_ids if past is used
+        if past is not None:
+            input_ids = input_ids[:, -1:]
+
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
+        input_shape = input_ids.shape
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
-
-        # TODO support use_cache=True
-        # cut decoder_input_ids if past is used
-        # if past is not None:
-        #     input_ids = input_ids[:, -1:]
 
         return {
             "input_ids": input_ids,

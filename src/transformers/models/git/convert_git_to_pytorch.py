@@ -206,8 +206,6 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     read_in_q_k_v(state_dict, config, prefix=prefix)
 
     # load HuggingFace model
-    # TODO: support use_cache
-    config.use_cache = False
     model = GITForCausalLM(config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     model.eval()
