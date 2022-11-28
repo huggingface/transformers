@@ -385,7 +385,11 @@ def create_circleci_config(folder=None):
 
     if len(jobs) > 0:
         config = {"version": "2.1"}
-        config["parameters"] = {"tests_to_run": {"type": "string", "default": test_list}}
+        config["parameters"] = {
+            # Only used to accept the parameters from the trigger
+            "nightly": {"type": "boolean", "default": False},
+            "tests_to_run": {"type": "string", "default": test_list},
+        }
         config["jobs"] = {j.job_name: j.to_dict() for j in jobs}
         config["workflows"] = {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
         with open(os.path.join(folder, "generated_config.yml"), "w") as f:

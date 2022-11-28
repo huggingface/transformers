@@ -227,12 +227,20 @@ class ModelOutput(OrderedDict):
             # if we provided an iterator as first field and the iterator is a (key, value) iterator
             # set the associated fields
             if first_field_iterator:
-                for element in iterator:
+                for idx, element in enumerate(iterator):
                     if (
                         not isinstance(element, (list, tuple))
                         or not len(element) == 2
                         or not isinstance(element[0], str)
                     ):
+                        if idx == 0:
+                            # If we do not have an iterator of key/values, set it as attribute
+                            self[class_fields[0].name] = first_field
+                        else:
+                            # If we have a mixed iterator, raise an error
+                            raise ValueError(
+                                f"Cannot set key/value for {element}. It needs to be a tuple (key, value)."
+                            )
                         break
                     setattr(self, element[0], element[1])
                     if element[1] is not None:
