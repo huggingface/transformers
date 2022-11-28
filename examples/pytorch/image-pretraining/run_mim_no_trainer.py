@@ -293,6 +293,12 @@ def parse_args():
         default=None,
         help="If the training should continue from a checkpoint folder.",
     )
+    parser.add_argument(
+        "--per_device_eval_batch_size",
+        type=int,
+        default=8,
+        help="Batch size (per device) for the evaluation dataloader.",
+    )
     args = parser.parse_args()
 
     # Sanity checks
