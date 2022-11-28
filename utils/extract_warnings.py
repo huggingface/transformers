@@ -30,7 +30,7 @@ def extract_warnings_from_single_artifact(artifact_zip_path, targets):
                                 continue
                             # This means we are outside the body of a warning
                             elif not line.startswith(" "):
-                                # process a single warning and move it to `target_warnings`.
+                                # process a single warning and move it to `selected_warnings`.
                                 if len(buffer) > 0:
                                     warning = "\n".join(buffer)
                                     # Only keep the warnings specified in `targets`
