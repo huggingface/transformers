@@ -228,7 +228,7 @@ def resize(
     return_numpy: bool = True,
 ) -> np.ndarray:
     """
-    Resizes `image` to `(h, w)` specified by `size` using the PIL library.
+    Resizes `image` to `(height, width)` specified by `size` using the PIL library.
 
     Args:
         image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
