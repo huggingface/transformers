@@ -166,9 +166,17 @@ def copy_config(config_hf, config_megatron):
     config_hf.apply_query_key_layer_scaling = config_megatron["apply_query_key_layer_scaling"]  # True
     config_hf.normalize_attention_scores = True
     config_hf.use_cache = False
-    config_hf.bos_token_id = 3
-    config_hf.eos_token_id = 3
-    config_hf.pad_token_id = 3
+
+    # This identifies the 6.7B (7B) model which uses a different tokenizer
+    if config_megatron["hidden_size"] == 4096:
+        config_hf.bos_token_id = 1  # <|endoftext|>
+        config_hf.eos_token_id = 1  # <|endoftext|>
+        config_hf.pad_token_id = 0  # <unk>
+    else:
+        config_hf.bos_token_id = 2  # <s>
+        config_hf.eos_token_id = 3  # <|endoftext|>
+        config_hf.pad_token_id = 0  # <pad>
+
     return config_hf
 
 
