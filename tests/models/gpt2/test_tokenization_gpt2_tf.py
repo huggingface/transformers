@@ -104,3 +104,16 @@ class GPTTokenizationTest(unittest.TestCase):
             loaded_output = loaded_model.signatures["serving_default"](test_inputs)["output_0"]
             # We may see small differences because the loaded model is compiled, so we need an epsilon for the test
             self.assertTrue(tf.reduce_all(out == loaded_output))
+
+    @slow
+    def test_from_config(self):
+        for tf_tokenizer in self.tf_tokenizers:
+            test_inputs = tf.convert_to_tensor([self.test_sentences[0]])
+            out = tf_tokenizer(test_inputs)  # Build model with some sample inputs
+
+            config = tf_tokenizer.get_config()
+            model_from_config = TFGPT2Tokenizer.from_config(config)
+            from_config_output = model_from_config(test_inputs)
+
+            for key in from_config_output.keys():
+                self.assertTrue(tf.reduce_all(from_config_output[key] == out[key]))
