@@ -474,15 +474,15 @@ class TFWhisperPreTrainedModel(TFPreTrainedModel):
             self.main_input_name: tf.random.uniform(
                 [2, self.config.num_mel_bins, self.config.max_source_positions * 2 - 1], dtype=tf.float32
             ),
-            "decoder_input_ids": tf.constant([[2, 3]], dtype=tf.int64),
+            "decoder_input_ids": tf.constant([[2, 3]], dtype=tf.int32),
         }
 
     @tf.function(
         input_signature=[
             {
                 "input_features": tf.TensorSpec((None, None, None), tf.float32, name="input_features"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int64, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int64, name="decoder_attention_mask"),
+                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
             }
         ]
     )
