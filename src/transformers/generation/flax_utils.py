@@ -18,7 +18,7 @@
 import inspect
 import warnings
 from functools import partial
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -36,8 +36,11 @@ from ..utils import ModelOutput, logging
 from .flax_logits_process import (
     FlaxForcedBOSTokenLogitsProcessor,
     FlaxForcedEOSTokenLogitsProcessor,
+    FlaxForceTokensLogitsProcessor,
     FlaxLogitsProcessorList,
     FlaxMinLengthLogitsProcessor,
+    FlaxSuppressTokensAtBeginLogitsProcessor,
+    FlaxSuppressTokensLogitsProcessor,
     FlaxTemperatureLogitsWarper,
     FlaxTopKLogitsWarper,
     FlaxTopPLogitsWarper,
@@ -155,6 +158,35 @@ class FlaxGenerationMixin:
         model_kwargs["encoder_outputs"] = self.encode(input_ids, params=params, return_dict=True, **encoder_kwargs)
         return model_kwargs
 
+    def _prepare_decoder_input_ids_for_generation(
+        self,
+        batch_size: int,
+        decoder_start_token_id: int = None,
+        bos_token_id: int = None,
+        model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
+    ) -> jnp.ndarray:
+        if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
+            # Only use this arg if not None, otherwise just remove from model_kwargs
+            decoder_input_ids = model_kwargs.pop("decoder_input_ids")
+            if decoder_input_ids is not None:
+                return decoder_input_ids
+        decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
+        return jnp.array(decoder_start_token_id).reshape(1, -1).repeat(batch_size, axis=0)
+
+    def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
+        decoder_start_token_id = (
+            decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
+        )
+        bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
+
+        if decoder_start_token_id is not None:
+            return decoder_start_token_id
+        elif bos_token_id is not None:
+            return bos_token_id
+        raise ValueError(
+            "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
+        )
+
     @staticmethod
     def _expand_to_num_beams(tensor, num_beams):
         return jnp.broadcast_to(tensor[:, None], (tensor.shape[0], num_beams) + tensor.shape[1:])
@@ -227,6 +259,9 @@ class FlaxGenerationMixin:
         min_length: Optional[int] = None,
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
+        suppress_tokens: Optional[List[int]] = None,
+        begin_suppress_tokens: Optional[List[int]] = None,
+        forced_decoder_ids: Optional[List[int]] = None,
         length_penalty: Optional[float] = None,
         early_stopping: Optional[bool] = None,
         trace: bool = True,
@@ -334,12 +369,19 @@ class FlaxGenerationMixin:
                     "generation results, please set `padding_side='left'` when initializing the tokenizer."
                 )
 
+        batch_size = input_ids.shape[0]
+
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
             if model_kwargs.get("encoder_outputs") is None:
                 model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, params, model_kwargs)
             # prepare decoder_input_ids for generation
-            input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+            input_ids = self._prepare_decoder_input_ids_for_generation(
+                batch_size,
+                decoder_start_token_id=decoder_start_token_id,
+                bos_token_id=bos_token_id,
+                model_kwargs=model_kwargs,
+            )
 
         # Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = input_ids.shape[-1]
@@ -382,7 +424,16 @@ class FlaxGenerationMixin:
 
         if not do_sample and num_beams == 1:
             logits_processor = self._get_logits_processor(
-                no_repeat_ngram_size, min_length, max_length, eos_token_id, forced_bos_token_id, forced_eos_token_id
+                no_repeat_ngram_size,
+                min_length,
+                max_length,
+                eos_token_id,
+                forced_bos_token_id,
+                forced_eos_token_id,
+                input_ids_seq_length,
+                suppress_tokens=suppress_tokens,
+                begin_suppress_tokens=begin_suppress_tokens,
+                forced_decoder_ids=forced_decoder_ids,
             )
             return self._greedy_search(
                 input_ids,
@@ -397,7 +448,16 @@ class FlaxGenerationMixin:
         elif do_sample and num_beams == 1:
             logits_warper = self._get_logits_warper(top_k=top_k, top_p=top_p, temperature=temperature)
             logits_processor = self._get_logits_processor(
-                no_repeat_ngram_size, min_length, max_length, eos_token_id, forced_bos_token_id, forced_eos_token_id
+                no_repeat_ngram_size,
+                min_length,
+                max_length,
+                eos_token_id,
+                forced_bos_token_id,
+                forced_eos_token_id,
+                input_ids_seq_length,
+                suppress_tokens=suppress_tokens,
+                begin_suppress_tokens=begin_suppress_tokens,
+                forced_decoder_ids=forced_decoder_ids,
             )
             return self._sample(
                 input_ids,
@@ -426,7 +486,16 @@ class FlaxGenerationMixin:
                 )
 
             logits_processor = self._get_logits_processor(
-                no_repeat_ngram_size, min_length, max_length, eos_token_id, forced_bos_token_id, forced_eos_token_id
+                no_repeat_ngram_size,
+                min_length,
+                max_length,
+                eos_token_id,
+                forced_bos_token_id,
+                forced_eos_token_id,
+                input_ids_seq_length,
+                suppress_tokens=suppress_tokens,
+                begin_suppress_tokens=begin_suppress_tokens,
+                forced_decoder_ids=forced_decoder_ids,
             )
 
             return self._beam_search(
@@ -478,6 +547,10 @@ class FlaxGenerationMixin:
         eos_token_id: int,
         forced_bos_token_id: int,
         forced_eos_token_id: int,
+        input_ids_seq_length: int,
+        suppress_tokens: Optional[List[int]] = None,
+        begin_suppress_tokens: Optional[List[int]] = None,
+        forced_decoder_ids: Optional[List[int]] = None,
     ) -> FlaxLogitsProcessorList:
         """
         This class returns a [`FlaxLogitsProcessorList`] list object that contains all relevant [`FlaxLogitsProcessor`]
@@ -496,6 +569,12 @@ class FlaxGenerationMixin:
         forced_eos_token_id = (
             forced_eos_token_id if forced_eos_token_id is not None else self.config.forced_eos_token_id
         )
+        suppress_tokens = suppress_tokens if suppress_tokens is not None else self.config.suppress_tokens
+        begin_suppress_tokens = (
+            begin_suppress_tokens if begin_suppress_tokens is not None else self.config.begin_suppress_tokens
+        )
+        if forced_decoder_ids is None and hasattr(self.config, "forced_decoder_ids"):
+            forced_decoder_ids = self.config.forced_decoder_ids
 
         # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
         # all samplers can be found in `generation_utils_samplers.py`
@@ -505,6 +584,16 @@ class FlaxGenerationMixin:
             processors.append(FlaxForcedBOSTokenLogitsProcessor(forced_bos_token_id))
         if forced_eos_token_id is not None:
             processors.append(FlaxForcedEOSTokenLogitsProcessor(max_length, forced_eos_token_id))
+        if suppress_tokens is not None:
+            processors.append(FlaxSuppressTokensLogitsProcessor(suppress_tokens))
+        if begin_suppress_tokens is not None:
+            begin_index = input_ids_seq_length
+            begin_index = begin_index if (input_ids_seq_length > 1 or forced_bos_token_id is None) else begin_index + 1
+            if forced_decoder_ids is not None:
+                begin_index += forced_decoder_ids[-1][0]  # generation starts after the last token that is forced
+            processors.append(FlaxSuppressTokensAtBeginLogitsProcessor(begin_suppress_tokens, begin_index))
+        if forced_decoder_ids is not None:
+            processors.append(FlaxForceTokensLogitsProcessor(forced_decoder_ids))
         return processors
 
     def _greedy_search(

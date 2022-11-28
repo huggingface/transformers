@@ -259,10 +259,53 @@ class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
         self.eos_token_id = eos_token_id
 
     def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int) -> jnp.ndarray:
-
         # create boolean flag to decide if min length penalty should be applied
         apply_penalty = 1 - jnp.clip(cur_len - self.min_length, 0, 1)
 
         scores = jnp.where(apply_penalty, scores.at[:, self.eos_token_id].set(-float("inf")), scores)
 
+        return scores
+
+
+class FlaxSuppressTokensAtBeginLogitsProcessor(FlaxLogitsProcessor):
+    r"""
+    [`FlaxSuppressTokensAtBeginLogitsProcessor`] supresses a list of tokens as soon as the `generate` function starts
+    generating using `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` are not
+    sampled at the begining of the generation.
+    """
+
+    def __init__(self, begin_suppress_tokens, begin_index):
+        self.begin_suppress_tokens = list(begin_suppress_tokens)
+        self.begin_index = begin_index
+
+    def __call__(self, input_ids, scores, cur_len: int):
+        if input_ids.shape[1] == self.begin_index:
+            scores = scores.at[:, self.begin_suppress_tokens].set(-float("inf"))
+
+        return scores
+
+
+class FlaxSuppressTokensLogitsProcessor(FlaxLogitsProcessor):
+    def __init__(self, suppress_tokens: list):
+        self.suppress_tokens = list(suppress_tokens)
+
+    def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int) -> jnp.ndarray:
+        scores = scores.at[..., self.suppress_tokens].set(-float("inf"))
+
+        return scores
+
+
+class FlaxForceTokensLogitsProcessor(FlaxLogitsProcessor):
+    r"""This processor can be used to force a list of tokens. The processor will set their log probs to `inf` so that they
+    are sampled at their corresponding index."""
+
+    def __init__(self, force_token_map):
+        self.force_token_map = dict(force_token_map)
+
+    def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int):
+        generation_idx = input_ids.shape[-1]
+        current_token = self.force_token_map.get(generation_idx, None)
+        if current_token is not None:
+            scores = scores.at[:, :].set(-float("inf"))
+            scores = scores.at[:, current_token].set(0)
         return scores

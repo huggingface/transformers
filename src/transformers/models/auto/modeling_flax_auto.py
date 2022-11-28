@@ -53,6 +53,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("vision-text-dual-encoder", "FlaxVisionTextDualEncoderModel"),
         ("vit", "FlaxViTModel"),
         ("wav2vec2", "FlaxWav2Vec2Model"),
+        ("whisper", "FlaxWhisperModel"),
         ("xglm", "FlaxXGLMModel"),
         ("xlm-roberta", "FlaxXLMRobertaModel"),
     ]
@@ -73,6 +74,7 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("roformer", "FlaxRoFormerForMaskedLM"),
         ("t5", "FlaxT5ForConditionalGeneration"),
         ("wav2vec2", "FlaxWav2Vec2ForPreTraining"),
+        ("whisper", "FlaxWhisperForConditionalGeneration"),
         ("xlm-roberta", "FlaxXLMRobertaForMaskedLM"),
     ]
 )
@@ -208,6 +210,7 @@ FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
         ("speech-encoder-decoder", "FlaxSpeechEncoderDecoderModel"),
+        ("whisper", "FlaxWhisperForConditionalGeneration"),
     ]
 )
 

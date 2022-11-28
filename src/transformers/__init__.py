@@ -3223,6 +3223,13 @@ else:
     _import_structure["models.wav2vec2"].extend(
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
     )
+    _import_structure["models.whisper"].extend(
+        [
+            "FlaxWhisperForConditionalGeneration",
+            "FlaxWhisperModel",
+            "FlaxWhisperPreTrainedModel",
+        ]
+    )
     _import_structure["models.xglm"].extend(
         [
             "FlaxXGLMForCausalLM",
@@ -5871,6 +5878,11 @@ if TYPE_CHECKING:
             FlaxWav2Vec2ForPreTraining,
             FlaxWav2Vec2Model,
             FlaxWav2Vec2PreTrainedModel,
+        )
+        from .models.whisper import (
+            FlaxWhisperForConditionalGeneration,
+            FlaxWhisperModel,
+            FlaxWhisperPreTrainedModel,
         )
         from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
         from .models.xlm_roberta import (
