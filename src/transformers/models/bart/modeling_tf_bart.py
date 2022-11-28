@@ -25,6 +25,7 @@ from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPastAndCrossAttentions,
+    TFSeq2SeqSequenceClassifierOutput,
     TFSeq2SeqLMOutput,
     TFSeq2SeqModelOutput,
 )
@@ -33,8 +34,10 @@ from ...modeling_tf_outputs import (
 from ...modeling_tf_utils import (
     DUMMY_INPUTS,
     TFCausalLanguageModelingLoss,
+    TFSequenceClassificationLoss,
     TFModelInputType,
     TFPreTrainedModel,
+    get_initializer,
     keras_serializable,
     unpack_inputs,
 )
@@ -1465,3 +1468,120 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
                 tuple(tf.gather(past_state, beam_idx, axis=0) for past_state in layer_past[:2]) + layer_past[2:],
             )
         return reordered_past
+
+
+@add_start_docstrings(
+    """
+    BART Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    output) e.g. for GLUE tasks.
+    """,
+    BART_START_DOCSTRING,
+)
+class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassificationLoss):
+    def __init__(self, config: BartConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.num_labels = config.num_labels
+        self.bart = TFBartMainLayer(config, name="bart")
+        classifier_dropout = config.classifier_dropout if config.classifier_dropout is not None else config.dropout
+        self.dropout = tf.keras.layers.Dropout(rate=classifier_dropout)
+        self.classifier = tf.keras.layers.Dense(
+            units=config.num_labels,
+            kernel_initializer=get_initializer(config.init_std),
+            name="classifier",
+        )
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        output_type=TFSeq2SeqSequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(
+        self,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        cross_attn_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_outputs: Optional[TFBaseModelOutput] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[tf.Tensor] = None,
+        training: Optional[bool] = False,
+    ) -> Union[TFSeq2SeqSequenceClassifierOutput, Tuple[tf.Tensor]]:
+
+        r"""
+        labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*): Labels for computing the masked
+        language modeling loss. Indices should either be in `[0, ..., config.vocab_size]` or -100 (see `input_ids`
+        docstring). Tokens with indices set to `-100` are ignored (masked), the loss is only computed for the tokens
+        with labels in `[0, ..., config.vocab_size]`.
+
+        Returns:
+
+        """
+        outputs = self.bart(
+            input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            encoder_outputs=encoder_outputs,
+            decoder_attention_mask=decoder_attention_mask,
+            decoder_position_ids=decoder_position_ids,
+            head_mask=head_mask,
+            decoder_head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+        pooled_output = outputs[0]
+        pooled_output = pooled_output[:, 0]
+        pooled_output  = self.dropout(inputs=pooled_output, training=training)
+        logits = self.classifier(inputs=pooled_output)
+        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFSeq2SeqSequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )
+
+    def serving_output(self, output: TFSeq2SeqSequenceClassifierOutput) -> TFSeq2SeqSequenceClassifierOutput:
+        kv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
+        dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
+        dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
+        enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
+        enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
+
+        return TFSeq2SeqSequenceClassifierOutput(
+            logits=output.logits,
+            past_key_values=kv,
+            decoder_hidden_states=dec_hs,
+            decoder_attentions=dec_attns,
+            encoder_last_hidden_state=output.encoder_last_hidden_state,
+            encoder_hidden_states=enc_hs,
+            encoder_attentions=enc_attns,
+        )
