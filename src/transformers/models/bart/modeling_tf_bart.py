@@ -25,18 +25,18 @@ from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPastAndCrossAttentions,
-    TFSeq2SeqSequenceClassifierOutput,
     TFSeq2SeqLMOutput,
     TFSeq2SeqModelOutput,
+    TFSeq2SeqSequenceClassifierOutput,
 )
 
 # Public API
 from ...modeling_tf_utils import (
     DUMMY_INPUTS,
     TFCausalLanguageModelingLoss,
-    TFSequenceClassificationLoss,
     TFModelInputType,
     TFPreTrainedModel,
+    TFSequenceClassificationLoss,
     get_initializer,
     keras_serializable,
     unpack_inputs,
@@ -1550,7 +1550,7 @@ class TFBartForSequenceClassification(TFBartPretrainedModel, TFSequenceClassific
         )
         pooled_output = outputs[0]
         pooled_output = pooled_output[:, 0]
-        pooled_output  = self.dropout(inputs=pooled_output, training=training)
+        pooled_output = self.dropout(inputs=pooled_output, training=training)
         logits = self.classifier(inputs=pooled_output)
         loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
 

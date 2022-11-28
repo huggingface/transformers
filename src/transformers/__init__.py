@@ -2437,7 +2437,9 @@ else:
             "TFAutoModelWithLMHead",
         ]
     )
-    _import_structure["models.bart"].extend(["TFBartForConditionalGeneration", "TFBartForSequenceClassification", "TFBartModel", "TFBartPretrainedModel"])
+    _import_structure["models.bart"].extend(
+        ["TFBartForConditionalGeneration", "TFBartForSequenceClassification", "TFBartModel", "TFBartPretrainedModel"]
+    )
     _import_structure["models.bert"].extend(
         [
             "TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5269,7 +5271,12 @@ if TYPE_CHECKING:
             TFAutoModelForVision2Seq,
             TFAutoModelWithLMHead,
         )
-        from .models.bart import TFBartForConditionalGeneration, TFBartForSequenceClassification, TFBartModel, TFBartPretrainedModel
+        from .models.bart import (
+            TFBartForConditionalGeneration,
+            TFBartForSequenceClassification,
+            TFBartModel,
+            TFBartPretrainedModel,
+        )
         from .models.bert import (
             TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFBertEmbeddings,
