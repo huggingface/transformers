@@ -25,7 +25,13 @@ The abstract from the paper is the following:
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- GIT is implemented in a very similar way to GPT-2, the only difference being that the model is also conditioned on `pixel_values`.
+- One can use [`GITProcessor`] to prepare images for the model, and the `generate` method for autoregressive generation.
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/git_architecture.jpg"
+alt="drawing" width="600"/>
+
+<small> GIT architecture. Taken from the <a href="https://arxiv.org/abs/2205.14100" target="_blank">original paper</a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/microsoft/GenerativeImage2Text).

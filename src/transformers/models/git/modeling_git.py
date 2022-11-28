@@ -1328,12 +1328,7 @@ class GITForCausalLM(GITPreTrainedModel):
         self.output = new_embeddings
 
     @add_start_docstrings_to_model_forward(GIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1363,7 +1358,29 @@ class GITForCausalLM(GITPreTrainedModel):
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
-        """
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import GITProcessor, GITForCausalLM
+        >>> import requests
+        >>> from PIL import Image
+
+        >>> processor = GITProcessor.from_pretrained("nielsr/git-base-coco")
+        >>> model = GITForCausalLM.from_pretrained("nielsr/git-base-coco")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> pixel_values = processor(images=image, return_tensors="pt").pixel_values
+
+        >>> generated_ids = model.generate(pixel_values=pixel_values, max_length=50)
+        >>> generated_caption = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        >>> print(generated_caption)
+        two cats sleeping on a couch with remotes.
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
             use_cache = False
