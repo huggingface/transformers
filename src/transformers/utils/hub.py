@@ -910,6 +910,7 @@ def get_checkpoint_shard_files(
     shard_filenames = sorted(list(set(index["weight_map"].values())))
     sharded_metadata = index["metadata"]
     sharded_metadata["all_checkpoint_keys"] = list(index["weight_map"].keys())
+    sharded_metadata["weight_map"] = index["weight_map"].copy()
 
     # First, let's deal with local folder.
     if os.path.isdir(pretrained_model_name_or_path):
