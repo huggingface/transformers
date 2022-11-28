@@ -239,7 +239,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
 
     print("Generating caption...")
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-    generated_ids = model.generate(input_ids, pixel_values=pixel_values, max_length=20)
+    generated_ids = model.generate(pixel_values=pixel_values, max_length=20)
     print("Generated caption:", tokenizer.batch_decode(generated_ids, skip_special_tokens=True))
 
     if pytorch_dump_folder_path is not None:

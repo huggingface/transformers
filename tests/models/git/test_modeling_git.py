@@ -396,9 +396,8 @@ class GITModelIntegrationTest(unittest.TestCase):
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         inputs = processor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
-        input_ids = torch.tensor([[101]]).to(torch_device)
 
-        generated_ids = model.generate(input_ids, pixel_values=pixel_values, max_length=20)
+        generated_ids = model.generate(pixel_values=pixel_values, max_length=20)
         generated_caption = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
         expected_shape = torch.Size((1, 8))

@@ -222,7 +222,7 @@ class GITConfig(PretrainedConfig):
         classifier_dropout=None,
         tie_word_embeddings=False,
         bos_token_id=101,
-        eos_token_id=102,  # TODO check whether this is correct
+        eos_token_id=102,
         **kwargs
     ):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
@@ -247,6 +247,9 @@ class GITConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
         self.tie_word_embeddings = tie_word_embeddings
+
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
     def to_dict(self):
         """
