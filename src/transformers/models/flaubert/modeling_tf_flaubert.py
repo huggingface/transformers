@@ -226,13 +226,13 @@ class TFFlaubertPreTrainedModel(TFPreTrainedModel):
     @property
     def dummy_inputs(self):
         # Sometimes Flaubert has language embeddings so don't forget to build them as well if needed
-        inputs_list = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
-        attns_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
+        inputs_list = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]], dtype=tf.int32)
+        attns_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]], dtype=tf.int32)
         if self.config.use_lang_emb and self.config.n_langs > 1:
             return {
                 "input_ids": inputs_list,
                 "attention_mask": attns_list,
-                "langs": tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]]),
+                "langs": tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]], dtype=tf.int32),
             }
         else:
             return {"input_ids": inputs_list, "attention_mask": attns_list}
@@ -1169,12 +1169,12 @@ class TFFlaubertForMultipleChoice(TFFlaubertPreTrainedModel, TFMultipleChoiceLos
         # Sometimes Flaubert has language embeddings so don't forget to build them as well if needed
         if self.config.use_lang_emb and self.config.n_langs > 1:
             return {
-                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
-                "langs": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
+                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32),
+                "langs": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32),
             }
         else:
             return {
-                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
+                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32),
             }
 
     @unpack_inputs
