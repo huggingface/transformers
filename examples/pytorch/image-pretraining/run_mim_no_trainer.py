@@ -746,6 +746,12 @@ def main():
                     commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
                 )
 
+        if args.checkpointing_steps == "epoch":
+            output_dir = f"epoch_{epoch}"
+            if args.output_dir is not None:
+                output_dir = os.path.join(args.output_dir, output_dir)
+            accelerator.save_state(output_dir)
+
 
 if __name__ == "__main__":
     main()
