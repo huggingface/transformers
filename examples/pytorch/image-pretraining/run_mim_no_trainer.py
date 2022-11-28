@@ -697,6 +697,31 @@ def main():
             if completed_steps >= args.max_train_steps:
                 break
 
+        model.eval()
+        losses = []
+        for step, batch in enumerate(eval_dataloader):
+            with torch.no_grad():
+                outputs = model(**batch)
+
+            loss = outputs.loss
+            losses.append(accelerator.gather_for_metrics(loss.repeat(args.per_device_eval_batch_size)))
+
+        losses = torch.cat(losses)
+        eval_loss = torch.mean(losses)
+
+        logger.info(f"epoch {epoch}: eval_loss: {eval_loss}")
+
+        if args.with_tracking:
+            accelerator.log(
+                {
+                    "eval_loss": eval_loss,
+                    "train_loss": total_loss.item() / len(train_dataloader),
+                    "epoch": epoch,
+                    "step": completed_steps,
+                },
+                step=completed_steps,
+            )
+
 
 if __name__ == "__main__":
     main()
