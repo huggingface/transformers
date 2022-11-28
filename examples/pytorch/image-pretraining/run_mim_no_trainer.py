@@ -45,12 +45,10 @@ from transformers.utils import check_min_version, get_full_repo_name, send_examp
 from transformers.utils.versions import require_version
 
 
-""" Pre-training a 🤗 Transformers model for simple masked image modeling (SimMIM) 
+""" Pre-training a 🤗 Transformers model for simple masked image modeling (SimMIM)
 without using HuggingFace Trainer.
-
 Any model supported by the AutoModelForMaskedImageModeling API can be used.
 """
-
 
 logger = logging.getLogger(__name__)
 
