@@ -83,7 +83,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--targets",
-        default="DeprecationWarning",
+        default="DeprecationWarning,UserWarning,FutureWarning",
         type=list_str,
         help="Comma-separated list of target warning(s) which we want to extract.",
     )
