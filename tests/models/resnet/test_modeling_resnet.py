@@ -141,7 +141,15 @@ class ResNetModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (ResNetModel, ResNetForImageClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            ResNetModel,
+            ResNetForImageClassification,
+            ResNetBackbone,
+        )
+        if is_torch_available()
+        else ()
+    )
 
     fx_compatible = True
     test_pruning = False
@@ -246,6 +254,10 @@ class ResNetModelTest(ModelTesterMixin, unittest.TestCase):
                 config.output_hidden_states = True
 
                 check_hidden_states_output(inputs_dict, config, model_class)
+
+    @unittest.skip(reason="ResNet does not use feedforward chunking")
+    def test_feed_forward_chunking(self):
+        pass
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
