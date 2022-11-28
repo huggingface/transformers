@@ -89,8 +89,9 @@ def get_max_height_width(images: List[np.ndarray]) -> List[int]:
 # Copied from transformers.models.detr.image_processing_detr.make_pixel_mask
 def make_pixel_mask(image: np.ndarray, output_size: Tuple[int, int]) -> np.ndarray:
     """
-    Args:
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
+
+    Args:
         image (`np.ndarray`):
             Image to make the pixel mask for.
         output_size (`Tuple[int, int]`):
@@ -105,8 +106,9 @@ def make_pixel_mask(image: np.ndarray, output_size: Tuple[int, int]) -> np.ndarr
 # Copied from transformers.models.detr.image_processing_detr.binary_mask_to_rle
 def binary_mask_to_rle(mask):
     """
+    Converts given binary mask of shape `(height, width)` to the run-length encoding (RLE) format.
+
     Args:
-    Converts given binary mask of shape (height, width) to the run-length encoding (RLE) format.
         mask (`torch.Tensor` or `numpy.array`):
             A binary mask tensor of shape `(height, width)` where 0 denotes background and 1 denotes the target
             segment_id or class_id.
@@ -127,8 +129,9 @@ def binary_mask_to_rle(mask):
 # Copied from transformers.models.detr.image_processing_detr.convert_segmentation_to_rle
 def convert_segmentation_to_rle(segmentation):
     """
+    Converts given segmentation map of shape `(height, width)` to the run-length encoding (RLE) format.
+
     Args:
-    Converts given segmentation map of shape (height, width) to the run-length encoding (RLE) format.
         segmentation (`torch.Tensor` or `numpy.array`):
             A segmentation map of shape `(height, width)` where each value denotes a segment or class id.
     Returns:
@@ -148,9 +151,10 @@ def convert_segmentation_to_rle(segmentation):
 # Copied from transformers.models.detr.image_processing_detr.remove_low_and_no_objects
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
     """
-    Args:
     Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
     `labels`.
+
+    Args:
         masks (`torch.Tensor`):
             A tensor of shape `(num_queries, height, width)`.
         scores (`torch.Tensor`):
@@ -456,8 +460,8 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Resize the image to the given size. Size can be min_size (scalar) or (h, w) tuple. If size is an int, smaller
-        edge of the image will be matched to this number.
+        Resize the image to the given size. Size can be min_size (scalar) or `(height, width)` tuple. If size is an
+        int, smaller edge of the image will be matched to this number.
         """
         if "max_size" in kwargs:
             warnings.warn(
@@ -743,7 +747,6 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         in the batch and optionally returns their corresponding pixel mask.
 
         Args:
-        Pad the bottom and right of the image with zeros to the output size.
             image (`np.ndarray`):
                 Image to pad.
             constant_values (`float` or `Iterable[float]`, *optional*):

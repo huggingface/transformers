@@ -313,8 +313,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
 
         # encode them
-        # TODO replace by .from_pretrained facebook/detr-resnet-50-panoptic
-        feature_extractor = DetrFeatureExtractor(format="coco_panoptic")
+        feature_extractor = DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50-panoptic")
         encoding = feature_extractor(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
 
         # verify pixel values

@@ -50,8 +50,9 @@ def _upcast(t):
 
 def box_area(boxes):
     """
-    Args:
     Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
+
+    Args:
         boxes (`torch.FloatTensor` of shape `(number_of_boxes, 4)`):
             Boxes for which the area will be computed. They are expected to be in (x1, y1, x2, y2) format with `0 <= x1
             < x2` and `0 <= y1 < y2`.

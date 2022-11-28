@@ -128,9 +128,9 @@ def get_resize_output_image_size(
     Args:
         image_size (`Tuple[int, int]`):
             The input image size.
-        size (*int*):
+        size (`int`):
             The desired output size.
-        max_size (*int*, *optional*):
+        max_size (`int`, *optional*):
             The maximum allowed output size.
     """
     image_size = get_image_size(input_image)
@@ -221,8 +221,9 @@ def get_max_height_width(images: List[np.ndarray]) -> List[int]:
 # Copied from transformers.models.detr.image_processing_detr.make_pixel_mask
 def make_pixel_mask(image: np.ndarray, output_size: Tuple[int, int]) -> np.ndarray:
     """
-    Args:
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
+
+    Args:
         image (`np.ndarray`):
             Image to make the pixel mask for.
         output_size (`Tuple[int, int]`):
@@ -237,8 +238,9 @@ def make_pixel_mask(image: np.ndarray, output_size: Tuple[int, int]) -> np.ndarr
 # Copied from transformers.models.detr.image_processing_detr.convert_coco_poly_to_mask
 def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndarray:
     """
-    Args:
     Convert a COCO polygon annotation to a mask.
+
+    Args:
         segmentations (`List[List[float]]`):
             List of polygons, each polygon represented by a list of x-y coordinates.
         height (`int`):
@@ -327,10 +329,10 @@ def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
     Compute the bounding boxes around the provided panoptic segmentation masks.
 
     Args:
-        masks: masks in format [N, H, W] where N is the number of masks
+        masks: masks in format `[number_masks, height, width]` where N is the number of masks
 
     Returns:
-        boxes: bounding boxes in format [N, 4] in xyxy format
+        boxes: bounding boxes in format `[number_masks, 4]` in xyxy format
     """
     if masks.size == 0:
         return np.zeros((0, 4))
@@ -450,7 +452,7 @@ def post_process_panoptic_sample(
     threshold=0.85,
 ) -> Dict:
     """
-    Converts the output of [*DetrForSegmentation*] into panoptic segmentation predictions for a single sample.
+    Converts the output of [`DetrForSegmentation`] into panoptic segmentation predictions for a single sample.
 
     Args:
         out_logits (`torch.Tensor`):
@@ -458,13 +460,14 @@ def post_process_panoptic_sample(
         masks (`torch.Tensor`):
             The predicted segmentation masks for this sample.
         boxes (`torch.Tensor`):
-            The prediced bounding boxes for this sample. The boxes are in the normalized format (center_x, center_y,
-            width, height) and values between [0, 1], relative to the size the image (disregarding padding).
+            The prediced bounding boxes for this sample. The boxes are in the normalized format `(center_x, center_y,
+            width, height)` and values between `[0, 1]`, relative to the size the image (disregarding padding).
         processed_size (`Tuple[int, int]`):
-            The processed size of the image (h, w), as returned by the preprocessing step i.e. the size after data
-            augmentation but before batching.
+            The processed size of the image `(height, width)`, as returned by the preprocessing step i.e. the size
+            after data augmentation but before batching.
         target_size (`Tuple[int, int]`):
-            The target size of the image, (h, w) corresponding to the requested final size of the prediction.
+            The target size of the image, `(height, width)` corresponding to the requested final size of the
+            prediction.
         is_thing_map (`Dict`):
             A dictionary mapping class indices to a boolean value indicating whether the class is a thing or not.
         threshold (`float`, *optional*, defaults to 0.85):
@@ -541,10 +544,10 @@ def resize_annotation(
         orig_size (`Tuple[int, int]`):
             The original size of the input image.
         target_size (`Tuple[int, int]`):
-            The target size of the image, as returned by the preprocessing *resize* step.
+            The target size of the image, as returned by the preprocessing `resize` step.
         threshold (`float`, *optional*, defaults to 0.5):
             The threshold used to binarize the segmentation masks.
-        resample (*PILImageResampling*, defaults to *PILImageResampling.NEAREST*):
+        resample (`PILImageResampling`, defaults to `PILImageResampling.NEAREST`):
             The resampling filter to use when resizing the masks.
     """
     ratios = tuple(float(s) / float(s_orig) for s, s_orig in zip(target_size, orig_size))
@@ -575,8 +578,9 @@ def resize_annotation(
 # Copied from transformers.models.detr.image_processing_detr.binary_mask_to_rle
 def binary_mask_to_rle(mask):
     """
+    Converts given binary mask of shape `(height, width)` to the run-length encoding (RLE) format.
+
     Args:
-    Converts given binary mask of shape (height, width) to the run-length encoding (RLE) format.
         mask (`torch.Tensor` or `numpy.array`):
             A binary mask tensor of shape `(height, width)` where 0 denotes background and 1 denotes the target
             segment_id or class_id.
@@ -597,8 +601,9 @@ def binary_mask_to_rle(mask):
 # Copied from transformers.models.detr.image_processing_detr.convert_segmentation_to_rle
 def convert_segmentation_to_rle(segmentation):
     """
+    Converts given segmentation map of shape `(height, width)` to the run-length encoding (RLE) format.
+
     Args:
-    Converts given segmentation map of shape (height, width) to the run-length encoding (RLE) format.
         segmentation (`torch.Tensor` or `numpy.array`):
             A segmentation map of shape `(height, width)` where each value denotes a segment or class id.
     Returns:
@@ -618,9 +623,10 @@ def convert_segmentation_to_rle(segmentation):
 # Copied from transformers.models.detr.image_processing_detr.remove_low_and_no_objects
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
     """
-    Args:
     Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
     `labels`.
+
+    Args:
         masks (`torch.Tensor`):
             A tensor of shape `(num_queries, height, width)`.
         scores (`torch.Tensor`):
@@ -864,8 +870,8 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         **kwargs
     ) -> np.ndarray:
         """
-        Resize the image to the given size. Size can be min_size (scalar) or (h, w) tuple. If size is an int, smaller
-        edge of the image will be matched to this number.
+        Resize the image to the given size. Size can be `min_size` (scalar) or `(height, width)` tuple. If size is an
+        int, smaller edge of the image will be matched to this number.
         """
         if "max_size" in kwargs:
             warnings.warn(
@@ -896,15 +902,12 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         orig_size,
         size,
         resample: PILImageResampling = PILImageResampling.NEAREST,
-        data_format: Optional[ChannelDimension] = None,
     ) -> Dict:
         """
         Resize the annotation to match the resized image. If size is an int, smaller edge of the mask will be matched
         to this number.
         """
-        return resize_annotation(
-            annotation, orig_size=orig_size, target_size=size, resample=resample, data_format=data_format
-        )
+        return resize_annotation(annotation, orig_size=orig_size, target_size=size, resample=resample)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.rescale
     def rescale(
@@ -931,7 +934,8 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize_annotation
     def normalize_annotation(self, annotation: Dict, image_size: Tuple[int, int]) -> Dict:
         """
-        Normalize the boxes in the annotation from [x0, y0, x1, y1] to [center_x, center_y, w, h] format.
+        Normalize the boxes in the annotation from `[top_left_x, top_left_y, bottom_right_x, bottom_right_y]` to
+        `[center_x, center_y, width, height]` format.
         """
         return normalize_annotation(annotation, image_size=image_size)
 
@@ -1007,7 +1011,6 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         in the batch and optionally returns their corresponding pixel mask.
 
         Args:
-        Pad the bottom and right of the image with zeros to the output size.
             image (`np.ndarray`):
                 Image to pad.
             constant_values (`float` or `Iterable[float]`, *optional*):
