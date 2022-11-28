@@ -113,13 +113,15 @@ class TFLevitConvEmbeddings(tf.keras.layers.Layer):
             name="convolution",
         )
         # The epsilon and momentum used here are the defaults in torch batch norm layer.
-        self.batch_norm = tf.keras.layers.BatchNormalization(epsilon=1e-05, momentum=0.1, name="batch_norm")
+        self.batch_norm = tf.keras.layers.BatchNormalization(epsilon=1e-05, momentum=0.9, name="batch_norm")
 
     def call(self, embeddings: tf.Tensor, training: Optional[bool] = None):
+        # embeddings shape = (bsz, num_channels, height, width)
         embeddings = tf.transpose(embeddings, perm=(0, 2, 3, 1))
         embeddings = self.padding(embeddings)
         embeddings = self.convolution(embeddings, training=training)
         embeddings = self.batch_norm(embeddings, training=training)
+        # embeddings shape = (bsz, height, width, num_channels)
         embeddings = tf.transpose(embeddings, perm=(0, 3, 1, 2))
         return embeddings
 
@@ -205,9 +207,17 @@ class TFLevitPatchEmbeddings(tf.keras.layers.Layer):
 class TFMLPLayerWithBN(tf.keras.layers.Layer):
     def __init__(self, input_dim, output_dim, bn_weight_init=1, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.linear = tf.keras.layers.Dense(units=output_dim, use_bias=False, name="linear")
+        self.linear = tf.keras.layers.Dense(
+            units=output_dim,
+            use_bias=False,
+            name="linear",
+        )
         # The epsilon and momentum used here are the defaults in torch batch norm layer.
-        self.batch_norm = tf.keras.layers.BatchNormalization(epsilon=1e-05, momentum=0.1, name="batch_norm")
+        self.batch_norm = tf.keras.layers.BatchNormalization(
+            epsilon=1e-05,
+            momentum=0.9,
+            name="batch_norm",
+        )
 
     def call(self, hidden_state: tf.Tensor, training: Optional[bool] = None):
         hidden_state = self.linear(hidden_state, training=training)
@@ -218,6 +228,7 @@ class TFMLPLayerWithBN(tf.keras.layers.Layer):
         hidden_state_reshape_list = [
             hidden_state_shape_list[0] * hidden_state_shape_list[1]
         ] + hidden_state_shape_list[2:]
+
         flattened_hidden_state = tf.reshape(hidden_state, shape=hidden_state_reshape_list)
         batch_norm_hidden_state = self.batch_norm(flattened_hidden_state, training=training)
 
@@ -228,7 +239,7 @@ class TFMLPLayerWithBN(tf.keras.layers.Layer):
 
 class TFLevitSubsample(tf.keras.layers.Layer):
     """
-    Layer to subsample the activatioin maps
+    Layer to subsample the activatioin maps.
     """
 
     def __init__(self, stride, resolution, *args, **kwargs):
@@ -272,20 +283,18 @@ class TFLevitAttention(tf.keras.layers.Layer):
         self.len_points = len(points)
 
         # Initialize the attention offsets and indices
-        attention_offsets, indices = {}, []
+        self.attention_offsets, self.indices = {}, []
 
         # Iterate over the `points`` generator and calculate the offset between the initial
         # point (0, 0) and the rest of the points [(0, 1), (0, 2)...]
         for p1 in points:  # this iterates only once, wehre p1 is (0, 0)
             for p2 in points:  # iterate over all the points other than (0, 0)
                 offset = (abs(p1[0] - p2[0]), abs(p1[1] - p2[1]))
-                if offset not in attention_offsets:
-                    attention_offsets[offset] = len(attention_offsets)
-                indices.append(attention_offsets[offset])
+                if offset not in self.attention_offsets:
+                    self.attention_offsets[offset] = len(self.attention_offsets)
+                self.indices.append(self.attention_offsets[offset])
 
-        # Store the attention offsets, indices and attention bias cache
-        self.attention_offsets = attention_offsets
-        self.indices = indices
+        # Store attention bias cache
         self.attention_bias_cache = {}
 
     def build(self, input_shape: tf.TensorShape):
@@ -317,8 +326,8 @@ class TFLevitAttention(tf.keras.layers.Layer):
     def call(self, hidden_state: tf.Tensor, training: Optional[bool] = None):
 
         # TODO: figure out the clearing cache mechanism
-        if training and self.attention_bias_cache:
-            self.attention_bias_cache = {}  # clear ab cache
+        # if training and self.attention_bias_cache:
+        #     self.attention_bias_cache = {}  # clear ab cache
 
         batch_size = tf.shape(hidden_state)[0]
         seq_length = tf.shape(hidden_state)[1]
@@ -427,8 +436,8 @@ class TFLevitAttentionSubsample(tf.keras.layers.Layer):
     def call(self, hidden_state: tf.Tensor, training: Optional[bool] = None):
 
         # TODO: figure out the clearing cache mechanism
-        if training and self.attention_bias_cache:
-            self.attention_bias_cache = {}  # clear ab cache
+        # if training and self.attention_bias_cache:
+        #     self.attention_bias_cache = {}  # clear ab cache
 
         batch_size = tf.shape(hidden_state)[0]
         seq_length = tf.shape(hidden_state)[1]
@@ -594,7 +603,7 @@ class TFLevitStage(tf.keras.layers.Layer):
 
     def call(self, hidden_state: tf.Tensor, training: Optional[bool] = None):
         for layer in self.layers:
-            hidden_state = layer(hidden_state)
+            hidden_state = layer(hidden_state, training=training)
         return hidden_state
 
 
@@ -658,7 +667,7 @@ class TFLevitClassificationLayer(tf.keras.layers.Layer):
         super().__init__(*args, **kwargs)
 
         # The epsilon and momentum used here are the defaults in torch batch norm layer.
-        self.batch_norm = tf.keras.layers.BatchNormalization(epsilon=1e-05, momentum=0.1, name="batch_norm")
+        self.batch_norm = tf.keras.layers.BatchNormalization(epsilon=1e-05, momentum=0.9, name="batch_norm")
         self.linear = tf.keras.layers.Dense(units=output_dim, name="linear")
 
     def call(self, hidden_state: tf.Tensor, training: Optional[bool] = None):
@@ -823,7 +832,6 @@ LEVIT_INPUTS_DOCSTRING = r"""
 class TFLevitModel(TFLevitPreTrainedModel):
     def __init__(self, config, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
-
         self.levit = TFLevitMainLayer(config=config, name="levit")
 
     @unpack_inputs
@@ -849,10 +857,8 @@ class TFLevitModel(TFLevitPreTrainedModel):
             return_dict=return_dict,
             training=training,
         )
-
         return outputs
 
-    # TODO @ariG23498: Check the output type for serving.
     def serving_output(self, output: TFBaseModelOutputWithPoolingAndNoAttention) -> TFBaseModelOutputWithPooling:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
@@ -885,7 +891,7 @@ class TFLevitForImageClassification(TFLevitPreTrainedModel):
                 input_dim=config.hidden_sizes[-1], output_dim=config.num_labels, name="classifier"
             )
             if config.num_labels > 0
-            else tf.identity
+            else tf.keras.layers.Activation("linear", name="classifier")
         )
 
     @unpack_inputs
@@ -978,17 +984,21 @@ class TFLevitForImageClassificationWithTeacher(TFLevitPreTrainedModel):
         # Classifier head
         self.classifier = (
             TFLevitClassificationLayer(
-                input_dim=config.hidden_sizes[-1], output_dim=config.num_labels, name="classifier"
+                input_dim=config.hidden_sizes[-1],
+                output_dim=config.num_labels,
+                name="classifier",
             )
             if config.num_labels > 0
-            else tf.identity
+            else tf.keras.layers.Activation("linear", name="classifier")
         )
         self.classifier_distill = (
             TFLevitClassificationLayer(
-                input_dim=config.hidden_sizes[-1], output_dim=config.num_labels, name="classifier_distill"
+                input_dim=config.hidden_sizes[-1],
+                output_dim=config.num_labels,
+                name="classifier_distill",
             )
             if config.num_labels > 0
-            else tf.identity
+            else tf.keras.layers.Activation("linear", name="classifier_distill")
         )
 
     @unpack_inputs
@@ -1020,9 +1030,8 @@ class TFLevitForImageClassificationWithTeacher(TFLevitPreTrainedModel):
         sequence_output = tf.math.reduce_mean(sequence_output, axis=1)
 
         # Apply the classifier heads and obtain the `cls_logits` and `distill_logits`
-        cls_logits, distill_logits = self.classifier(sequence_output, training=training), self.classifier_distill(
-            sequence_output, training=training
-        )
+        cls_logits = self.classifier(sequence_output, training=training)
+        distill_logits = self.classifier_distill(sequence_output, training=training)
 
         # According to the paper, the cls and distill logits are averaged
         logits = (cls_logits + distill_logits) / 2
