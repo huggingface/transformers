@@ -29,7 +29,7 @@ if is_torch_available():
 
 @require_torch
 @slow
-class Trillson_efficientModelTester(unittest.TestCase):
+class Trillsson_efficientModelTester(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
@@ -58,7 +58,7 @@ class Trillson_efficientModelTester(unittest.TestCase):
         EXPECTED_SHAPE = torch.Size((1, 1024))
         self.assertEqual(last_hidden_state.shape, EXPECTED_SHAPE)
 
-        EXPECTED_SUM = torch.tensor(1258.8671)
+        EXPECTED_SUM = torch.tensor(1258.8669)
         self.assertTrue(torch.allclose(torch.sum(last_hidden_state.abs()), EXPECTED_SUM))
 
     @slow
@@ -81,7 +81,7 @@ class Trillson_efficientModelTester(unittest.TestCase):
         EXPECTED_SHAPE = torch.Size((2, 1024))
         self.assertEqual(last_hidden_state.shape, EXPECTED_SHAPE)
 
-        EXPECTED_SUM = torch.tensor(2458.5457)
+        EXPECTED_SUM = torch.tensor(2458.5454)
         self.assertTrue(torch.allclose(torch.sum(last_hidden_state.abs()), EXPECTED_SUM))
 
     @slow
@@ -104,5 +104,5 @@ class Trillson_efficientModelTester(unittest.TestCase):
         EXPECTED_SHAPE = torch.Size((4, 1024))
         self.assertEqual(last_hidden_state.shape, EXPECTED_SHAPE)
 
-        EXPECTED_SUM = torch.tensor(4763.9116)
+        EXPECTED_SUM = torch.tensor(4763.9111)
         self.assertTrue(torch.allclose(torch.sum(last_hidden_state.abs()), EXPECTED_SUM))
