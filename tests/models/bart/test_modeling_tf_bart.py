@@ -29,7 +29,7 @@ from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFBartForConditionalGeneration, TFBartModel
+    from transformers import TFBartForConditionalGeneration, TFBartForSequenceClassification, TFBartModel
 
 
 @require_tf
@@ -141,7 +141,6 @@ class TFBartModelTester:
         # test that outputs are equal for slice
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
-
 def prepare_bart_inputs_dict(
     config,
     input_ids,
@@ -181,7 +180,7 @@ def prepare_bart_inputs_dict(
 
 @require_tf
 class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TFBartForConditionalGeneration, TFBartModel) if is_tf_available() else ()
+    all_model_classes = (TFBartForConditionalGeneration, TFBartForSequenceClassification, TFBartModel) if is_tf_available() else ()
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
@@ -218,7 +217,7 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
                 assert x is None
                 name = model.get_bias()
                 assert name is None
-
+    
     @tooslow
     def test_saved_model_creation(self):
         pass
@@ -257,6 +256,13 @@ class TFBartHeadTests(unittest.TestCase):
             decoder_start_token_id=2,
         )
         return config, input_ids, batch_size
+
+    def test_sequence_classification_forward(self):
+        config, input_ids, batch_size = self._get_config_and_data()
+        model = TFBartForSequenceClassification(config=config)
+        outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
+        expected_shape = (batch_size, config.num_labels)
+        self.parent.assertEqual(outputs.logits.shape, expected_shape)
 
     def test_lm_forward(self):
         config, input_ids, batch_size = self._get_config_and_data()
