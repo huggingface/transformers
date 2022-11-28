@@ -16,9 +16,9 @@
 import inspect
 import unittest
 
-from transformers import GITConfig, GITVisionConfig, is_torch_available
+from transformers import GITConfig, GITProcessor, GITVisionConfig, is_torch_available, is_vision_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -30,6 +30,10 @@ if is_torch_available():
 
     from transformers import MODEL_FOR_PRETRAINING_MAPPING, GITForCausalLM, GITModel, GITVisionModel
     from transformers.models.git.modeling_git import GIT_PRETRAINED_MODEL_ARCHIVE_LIST
+
+
+if is_vision_available():
+    from PIL import Image
 
 
 class GITVisionModelTester:
@@ -381,8 +385,22 @@ class GITModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
+@require_vision
 class GITModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_no_head_absolute_embedding(self):
+    def test_inference_image_captioning(self):
+        processor = GITProcessor.from_pretrained("nielsr/git-base")
+        model = GITForCausalLM.from_pretrained("nielsr/git-base")
+        model.to(torch_device)
 
-        raise NotImplementedError("To do")
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        inputs = processor(images=image, return_tensors="pt")
+        pixel_values = inputs.pixel_values.to(torch_device)
+        input_ids = torch.tensor([[101]]).to(torch_device)
+
+        generated_ids = model.generate(input_ids, pixel_values=pixel_values, max_length=20)
+        generated_caption = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        expected_shape = torch.Size((1, 8))
+        self.assertEqual(generated_ids.shape, expected_shape)
+        self.assertEquals(generated_caption, "two cats laying on a couch")

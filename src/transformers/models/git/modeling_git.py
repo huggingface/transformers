@@ -52,7 +52,8 @@ _CONFIG_FOR_DOC = "GITConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
 
 GIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/git-base",
+    # TODO update checkpoints
+    "nielsr/git-base",
     # See all GIT models at https://huggingface.co/models?filter=git
 ]
 
