@@ -197,15 +197,6 @@ class CoreAttention(torch.nn.Module):
         # [sk, b, np, hn] -> [sk, b * np, hn]
         key_layer = key_layer.view(output_size[3], output_size[0] * output_size[1], -1)
 
-        # preallocting input tensor: [b * np, sq, sk]
-        matmul_input_buffer = torch.zeros(
-            output_size[0] * output_size[1],
-            output_size[2],
-            output_size[3],
-            dtype=query_layer.dtype,
-            device=query_layer.device
-        )
-
         # Raw attention scores. [b * np, sq, sk]
         if query_layer.device == torch.device('cpu'):
             # We have this due to a bug in pytorch where torch.badbmm gives random nans on cpu
@@ -215,6 +206,15 @@ class CoreAttention(torch.nn.Module):
                 key_layer.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
             ) * (1.0 / self.norm_factor) if self.normalize_attention_scores else 1.0
         else:
+            # preallocating input tensor: [b * np, sq, sk]
+            matmul_input_buffer = torch.empty(
+                output_size[0] * output_size[1],
+                output_size[2],
+                output_size[3],
+                dtype=query_layer.dtype,
+                device=query_layer.device
+            )
+
             matmul_result = torch.baddbmm(
                 matmul_input_buffer,
                 query_layer.transpose(0, 1),  # [b * np, sq, hn]
@@ -230,7 +230,6 @@ class CoreAttention(torch.nn.Module):
         # Update attention mask for inference. [b, np, sq, sk]
         # ==================================================
 
-        # if use_cache:
         with torch.no_grad():
             if layer_past is not None:
                 causal_mask = causal_mask[
@@ -284,13 +283,16 @@ class CoreAttention(torch.nn.Module):
 class GptSw3Attention(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
-        normalize_attention_scores = True                   # This is verified correct!         # TODO: use from config
-        precision = 32                                      # TODO: Verify that this is correct # TODO: use from config
-        apply_query_key_layer_scaling = True                # This is verified correct          # TODO: use from config
-        attention_dropout = 0.1                             # TODO: Verify that this is correct # TODO: use from config
-        self.get_key_value = True                           # TODO: Verify that this is correct # TODO: Safely remove this
-        self.layer_idx = max(1, layer_idx)  # In nemo megatron they use max(1, layer_number) instead of layer_number+1.
 
+        precision = 32  # TODO: Verify that this is correct # TODO: use from config
+
+        # normalize_attention_scores = True                   # This is verified correct!         # TODO: use from config
+        # apply_query_key_layer_scaling = True                # This is verified correct          # TODO: use from config
+
+        self.normalize_attention_scores = config.normalize_attention_scores
+        self.apply_query_key_layer_scaling = config.apply_query_key_layer_scaling
+        self.attention_dropout = config.attn_pdrop
+        self.layer_idx = max(1, layer_idx)  # In nemo megatron they use max(1, layer_number) instead of layer_number+1.
         self.hidden_size = config.hidden_size
         self.num_attention_heads = config.num_attention_heads
         self.hidden_size_per_attention_head = self.hidden_size // self.num_attention_heads
@@ -300,9 +302,9 @@ class GptSw3Attention(nn.Module):
             num_attention_heads=self.num_attention_heads,
             hidden_size=self.hidden_size,
             precision=precision,
-            apply_query_key_layer_scaling=apply_query_key_layer_scaling,
-            attention_dropout=attention_dropout,
-            normalize_attention_scores=normalize_attention_scores,
+            apply_query_key_layer_scaling=self.apply_query_key_layer_scaling,
+            attention_dropout=self.attention_dropout,
+            normalize_attention_scores=self.normalize_attention_scores,
         )
         self.c_attn = nn.Linear(self.hidden_size, 3 * self.hidden_size)
         self.c_proj = nn.Linear(self.hidden_size, self.hidden_size)
@@ -326,18 +328,12 @@ class GptSw3Attention(nn.Module):
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
-        # Self-attention layer takes input with size [s, b, h]
-        # and returns output of the same size.
-
-
         # The Nemo attention assumes that the input hidden states have [sq, b, h] shape.
         # Huggingface input hidden states have [b, sq, h] shape.
         # hidden_states: [b, sq, h] -> [sq, b, h]
         hidden_states = hidden_states.transpose(0, 1)
 
-        # If no attention mask is provided, we just make a causal mask.
         sq, b, h = hidden_states.shape
-        # TODO: Figure out how to create attention mask with use_cache=True
         causal_mask = torch.tril(torch.ones((b, 2048, 2048), device=hidden_states.device)).view(b, 1, 2048, 2048)
         causal_mask = causal_mask < 0.5
 
@@ -362,7 +358,6 @@ class GptSw3Attention(nn.Module):
         (query_layer, key_layer, value_layer) = self._split_tensor_along_last_dim(mixed_x_layer, 3)
 
         if layer_past is not None:
-            # TODO: Follow hf caching format, which means convert it to gpt-sw3 compatible format here.
             past_key, past_value = layer_past
 
             # Rearrange dimensions from hf to nemo format.
@@ -376,9 +371,9 @@ class GptSw3Attention(nn.Module):
 
         if use_cache is True:
             # Rearrange dimensions from nemo to hf format.
-            # key: [sq, b, np, hn] -> [b, np, hn, sq]  # TODO: Verify that this is the hf format.
+            # key: [sq, b, np, hn] -> [b, np, hn, sq]
             stored_key_layer = key_layer.permute(1, 2, 3, 0)
-            # value: [sq, b, np, hn] -> [b, np, sq, hn]  # TODO: Verify that this is the hf format.
+            # value: [sq, b, np, hn] -> [b, np, sq, hn]
             stored_value_layer = value_layer.permute(1, 2, 0, 3)
             present = (stored_key_layer, stored_value_layer)
         else:
@@ -489,7 +484,6 @@ class GptSw3Block(nn.Module):
         # residual connection
         hidden_states = residual + feed_forward_hidden_states
 
-        # TODO: Make sure cache works correctly. Outputs comes from attention so need to verify what is returned.
         if use_cache:
             outputs = (hidden_states,) + outputs
         else:

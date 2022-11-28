@@ -113,11 +113,11 @@ def convert_megatron_checkpoint(sd_megatron, config):
     """
     Converts a Megatron checkpoint to a HuggingFace GPT-SW3 checkpoint.
     """
-    n_positions = config.n_positions
+    # n_positions = config.n_positions
     layers = config.n_layer
     vocab_size = config.vocab_size
-    heads = config.n_head
-    hidden_size_per_head = config.n_embd // config.n_head
+    # heads = config.n_head
+    # hidden_size_per_head = config.n_embd // config.n_head
 
     word_embeddings = sd_megatron["model.language_model.embedding.word_embeddings.weight"][: vocab_size, :]
     sd_hf = {
@@ -128,18 +128,12 @@ def convert_megatron_checkpoint(sd_megatron, config):
 
     pf = "model.language_model.encoder.layers."
     for i in range(layers):
-        # causal_mask = torch.tril(torch.ones((n_positions, n_positions), dtype=torch.uint8))
-        # causal_mask = causal_mask.view(1, 1, n_positions, n_positions)
         sd_hf[f"transformer.h.{i}.ln_1.weight"] = sd_megatron[f"{pf}{i}.input_layernorm.weight"]
         sd_hf[f"transformer.h.{i}.ln_1.bias"] = sd_megatron[f"{pf}{i}.input_layernorm.bias"]
-        # sd_hf[f"transformer.h.{i}.attn.bias"] = causal_mask
-        # sd_hf[f"transformer.h.{i}.attn.masked_bias"] = torch.tensor(-1e4, dtype=torch.bfloat16)
         val1 = sd_megatron[f"{pf}{i}.self_attention.query_key_value.weight"]
-        # out_val = fix_query_key_value_ordering(val, 3, heads, hidden_size_per_head)
-        sd_hf[f"transformer.h.{i}.attn.c_attn.weight"] = val1 # out_val
+        sd_hf[f"transformer.h.{i}.attn.c_attn.weight"] = val1
         val2 = sd_megatron[f"{pf}{i}.self_attention.query_key_value.bias"]
-        # out_val = fix_query_key_value_ordering(val, 3, heads, hidden_size_per_head)
-        sd_hf[f"transformer.h.{i}.attn.c_attn.bias"] = val2 # out_val
+        sd_hf[f"transformer.h.{i}.attn.c_attn.bias"] = val2
         sd_hf[f"transformer.h.{i}.attn.c_proj.weight"] = sd_megatron[f"{pf}{i}.self_attention.dense.weight"]
         sd_hf[f"transformer.h.{i}.attn.c_proj.bias"] = sd_megatron[f"{pf}{i}.self_attention.dense.bias"]
         sd_hf[f"transformer.h.{i}.ln_2.weight"] = sd_megatron[f"{pf}{i}.post_attention_layernorm.weight"]
@@ -169,13 +163,12 @@ def copy_config(config_hf, config_megatron):
     config_hf.attn_pdrop = 0.1
     config_hf.layer_norm_epsilon = config_megatron["layernorm_epsilon"]  # 1e-5
     config_hf.initializer_range = config_megatron["init_method_std"]  # 0.02
-    config_hf.scale_attn_weights = config_megatron["apply_query_key_layer_scaling"]  # True
+    config_hf.apply_query_key_layer_scaling = config_megatron["apply_query_key_layer_scaling"]  # True
     config_hf.normalize_attention_scores = True
     config_hf.use_cache = False
-    config_hf.bos_token_id = 1
-    config_hf.eos_token_id = 1
-    config_hf.pad_token_id = 1
-
+    config_hf.bos_token_id = 3
+    config_hf.eos_token_id = 3
+    config_hf.pad_token_id = 3
     return config_hf
 
 
