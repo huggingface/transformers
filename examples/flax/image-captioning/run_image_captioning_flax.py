@@ -506,7 +506,9 @@ def main():
     if data_args.image_column is None:
         if dataset_columns is None:
             raise ValueError(
-                f"`--dataset_name` {data_args.dataset_name} not found in dataset '{data_args.dataset_name}'. Make sure to set `--dataset_name` to the correct dataset name, one of {', '.join(image_captioning_name_mapping.keys())}."
+                f"`--dataset_name` {data_args.dataset_name} not found in dataset '{data_args.dataset_name}'. Make sure"
+                " to set `--dataset_name` to the correct dataset name, one of"
+                f" {', '.join(image_captioning_name_mapping.keys())}."
             )
         image_column = dataset_columns[0]
     else:
@@ -518,7 +520,9 @@ def main():
     if data_args.caption_column is None:
         if dataset_columns is None:
             raise ValueError(
-                f"`--dataset_name` {data_args.dataset_name} not found in dataset '{data_args.dataset_name}'. Make sure to set `--dataset_name` to the correct dataset name, one of {', '.join(image_captioning_name_mapping.keys())}."
+                f"`--dataset_name` {data_args.dataset_name} not found in dataset '{data_args.dataset_name}'. Make sure"
+                " to set `--dataset_name` to the correct dataset name, one of"
+                f" {', '.join(image_captioning_name_mapping.keys())}."
             )
         caption_column = dataset_columns[1]
     else:
