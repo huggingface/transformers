@@ -258,6 +258,9 @@ class CoreAttention(torch.nn.Module):
         # context layer shape: [b, np, sq, hn]
         output_size = (value_layer.size(1), value_layer.size(2), query_layer.size(0), value_layer.size(3))
 
+        # HuggingFace compatible output shape: [b, np, sq, -1]
+        attention_probs_size = (value_layer.size(1), value_layer.size(2), query_layer.size(0), -1)
+
         # change view [sk, b * np, hn]
         value_layer = value_layer.view(value_layer.size(0), output_size[0] * output_size[1], -1)
 
@@ -276,6 +279,8 @@ class CoreAttention(torch.nn.Module):
         # [sq, b, np, hn] --> [sq, b, hp]
         new_context_layer_shape = context_layer.size()[:-2] + (self.hidden_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
+
+        attention_probs = attention_probs.view(attention_probs_size)
 
         return context_layer, attention_probs
 
@@ -392,7 +397,6 @@ class GptSw3Attention(nn.Module):
 
         # [sq, b, h] -> [b, sq, h]
         attn_output = attn_output.transpose(0, 1)
-        attn_weights = None  # attn_weights  # TODO: Figure out correct dim order and shape for attn_weights.
 
         outputs = (attn_output, present)
         if output_attentions:
