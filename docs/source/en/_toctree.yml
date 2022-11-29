@@ -146,6 +146,8 @@
     title: BERTology
   - local: perplexity
     title: Perplexity of fixed-length models
+  - local: pipeline_webserver
+    title: Pipelines for webserver inference
   title: Conceptual guides
 - sections:
   - sections:
