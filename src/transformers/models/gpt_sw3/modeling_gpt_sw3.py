@@ -51,7 +51,7 @@ _CONFIG_FOR_DOC = "GptSw3Config"
 _TOKENIZER_FOR_DOC = "GptSw3Tokenizer"
 
 GPT_SW3_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "",  # TODO: Add models
+    "/home/ariel/gpt_sw3/hf_new/126m/",  # TODO: Add models
     # See all gpt-sw3 models at https://huggingface.co/models?filter=gpt-sw3
 ]
 
