@@ -149,4 +149,26 @@ If you're interested in submitting a resource to be included here, please feel f
     - __call__
 
 </jax>
-</frameworkcontent>
+<tf>
+
+## TFBeitModel
+
+[[autodoc]] TFBeitModel
+    - call
+
+## TFBeitForMaskedImageModeling
+
+[[autodoc]] TFBeitForImageClassification
+    - call
+
+## TFBeitForImageClassification
+
+[[autodoc]] TFBeitForImageClassification
+    - call
+
+## TFBeitForSemanticSegmentation
+
+[[autodoc]] TFBeitForSemanticSegmentation
+    - call
+
+</tf>
