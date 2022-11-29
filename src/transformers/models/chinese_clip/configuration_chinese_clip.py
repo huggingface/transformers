@@ -200,8 +200,10 @@ class ChineseCLIPVisionConfig(PretrainedConfig):
 
     >>> # Initializing a ChineseCLIPVisionConfig with OFA-Sys/chinese-clip-vit-base-patch16 style configuration
     >>> configuration = ChineseCLIPVisionConfig()
+
     >>> # Initializing a ChineseCLIPVisionModel (with random weights) from the OFA-Sys/chinese-clip-vit-base-patch16 style configuration
     >>> model = ChineseCLIPVisionModel(configuration)
+
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
