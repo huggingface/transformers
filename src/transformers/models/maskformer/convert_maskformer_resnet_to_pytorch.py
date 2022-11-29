@@ -16,6 +16,7 @@
 
 
 import argparse
+import json
 import pickle
 from pathlib import Path
 
@@ -23,6 +24,7 @@ import torch
 from PIL import Image
 
 import requests
+from huggingface_hub import hf_hub_download
 from transformers import MaskFormerConfig, MaskFormerFeatureExtractor, MaskFormerForInstanceSegmentation, ResNetConfig
 from transformers.utils import logging
 
@@ -46,8 +48,15 @@ def get_maskformer_config(model_name: str):
         )
     config = MaskFormerConfig(backbone_config=backbone_config)
 
-    # TODO id2label mappings
-    config.num_labels = 150
+    repo_id = "huggingface/label-files"
+    if "ade" in model_name:
+        config.num_labels = 150
+        filename = "ade20k-id2label.json"
+    elif "coco" in model_name:
+        raise NotImplementedError("To do")
+
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
 
     return config
 
@@ -280,16 +289,15 @@ def convert_maskformer_checkpoint(
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
+        print(f"Saving model and feature extractor to {pytorch_dump_folder_path}")
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-        print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-        # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print("Pushing to the hub...")
+        print("Pushing model and feature extractor to the hub...")
         model.push_to_hub(f"nielsr/{model_name}")
-        # feature_extractor.push_to_hub(model_name, organization="hustvl")
+        feature_extractor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
