@@ -101,9 +101,9 @@ for (rq, out) in zip(queues, outs):
     await rq.put(out)
 ```
 
-<Warning>
+<Tip warning={true}>
 Do not activate this without checking it makes sense for your load
-</Warning>
+</Tip>
 
 The propose code is optimized for readability, not for being the best code.
 First of all there's no limit in the size of the batch, this is usually not a 
