@@ -95,7 +95,7 @@ If you use `device=n` the pipeline will automatically put the model on said devi
 This will work regardless wether you are using `PyTorch` or `Tensorflow`.
 
 ```py
->>> generator(model="openai/whisper-large", device=0)
+generator(model="openai/whisper-large", device=0)
 ```
 
 If the model is too large for a single GPU, you can also use [`accelerate`](https://huggingface.co/docs/accelerate/index) (`device_map="auto"`).
