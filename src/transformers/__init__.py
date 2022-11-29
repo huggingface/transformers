@@ -727,7 +727,7 @@ else:
     _import_structure["models.deit"].extend(["DeiTFeatureExtractor", "DeiTImageProcessor"])
     _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.conditional_detr"].append("ConditionalDetrFeatureExtractor")
-    _import_structure["models.donut"].append("DonutFeatureExtractor")
+    _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaProcessor", "FlavaImageProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
@@ -3853,7 +3853,7 @@ if TYPE_CHECKING:
         from .models.deformable_detr import DeformableDetrFeatureExtractor
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
         from .models.detr import DetrFeatureExtractor
-        from .models.donut import DonutFeatureExtractor
+        from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.flava import FlavaFeatureExtractor, FlavaImageProcessor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
