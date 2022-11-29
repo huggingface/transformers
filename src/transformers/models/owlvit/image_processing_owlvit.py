@@ -230,6 +230,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
+        **kwargs
     ) -> BatchFeature:
         """
         Prepares an image or batch of images for the model.
