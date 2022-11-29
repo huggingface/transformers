@@ -36,7 +36,6 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from .image_processing_bridgetower import build_model, adapt_position_encoding, swin_adapt_position_encoding
-from .import swin_transformer as swin
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, is_torch_greater_or_equal_than_1_10, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
