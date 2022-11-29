@@ -556,6 +556,7 @@ def resize_annotation(
     ratio_height, ratio_width = ratios
 
     new_annotation = {}
+    new_annotation["size"] = target_size
 
     for key, value in annotation.items():
         if key == "boxes":
@@ -567,8 +568,9 @@ def resize_annotation(
             scaled_area = area * (ratio_width * ratio_height)
             new_annotation["area"] = scaled_area
         elif key == "masks":
-            masks = value[:, None].astype(np.float32)
+            masks = value[:, None]
             masks = np.array([resize(mask, target_size, resample=resample) for mask in masks])
+            masks = masks.astype(np.float32)
             masks = masks[:, 0] > threshold
             new_annotation["masks"] = masks
         elif key == "size":
