@@ -70,9 +70,9 @@ def get_maskformer_config(model_name: str):
         config.num_labels = 19
         filename = "cityscapes-id2label.json"
     elif "vistas" in model_name:
-        # TODO
+        # this should be ok
         config.num_labels = 65
-        filename = "vistas-id2label.json"
+        filename = "mapillary-vistas-id2label.json"
 
     id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
