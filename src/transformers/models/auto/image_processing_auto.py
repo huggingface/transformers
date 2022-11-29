@@ -44,6 +44,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("data2vec-vision", "BeitImageProcessor"),
         ("deit", "DeiTImageProcessor"),
         ("dinat", "ViTImageProcessor"),
+        ("donut-swin", "DonutImageProcessor"),
         ("dpt", "DPTImageProcessor"),
         ("flava", "FlavaImageProcessor"),
         ("glpn", "GLPNImageProcessor"),

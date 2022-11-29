@@ -223,11 +223,12 @@ def resize(
     image,
     size: Tuple[int, int],
     resample=PILImageResampling.BILINEAR,
+    reducing_gap: Optional[int] = None,
     data_format: Optional[ChannelDimension] = None,
     return_numpy: bool = True,
 ) -> np.ndarray:
     """
-    Resizes `image` to (h, w) specified by `size` using the PIL library.
+    Resizes `image` to `(height, width)` specified by `size` using the PIL library.
 
     Args:
         image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
@@ -236,8 +237,11 @@ def resize(
             The size to use for resizing the image.
         resample (`int`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             The filter to user for resampling.
+        reducing_gap (`int`, *optional*):
+            Apply optimization by resizing the image in two steps. The bigger `reducing_gap`, the closer the result to
+            the fair resampling. See corresponding Pillow documentation for more details.
         data_format (`ChannelDimension`, *optional*):
-            The channel dimension format of the output image. If `None`, will use the inferred format from the input.
+            The channel dimension format of the output image. If unset, will use the inferred format from the input.
         return_numpy (`bool`, *optional*, defaults to `True`):
             Whether or not to return the resized image as a numpy array. If False a `PIL.Image.Image` object is
             returned.
@@ -260,7 +264,7 @@ def resize(
         image = to_pil_image(image)
     height, width = size
     # PIL images are in the format (width, height)
-    resized_image = image.resize((width, height), resample=resample)
+    resized_image = image.resize((width, height), resample=resample, reducing_gap=reducing_gap)
 
     if return_numpy:
         resized_image = np.array(resized_image)
@@ -290,7 +294,7 @@ def normalize(
         std (`float` or `Iterable[float]`):
             The standard deviation to use for normalization.
         data_format (`ChannelDimension`, *optional*):
-            The channel dimension format of the output image. If `None`, will use the inferred format from the input.
+            The channel dimension format of the output image. If unset, will use the inferred format from the input.
     """
     if isinstance(image, PIL.Image.Image):
         warnings.warn(

@@ -44,6 +44,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_donut"] = ["DonutFeatureExtractor"]
+    _import_structure["image_processing_donut"] = ["DonutImageProcessor"]
 
 
 if TYPE_CHECKING:
@@ -69,6 +70,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_donut import DonutFeatureExtractor
+        from .image_processing_donut import DonutImageProcessor
 
 else:
     import sys
