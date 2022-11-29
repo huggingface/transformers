@@ -95,7 +95,7 @@ class GptSw3ModelTester:
         self.pad_token_id = vocab_size - 1
 
     def get_large_model_config(self):
-        return GptSw3Config.from_pretrained("gpt_sw3")
+        return GptSw3Config.from_pretrained("/home/ariel/gpt_sw3/hf_new/126m/")
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -522,9 +522,9 @@ class GptSw3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     @slow
     def test_batch_generation(self):
-        model = GptSw3LMHeadModel.from_pretrained("gpt_sw3")
+        model = GptSw3LMHeadModel.from_pretrained("/home/ariel/gpt_sw3/hf_new/126m/")
         model.to(torch_device)
-        tokenizer = GptSw3Tokenizer.from_pretrained("gpt_sw3")
+        tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m")
 
         tokenizer.padding_side = "left"
 
@@ -572,8 +572,8 @@ class GptSw3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
         expected_output_sentence = [
-            "Hello, my dog is a little bit of a mess. I'm not sure if he's going",
-            "Today, I'm going to be doing a lot of research on this. I",
+            "Hello, my dog is a little bit of a mess.\n\nI'm not sure if",
+            "Today, I'm going to be a little bit more careful about what I",
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
@@ -581,9 +581,9 @@ class GptSw3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     @slow
     def test_batch_generation_2heads(self):
-        model = GptSw3DoubleHeadsModel.from_pretrained("gpt_sw3")
+        model = GptSw3DoubleHeadsModel.from_pretrained("/home/ariel/gpt_sw3/hf_new/126m/")
         model.to(torch_device)
-        tokenizer = GptSw3Tokenizer.from_pretrained("gpt_sw3")
+        tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m")
 
         tokenizer.padding_side = "left"
 
@@ -631,9 +631,14 @@ class GptSw3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
+        # TODO: Remove old example
+        # expected_output_sentence = [
+        #     "Hello, my dog is a little bit of a mess. I'm not sure if he's going",
+        #     "Today, I'm going to be doing a lot of research on this. I",
+        # ]
         expected_output_sentence = [
-            "Hello, my dog is a little bit of a mess. I'm not sure if he's going",
-            "Today, I'm going to be doing a lot of research on this. I",
+            "Hello, my dog is a little bit of a mess.\n\nI'm not sure if",
+            "Today, I'm going to be a little bit more careful about what I",
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertTrue(batch_out_sentence_tt != batch_out_sentence)  # token_type_ids should change output
@@ -656,7 +661,7 @@ class GptSw3ModelLanguageGenerationTest(unittest.TestCase):
         verify_outputs=True,
     ):
         model = GptSw3LMHeadModel.from_pretrained(
-            "gpt_sw3",
+            "/home/ariel/gpt_sw3/hf_new/126m/",
             reorder_and_upcast_attn=reorder_and_upcast_attn,
             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
         )
@@ -667,13 +672,14 @@ class GptSw3ModelLanguageGenerationTest(unittest.TestCase):
         model.to(torch_device)
 
         # The dog
-        input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)
+        input_ids = torch.tensor([[619, 2749]], dtype=torch.long, device=torch_device)
 
         # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
         # fmt: off
         expected_output_ids = [
-            464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290,
+            619, 2749, 428, 268, 2058, 1902, 4997, 346, 4312, 63443, 18, 18, 63456, 63455, 63443, 509, 358, 538, 426, 1822,
         ]
+
         # fmt: on
         output_ids = model.generate(input_ids, do_sample=False)
         if verify_outputs:
@@ -697,8 +703,8 @@ class GptSw3ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gpt_sw3_sample(self):
-        tokenizer = GptSw3Tokenizer.from_pretrained("gpt_sw3")
-        model = GptSw3LMHeadModel.from_pretrained("gpt_sw3")
+        tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m")
+        model = GptSw3LMHeadModel.from_pretrained("/home/ariel/gpt_sw3/hf_new/126m/")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -716,7 +722,7 @@ class GptSw3ModelLanguageGenerationTest(unittest.TestCase):
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
         EXPECTED_OUTPUT_STR = (
-            "Today is a nice day and if you don't know anything about the state of play during your holiday"
+            "Today is a nice day and the weather looks good! The wind has shaken the sky, but"
         )
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
         self.assertTrue(
@@ -725,8 +731,8 @@ class GptSw3ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gpt_sw3_sample_max_time(self):
-        tokenizer = GptSw3Tokenizer.from_pretrained("gpt_sw3")
-        model = GptSw3LMHeadModel.from_pretrained("gpt_sw3")
+        tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m")
+        model = GptSw3LMHeadModel.from_pretrained("/home/ariel/gpt_sw3/hf_new/126m/")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -771,8 +777,8 @@ class GptSw3ModelLanguageGenerationTest(unittest.TestCase):
             "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"
         )
 
-        gpt_sw3_tokenizer = GptSw3Tokenizer.from_pretrained("gpt_sw3-large")
-        gpt_sw3_model = GptSw3LMHeadModel.from_pretrained("gpt_sw3-large").to(torch_device)
+        gpt_sw3_tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m")
+        gpt_sw3_model = GptSw3LMHeadModel.from_pretrained("/home/ariel/gpt_sw3/hf_new/126m/").to(torch_device)
         input_ids = gpt_sw3_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
         outputs = gpt_sw3_model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
@@ -784,16 +790,13 @@ class GptSw3ModelLanguageGenerationTest(unittest.TestCase):
             [
                 "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
                 "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, "
-                "United Kingdom\n\nGoogle has a lot of data on its users and uses it to improve its products, such as "
-                "Google Now, which helps users find the information they're looking for on the web. But the company "
-                "is not the only one to collect data on its users. Facebook, for example, has its own facial "
-                "recognition technology, as well as a database of millions of photos that it uses to personalize its "
-                "News Feed.\n\nFacebook's use of data is a hot topic in the tech industry, with privacy advocates "
-                "concerned about the company's ability to keep users' information private. In a blog post last "
-                'year, Facebook CEO Mark Zuckerberg said his company would "do our best to be transparent about our '
-                'data use and how we use it."\n\n"We have made it clear that we do not sell or share your data with '
-                'third parties," Zuckerberg wrote. "If you have questions or concerns, please reach out to us at '
-                'privacy@facebook.com."\n\nGoogle declined to comment on the privacy implications of its use of data, '
-                "but said in a statement to The Associated Press that"
+                "with offices in Hong Kong (China), New York (United States), and the US.\nHistory.\nDuplex "
+                "Microsystems (DMs) are a set of 10-by-10-inch (10.5 x 10.5 cm) microscopes that are used to detect "
+                "microorganisms and other life-threatening microorganisms. DMs are made of metal-containing materials "
+                "such as carbon nanotubes (CNTs), which are used to detect microorganisms. The DMs are designed to "
+                "detect microorganisms by detecting chemical reactions, such as nitroglycerin (NG) and ammonia (NH4)."
+                "\nIn 2010, Google announced it would invest $1.5 billion in the development of a new DM system, which "
+                "would be based on deep-dissipation microscopes. The project was completed in 2012, and has received "
+                "funding from the National Science"
             ],
         )
