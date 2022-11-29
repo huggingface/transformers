@@ -348,6 +348,7 @@ class ChineseCLIPConfig(PretrainedConfig):
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
+        self.initializer_range = 0.02
 
     @classmethod
     def from_text_vision_configs(
