@@ -44,7 +44,7 @@ The code snippet below shows how to compute image & text features and similariti
 >>> image_features = image_features / image_features.norm(p=2, dim=-1, keepdim=True)  # normalize
 
 >>> # compute text features
->>> inputs = tokenizer(texts, padding=True, return_tensors="pt")
+>>> inputs = processor(text=texts, padding=True, return_tensors="pt")
 >>> text_features = model.get_text_features(**inputs)
 >>> text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True)  # normalize
 
