@@ -697,7 +697,7 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
         elif isinstance(module, ChineseCLIPTextEmbeddings):
-            nn.init.normal_(module.word_embeddings.weight, mean=0.0, std=self.config.initializer_range)           
+            nn.init.normal_(module.word_embeddings.weight, mean=0.0, std=self.config.initializer_range)
             nn.init.normal_(module.position_embeddings.weight, mean=0.0, std=self.config.initializer_range)
             nn.init.normal_(module.token_type_embeddings.weight, mean=0.0, std=self.config.initializer_range)
             for embedding in [module.word_embeddings, module.position_embeddings, module.token_type_embeddings]:
@@ -735,7 +735,7 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()              
+                module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, ChineseCLIPVisionEncoder) or isinstance(module, ChineseCLIPTextEncoder):
