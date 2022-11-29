@@ -677,38 +677,6 @@ class ChineseCLIPTextPooler(nn.Module):
         return pooled_output
 
 
-class ChineseCLIPTextPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = ChineseCLIPTextConfig
-    base_model_prefix = "chinese_clip"
-    supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ChineseCLIPTextEncoder):
-            module.gradient_checkpointing = value
-
-
 class ChineseCLIPPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -730,6 +698,13 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+        elif isinstance(module, ChineseCLIPTextEmbeddings):
+            nn.init.normal_(module.word_embeddings, mean=0.0, std=self.config.initializer_range)           
+            nn.init.normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.token_type_embeddings, mean=0.0, std=self.config.initializer_range)
+            for embedding in [module.word_embeddings, module.position_embeddings, module.token_type_embeddings]:
+                if embedding.padding_idx is not None:
+                    embedding.weight.data[embedding.padding_idx].zero_()
         elif isinstance(module, ChineseCLIPVisionAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
@@ -759,8 +734,10 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()              
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, ChineseCLIPVisionEncoder) or isinstance(module, ChineseCLIPTextEncoder):
@@ -1131,7 +1108,7 @@ class ChineseCLIPVisionTransformer(nn.Module):
     CHINESE_CLIP_START_DOCSTRING,
 )
 # Copied from transformers.models.bert.modeling_bert.BertModel with BERT->CHINESE_CLIP,Bert->ChineseCLIPText
-class ChineseCLIPTextModel(ChineseCLIPTextPreTrainedModel):
+class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of

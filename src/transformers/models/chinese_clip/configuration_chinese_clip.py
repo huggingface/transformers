@@ -119,6 +119,7 @@ class ChineseCLIPTextConfig(PretrainedConfig):
         max_position_embeddings=512,
         type_vocab_size=2,
         initializer_range=0.02,
+        initializer_factor=1.0,
         layer_norm_eps=1e-12,
         pad_token_id=0,
         position_embedding_type="absolute",
@@ -139,6 +140,7 @@ class ChineseCLIPTextConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
+        self.initializer_factor = initializer_factor
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
