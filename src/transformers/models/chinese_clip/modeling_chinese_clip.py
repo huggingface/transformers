@@ -55,8 +55,8 @@ CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# contrastive loss function, adapted from
-# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/ChineseCLIP.html
+# Copied from transformers.models.clip.modeling_clip.contrastive_loss
+# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
