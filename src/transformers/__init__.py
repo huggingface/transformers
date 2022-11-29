@@ -2063,6 +2063,7 @@ else:
             "SwinForMaskedImageModeling",
             "SwinModel",
             "SwinPreTrainedModel",
+            "SwinBackbone",
         ]
     )
     _import_structure["models.swinv2"].extend(
@@ -4997,6 +4998,7 @@ if TYPE_CHECKING:
         )
         from .models.swin import (
             SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SwinBackbone,
             SwinForImageClassification,
             SwinForMaskedImageModeling,
             SwinModel,
