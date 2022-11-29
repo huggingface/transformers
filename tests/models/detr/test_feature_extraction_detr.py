@@ -341,7 +341,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         expected_class_labels = torch.tensor([17, 17, 63, 75, 75, 93])
         self.assertTrue(torch.allclose(encoding["labels"][0]["class_labels"], expected_class_labels))
         # verify masks
-        expected_masks_sum = 822338
+        expected_masks_sum = 822873
         self.assertEqual(encoding["labels"][0]["masks"].sum().item(), expected_masks_sum)
         # verify orig_size
         expected_orig_size = torch.tensor([480, 640])
