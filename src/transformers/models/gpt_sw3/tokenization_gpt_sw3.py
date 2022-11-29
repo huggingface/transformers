@@ -222,8 +222,14 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
                     ) -> Union[List[int], List[List[int]], "torch.Tensor"]:
         """
         Encodes a text or batch of texts to token ids using preprocessing and the raw SP tokenizer. This has reduced
-        functionality but is often much faster. Does NOT handle special tokens correctly, these can manually be added
-        as ids afterwards. Otherwise, use default HuggingFace tokenization methods.
+        functionality but is often much faster.
+
+        Does NOT handle special tokens correctly, these can manually be added
+        as ids afterwards.
+
+        Does NOT support padding, these can manually be added as ids afterwards.
+
+        Use default HuggingFace tokenization methods for full functionality.
 
         Args:
             text (`str` or `List[str]`): One or several text(s) to convert to token ids.
