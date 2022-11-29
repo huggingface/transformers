@@ -16,16 +16,14 @@
 
 
 import math
+from dataclasses import dataclass
 import warnings
-from multiprocessing import pool
 from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
-from torch.utils.checkpoint import checkpoint
 
-from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...models.longformer import LongformerConfig, LongformerModel
@@ -45,6 +43,7 @@ from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
     add_start_docstrings,
+    add_end_docstrings,
     is_torch_fx_proxy,
     logging,
     replace_return_docstrings,
@@ -76,6 +75,17 @@ def pad_block_embeddings(block_embeddings, pad_length):
         dtype=block_embeddings.dtype,
     )
     return torch.cat([block_embeddings[:, :pad_length, :], padding_tensor], dim=1)
+
+
+@add_end_docstrings(
+    """
+        frontier_predictions: (`torch.FloatTensor`, *optional*, of shape `(batch_size, sequence_length, 1)`):
+            Probability scores of being a frontier as predicted by the FrontierPredictor module.
+    """
+)
+@dataclass
+class MantaSeq2SeqModelOutput(Seq2SeqModelOutput):
+    frontier_predictions: Optional[torch.FloatTensor] = None
 
 
 class MantaFrontierPredictor(nn.Module):
@@ -690,17 +700,17 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
     def get_input_embeddings(self):
         return self.byte_embeddings
 
     def set_input_embeddings(self, new_embeddings):
         self.byte_embeddings = new_embeddings
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def get_output_embeddings(self):
+        return self.lm_head
 
     def get_encoder(self):
         return self.encoder_decoder.encoder
@@ -723,7 +733,7 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
 
         pooled_representations = self.pooler(frontier_predictions, byte_embeddings)
 
-        return pooled_representations
+        return pooled_representations, frontier_predictions
 
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -744,7 +754,7 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
+    ) -> Union[Tuple[torch.FloatTensor], MantaSeq2SeqModelOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
@@ -789,10 +799,12 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
                 warnings.warn(__HEAD_MASK_WARNING_MSG, FutureWarning)
                 decoder_head_mask = head_mask
 
+        frontier_predictions = None
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
-
-            pooled_representations = self._compute_pooled_representations(input_ids, attention_mask, inputs_embeds)
+            pooled_representations, frontier_predictions = self._compute_pooled_representations(
+                input_ids, attention_mask, inputs_embeds
+            )
             # Convert encoder inputs in embeddings if needed
             encoder_outputs = self.encoder_decoder.encoder(
                 inputs_embeds=pooled_representations,
@@ -802,6 +814,7 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
                 return_dict=return_dict,
             )
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            frontier_predictions = None
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
@@ -817,8 +830,8 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
         # Decode
         decoder_outputs = self.encoder_decoder.decoder(
             input_ids=decoder_input_ids,
-            inputs_embeds=decoder_inputs_embeds,
             attention_mask=decoder_attention_mask,
+            inputs_embeds=decoder_inputs_embeds,
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
             head_mask=decoder_head_mask,
@@ -830,6 +843,11 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
         )
 
         sequence_output = decoder_outputs[0]
+
+        if self.config.tie_word_embeddings:
+            # Rescale output before projecting on vocab
+            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
+            sequence_output = sequence_output * (self.model_dim**-0.5)
 
         lm_logits = self.lm_head(sequence_output)
 
@@ -843,7 +861,7 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
             output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
             return ((loss,) + output) if loss is not None else output
 
-        return Seq2SeqLMOutput(
+        return MantaSeq2SeqModelOutput(
             loss=loss,
             logits=lm_logits,
             past_key_values=decoder_outputs.past_key_values,
@@ -853,6 +871,7 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
+            frontier_predictions=frontier_predictions,
         )
 
     def prepare_inputs_for_generation(
