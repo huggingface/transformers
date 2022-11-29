@@ -572,6 +572,10 @@ def is_tensorflow_text_available():
     return importlib.util.find_spec("tensorflow_text") is not None
 
 
+def is_keras_nlp_available():
+    return importlib.util.find_spec("keras_nlp") is not None
+
+
 def is_in_notebook():
     try:
         # Test adapted from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
