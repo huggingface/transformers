@@ -33,7 +33,7 @@ While each task has an associated [`pipeline`], it is simpler to use the general
 ```py
 >>> from transformers import pipeline
 
->>> generator = pipeline(task="automatic-speech-generation")
+>>> generator = pipeline(task="automatic-speech-recognition")
 ```
 
 2. Pass your input text to the [`pipeline`]:
@@ -121,10 +121,10 @@ to the model (which is on GPU where batching is more likely to help), without an
 The output should always match what you would have received without batching. It is only meant as a way to help 
 get more speed out of the pipeline. 
 
-### Task specific `return_timestamps`.
+### Task specific parameters
 
 All tasks provide task specific parameters which should help you get the job done.
-For instance [https://huggingface.co/docs/transformers/main_classes/pipelines#transformers.AutomaticSpeechRecognitionPipeline.__call__]() # TODO fix link
+For instance, the [`transformers.AutomaticSpeechRecognitionPipeline.__call__`] method
 
 Here we can see `return_timestamps` which sounds promising for subtitling videos.
 
