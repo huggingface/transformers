@@ -154,7 +154,7 @@ even receiving an error.
 ### Dynamic batching
 
 In general batching is not necessarily an improvement over passing item 1 at 
-a time: [`main_classes.ppipelines.pipeline_batching`]. But it can be very effective
+a time: [`main_classes.pipelines.pipeline_batching`]. But it can be very effective
 when used on the correct setting. For reference in the API, there's is no dynamic
 batching by default (too much opportunity for slowdown). But for the Bloom inference
 which is a very large model, it is **essential** to provide a decent experience for everyone.
