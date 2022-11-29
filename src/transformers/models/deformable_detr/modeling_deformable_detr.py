@@ -41,6 +41,7 @@ from ...file_utils import (
 )
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import meshgrid
 from ...utils import is_ninja_available, logging
 from .configuration_deformable_detr import DeformableDetrConfig
 from .load_custom import load_cuda_kernels
@@ -1144,9 +1145,10 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
         reference_points_list = []
         for level, (height, width) in enumerate(spatial_shapes):
 
-            ref_y, ref_x = torch.meshgrid(
+            ref_y, ref_x = meshgrid(
                 torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
                 torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
+                indexing="ij",
             )
             # TODO: valid_ratios could be useless here. check https://github.com/fundamentalvision/Deformable-DETR/issues/36
             ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, level, 1] * height)
@@ -1555,9 +1557,10 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
             valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
-            grid_y, grid_x = torch.meshgrid(
+            grid_y, grid_x = meshgrid(
                 torch.linspace(0, height - 1, height, dtype=torch.float32, device=enc_output.device),
                 torch.linspace(0, width - 1, width, dtype=torch.float32, device=enc_output.device),
+                indexing="ij",
             )
             grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)
 

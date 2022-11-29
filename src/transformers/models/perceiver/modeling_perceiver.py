@@ -30,7 +30,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -2704,7 +2704,7 @@ def build_linear_positions(index_dims, output_range=(-1.0, 1.0)):
         return torch.linspace(start=output_range[0], end=output_range[1], steps=n_xels_per_dim, dtype=torch.float32)
 
     dim_ranges = [_linspace(n_xels_per_dim) for n_xels_per_dim in index_dims]
-    array_index_grid = torch.meshgrid(*dim_ranges)
+    array_index_grid = meshgrid(*dim_ranges, indexing="ij")
 
     return torch.stack(array_index_grid, dim=-1)
 
