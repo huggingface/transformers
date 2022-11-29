@@ -75,6 +75,10 @@ def is_wandb_available():
     return importlib.util.find_spec("wandb") is not None
 
 
+def is_clearml_available():
+    return importlib.util.find_spec("clearml") is not None
+
+
 def is_comet_available():
     return _has_comet
 
@@ -528,6 +532,8 @@ def get_available_reporting_integrations():
         integrations.append("wandb")
     if is_codecarbon_available():
         integrations.append("codecarbon")
+    if is_clearml_available():
+        integrations.append("clearml")
     return integrations
 
 
@@ -1299,6 +1305,112 @@ class CodeCarbonCallback(TrainerCallback):
             self.tracker.stop()
 
 
+class ClearMLCallback(TrainerCallback):
+    """
+    A [`TrainerCallback`] that sends the logs to [ClearML](https://clear.ml/).
+
+    Environment:
+            CLEARML_PROJECT (`str`, *optional*, defaults to `"HuggingFace Transformers"`):
+                ClearML project name.
+            CLEARML_TASK (`str`, *optional* defaults to `"Trainer"`):
+                ClearML task name.
+    """
+
+    def __init__(self):
+        if is_clearml_available():
+            import clearml
+
+            self._clearml = clearml
+        else:
+            raise RuntimeError("ClearMLCallback requires 'clearml' to be installed. Run `pip install clearml`.")
+
+        self._initialized = False
+        self._clearml_task = None
+
+    def setup(self, args, state, model, tokenizer, **kwargs):
+        if self._clearml is None:
+            return
+        if state.is_world_process_zero:
+            logger.info("Automatic ClearML logging enabled.")
+            if self._clearml_task is None:
+                self._clearml_task = self._clearml.Task.init(
+                    project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
+                    task_name=os.getenv("CLEARML_TASK", "Trainer"),
+                    auto_connect_frameworks={"tensorboard": False, "pytorch": False},
+                    output_uri=True,
+                )
+                self._initialized = True
+                logger.info("ClearML Task has been initialized.")
+
+            self._clearml_task.connect(args, "Args")
+            if hasattr(model, "config") and model.config is not None:
+                self._clearml_task.connect(model.config, "Model Configuration")
+
+    def on_train_begin(self, args, state, control, model=None, tokenizer=None, **kwargs):
+        if self._clearml is None:
+            return
+        if state.is_hyper_param_search:
+            self._initialized = False
+        if not self._initialized:
+            self.setup(args, state, model, tokenizer, **kwargs)
+
+    def on_train_end(self, args, state, control, model=None, tokenizer=None, metrics=None, logs=None, **kwargs):
+        if self._clearml is None:
+            return
+        if self._clearml_task and state.is_world_process_zero:
+            # Close ClearML Task at the end end of training
+            self._clearml_task.close()
+
+    def on_log(self, args, state, control, model=None, tokenizer=None, logs=None, **kwargs):
+        if self._clearml is None:
+            return
+        if not self._initialized:
+            self.setup(args, state, model, tokenizer, **kwargs)
+        if state.is_world_process_zero:
+            eval_prefix = "eval_"
+            eval_prefix_len = len(eval_prefix)
+            test_prefix = "test_"
+            test_prefix_len = len(test_prefix)
+            single_value_scalars = [
+                "train_runtime",
+                "train_samples_per_second",
+                "train_steps_per_second",
+                "train_loss",
+                "total_flos",
+                "epoch",
+            ]
+            for k, v in logs.items():
+                if isinstance(v, (int, float)):
+                    if k in single_value_scalars:
+                        self._clearml_task.get_logger().report_single_value(name=k, value=v)
+                    elif k.startswith(eval_prefix):
+                        self._clearml_task.get_logger().report_scalar(
+                            title=k[eval_prefix_len:], series="eval", value=v, iteration=state.global_step
+                        )
+                    elif k.startswith(test_prefix):
+                        self._clearml_task.get_logger().report_scalar(
+                            title=k[test_prefix_len:], series="test", value=v, iteration=state.global_step
+                        )
+                    else:
+                        self._clearml_task.get_logger().report_scalar(
+                            title=k, series="train", value=v, iteration=state.global_step
+                        )
+                else:
+                    logger.warning(
+                        "Trainer is attempting to log a value of "
+                        f'"{v}" of type {type(v)} for key "{k}" as a scalar. '
+                        "This invocation of ClearML logger's  report_scalar() "
+                        "is incorrect so we dropped this attribute."
+                    )
+
+    def on_save(self, args, state, control, **kwargs):
+        if self._clearml_task and state.is_world_process_zero:
+            ckpt_dir = f"checkpoint-{state.global_step}"
+            artifact_path = os.path.join(args.output_dir, ckpt_dir)
+            logger.info(f"Logging checkpoint artifacts in {ckpt_dir}. This may take time.")
+            self._clearml_task.update_output_model(artifact_path, iteration=state.global_step, auto_delete_file=False)
+
+
 INTEGRATION_TO_CALLBACK = {
     "azure_ml": AzureMLCallback,
     "comet_ml": CometCallback,
@@ -1307,6 +1419,7 @@ INTEGRATION_TO_CALLBACK = {
     "tensorboard": TensorBoardCallback,
     "wandb": WandbCallback,
     "codecarbon": CodeCarbonCallback,
+    "clearml": ClearMLCallback,
 }
 
 
@@ -1316,4 +1429,5 @@ def get_reporting_integration_callbacks(report_to):
             raise ValueError(
                 f"{integration} is not supported, only {', '.join(INTEGRATION_TO_CALLBACK.keys())} are supported."
             )
+
     return [INTEGRATION_TO_CALLBACK[integration] for integration in report_to]

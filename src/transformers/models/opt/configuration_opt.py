@@ -78,12 +78,12 @@ class OPTConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import OPTModel, OPTConfig
+    >>> from transformers import OPTConfig, OPTModel
 
     >>> # Initializing a OPT facebook/opt-large style configuration
     >>> configuration = OPTConfig()
 
-    >>> # Initializing a model from the facebook/opt-large style configuration
+    >>> # Initializing a model (with random weights) from the facebook/opt-large style configuration
     >>> model = OPTModel(configuration)
 
     >>> # Accessing the model configuration

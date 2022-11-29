@@ -27,6 +27,7 @@ Wheel files are available for the following Python versions:
 
 | Extension Version | Python 3.6 | Python 3.7 | Python 3.8 | Python 3.9 | Python 3.10 |
 | :---------------: | :--------: | :--------: | :--------: | :--------: | :---------: |
+| 1.12.100          |            | √          | √          | √          | √           |
 | 1.12.0            |            | √          | √          | √          | √           |
 | 1.11.0            |            | √          | √          | √          | √           |
 | 1.10.0            | √          | √          | √          | √          |             |
@@ -41,6 +42,7 @@ Versions of oneCCL and PyTorch must match.
 <Tip warning={true}>
 
 oneccl_bindings_for_pytorch 1.12.0 prebuilt wheel does not work with PyTorch 1.12.1 (it is for PyTorch 1.12.0)
+PyTorch 1.12.1 should work with oneccl_bindings_for_pytorch 1.12.100
 
 </Tip>
 
@@ -49,7 +51,7 @@ Use this standards-based MPI implementation to deliver flexible, efficient, scal
 
 oneccl_bindings_for_pytorch is installed along with the MPI tool set. Need to source the environment before using it.
 
-for Intel® oneCCL 1.12.0
+for Intel® oneCCL >= 1.12.0
 ```
 oneccl_bindings_for_pytorch_path=$(python -c "from oneccl_bindings_for_pytorch import cwd; print(cwd)")
 source $oneccl_bindings_for_pytorch_path/env/setvars.sh

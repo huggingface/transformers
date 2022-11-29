@@ -494,7 +494,7 @@ tres argumentos que necesitas conocer para ello son `padding`, `truncation` y `m
 
 - `padding` controla el aplicarme padding al texto. Puede ser un booleano o una cadena que debe ser:
 
-  - `True` o `'longest'` para aplicar el pad hasta la secuencia más larga del batch (no apliques el padding si sólo se proporcionas 
+  - `True` o `'longest'` para aplicar el pad hasta la secuencia más larga del batch (no apliques el padding si sólo le proporcionas 
   una sola secuencia).
   - `'max_length'` para aplicar el pad hasta la longitud especificada por el argumento `max_length` o la longitud máxima aceptada 
   por el modelo si no le proporcionas `longitud_máxima` (`longitud_máxima=None`). Si sólo le proporcionas una única secuencia 
@@ -523,7 +523,7 @@ padding/truncamiento a `longitud_máxima` se desactiva.
 
 A continuación te mostramos en una tabla que resume la forma recomendada de configurar el padding y el truncamiento. Si utilizas un par de secuencias de entrada en 
 algunos de los siguientes ejemplos, puedes sustituir `truncation=True` por una `STRATEGY` seleccionada en 
-`['only_first', 'only_second', 'longest_first']`, es decir, `truncation='only_second'` o `truncation= 'longest_first'` para controlar cómo se trunquen ambas secuencias del par como lo has detallado anteriormente.
+`['only_first', 'only_second', 'longest_first']`, es decir, `truncation='only_second'` o `truncation= 'longest_first'` para controlar cómo se truncan ambas secuencias del par como se ha detallado anteriormente.
 
 | Truncation                           | Padding                           | Instrucciones                                                                               |
 |--------------------------------------|-----------------------------------|---------------------------------------------------------------------------------------------|
@@ -539,7 +539,7 @@ algunos de los siguientes ejemplos, puedes sustituir `truncation=True` por una `
 |                                      | padding long max de input model   | `tokenizer(batch_sentences, padding='max_length', truncation=True)` or                 |
 |                                      |                                   | `tokenizer(batch_sentences, padding='max_length', truncation=STRATEGY)`                |
 |                                      | padding a una long especifica     | Not possible                                                                                |
-| truncationa una long especifica      | no padding                        | `tokenizer(batch_sentences, truncation=True, max_length=42)` or                        |
+| truncation a una long especifica      | no padding                        | `tokenizer(batch_sentences, truncation=True, max_length=42)` or                        |
 |                                      |                                   | `tokenizer(batch_sentences, truncation=STRATEGY, max_length=42)`                       |
 |                                      | padding secuencia max del batch   | `tokenizer(batch_sentences, padding=True, truncation=True, max_length=42)` or          |
 |                                      |                                   | `tokenizer(batch_sentences, padding=True, truncation=STRATEGY, max_length=42)`         |

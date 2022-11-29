@@ -193,8 +193,8 @@ Pass your text to the tokenizer:
 
 The tokenizer returns a dictionary containing:
 
-* [input_ids](./glossary#input-ids): numerical representions of your tokens.
-* [atttention_mask](.glossary#attention-mask): indicates which tokens should be attended to.
+* [input_ids](./glossary#input-ids): numerical representations of your tokens.
+* [attention_mask](.glossary#attention-mask): indicates which tokens should be attended to.
 
 A tokenizer can also accept a list of inputs, and pad and truncate the text to return a batch with uniform length:
 
@@ -432,19 +432,30 @@ Depending on your task, you'll typically pass the following parameters to [`Trai
    >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
    ```
 
-4. Your preprocessed train and test datasets:
+4. Load a dataset:
 
    ```py
-   >>> train_dataset = dataset["train"]  # doctest: +SKIP
-   >>> eval_dataset = dataset["eval"]  # doctest: +SKIP
+   >>> from datasets import load_dataset
+
+   >>> dataset = load_dataset("rotten_tomatoes")  # doctest: +IGNORE_RESULT
    ```
 
-5. A [`DataCollator`] to create a batch of examples from your dataset:
+5. Create a function to tokenize the dataset, and apply it over the entire dataset with [`~datasets.Dataset.map`]:
 
    ```py
-   >>> from transformers import DefaultDataCollator
+   >>> def tokenize_dataset(dataset):
+   ...     return tokenizer(dataset["text"])
 
-   >>> data_collator = DefaultDataCollator()
+
+   >>> dataset = dataset.map(tokenize_dataset, batched=True)
+   ```
+
+6. A [`DataCollatorWithPadding`] to create a batch of examples from your dataset:
+
+   ```py
+   >>> from transformers import DataCollatorWithPadding
+
+   >>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
    ```
 
 Now gather all these classes in [`Trainer`]:

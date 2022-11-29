@@ -72,7 +72,7 @@ On top of the configuration of the model, we see three different weights files, 
 
 The main advantage of doing this for big models is that during step 2 of the workflow shown above, each shard of the checkpoint is loaded after the previous one, capping the memory usage in RAM to the model size plus the size of the biggest shard.
 
-Beind the scenes, the index file is used to determine which keys are in the checkpoint, and where the corresponding weights are stored. We can load that index like any json and get a dictionary:
+Behind the scenes, the index file is used to determine which keys are in the checkpoint, and where the corresponding weights are stored. We can load that index like any json and get a dictionary:
 
 ```py
 >>> import json
@@ -86,7 +86,7 @@ Beind the scenes, the index file is used to determine which keys are in the chec
 dict_keys(['metadata', 'weight_map'])
 ```
 
-The metadata just consists of the total size of the model for now. We plan to add several other informations in the future:
+The metadata just consists of the total size of the model for now. We plan to add other information in the future:
 
 ```py
 >>> index["metadata"]

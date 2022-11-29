@@ -43,11 +43,12 @@ class ViTFeatureExtractionTester(unittest.TestCase):
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        size=18,
+        size=None,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
+        size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -109,8 +110,8 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -121,8 +122,8 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -141,8 +142,8 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -153,8 +154,8 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -173,8 +174,8 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )
 
@@ -185,7 +186,7 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.size["height"],
+                self.feature_extract_tester.size["width"],
             ),
         )

@@ -30,7 +30,7 @@ show that the TrOCR model outperforms the current state-of-the-art models on bot
 tasks.*
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/trocr_architecture.jpg"
-alt="drawing" width="600"/> 
+alt="drawing" width="600"/>
 
 <small> TrOCR architecture. Taken from the <a href="https://arxiv.org/abs/2109.10282">original paper</a>. </small>
 
@@ -53,7 +53,7 @@ Tips:
 ## Inference
 
 TrOCR's [`VisionEncoderDecoder`] model accepts images as input and makes use of
-[`~generation_utils.GenerationMixin.generate`] to autoregressively generate text given the input image.
+[`~generation.GenerationMixin.generate`] to autoregressively generate text given the input image.
 
 The [`ViTFeatureExtractor`/`DeiTFeatureExtractor`] class is responsible for preprocessing the input image and
 [`RobertaTokenizer`/`XLMRobertaTokenizer`] decodes the generated target tokens to the target string. The
@@ -64,20 +64,20 @@ into a single instance to both extract the input features and decode the predict
 
 ``` py
 >>> from transformers import TrOCRProcessor, VisionEncoderDecoderModel
->>> import requests 
+>>> import requests
 >>> from PIL import Image
 
->>> processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten") 
+>>> processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
 >>> model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
 
->>> # load image from the IAM dataset 
->>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg" 
+>>> # load image from the IAM dataset
+>>> url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
->>> pixel_values = processor(image, return_tensors="pt").pixel_values 
+>>> pixel_values = processor(image, return_tensors="pt").pixel_values
 >>> generated_ids = model.generate(pixel_values)
 
->>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0] 
+>>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 ```
 
 See the [model hub](https://huggingface.co/models?filter=trocr) to look for TrOCR checkpoints.

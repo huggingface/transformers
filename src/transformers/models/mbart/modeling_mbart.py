@@ -1150,6 +1150,8 @@ class MBartDecoder(MBartPreTrainedModel):
     MBART_START_DOCSTRING,
 )
 class MBartModel(MBartPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+
     def __init__(self, config: MBartConfig):
         super().__init__(config)
 
@@ -1273,6 +1275,8 @@ class MBartForConditionalGeneration(MBartPreTrainedModel):
         r"encoder.version",
         r"decoder.version",
         r"lm_head.weight",
+        "encoder.embed_tokens.weight",
+        "decoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: MBartConfig):
@@ -1347,7 +1351,7 @@ class MBartForConditionalGeneration(MBartPreTrainedModel):
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
             use_cache = False
-            if decoder_input_ids is None:
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id)
 
         outputs = self.model(
@@ -1440,6 +1444,8 @@ class MBartForConditionalGeneration(MBartPreTrainedModel):
     MBART_START_DOCSTRING,
 )
 class MBartForSequenceClassification(MBartPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+
     def __init__(self, config: MBartConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = MBartModel(config)
@@ -1568,6 +1574,8 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
     MBART_START_DOCSTRING,
 )
 class MBartForQuestionAnswering(MBartPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1701,6 +1709,8 @@ class MBartDecoderWrapper(MBartPreTrainedModel):
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->MBart, facebook/bart-base->facebook/mbart-large-cc25
 class MBartForCausalLM(MBartPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+
     def __init__(self, config):
         config = copy.deepcopy(config)
         config.is_decoder = True
