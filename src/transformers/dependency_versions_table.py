@@ -30,6 +30,7 @@ deps = {
     "jaxlib": "jaxlib>=0.1.65,<=0.3.6",
     "jieba": "jieba",
     "kenlm": "kenlm",
+    "keras-nlp": "keras-nlp>=0.3.1",
     "nltk": "nltk",
     "natten": "natten>=0.14.4",
     "numpy": "numpy>=1.17",
