@@ -39,9 +39,7 @@ While each task has an associated [`pipeline`], it is simpler to use the general
 2. Pass your input text to the [`pipeline`]:
 
 ```py
->>> generator(
-...     "https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac"
-... )
+>>> generator("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
 {'text': 'I HAVE A DREAM BUT ONE DAY THIS NATION WILL RISE UP LIVE UP THE TRUE MEANING OF ITS TREES'}
 ```
 
@@ -50,9 +48,7 @@ Let's take [openai/whisper-large](https://huggingface.co/openai/whisper-large) t
 
 ```py
 >>> generator = pipeline(model="openai/whisper-large")
->>> generator(
-...     "https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac"
-... )
+>>> generator("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
 {'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its creed.'}
 ```
 
@@ -65,12 +61,12 @@ If you don't find any, start [`training`]
 If you have several inputs, you can pass your input as a list:
 
 ```py
->>> generator(
-...     [
-...         "https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac",
-...         "https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac"]
-...     ]
-... )  # doctest: +SKIP
+generator(
+    [
+        "https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac",
+        "https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac",
+    ]
+)
 ```
 
 If you want to iterate over a whole dataset, or want to use it for inference in a webserver, check out dedicated parts
@@ -85,9 +81,9 @@ In general you can specify parameters anywhere you want:
 
 ```py
 generator(model="openai/whisper-large", my_parameter=1)
-out = generate(...) # This will use `my_parameter=1`.
-out = generate(..., my_parameter=2) # This will override and use `my_parameter=2`.
-out = generate(...) # This will go back to using `my_parameter=1`.
+out = generate(...)  # This will use `my_parameter=1`.
+out = generate(..., my_parameter=2)  # This will override and use `my_parameter=2`.
+out = generate(...)  # This will go back to using `my_parameter=1`.
 ```
 
 Let's check out 3 important ones:
@@ -104,8 +100,8 @@ This will work regardless wether you are using `PyTorch` or `Tensorflow`.
 If the model is too large for a single GPU, you can also use [`accelerate`](https://huggingface.co/docs/accelerate/index) (`device_map="auto"`).
 
 ```py
-!pip install accelerate
->>> generator(model="openai/whisper-large", device_map="auto")
+#!pip install accelerate
+generator(model="openai/whisper-large", device_map="auto")
 ```
 
 ### Batch size
@@ -214,7 +210,7 @@ pipe = pipeline(model="hf-internal-testing/tiny-random-wav2vec2", device=0)
 dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:10]")
 
 for out in pipe(KeyDataset(dataset["audio"])):
-   print(out)
+    print(out)
 ```
 
 
@@ -258,7 +254,8 @@ Using a [`pipeline`] for nlp tasks is practically identical.
 >>> # It will classify text, except you are free to choose any label you might imagine
 >>> classifier = pipeline(model="facebook/bart-large-mnli")
 >>> classifier(
-...     "I have a problem with my iphone that needs to be resolved asap!!", candidate_labels=["urgent", "not urgent", "phone", "tablet", "computer"]
+...     "I have a problem with my iphone that needs to be resolved asap!!",
+...     candidate_labels=["urgent", "not urgent", "phone", "tablet", "computer"],
 ... )
 {'sequence': 'I have a problem with my iphone that needs to be resolved asap!!',
  'labels': ['urgent', 'phone', 'computer', 'not urgent', 'tablet'],
@@ -275,6 +272,9 @@ For example, if you use the same image from the vision pipeline above:
 >>> from transformers import pipeline
 
 >>> vqa = pipeline(model="impira/layoutlm-document-qa")
->>> vqa(image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png", question="What is the invoice number?")
+>>> vqa(
+...     image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
+...     question="What is the invoice number?",
+... )
 [{'score': 0.635722279548645, 'answer': '1110212019', 'start': 22, 'end': 22}]
 ```
