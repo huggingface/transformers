@@ -52,7 +52,7 @@ The code snippet below shows how to compute image & text features and similariti
 >>> inputs = processor(text=texts, images=image, return_tensors="pt", padding=True)
 >>> outputs = model(**inputs)
 >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
->>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
+>>> probs = logits_per_image.softmax(dim=1)  # probs: [[1.2686e-03, 5.4499e-02, 6.7968e-04, 9.4355e-01]]
 ```
 
 This model was contributed by [OFA-Sys](https://huggingface.co/OFA-Sys). 
