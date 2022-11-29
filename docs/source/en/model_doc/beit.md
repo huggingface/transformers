@@ -71,6 +71,9 @@ alt="drawing" width="600"/>
 
 <small> BEiT pre-training. Taken from the <a href="https://arxiv.org/abs/2106.08254">original paper.</a> </small>
 
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The JAX/FLAX version of this model was
+contributed by [kamalkraj](https://huggingface.co/kamalkraj). The TF version of this model was contributed by [MadElf1337](https://huggingface.co/MadElf1337) The original code can be found [here](https://github.com/microsoft/unilm/tree/master/beit).
+
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with BEiT.
