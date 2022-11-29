@@ -72,6 +72,7 @@ generator(
 If you want to iterate over a whole dataset, or want to use it for inference in a webserver, check out dedicated parts
 
 [Using pipelines on a dataset](#using-pipelines-on-a-dataset)
+
 [Using pipelines for a webserver](./pipeline_webserver)
 
 ## Parameters
@@ -120,6 +121,10 @@ This will actually run the pipeline on all 10 audio files you are providing, but
 to the model (which is on GPU where batching is more likely to help), without any further code from you. 
 The output should always match what you would have received without batching. It is only meant as a way to help 
 get more speed out of the pipeline. 
+
+Pipelines alleviate some complexity of batching, because for some pipelines, 
+a single item (like a long audio file) need to be chunked into multiple parts
+for processing by a model. Pipeline [abstract that away for you](./main_classes/pipelines#pipeline-chunk-batching)
 
 ### Task specific parameters
 
@@ -221,7 +226,7 @@ Creating an inference engine is a complex topic which deserves it's own
 page.
 </Tip>
 
-[`pipeline_webserver`]
+[Link](./pipeline_webserver)
 
 ### Vision pipeline
 
