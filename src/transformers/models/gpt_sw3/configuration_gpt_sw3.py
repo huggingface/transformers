@@ -20,14 +20,13 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "": "https://huggingface.co//resolve/main/config.json", # TODO: ADD SOMETHING HERE!
+    "": "https://huggingface.co//resolve/main/config.json",  # TODO: ADD SOMETHING HERE!
 }
-
 
 
 class GptSw3Config(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`GptSw3Model`] or a [`TFGptSw3Model`]. It is used to
+    This is the configuration class to store the configuration of a [`GptSw3Model`]. It is used to
     instantiate a GPT-SW3 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the GPT-SW3.
     [gpt_sw3](https://huggingface.co/gpt_sw3) architecture. # TODO: add correct link.
@@ -37,10 +36,10 @@ class GptSw3Config(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 64000):
-            Vocabulary size of the GPT-SW3 model. Defines the number of different tokens that can be represented by the
+        vocab_size (`int`, *optional*, defaults to 50257):
+            Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GptSw3Model`] or [`TFGptSw3Model`].
-        n_positions (`int`, *optional*, defaults to 2048):
+        n_positions (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         n_embd (`int`, *optional*, defaults to 768):
@@ -63,14 +62,42 @@ class GptSw3Config(PretrainedConfig):
             The epsilon to use in the layer normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        summary_type (`string`, *optional*, defaults to `"cls_index"`):
+            Argument used when doing sequence summary, used in the models [`GptSw3DoubleHeadsModel`].
+
+            Has to be one of the following options:
+
+                - `"last"`: Take the last token hidden state (like XLNet).
+                - `"first"`: Take the first token hidden state (like BERT).
+                - `"mean"`: Take the mean of all tokens hidden states.
+                - `"cls_index"`: Supply a Tensor of classification token position (like GPT/GPT-2).
+                - `"attn"`: Not implemented now, use multi-head attention.
+        summary_use_proj (`bool`, *optional*, defaults to `True`):
+            Argument used when doing sequence summary, used in the models [`GptSw3DoubleHeadsModel`].
+
+            Whether or not to add a projection after the vector extraction.
+        summary_activation (`str`, *optional*):
+            Argument used when doing sequence summary. Used in for the multiple choice head in
+            [`GptSw3DoubleHeadsModel`].
+
+            Pass `"tanh"` for a tanh activation to the output, any other value will result in no activation.
+        summary_proj_to_labels (`bool`, *optional*, defaults to `True`):
+            Argument used when doing sequence summary, used in the models [`GptSw3DoubleHeadsModel`].
+
+            Whether the projection outputs should have `config.num_labels` or `config.hidden_size` classes.
+        summary_first_dropout (`float`, *optional*, defaults to 0.1):
+            Argument used when doing sequence summary, used in the models [`GptSw3DoubleHeadsModel`].
 
             The dropout ratio to be used after the projection and activation.
-        apply_query_key_layer_scaling (`bool`, *optional*, defaults to `True`):
-            Whether to scale the query and key by 1/sqrt(head_size).
-        normalize_attention_scores (`bool`, *optional*, defaults to `True`):
-            Whether to normalize attention scores prior to softmax.
+        scale_attn_weights (`bool`, *optional*, defaults to `True`):
+            Scale attention weights by dividing by sqrt(hidden_size)..
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        scale_attn_by_inverse_layer_idx (`bool`, *optional*, defaults to `False`):
+            Whether to additionally scale attention weights by `1 / layer_idx + 1`.
+        reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
+            Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
+            dot-product/softmax to float() when training with mixed precision.
 
     Example:
 
@@ -110,11 +137,17 @@ class GptSw3Config(PretrainedConfig):
         attn_pdrop=0.1,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
+        summary_type="cls_index",
+        summary_use_proj=True,
+        summary_activation=None,
+        summary_proj_to_labels=True,
+        summary_first_dropout=0.1,
+        scale_attn_weights=True,
         use_cache=True,
         bos_token_id=3,
         eos_token_id=3,
-        normalize_attention_scores=True,
-        apply_query_key_layer_scaling=True,
+        scale_attn_by_inverse_layer_idx=False,
+        reorder_and_upcast_attn=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -129,9 +162,15 @@ class GptSw3Config(PretrainedConfig):
         self.attn_pdrop = attn_pdrop
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
+        self.summary_type = summary_type
+        self.summary_use_proj = summary_use_proj
+        self.summary_activation = summary_activation
+        self.summary_first_dropout = summary_first_dropout
+        self.summary_proj_to_labels = summary_proj_to_labels
+        self.scale_attn_weights = scale_attn_weights
         self.use_cache = use_cache
-        self.normalize_attention_scores = normalize_attention_scores
-        self.apply_query_key_layer_scaling = apply_query_key_layer_scaling
+        self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
+        self.reorder_and_upcast_attn = reorder_and_upcast_attn
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
