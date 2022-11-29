@@ -427,15 +427,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         #meter_utils.set_metrics(self)
         self.current_tasks = list()
 
-    #def forward(
-    #        self,
-    #        batch,
-    #        mask_text=False,
-    #        mask_image=False,
-    #        image_token_type_idx=1,
-    #        img=None,
-    #        irtr_len=0,
-    #    ):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -451,25 +442,15 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[BaseModelOutputWithPooling, Tuple[torch.FloatTensor]]:
-        #if img is None:
-        #    if f"image_{image_token_type_idx - 1}" in batch:
-        #        imgkey = f"image_{image_token_type_idx - 1}"
-        #    else:
-        #        imgkey = "image"
-        #    img = batch[imgkey][0]
         
-        #do_mlm = "_mlm" if mask_text else ""
         image_token_type_idx=1
         irtr_len=0
         text_ids = input_ids
         img = pixel_values.resize_(1,3,224,224)
         text_masks = attention_mask
-	#text_labels = batch[f"text_labels{do_mlm}"]
-        #text_masks = batch[f"text_masks"]
         input_shape = input_ids.size() 
         text_embeds = self.text_transformer.embeddings(input_ids=text_ids)
         
-        #input_shape = text_masks.size()
         extend_text_masks = self.text_transformer.get_extended_attention_mask(text_masks, input_shape, self.device)
         
         split_index = len(self.text_transformer.encoder.layer) - self.config.num_layers + 1
@@ -1140,3 +1121,93 @@ class BertSelfOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
+
+
+class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.bridgetower = BridgeTowerModel(config)
+        self.mlm_score = BridgeTowerMLMHead(config)
+        
+        #TODO: self.post_init()
+
+    def get_output_embeddings(self):
+        return self.mlm_score.decoder
+
+    def set_output_embeddings(self, new_embeddings):
+        self.mlm_score.decoder = new_embeddings
+
+    def forward(self,input_ids: Optional[torch.LongTensor] = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            token_type_ids: Optional[torch.LongTensor] = None,
+            pixel_values: Optional[torch.FloatTensor] = None,
+            pixel_mask: Optional[torch.LongTensor] = None,
+            head_mask: Optional[torch.FloatTensor] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            image_embeds: Optional[torch.FloatTensor] = None,
+            labels: Optional[torch.LongTensor] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None) :
+
+#	outputs = self.bridgetower(#TODO)
+        return MaskedLMOutput()	
+
+        #return MaskedLMOutput(
+        #loss=masked_lm_loss,
+        #logits=mlm_logits,
+        #hidden_states=outputs.hidden_states,
+        #attentions=outputs.attentions)
+
+
+class BridgeTowerPredictionHeadTransform(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        if isinstance(config.hidden_act, str):
+            self.transform_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.transform_act_fn = config.hidden_act
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        return hidden_states
+
+
+class BridgeTowerMLMHead(nn.Module):
+    def __init__(self, config, weight=None):
+        super().__init__()
+        self.config = config
+        self.transform = BridgeTowerPredictionHeadTransform(config)
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+        if weight is not None:
+            self.decoder.weight = weight
+
+    def forward(self, x):
+        x = self.transform(x)
+        x = self.decoder(x) + self.bias
+        return x
+
+
+class BridgeTowerITMHead(nn.Module):
+    def __init__(self, hidden_size):
+        super().__init__()
+        self.fc = nn.Linear(hidden_size, 2)
+
+    def forward(self, x):
+        x = self.fc(x)
+        return x
+
+
+class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
+    def __init__(self, config):
+        super().__init__()
+        self.bridgetower = BridgeTowerModel(config)
+
+    def forward():
+        return self.bridgetower
