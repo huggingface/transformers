@@ -294,7 +294,7 @@ _import_structure = {
         "MarkupLMProcessor",
         "MarkupLMTokenizer",
     ],
-    "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig"],
+    "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig", "MaskFormerSwinConfig"],
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
     "models.mctct": ["MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCTConfig", "MCTCTProcessor"],
@@ -914,6 +914,7 @@ else:
         [
             "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
             "MODEL_FOR_AUDIO_XVECTOR_MAPPING",
+            "MODEL_FOR_BACKBONE_MAPPING",
             "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
             "MODEL_FOR_CAUSAL_LM_MAPPING",
             "MODEL_FOR_CTC_MAPPING",
@@ -1626,6 +1627,7 @@ else:
             "MaskFormerForInstanceSegmentation",
             "MaskFormerModel",
             "MaskFormerPreTrainedModel",
+            "MaskFormerSwinBackbone",
         ]
     )
     _import_structure["models.markuplm"].extend(
@@ -3491,7 +3493,7 @@ if TYPE_CHECKING:
         MarkupLMProcessor,
         MarkupLMTokenizer,
     )
-    from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig
+    from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, MaskFormerSwinConfig
     from .models.mbart import MBartConfig
     from .models.mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig, MCTCTProcessor
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
@@ -3999,6 +4001,7 @@ if TYPE_CHECKING:
         from .models.auto import (
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
             MODEL_FOR_AUDIO_XVECTOR_MAPPING,
+            MODEL_FOR_BACKBONE_MAPPING,
             MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
             MODEL_FOR_CTC_MAPPING,
@@ -4589,6 +4592,7 @@ if TYPE_CHECKING:
             MaskFormerForInstanceSegmentation,
             MaskFormerModel,
             MaskFormerPreTrainedModel,
+            MaskFormerSwinBackbone,
         )
         from .models.mbart import (
             MBartForCausalLM,

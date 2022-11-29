@@ -380,6 +380,9 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = None
 MODEL_FOR_AUDIO_XVECTOR_MAPPING = None
 
 
+MODEL_FOR_BACKBONE_MAPPING = None
+
+
 MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING = None
 
 
@@ -3352,6 +3355,13 @@ class MaskFormerModel(metaclass=DummyObject):
 
 
 class MaskFormerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MaskFormerSwinBackbone(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
