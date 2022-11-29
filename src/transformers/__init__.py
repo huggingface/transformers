@@ -8047,6 +8047,13 @@ if TYPE_CHECKING:
             TFBartModel,
             TFBartPretrainedModel,
         )
+        from .models.beit import (
+            TFBeitForMaskedImageModeling
+            TFBeitForImageClassification,
+            TFBeitForSemanticSegmentation,
+            TFBeitModel,
+            TFBeitPreTrainedModel,
+        )
         from .models.bert import (
             TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFBertEmbeddings,
