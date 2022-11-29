@@ -101,7 +101,7 @@ class ChineseCLIPTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "chinese-clip_text_model"
+    model_type = "chinese_clip_text_model"
 
     def __init__(
         self,
@@ -147,7 +147,7 @@ class ChineseCLIPTextConfig(PretrainedConfig):
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from ChineseCLIPConfig
-        if config_dict.get("model_type") == "chinese-clip":
+        if config_dict.get("model_type") == "chinese_clip":
             config_dict = config_dict["text_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
@@ -206,7 +206,7 @@ class ChineseCLIPVisionConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "chinese-clip_vision_model"
+    model_type = "chinese_clip_vision_model"
 
     def __init__(
         self,
@@ -249,7 +249,7 @@ class ChineseCLIPVisionConfig(PretrainedConfig):
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from ChineseCLIPConfig
-        if config_dict.get("model_type") == "chinese-clip":
+        if config_dict.get("model_type") == "chinese_clip":
             config_dict = config_dict["vision_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
@@ -308,7 +308,7 @@ class ChineseCLIPConfig(PretrainedConfig):
     >>> config = ChineseCLIPConfig.from_text_vision_configs(config_text, config_vision)
     ```"""
 
-    model_type = "chinese-clip"
+    model_type = "chinese_clip"
     is_composition = True
 
     def __init__(

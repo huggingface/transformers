@@ -51,7 +51,7 @@ _TOKENIZER_FOR_DOC = "ChineseCLIPTokenizer"
 
 CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "OFA-Sys/chinese-clip-vit-base-patch16",
-    # See all Chinese-CLIP models at https://huggingface.co/models?filter=chinese-clip
+    # See all Chinese-CLIP models at https://huggingface.co/models?filter=chinese_clip
 ]
 
 
