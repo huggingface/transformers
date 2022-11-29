@@ -270,3 +270,19 @@ def find_pruneable_heads_and_indices(
     mask = mask.view(-1).contiguous().eq(1)
     index: torch.LongTensor = torch.arange(len(mask))[mask].long()
     return heads, index
+
+
+def meshgrid(
+    *tensors: Union[torch.Tensor, List[torch.Tensor]], indexing: Optional[str] = None
+) -> Tuple[torch.Tensor, ...]:
+    """
+    Wrapper around torch.meshgrid to avoid warning messages about the introduced `indexing` argument.
+
+    Reference: https://pytorch.org/docs/1.13/generated/torch.meshgrid.html
+    """
+    if is_torch_greater_or_equal_than_1_10:
+        return torch.meshgrid(*tensors, indexing=indexing)
+    else:
+        if indexing != "ij":
+            raise ValueError('torch.meshgrid only supports `indexing="ij"` for torch<1.10.')
+        return torch.meshgrid(*tensors)

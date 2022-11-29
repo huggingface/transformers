@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     SemanticSegmenterOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -446,7 +446,7 @@ class BeitRelativePositionBias(nn.Module):
         # get pair-wise relative position index for each token inside the window
         coords_h = torch.arange(window_size[0])
         coords_w = torch.arange(window_size[1])
-        coords = torch.stack(torch.meshgrid([coords_h, coords_w]))  # 2, Wh, Ww
+        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))  # 2, Wh, Ww
         coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
         relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
         relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
