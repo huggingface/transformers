@@ -699,9 +699,9 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
         elif isinstance(module, ChineseCLIPTextEmbeddings):
-            nn.init.normal_(module.word_embeddings, mean=0.0, std=self.config.initializer_range)           
-            nn.init.normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
-            nn.init.normal_(module.token_type_embeddings, mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.word_embeddings.weight, mean=0.0, std=self.config.initializer_range)           
+            nn.init.normal_(module.position_embeddings.weight, mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.token_type_embeddings.weight, mean=0.0, std=self.config.initializer_range)
             for embedding in [module.word_embeddings, module.position_embeddings, module.token_type_embeddings]:
                 if embedding.padding_idx is not None:
                     embedding.weight.data[embedding.padding_idx].zero_()
