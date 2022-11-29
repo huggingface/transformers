@@ -691,9 +691,7 @@ class ChineseCLIPPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
-        if isinstance(module, ChineseCLIPTextModel):
-            module.post_init()
-        elif isinstance(module, ChineseCLIPVisionEmbeddings):
+        if isinstance(module, ChineseCLIPVisionEmbeddings):
             factor = self.config.initializer_factor
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
