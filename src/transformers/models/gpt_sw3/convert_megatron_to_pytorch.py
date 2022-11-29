@@ -1,25 +1,73 @@
-# coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team.
+####################################################################################################
+
+# From: https://github.com/NVIDIA/NeMo/blob/117029aef03b86359a0b777079f8f39515cacf0e/nemo/collections/nlp/models/language_modeling/megatron/gpt_model.py#L94
+# Original model settings parameters:
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+#   Note: This relates to attention
+#   apply_query_key_layer_scaling=True, # This is set to True in config
+#   normalize_attention_scores=True,    # TODO: Verify that this is True by default in Nemo Megatron GPT implementation
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#       See: https://github.com/NVIDIA/NeMo/blob/117029aef03b86359a0b777079f8f39515cacf0e/nemo/collections/nlp/modules/common/megatron/transformer.py#L414
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""Convert AI Sweden GPT-SW3 checkpoint."""
+#       coeff = None
+#       self.norm_factor = math.sqrt(self.hidden_size_per_attention_head) # -> sqrt(attention head dim)
+#       if self.apply_query_key_layer_scaling:
+#           coeff = self.layer_number
+#           self.norm_factor *= coeff
+#
+#       matmul_result = torch.baddbmm(
+#             matmul_input_buffer,
+#             query_layer.transpose(0, 1),  # [b * np, sq, hn]
+#             key_layer.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
+#             beta=0.0,
+#             alpha=(1.0 / self.norm_factor) if self.normalize_attention_scores else 1.0,
+#         )
+#
+#         See: https://pytorch.org/docs/stable/generated/torch.baddbmm.html
+#         alpha (Number, optional) – multiplier for batch1 @ batch2 (alpha)
+#
+#
+#   kv_channels=None,
+#
+#   pre_process=True,
+#       Seems to be Megatron specific and not relevant for hf implementation.
+#
+#   post_process=True,
+#       See: https://github.com/NVIDIA/NeMo/blob/117029aef03b86359a0b777079f8f39515cacf0e/nemo/collections/nlp/models/language_modeling/megatron/gpt_model.py#L39
+#       Seems to be Megatron specific and not relevant for hf implementation.
+#   TODO: if comparison with NeMo fails recheck this!
+#
+#   init_method_std=0.02,
+#   use_scaled_init_method=True,
+#   hidden_dropout=0.1,
+#   precision=16,
+#
+#   normalization='layernorm',
+#   layernorm_epsilon=1e-5,
+#
+#   transformer_block_type='pre_ln',
+#       See: https://github.com/NVIDIA/NeMo/blob/117029aef03b86359a0b777079f8f39515cacf0e/nemo/collections/nlp/modules/common/megatron/transformer.py#L1835
+#       # Pre-LN: x -> LN -> MHA -> Residual -> LN -> MLP -> Residual
+#
+#   openai_gelu=False,
+#   activation='gelu',
+#       Nemo uses this one without approximate argument:
+#       https://pytorch.org/docs/stable/generated/torch.nn.functional.gelu.html
+#
+#   From Megatron:
+#   trainer:
+#       precision: bf16
+#
 
 import argparse
 import os
-from os.path import isfile
+import re
+import zipfile
+from os.path import join, isfile
 
 import torch
-from transformers import GptSw3Config, GPT2Config
+
+from transformers import AutoTokenizer, GptSw3Config, GPT2Config
 
 
 ####################################################################################################
@@ -130,7 +178,7 @@ def convert_megatron_checkpoint(sd_megatron, config, gpt2=False):
     return sd_hf
 
 
-def copy_config(config_hf, config_megatron):
+def copy_config(config_hf, config_megatron, gpt2=False):
     """Copy the config from Megatron to hf."""
     config_hf.vocab_size = 64000
     config_hf.n_positions = config_megatron["encoder_seq_length"]
@@ -146,18 +194,16 @@ def copy_config(config_hf, config_megatron):
     config_hf.initializer_range = config_megatron["init_method_std"]  # 0.02
     config_hf.apply_query_key_layer_scaling = config_megatron["apply_query_key_layer_scaling"]  # True
     config_hf.normalize_attention_scores = True
-    config_hf.use_cache = True
+    config_hf.use_cache = False
+    # config_hf.reorder_and_upcast_attn
 
-    config_hf.scale_attn_weights = True,
-    config_hf.scale_attn_by_inverse_layer_idx = True,
-    config_hf.reorder_and_upcast_attn = True,
-
-    config_hf.summary_type = "cls_index"
-    config_hf.summary_use_proj = True
-    config_hf.summary_activation = None
-    config_hf.summary_proj_to_labels = True
-    config_hf.summary_first_dropout = 0.1
-    config_hf.scale_attn_weights = True
+    if gpt2:
+        config_hf.summary_type = "cls_index"
+        config_hf.summary_use_proj = True
+        config_hf.summary_activation = None
+        config_hf.summary_proj_to_labels = True
+        config_hf.summary_first_dropout = 0.1
+        config_hf.scale_attn_weights = True
 
     # This identifies the 6.7B (7B) model which uses a different tokenizer
     if config_megatron["hidden_size"] == 4096:
@@ -184,8 +230,11 @@ def main(args):
 
     # Load the config.
     config_megatron = checkpoint["hyper_parameters"]["cfg"]
-    config_hf = GptSw3Config()
-    config_hf = copy_config(config_hf=config_hf, config_megatron=config_megatron)
+    if args.gpt2:
+        config_hf = GPT2Config()
+    else:
+        config_hf = GptSw3Config()
+    config_hf = copy_config(config_hf=config_hf, config_megatron=config_megatron, gpt2=args.gpt2)
     config_hf.architectures = ["GptSw3LMHeadModel"]
 
     sd_megatron = checkpoint["state_dict"]
@@ -229,6 +278,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--print-checkpoint-structure",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--gpt2",
         action="store_true",
     )
     _args = parser.parse_args()
