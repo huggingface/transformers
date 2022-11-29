@@ -60,7 +60,7 @@ Now this is more appropriate !
 Really check out the hub, for different languages, models specialized in your field and more.
 And you can check out the live results directly from the hub to see if it fits or 
 handle corner cases better than another one.
-If you don't find any, start [`fine-tuning`]  # TODO FIX link.
+If you don't find any, start [`training`]
 
 If you have several inputs, you can pass your input as a list:
 
@@ -101,8 +101,7 @@ This will work regardless wether you are using `PyTorch` or `Tensorflow`.
 >>> generator(model="openai/whisper-large", device=0)
 ```
 
-If the model is too large for a single GPU, you can also use [`accelerate`] (`device_map="auto"`).
-# TODO check link.
+If the model is too large for a single GPU, you can also use [`accelerate`](https://huggingface.co/docs/accelerate/index) (`device_map="auto"`).
 
 ```py
 !pip install accelerate
