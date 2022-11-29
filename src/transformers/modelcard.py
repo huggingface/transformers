@@ -591,7 +591,7 @@ class TrainingSummary:
 
         if model_name is None:
             model_name = Path(trainer.args.output_dir).name
-        if not model_name:
+        if len(model_name) == 0:
             model_name = finetuned_from
 
         # Add `generated_from_trainer` to the tags
