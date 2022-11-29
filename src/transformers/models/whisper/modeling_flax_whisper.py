@@ -24,6 +24,8 @@ from ...modeling_flax_utils import (
     ACT2FN,
     FlaxPreTrainedModel,
     append_call_sample_docstring,
+    append_replace_return_docstrings,
+    overwrite_call_docstring,
 )
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_whisper import WhisperConfig
@@ -903,6 +905,22 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
         dropout_rng: PRNGKey = None,
         **kwargs,
     ):
+        r"""
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import WhisperProcessor, FlaxWhisperForConditionalGeneration
+        >>> from datasets import load_dataset
+
+        >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        >>> model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="np")
+        >>> input_features = inputs.input_features
+        >>> encoder_outputs = model.encode(input_features=input_features)
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -946,6 +964,29 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
+        r"""
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import WhisperProcessor, FlaxWhisperForConditionalGeneration
+        >>> from datasets import load_dataset
+
+        >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        >>> model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="np")
+        >>> input_features = inputs.input_features
+        >>> encoder_outputs = model.encode(input_features=input_features)
+
+         >>> decoder_start_token_id = model.config.decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> last_decoder_hidden_states = outputs.last_hidden_state
+        ```"""
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1210,6 +1251,28 @@ class FlaxWhisperForConditionalGeneration(FlaxWhisperPreTrainedModel):
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
+        r"""
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import WhisperProcessor, FlaxWhisperForConditionalGeneration
+        >>> from datasets import load_dataset
+
+        >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        >>> model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="np")
+        >>> input_features = inputs.input_features
+        >>> encoder_outputs = model.encode(input_features=input_features)
+
+         >>> decoder_start_token_id = model.config.decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> last_decoder_hidden_states = outputs.last_hidden_state
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1338,6 +1401,35 @@ class FlaxWhisperForConditionalGeneration(FlaxWhisperPreTrainedModel):
         model_kwargs["past_key_values"] = model_outputs.past_key_values
         model_kwargs["decoder_position_ids"] = model_kwargs["decoder_position_ids"][:, -1:] + 1
         return model_kwargs
+
+
+FLAX_WHISPER_CONDITIONAL_GENERATION_DOCSTRING = r"""
+    Returns:
+
+    Transcription example:
+
+    ```python
+    >>> from transformers import WhisperProcessor, FlaxWhisperForConditionalGeneration
+    >>> from datasets import load_dataset
+
+    >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+    >>> model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
+    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="np")
+    >>> input_features = inputs.input_features
+    >>> generated_ids = model.generate(input_ids=input_features)
+    >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+    >>> transcription
+    ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
+    ```
+"""
+
+overwrite_call_docstring(
+    FlaxWhisperForConditionalGeneration, WHISPER_INPUTS_DOCSTRING + FLAX_WHISPER_CONDITIONAL_GENERATION_DOCSTRING
+)
+append_replace_return_docstrings(
+    FlaxWhisperForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
+)
 
 
 def convert_unroll_to_scan(model, params: Union[Dict, FrozenDict]):
