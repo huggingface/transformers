@@ -184,10 +184,7 @@ def main(args):
 
     # Load the config.
     config_megatron = checkpoint["hyper_parameters"]["cfg"]
-    if args.gpt2:
-        config_hf = GPT2Config()
-    else:
-        config_hf = GptSw3Config()
+    config_hf = GptSw3Config()
     config_hf = copy_config(config_hf=config_hf, config_megatron=config_megatron)
     config_hf.architectures = ["GptSw3LMHeadModel"]
 
