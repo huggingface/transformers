@@ -84,10 +84,10 @@ If you want to iterate over a whole dataset, or want to use it for inference in 
 In general you can specify parameters anywhere you want:
 
 ```py
->>> generator(model="openai/whisper-large", my_parameter=1)
->>> out = generate(...) # This will use `my_parameter=1`.
->>> out = generate(..., my_parameter=2) # This will override and use `my_parameter=2`.
->>> out = generate(...) # This will go back to using `my_parameter=1`.
+generator(model="openai/whisper-large", my_parameter=1)
+out = generate(...) # This will use `my_parameter=1`.
+out = generate(..., my_parameter=2) # This will override and use `my_parameter=2`.
+out = generate(...) # This will go back to using `my_parameter=1`.
 ```
 
 Let's check out 3 important ones:
@@ -97,11 +97,16 @@ Let's check out 3 important ones:
 If you use `device=n` the pipeline will automatically put the model on said device.
 This will work regardless wether you are using `PyTorch` or `Tensorflow`.
 
+```py
+>>> generator(model="openai/whisper-large", device=0)
+```
+
 If the model is too large for a single GPU, you can also use [`accelerate`] (`device_map="auto"`).
 # TODO check link.
 
 ```py
->>> generator(model="openai/whisper-large", device=0)
+!pip install accelerate
+>>> generator(model="openai/whisper-large", device_map="auto")
 ```
 
 ### Batch size
@@ -111,9 +116,9 @@ By default, pipelines will not batch inference for reasons explained in detail [
 But if it works in your use case, you can use:
 
 ```py
->>> generator(model="openai/whisper-large", device=0, batch_size=2)
->>> audio_filenames = [f"audio_{i}.flac" for i in range(10)]
->>> texts = generator(audio_filenames)
+generator(model="openai/whisper-large", device=0, batch_size=2)
+audio_filenames = [f"audio_{i}.flac" for i in range(10)]
+texts = generator(audio_filenames)
 ```
 
 This will actually run the pipeline on all 10 audio files you are providing, but it will pass them by batches of 2
@@ -203,7 +208,7 @@ Turns out we also have a fantasic library for [datasets](https://github.com/hugg
 which makes this even simpler.
 
 ```py
-# KeyDataste is a util that will just output the item we're interested in.
+# KeyDataset is a util that will just output the item we're interested in.
 from transformers.pipelines.pt_utils import KeyDataset
 
 pipe = pipeline(model="hf-internal-testing/tiny-random-wav2vec2", device=0)
@@ -217,109 +222,11 @@ for out in pipe(KeyDataset(dataset["audio"])):
 ## Using pipelines for a webserver
 
 <Tip>
-Creating an inference engine is a complex topic, and the "best" solution 
-will most likely depend on your problem space. Are you on CPU, GPU ? Do
-you want the lowest latency, or the highest throughput, do you want to support
-many models or highly optimize 1 specific model ? Etc.. 
-There is not just one solution, so what we are going to present is a sane default
-to get started, not necessarily the most optimal solution for you.
+Creating an inference engine is a complex topic which deserves it's own
+page.
 </Tip>
 
-
-The key thing to understand is that we can use an iterator, just like for the
-dataset, since a webserver is basically that a system that waits for requests and
-treats them as they come in.
-
-Usually webservers are multiplexed (multithreaded, async, etc..) to handle various
-requests concurrently. Pipelines on the other hand (and mostly the underlying models)
-are not really great for parallelism, they take up a lot of RAM, and when running or compute
-intensive, so it's best to give them all the available ressources to them when they are running.
-
-We are going to solve that by having the webserver handle the light load of receiving
-and sending requests, and having a single thread handling the actual work.
-This example is going to use `starlette`. The actual framework is not really
-important, but you might have to tune or change the code if you are using another
-one to achieve the same effect.
-
-Create `server.py`:
-
-```py
-from starlette.applications import Starlette
-from starlette.responses import JSONResponse
-from starlette.routing import Route
-from transformers import pipeline
-import asyncio
-
-
-async def homepage(request):
-    payload = await request.body()
-    string = payload.decode("utf-8")
-    response_q = asyncio.Queue()
-    await request.app.model_queue.put((string, response_q))
-    output = await response_q.get()
-    return JSONResponse(output)
-
-
-async def server_loop(q):
-    pipe = pipeline(model="bert-base-uncased")
-    while True:
-        (string, response_q) = await q.get()
-        out = pipe(string)
-        await response_q.put(out)
-
-
-app = Starlette(
-    routes=[
-        Route("/", homepage, methods=["POST"]),
-    ],
-)
-
-
-@app.on_event("startup")
-async def startup_event():
-    q = asyncio.Queue()
-    app.model_queue = q
-    asyncio.create_task(server_loop(q))
-```
-
-Now you can start with
-```bash
-uvicorn server:app
-```
-
-And you can query it:
-```bash
-curl -X POST -d "test [MASK]" http://localhost:8000/
-#[{"score":0.7742936015129089,"token":1012,"token_str":".","sequence":"test."},...]
-```
-
-And there you go you have a first idea of how to create a webserver.
-
-What is really important is that we load the model only **once** so there is no copies
-of the model on the webserver, so no unnecessary RAM being used.
-Then the queuing mecanism allows you to do fancy stuff like maybe accumulating a few
-items before inferring to use dynamic batching:
-
-```py
-(string, rq) = await q.get()
-strings = []
-queues = []
-while True:
-    try:
-        (string, rq) = await asyncio.wait_for(q.get(), timeout=0.01)  # 10ms
-    except asyncio.exceptions.TimeoutError:
-        break
-    strings.append(string)
-    queues.append(rq)
-strings
-outs = pipe(strings, batch_size=len(strings))
-for (rq, out) in zip(queues, outs):
-    await rq.put(out)
-```
-
-You can also think about error checking, wether it's valid/invalid input,
-if there's is a problem while loading the model (not enough memory, actual errors in the model files)
-What about cuda errors, etc... 
+[`pipeline_webserver`]
 
 ### Vision pipeline
 
