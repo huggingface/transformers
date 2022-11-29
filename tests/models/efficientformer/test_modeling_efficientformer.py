@@ -17,7 +17,7 @@
 
 import inspect
 import unittest
-from typing import Optional, Tuple, Dict, Union
+from typing import Dict, Tuple, Union
 
 from transformers import EfficientFormerConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
@@ -129,8 +129,7 @@ class EfficientFormerModelTester:
         )
 
     def create_and_check_model(
-        self, config: EfficientFormerConfig, pixel_values: torch.Tensor, labels: torch.Tensor
-    ) -> None:
+        self, config: EfficientFormerConfig, pixel_values, labels) -> None:
         model = EfficientFormerModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -138,8 +137,7 @@ class EfficientFormerModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_masked_image_modeling(
-        self, config: EfficientFormerConfig, pixel_values: torch.Tensor, labels: torch.Tensor
-    ) -> None:
+        self, config: EfficientFormerConfig, pixel_values, labels) -> None:
         model = EfficientFormerForMaskedImageModeling(config=config)
         model.to(torch_device)
         model.eval()
@@ -159,8 +157,7 @@ class EfficientFormerModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.image_size, self.image_size))
 
     def create_and_check_for_image_classification(
-        self, config: EfficientFormerConfig, pixel_values: torch.Tensor, labels: torch.Tensor
-    ) -> None:
+        self, config: EfficientFormerConfig, pixel_values, labels) -> None:
         config.num_labels = self.type_sequence_label_size
         model = EfficientFormerForImageClassification(config)
         model.to(torch_device)

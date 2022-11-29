@@ -170,7 +170,6 @@ class EfficientFormerConvStem(nn.Module):
         self.activation = nn.ReLU()
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-
         features = self.norm1(self.conv1(pixel_values))
         features = self.activation(features)
         features = self.norm2(self.conv2(features))
@@ -291,7 +290,6 @@ class EfficientFormerDropPath(nn.Module):
 
 class EfficientFormerMeta3D(nn.Module):
     def __init__(self, config: EfficientFormerConfig, dim: int, drop_path: float = 0.0) -> None:
-
         super().__init__()
 
         self.norm1 = nn.LayerNorm(dim, eps=config.layer_norm_eps)

@@ -68,7 +68,6 @@ def convert_torch_checkpoint(checkpoint):
 
 @torch.no_grad
 def convert_efficientformer_checkpoint(checkpoint_path, efficientformer_config_file, pytorch_dump_path):
-
     orig_state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
     config = EfficientFormerConfig.from_json_file(efficientformer_config_file)
     model = EfficientFormerForImageClassification(config)

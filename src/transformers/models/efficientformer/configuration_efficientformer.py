@@ -15,7 +15,8 @@
 """ EfficientFormer model configuration"""
 
 from collections import OrderedDict
-from typing import Mapping, List
+from typing import List, Mapping
+
 from packaging import version
 
 from ...configuration_utils import PretrainedConfig
@@ -133,7 +134,7 @@ class EfficientFormerConfig(PretrainedConfig):
         layer_scale_init_value: float = 1e-5,
         hidden_act: str = "gelu",
         initializer_range: float = 0.02,
-        layer_norm_eps: float =1e-12,
+        layer_norm_eps: float = 1e-12,
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
