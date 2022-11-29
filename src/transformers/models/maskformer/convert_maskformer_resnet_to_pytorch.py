@@ -49,11 +49,30 @@ def get_maskformer_config(model_name: str):
     config = MaskFormerConfig(backbone_config=backbone_config)
 
     repo_id = "huggingface/label-files"
-    if "ade" in model_name:
+    if "ade20k-full" in model_name:
+        # this should be ok
+        config.num_labels = 847
+        filename = "maskformer-ade20k-full-id2label.json"
+    elif "ade" in model_name:
+        # this should be ok
         config.num_labels = 150
         filename = "ade20k-id2label.json"
+    elif "coco-stuff" in model_name:
+        # this should be ok
+        config.num_labels = 171
+        filename = "maskformer-coco-stuff-id2label.json"
     elif "coco" in model_name:
-        raise NotImplementedError("To do")
+        # TODO
+        config.num_labels = 133
+        filename = "coco-panoptic-id2label.json"
+    elif "cityscapes" in model_name:
+        # this should be ok
+        config.num_labels = 19
+        filename = "cityscapes-id2label.json"
+    elif "vistas" in model_name:
+        # TODO
+        config.num_labels = 65
+        filename = "vistas-id2label.json"
 
     id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}

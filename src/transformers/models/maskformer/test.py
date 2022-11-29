@@ -1,6 +1,10 @@
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig, SwinConfig
 
 
+config = MaskFormerConfig.from_pretrained("facebook/maskformer-swin-tiny-ade")
+
+print("Number of labels:", config.num_labels)
+
 # Instantiating from a config will always randomly initialize all the weights
 
 # option 1: use default config
