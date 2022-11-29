@@ -625,8 +625,9 @@ def main():
         logger.info(f"mnli-mm: {eval_metric}")
 
     if args.output_dir is not None:
+        all_results = {f"eval_{k}": v for k, v in eval_metric.items()}
         with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
-            json.dump({"eval_accuracy": eval_metric["accuracy"]}, f)
+            json.dump(all_results, f)
 
 
 if __name__ == "__main__":

@@ -233,7 +233,7 @@ class VanLayer(nn.Module):
         drop_path_rate: float = 0.5,
     ):
         super().__init__()
-        self.drop_path = VanDropPath(drop_path) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = VanDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.pre_normomalization = nn.BatchNorm2d(hidden_size)
         self.attention = VanSpatialAttentionLayer(hidden_size, config.hidden_act)
         self.attention_scaling = VanLayerScaling(hidden_size, config.layer_scale_init_value)

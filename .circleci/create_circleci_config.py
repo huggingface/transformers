@@ -308,8 +308,12 @@ layoutlm_job = CircleCIJob(
         "pip install 'git+https://github.com/facebookresearch/detectron2.git'",
         "sudo apt install tesseract-ocr",
         "pip install pytesseract",
+        "pip install natten",
     ],
-    tests_to_run="tests/models/*layoutlmv*",
+    tests_to_run=[
+        "tests/models/*layoutlmv*",
+        "tests/models/*nat",
+    ],
     pytest_num_workers=1,
     pytest_options={"durations": 100},
 )
@@ -381,7 +385,11 @@ def create_circleci_config(folder=None):
 
     if len(jobs) > 0:
         config = {"version": "2.1"}
-        config["parameters"] = {"tests_to_run": {"type": "string", "default": test_list}}
+        config["parameters"] = {
+            # Only used to accept the parameters from the trigger
+            "nightly": {"type": "boolean", "default": False},
+            "tests_to_run": {"type": "string", "default": test_list},
+        }
         config["jobs"] = {j.job_name: j.to_dict() for j in jobs}
         config["workflows"] = {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
         with open(os.path.join(folder, "generated_config.yml"), "w") as f:

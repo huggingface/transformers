@@ -113,6 +113,13 @@ class DonutFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class DonutImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class DPTFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -219,6 +226,20 @@ class LevitImageProcessor(metaclass=DummyObject):
 
 
 class MaskFormerFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class MobileNetV1FeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class MobileNetV1ImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
