@@ -1,19 +1,20 @@
 import os
 import unicodedata
 import re
-import torch
+
+from ... import is_torch_available
+
 # In src/transformers/tokenization_utils_base.py
 # if TYPE_CHECKING:
-#     if is_torch_available():
-#         import torch
+if is_torch_available():
+    import torch
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import sentencepiece as spm
-import numpy as np
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...utils import logging, to_py_obj, is_torch_tensor, TensorType
+from ...tokenization_utils import PreTrainedTokenizer
+from ...utils import logging
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
@@ -41,6 +42,10 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 
 class GptSw3Tokenizer(PreTrainedTokenizer):
+    """
+    Construct a GPT-SW3 tokenizer. Uses an underlying Sentence Piece model.
+    """
+
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
@@ -51,27 +56,31 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
             do_lower_case=False,
             remove_space=False,
             keep_accents=False,
+            pad_token=None,
+            unk_token=None,
+            eos_token=None,
+            bos_token=None,
             sp_model_kwargs: Optional[Dict[str, Any]] = None,
             **kwargs
     ) -> None:
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
-        # TODO: set special tokens according to this if-statement
         name_or_path = kwargs.get("name_or_path")
-        # print(name_or_path)
-        if "gpt-sw3-7b" in name_or_path or "-OLD" in name_or_path:
-            self.is_old_tokenizer = True
-            pad_token = "<unk>"
-            unk_token = pad_token
-            eos_token = "<|endoftext|>"
-            bos_token = eos_token
+        if name_or_path is None:
+            logger.warning("name_or_path not provided, will work for all GPTSw3 models except gpt-sw3-7b,"
+                           " you are testing the model, this can safely be ignored")
+            name_or_path = "None"
+
+        # Default definitions for our 2 tokenizer versions, with None-checks to enable proper testing
+        eos_token = "<|endoftext|>" if eos_token is None else eos_token
+        unk_token = "<unk>" if unk_token is None else unk_token
+        if "gpt-sw3-7b" in name_or_path:
+            pad_token = unk_token if pad_token is None else pad_token
+            bos_token = eos_token if bos_token is None else bos_token
         else:
-            self.is_old_tokenizer = False
-            pad_token = "<pad>"
-            unk_token = "<unk>"
-            eos_token = "<|endoftext|>"
-            bos_token = "<s>"
+            pad_token = "<pad>" if pad_token is None else pad_token
+            bos_token = "<s>" if bos_token is None else bos_token
 
         super().__init__(
             do_lower_case=do_lower_case,
@@ -93,6 +102,7 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
 
+        # Used to for whitespace normalization in input texts
         self.whitespaces = {
             " ",
             " ",
@@ -108,62 +118,83 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
             "",
         }
 
-        # Control chars except newlines and tabs, soft-hyphens, and non-breaking space, zero-width space
-        additional_chars_to_remove = [160, 173, 8203]
+        # Regular expression to remove non-printing characters (e.g. some unicode control chars) in preprocessing
         self.non_printing_characters_re = re.compile(
-            f"[{''.join(map(chr, list(range(0, 9)) + list(range(11, 32)) + list(range(127, 160)) + additional_chars_to_remove))}]"
+            f"[{''.join(map(chr, list(range(0, 9)) + list(range(11, 32)) + list(range(127, 160)) + [160, 173, 8203]))}]"
         )
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["sp_model"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+
+        # for backward compatibility
+        if not hasattr(self, "sp_model_kwargs"):
+            self.sp_model_kwargs = {}
+
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(self.vocab_file)
 
     @property
     def vocab_size(self) -> int:
         return len(self.sp_model)
 
-    def preprocess_text(self, inputs):
+    def preprocess_text(self, text: str) -> str:
+        """
+        Returns the preprocessed text. This procedure is identical to what was used when training the tokenizer.
+        """
+
         # Remove non-printing characters
-        outputs = self.non_printing_characters_re.sub("", inputs)
+        text = self.non_printing_characters_re.sub("", text)
 
         # Normalize whitespaces
-        outputs = "".join(
-            [char if char not in self.whitespaces else " " for char in outputs]
+        text = "".join(
+            [char if char not in self.whitespaces else " " for char in text]
         )
 
         # NFC Unicode normalization
-        outputs = unicodedata.normalize("NFC", outputs)
-        return outputs
+        text = unicodedata.normalize("NFC", text)
+        return text
 
-    def _tokenize(self, text, **kwargs):
-        """
-            Converts a string in a sequence of tokens (string), using the tokenizer. Split in words for word-based
-            vocabulary or sub-words for sub-word-based vocabularies (BPE/SentencePieces/WordPieces).
-
-            Do NOT take care of added tokens.
-        """
-
+    def _tokenize(self, text: str, **kwargs) -> List[str]:
         text = self.preprocess_text(text)
         return self.sp_model.encode(text, out_type=str)
 
-    def _convert_token_to_id(self, token):
-        """Converts a token (str) in an id using the vocab."""
+    def _convert_token_to_id(self, token: str) -> int:
+        """Converts a token (str) to an id (int) using the vocab."""
         return self.sp_model.PieceToId(token)
 
     def _convert_id_to_token(self, index: int) -> str:
-        """Converts an index (integer) in a token (str) using the vocab."""
+        """Converts an index (int) to a token (str) using the vocab."""
         return self.sp_model.IdToPiece(index)
 
-    # This method is not abstract, but is required to function correctly
-    def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        return self.sp_model.decode(tokens)
+    @staticmethod
+    def clean_up_tokenization(out_string: str) -> str:
+        """Returns the input string, this function is overridden to remove the default clean up."""
+        return out_string
 
-    # This method is not abstract, but overriding this ensures that e.g. bytes gets represented as intended
-    def _decode(
-        self,
-        token_ids: List[int],
-        skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
-        spaces_between_special_tokens: bool = True,
-        **kwargs
-    ) -> str:
-        return self.sp_model.decode(token_ids)
+    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+        """Converts a sequence of tokens (strings) to a single string. Special tokens remain intact."""
+        current_sub_tokens = []
+        out_string = ""
+        prev_is_special = False
+        for token in tokens:
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self.all_special_tokens:
+                if not prev_is_special:
+                    out_string += " "
+                out_string += self.sp_model.decode(current_sub_tokens) + token
+                prev_is_special = True
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+                prev_is_special = False
+        out_string += self.sp_model.decode(current_sub_tokens)
+
+        return out_string
 
     def get_vocab(self) -> Dict[str, int]:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
@@ -187,53 +218,49 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
-    def _to_py_obj_light(self, obj):
-        # Like to_py_obj but removes checks for UserDict, list of tuples, TF, and Jax
-        # This gives ~2x speedup compared to supporting everything, and ~0.5x speedup compared to only supporting list
-        if isinstance(obj, (np.ndarray, np.number)):  # tolist also works on 0d np arrays
-            return obj.tolist()
-        elif is_torch_tensor(obj):
-            return obj.detach().cpu().tolist()
-        else:
-            return obj
+    def encode_fast(self, text: Union[str, List[str]], return_tensors: Union[str, bool] = False
+                    ) -> Union[List[int], List[List[int]], "torch.Tensor"]:
+        """
+        Encodes a text or batch of texts to token ids using preprocessing and the raw SP tokenizer. This has reduced
+        functionality but is often much faster.
 
-    # Overriding decode instead of _decode yields significant speedup but removes some functionality
-    def decode_fast(self, token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor"]) -> str:
-        # token_ids = to_py_obj(token_ids)
-        token_ids = self._to_py_obj_light(token_ids)
+        Does NOT handle special tokens correctly, these can manually be added
+        as ids afterwards.
 
-        return self.sp_model.decode(token_ids)
+        Does NOT support padding, these can manually be added as ids afterwards.
 
-    # Fastest but only works for python ints or lists
-    def decode_faster(self, token_ids: Union[int, List[int]]) -> str:
-        # token_ids = to_py_obj(token_ids)
+        Use default HuggingFace tokenization methods for full functionality.
 
-        return self.sp_model.decode(token_ids)
+        Args:
+            text (`str` or `List[str]`): One or several text(s) to convert to token ids.
+            return_tensors (`str` or `bool`): Returns PyTorch tensors if set to True or "pt"
 
-    def encode_fast(self, text: str, return_tensors: Optional[Union[str, TensorType]] = None) -> List[int]:
-        text = self.preprocess_text(text)
-        token_ids = self.sp_model.encode(text)
-        if return_tensors == "pt":
-            token_ids = torch.tensor(token_ids)
-        return token_ids
-
-    # Almost 10x speedup to override this for batch encode, 2x speedup for single-text encode
-    def call_fast(self, text: Union[str, List[str]], return_tensors: Optional[Union[str, TensorType]] = None
-                  ) -> Dict[str, Union[List[int], List[List[int]], "torch.Tensor"]]:
+        Returns:
+            `List[int]`, `List[List[int]]`, or `torch.Tensor`: The encoded text(s) as token ids.
+        """
 
         if isinstance(text, str):
             text = self.preprocess_text(text)
             token_ids = self.sp_model.encode(text)
-            # attention_mask = [1 for _ in token_ids]
         else:
             text = [self.preprocess_text(t) for t in text]
             token_ids = self.sp_model.encode(text)
-            # attention_mask = [[1] * len(ids_list) for ids_list in token_ids]
 
-        if return_tensors == "pt":
+        if return_tensors is True or return_tensors == "pt":
             token_ids = torch.tensor(token_ids)
-            # attention_mask = torch.tensor(attention_mask)
 
-        # out_dict = {"input_ids": token_ids, "attention_mask": attention_mask}
-        out_dict = {"input_ids": token_ids}
-        return out_dict
+        return token_ids
+
+    def decode_fast(self, token_ids: Union[int, List[int]]) -> str:
+        """
+        Encodes a text or batch of texts to token ids using preprocessing and the raw SP tokenizer. This has reduced
+        functionality but is often much faster.
+
+        Args:
+            token_ids (`int` or `List[int]`): Encoded token or text as token id(s).
+
+        Returns:
+            `str`: Decoded text
+        """
+
+        return self.sp_model.decode(token_ids)
