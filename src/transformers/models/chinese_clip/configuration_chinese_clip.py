@@ -41,7 +41,7 @@ CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class ChineseCLIPTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ChineseCLIPModel`]. It is used to instantiate a
-    CHINESE_CLIP model according to the specified arguments, defining the model architecture. Instantiating a
+    Chinese CLIP model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the CHINESE_CLIP
     [OFA-Sys/chinese-clip-vit-base-patch16](https:
         //huggingface.co/OFA-Sys/chinese-clip-vit-base-patch16) architecture.
