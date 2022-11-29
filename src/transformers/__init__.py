@@ -727,7 +727,7 @@ else:
     _import_structure["models.deformable_detr"].append("DeformableDetrFeatureExtractor")
     _import_structure["models.deit"].extend(["DeiTFeatureExtractor", "DeiTImageProcessor"])
     _import_structure["models.detr"].append("DetrFeatureExtractor")
-    _import_structure["models.donut"].append(["DonutFeatureExtractor", "DonutImageProcessor"])
+    _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
