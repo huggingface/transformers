@@ -1,5 +1,6 @@
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig, SwinConfig
 
+
 # Instantiating from a config will always randomly initialize all the weights
 
 # option 1: use default config

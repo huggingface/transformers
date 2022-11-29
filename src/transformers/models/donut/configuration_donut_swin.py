@@ -72,6 +72,8 @@ class DonutSwinConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        output_hidden_states_before_downsampling (`bool`, `optional`, defaults to False):
+            Whether or not to output hidden states before downsampling when `output_hidden_states=True`.
 
     Example:
 
@@ -113,6 +115,7 @@ class DonutSwinConfig(PretrainedConfig):
         patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
+        output_hidden_states_before_downsampling=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -135,6 +138,7 @@ class DonutSwinConfig(PretrainedConfig):
         self.path_norm = patch_norm
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
+        self.output_hidden_states_before_downsampling = output_hidden_states_before_downsampling
         # we set the hidden_size attribute in order to make Swin work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
