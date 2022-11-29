@@ -84,7 +84,7 @@ def pad_block_embeddings(block_embeddings, pad_length):
     """
 )
 @dataclass
-class MantaSeq2SeqModelOutput(Seq2SeqModelOutput):
+class MantaSeq2SeqLMOutput(Seq2SeqLMOutput):
     frontier_predictions: Optional[torch.FloatTensor] = None
 
 
@@ -652,6 +652,8 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
 
     def __init__(self, config: MantaConfig):
         super().__init__(config)
+        self.model_dim = config.d_model
+
         self.byte_embeddings = nn.Embedding(config.vocab_size, config.byte_embedding_dim)
 
         self.frontier_predictor = MantaFrontierPredictor(
@@ -754,7 +756,7 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], MantaSeq2SeqModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor], MantaSeq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
@@ -861,7 +863,7 @@ class MantaForConditionalGeneration(MantaPreTrainedModel):
             output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
             return ((loss,) + output) if loss is not None else output
 
-        return MantaSeq2SeqModelOutput(
+        return MantaSeq2SeqLMOutput(
             loss=loss,
             logits=lm_logits,
             past_key_values=decoder_outputs.past_key_values,
