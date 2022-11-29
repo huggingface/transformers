@@ -47,7 +47,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "OFA-Sys/chinese-clip-vit-base-patch16"
 _CONFIG_FOR_DOC = "ChineseCLIPConfig"
-_TOKENIZER_FOR_DOC = "ChineseCLIPTokenizer"
+_TOKENIZER_FOR_DOC = "BertTokenizer"
 
 CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "OFA-Sys/chinese-clip-vit-base-patch16",
