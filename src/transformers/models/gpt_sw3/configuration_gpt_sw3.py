@@ -137,17 +137,19 @@ class GptSw3Config(PretrainedConfig):
         attn_pdrop=0.1,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
+
         summary_type="cls_index",
         summary_use_proj=True,
         summary_activation=None,
         summary_proj_to_labels=True,
         summary_first_dropout=0.1,
+
         scale_attn_weights=True,
-        use_cache=True,
+        use_cache=False,
         bos_token_id=3,
         eos_token_id=3,
-        scale_attn_by_inverse_layer_idx=True,
-        reorder_and_upcast_attn=True,
+        scale_attn_by_inverse_layer_idx=False,
+        reorder_and_upcast_attn=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
