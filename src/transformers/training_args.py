@@ -1086,7 +1086,7 @@ class TrainingArguments:
                 if self.no_cuda and not is_torch_bf16_cpu_available():
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/cpu. You need torch>=1.10")
-                elif not self.no_cuda and not is_torch_bf16_gpu_available():
+                elif not self.no_cuda and torch.cuda.is_available() and not is_torch_bf16_gpu_available():
                     # gpu
                     raise ValueError(
                         "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
@@ -1414,7 +1414,7 @@ class TrainingArguments:
                 raise ImportError("--deepspeed requires deepspeed: `pip install deepspeed`.")
             import deepspeed
 
-            deepspeed.init_distributed()
+            deepspeed.init_distributed(timeout=timedelta(seconds=self.ddp_timeout))
 
             # workaround for setups like notebooks where the launcher can't be used,
             # but deepspeed requires a dist env.
