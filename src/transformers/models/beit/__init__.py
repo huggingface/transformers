@@ -20,6 +20,7 @@ from ...utils import (
     is_flax_available,
     is_torch_available,
     is_vision_available,
+    is_tf_available,
 )
 
 
