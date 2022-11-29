@@ -272,7 +272,9 @@ def find_pruneable_heads_and_indices(
     return heads, index
 
 
-def meshgrid(*tensors: Union[torch.Tensor, List[torch.Tensor]], indexing: Optional[str] = None) -> Tuple[torch.Tensor, ...]:
+def meshgrid(
+    *tensors: Union[torch.Tensor, List[torch.Tensor]], indexing: Optional[str] = None
+) -> Tuple[torch.Tensor, ...]:
     """
     Wrapper around torch.meshgrid to avoid warning messages about the introduced `indexing` argument.
 
