@@ -53,7 +53,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "YolosConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "YolosFeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "YolosImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "hustvl/yolos-small"
@@ -83,7 +83,7 @@ class YolosObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~DetrFeatureExtractor.post_process`] to retrieve the unnormalized bounding
+            possible padding). You can use [`~DetrImageProcessor.post_process`] to retrieve the unnormalized bounding
             boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -573,8 +573,8 @@ YOLOS_START_DOCSTRING = r"""
 YOLOS_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`AutoImageProcessor.__call__`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -756,7 +756,7 @@ class YolosForObjectDetection(YolosPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, AutoModelForObjectDetection
+        >>> from transformers import AutoImageProcessor, AutoModelForObjectDetection
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -764,17 +764,17 @@ class YolosForObjectDetection(YolosPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("hustvl/yolos-tiny")
+        >>> image_processor = AutoImageProcessor.from_pretrained("hustvl/yolos-tiny")
         >>> model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-tiny")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> # convert outputs (bounding boxes and class logits) to COCO API
         >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = feature_extractor.post_process_object_detection(
-        ...     outputs, threshold=0.9, target_sizes=target_sizes
-        ... )[0]
+        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
+        ...     0
+        ... ]
 
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
