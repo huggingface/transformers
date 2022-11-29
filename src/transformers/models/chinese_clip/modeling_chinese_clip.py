@@ -639,6 +639,7 @@ class ChineseCLIPTextLayer(nn.Module):
         return layer_output
 
 
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIPEncoder->ChineseCLIPVision,CLIPConfig->ChineseCLIPConfig,CLIPAttention->ChineseCLIPVisionAttention,CLIPMLP->ChineseCLIPVisionMLP
 class ChineseCLIPVisionLayer(nn.Module):
     def __init__(self, config: ChineseCLIPConfig):
         super().__init__()
