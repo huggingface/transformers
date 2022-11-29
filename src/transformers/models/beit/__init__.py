@@ -105,7 +105,7 @@ if TYPE_CHECKING:
         from .modeling_tf_beit import (
             TFBeitForMaskedImageModeling,
             TFBeitForImageClassification,
-            TFBeitForSemanticSegmentation",
+            TFBeitForSemanticSegmentation,
             TFBeitModel,
             TFBeitPreTrainedModel,
             
