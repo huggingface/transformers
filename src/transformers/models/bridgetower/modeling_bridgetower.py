@@ -35,7 +35,6 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from .import objectives
 from .image_processing_bridgetower import build_model, adapt_position_encoding, swin_adapt_position_encoding
 from .import swin_transformer as swin
 from ...modeling_utils import PreTrainedModel
@@ -80,26 +79,15 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["BridgeTowerSelfAttention"]
 
     def _init_weights(self, module):
-    
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=0.02)#TODO:Add as self.config.initializer_range
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=0.02)#TODO: self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            module.weight.data.normal_(mean=0.0, std=0.02)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    # TODO: Do we need this?
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, BridgeTowerEncoder):
-            module.gradient_checkpointing = value
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
+
 
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
     def __init__(self, config):
@@ -138,12 +126,12 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         else:
             self.cross_modal_text_transform = nn.ModuleList([nn.Linear(config.input_text_embed_size, config.hidden_size) for _ in range(config.num_layers)])
             self.cross_modal_image_transform = nn.ModuleList([nn.Linear(config.input_image_embed_size, config.hidden_size) for _ in range(config.num_layers)])
-        self.cross_modal_text_transform.apply(objectives.init_weights)
-        self.cross_modal_image_transform.apply(objectives.init_weights)
+        self.cross_modal_text_transform.apply(self._init_weights)
+        self.cross_modal_image_transform.apply(self._init_weights)
 
 
         self.token_type_embeddings = nn.Embedding(2, config.hidden_size)
-        self.token_type_embeddings.apply(objectives.init_weights)
+        self.token_type_embeddings.apply(self._init_weights)
 
         if torch.distributed.is_initialized():
             if torch.distributed.get_rank() == 0:
@@ -182,33 +170,33 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 ln.bias.data = self.vit_model.visual.ln_post.bias.data
 
         self.cross_modal_image_layers = nn.ModuleList([BertCrossLayer(bert_config) for _ in range(config.num_layers)])
-        self.cross_modal_image_layers.apply(objectives.init_weights)
+        self.cross_modal_image_layers.apply(self._init_weights)
         self.cross_modal_text_layers = nn.ModuleList([BertCrossLayer(bert_config) for _ in range(config.num_layers)])
-        self.cross_modal_text_layers.apply(objectives.init_weights)
+        self.cross_modal_text_layers.apply(self._init_weights)
 
         # Class token => Linear => Tanh
         self.cross_modal_image_pooler = Pooler(config.hidden_size)
-        self.cross_modal_image_pooler.apply(objectives.init_weights)
+        self.cross_modal_image_pooler.apply(self._init_weights)
         self.cross_modal_text_pooler = Pooler(config.hidden_size)
-        self.cross_modal_text_pooler.apply(objectives.init_weights)
+        self.cross_modal_text_pooler.apply(self._init_weights)
 
         if config.loss_names["mlm"] > 0:
             # MLM Head weights don't tie with BERT Embedding weights. Train from scratch.
             self.mlm_score = BridgeTowerMLMHead(bert_config)
-            self.mlm_score.apply(objectives.init_weights)
+            self.mlm_score.apply(self._init_weights)
 
         if config.loss_names["itm"] > 0:
             self.itm_score = BridgeTowerITMHead(config.hidden_size * 2)
-            self.itm_score.apply(objectives.init_weights)
+            self.itm_score.apply(self._init_weights)
 
         hs = config.hidden_size
 
         # ===================== Initialize LCI Components ===================== #
         # just for first layer
         self.cross_modal_text_layernorm = nn.LayerNorm(config.hidden_size)
-        self.cross_modal_text_layernorm.apply(objectives.init_weights)
+        self.cross_modal_text_layernorm.apply(self._init_weights)
         self.cross_modal_image_layernorm = nn.LayerNorm(config.hidden_size)
-        self.cross_modal_image_layernorm.apply(objectives.init_weights)
+        self.cross_modal_image_layernorm.apply(self._init_weights)
 
         if config.link_tower_shared:
             self.cross_modal_text_link_tower = LinkTower(config, bert_config)
@@ -217,8 +205,8 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             self.cross_modal_text_link_tower = nn.ModuleList([LinkTower(config, bert_config) for _ in range(config.num_layers - 1)])
             self.cross_modal_image_link_tower = nn.ModuleList([LinkTower(config, bert_config) for _ in range(config.num_layers - 1)])
 
-        self.cross_modal_text_link_tower.apply(objectives.init_weights)
-        self.cross_modal_image_link_tower.apply(objectives.init_weights)
+        self.cross_modal_text_link_tower.apply(self._init_weights)
+        self.cross_modal_image_link_tower.apply(self._init_weights)
 
 
         # ===================== Load Pretrained METER Weights ===================== 
@@ -309,7 +297,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         if config.downstream_fusion:
             assert config.downstream_fusion_layers > 1
             self.cross_modal_downstream_fusion_head = FusionHead(config)
-            self.cross_modal_downstream_fusion_head.apply(objectives.init_weights)
+            self.cross_modal_downstream_fusion_head.apply(self._init_weights)
 
         hscale = config.head_hidden_scale
         dscale = 1 # downstream_fusion_scale
@@ -352,24 +340,24 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                     nn.GELU(),
                     nn.Linear(hs * 2 * dscale * hscale, vs),
                 )
-            self.vqa_classifier.apply(objectives.init_weights)
+            self.vqa_classifier.apply(self._init_weights)
 
         if config.loss_names["nlvr2"] > 0:
             nlvr2_input_scale = 4 # 2 * 2
             if config.nlvr2_head_format == 'pair-biatten':
                 self.nlvr2_biatten_head_attn1 = nn.MultiheadAttention(hs, config.num_heads, dropout=config.drop_rate, batch_first=True)
-                self.nlvr2_biatten_head_attn1.apply(objectives.init_weights)
+                self.nlvr2_biatten_head_attn1.apply(self._init_weights)
                 self.nlvr2_biatten_head_attn2 = nn.MultiheadAttention(hs, config.num_heads, dropout=config.drop_rate, batch_first=True)
-                self.nlvr2_biatten_head_attn2.apply(objectives.init_weights)
+                self.nlvr2_biatten_head_attn2.apply(self._init_weights)
                 self.nlvr2_biatten_head_fc = nn.Sequential(
                     nn.Linear(hs * 2, hs * 2), 
                     nn.LayerNorm(hs * 2), 
                     nn.GELU(), 
                     nn.Dropout(config.drop_rate)
                 )
-                self.nlvr2_biatten_head_fc.apply(objectives.init_weights)
+                self.nlvr2_biatten_head_fc.apply(self._init_weights)
                 self.nlvr2_biatten_head_attn_pool = AttentionPool(hs * 2, config.drop_rate)
-                self.nlvr2_biatten_head_attn_pool.apply(objectives.init_weights)
+                self.nlvr2_biatten_head_attn_pool.apply(self._init_weights)
             elif config.nlvr2_head_format == 'triplet':
                 nlvr2_input_scale = 3 # 1 + 1 + 1
             
@@ -384,11 +372,11 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                     nn.GELU(),
                     nn.Linear(int(hs * 2 * hscale), 2),
                 )
-            self.nlvr2_classifier.apply(objectives.init_weights)
+            self.nlvr2_classifier.apply(self._init_weights)
             self.nlvr2_classifier_dropout = nn.Dropout(config.classifier_drop_rate)
             emb_data = self.token_type_embeddings.weight.data
             self.token_type_embeddings = nn.Embedding(3, hs)
-            self.token_type_embeddings.apply(objectives.init_weights)
+            self.token_type_embeddings.apply(self._init_weights)
             self.token_type_embeddings.weight.data[0, :] = emb_data[0, :]
             self.token_type_embeddings.weight.data[1, :] = emb_data[1, :]
             self.token_type_embeddings.weight.data[2, :] = emb_data[1, :]
@@ -405,7 +393,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                     nn.GELU(),
                     nn.Linear(hs * 2 * hscale, 3),
                 )
-            self.snli_classifier.apply(objectives.init_weights)
+            self.snli_classifier.apply(self._init_weights)
 
         if config.loss_names["irtr"] > 0:
             self.rank_output = nn.Linear(hs * 2, 1)
