@@ -256,12 +256,11 @@ def drop_path(
     input: torch.Tensor, drop_prob: float = 0.0, training: bool = False, scale_by_keep: bool = True
 ) -> torch.Tensor:
     """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). Comment by Ross Wightman:
+    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however, the original name is
+    misleading as 'Drop Connect' is a different form of dropout in a separate paper... See discussion:
+    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
+    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -497,9 +496,8 @@ class EfficientFormerPreTrainedModel(PreTrainedModel):
 
 
 EFFICIENTFORMER_START_DOCSTRING = r"""
-    This model is a PyTorch [nn.Module](https://pytorch.org/docs/stable/nn.html#nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
+    This model is a PyTorch [nn.Module](https://pytorch.org/docs/stable/nn.html#nn.Module) subclass. Use it as a
+    regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and behavior.
 
     Parameters:
         config ([`EfficientFormerConfig`]): Model configuration class with all the parameters of the model.
@@ -591,8 +589,8 @@ class EfficientFormerModel(EfficientFormerPreTrainedModel):
 
 @add_start_docstrings(
     """
-    EfficientFormer Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.
+    EfficientFormer Model transformer with an image classification head on top (a linear layer on top of the final
+    hidden state of the [CLS] token) e.g. for ImageNet.
     """,
     EFFICIENTFORMER_START_DOCSTRING,
 )
@@ -718,8 +716,9 @@ class EfficientFormerForImageClassificationWithTeacherOutput(ModelOutput):
 
 @add_start_docstrings(
     """
-    EfficientFormer Model transformer with image classification heads on top (a linear layer on top of the final hidden state of
-    the [CLS] token and a linear layer on top of the final hidden state of the distillation token) e.g. for ImageNet.
+    EfficientFormer Model transformer with image classification heads on top (a linear layer on top of the final hidden
+    state of the [CLS] token and a linear layer on top of the final hidden state of the distillation token) e.g. for
+    ImageNet.
 
     .. warning::
 

@@ -747,7 +747,7 @@ else:
     _import_structure["models.efficientformer"].extend(
         ["EfficientFormerFeatureExtractor", "EfficientFormerImageProcessor"]
     )
-    _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaProcessor", "FlavaImageProcessor"])
+    _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
@@ -1275,6 +1275,15 @@ else:
             "DPTForSemanticSegmentation",
             "DPTModel",
             "DPTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.efficientformer"].extend(
+        [
+            "EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "EfficientFormerForImageClassification",
+            "EfficientFormerForMaskedImageModeling",
+            "EfficientFormerModel",
+            "EfficientFormerPreTrainedModel",
         ]
     )
     _import_structure["models.electra"].extend(
@@ -2182,15 +2191,6 @@ else:
             "ViTForMaskedImageModeling",
             "ViTModel",
             "ViTPreTrainedModel",
-        ]
-    )
-    _import_structure["models.efficientformer"].extend(
-        [
-            "EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "EfficientFormerForImageClassification",
-            "EfficientFormerForMaskedImageModeling",
-            "EfficientFormerModel",
-            "EfficientFormerPreTrainedModel",
         ]
     )
     _import_structure["models.vit_mae"].extend(
