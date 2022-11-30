@@ -768,7 +768,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import PerceiverConfig, PerceiverTokenizer, PerceiverFeatureExtractor, PerceiverModel
+        >>> from transformers import PerceiverConfig, PerceiverTokenizer, PerceiverImageProcessor, PerceiverModel
         >>> from transformers.models.perceiver.modeling_perceiver import (
         ...     PerceiverTextPreprocessor,
         ...     PerceiverImagePreprocessor,
@@ -839,10 +839,10 @@ class PerceiverModel(PerceiverPreTrainedModel):
         ... )
 
         >>> # you can then do a forward pass as follows:
-        >>> feature_extractor = PerceiverFeatureExtractor()
+        >>> image_processor = PerceiverImageProcessor()
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> inputs = feature_extractor(image, return_tensors="pt").pixel_values
+        >>> inputs = image_processor(image, return_tensors="pt").pixel_values
 
         >>> with torch.no_grad():
         ...     outputs = model(inputs=inputs)
@@ -1266,17 +1266,17 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import PerceiverFeatureExtractor, PerceiverForImageClassificationLearned
+        >>> from transformers import PerceiverImageProcessor, PerceiverForImageClassificationLearned
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained("deepmind/vision-perceiver-learned")
+        >>> image_processor = PerceiverImageProcessor.from_pretrained("deepmind/vision-perceiver-learned")
         >>> model = PerceiverForImageClassificationLearned.from_pretrained("deepmind/vision-perceiver-learned")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt").pixel_values
+        >>> inputs = image_processor(images=image, return_tensors="pt").pixel_values
         >>> outputs = model(inputs=inputs)
         >>> logits = outputs.logits
         >>> list(logits.shape)
@@ -1407,17 +1407,17 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import PerceiverFeatureExtractor, PerceiverForImageClassificationFourier
+        >>> from transformers import PerceiverImageProcessor, PerceiverForImageClassificationFourier
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained("deepmind/vision-perceiver-fourier")
+        >>> image_processor = PerceiverImageProcessor.from_pretrained("deepmind/vision-perceiver-fourier")
         >>> model = PerceiverForImageClassificationFourier.from_pretrained("deepmind/vision-perceiver-fourier")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt").pixel_values
+        >>> inputs = image_processor(images=image, return_tensors="pt").pixel_values
         >>> outputs = model(inputs=inputs)
         >>> logits = outputs.logits
         >>> list(logits.shape)
@@ -1548,17 +1548,17 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import PerceiverFeatureExtractor, PerceiverForImageClassificationConvProcessing
+        >>> from transformers import PerceiverImageProcessor, PerceiverForImageClassificationConvProcessing
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = PerceiverFeatureExtractor.from_pretrained("deepmind/vision-perceiver-conv")
+        >>> image_processor = PerceiverImageProcessor.from_pretrained("deepmind/vision-perceiver-conv")
         >>> model = PerceiverForImageClassificationConvProcessing.from_pretrained("deepmind/vision-perceiver-conv")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt").pixel_values
+        >>> inputs = image_processor(images=image, return_tensors="pt").pixel_values
         >>> outputs = model(inputs=inputs)
         >>> logits = outputs.logits
         >>> list(logits.shape)

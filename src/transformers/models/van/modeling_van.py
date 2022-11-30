@@ -38,7 +38,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "VanConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "Visual-Attention-Network/van-base"
@@ -407,8 +407,8 @@ VAN_START_DOCSTRING = r"""
 VAN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`AutoImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all stages. See `hidden_states` under returned tensors for

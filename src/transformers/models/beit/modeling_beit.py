@@ -49,7 +49,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "BeitConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "BeitFeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "BeitImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/beit-base-patch16-224-pt22k"
@@ -593,8 +593,8 @@ BEIT_START_DOCSTRING = r"""
 BEIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`BeitFeatureExtractor`]. See
-            [`BeitFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`BeitImageProcessor`]. See
+            [`BeitImageProcessor.__call__`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -769,7 +769,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import BeitFeatureExtractor, BeitForMaskedImageModeling
+        >>> from transformers import BeitImageProcessor, BeitForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -777,11 +777,11 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
+        >>> image_processor = BeitImageProcessor.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
         >>> model = BeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
-        >>> pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+        >>> pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
         >>> # create random boolean mask of shape (batch_size, num_patches)
         >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
 
@@ -1218,17 +1218,17 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, BeitForSemanticSegmentation
+        >>> from transformers import AutoImageProcessor, BeitForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
+        >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
         >>> model = BeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits

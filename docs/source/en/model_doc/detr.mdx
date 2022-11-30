@@ -105,11 +105,11 @@ Tips:
 - DETR resizes the input images such that the shortest side is at least a certain amount of pixels while the longest is
   at most 1333 pixels. At training time, scale augmentation is used such that the shortest side is randomly set to at
   least 480 and at most 800 pixels. At inference time, the shortest side is set to 800. One can use
-  [`~transformers.DetrFeatureExtractor`] to prepare images (and optional annotations in COCO format) for the
+  [`~transformers.DetrImageProcessor`] to prepare images (and optional annotations in COCO format) for the
   model. Due to this resizing, images in a batch can have different sizes. DETR solves this by padding images up to the
   largest size in a batch, and by creating a pixel mask that indicates which pixels are real/which are padding.
   Alternatively, one can also define a custom `collate_fn` in order to batch images together, using
-  [`~transformers.DetrFeatureExtractor.pad_and_create_pixel_mask`].
+  [`~transformers.DetrImageProcessor.pad_and_create_pixel_mask`].
 - The size of the images will determine the amount of memory being used, and will thus determine the `batch_size`.
   It is advised to use a batch size of 2 per GPU. See [this Github thread](https://github.com/facebookresearch/detr/issues/150) for more info.
 
@@ -142,14 +142,14 @@ As a summary, consider the following table:
 | **Description** | Predicting bounding boxes and class labels around objects in an image | Predicting masks around objects (i.e. instances) in an image | Predicting masks around both objects (i.e. instances) as well as "stuff" (i.e. background things like trees and roads) in an image |
 | **Model** | [`~transformers.DetrForObjectDetection`] | [`~transformers.DetrForSegmentation`] | [`~transformers.DetrForSegmentation`] |
 | **Example dataset** | COCO detection | COCO detection, COCO panoptic | COCO panoptic  |                                                                        |
-| **Format of annotations to provide to**  [`~transformers.DetrFeatureExtractor`] | {'image_id': `int`, 'annotations': `List[Dict]`} each Dict being a COCO object annotation  | {'image_id': `int`, 'annotations': `List[Dict]`}  (in case of COCO detection) or {'file_name': `str`, 'image_id': `int`, 'segments_info': `List[Dict]`} (in case of COCO panoptic) | {'file_name': `str`, 'image_id': `int`, 'segments_info': `List[Dict]`} and masks_path (path to directory containing PNG files of the masks) |
-| **Postprocessing** (i.e. converting the output of the model to COCO API) | [`~transformers.DetrFeatureExtractor.post_process`] | [`~transformers.DetrFeatureExtractor.post_process_segmentation`] | [`~transformers.DetrFeatureExtractor.post_process_segmentation`], [`~transformers.DetrFeatureExtractor.post_process_panoptic`] |
+| **Format of annotations to provide to**  [`~transformers.DetrImageProcessor`] | {'image_id': `int`, 'annotations': `List[Dict]`} each Dict being a COCO object annotation  | {'image_id': `int`, 'annotations': `List[Dict]`}  (in case of COCO detection) or {'file_name': `str`, 'image_id': `int`, 'segments_info': `List[Dict]`} (in case of COCO panoptic) | {'file_name': `str`, 'image_id': `int`, 'segments_info': `List[Dict]`} and masks_path (path to directory containing PNG files of the masks) |
+| **Postprocessing** (i.e. converting the output of the model to COCO API) | [`~transformers.DetrImageProcessor.post_process`] | [`~transformers.DetrImageProcessor.post_process_segmentation`] | [`~transformers.DetrImageProcessor.post_process_segmentation`], [`~transformers.DetrImageProcessor.post_process_panoptic`] |
 | **evaluators** | `CocoEvaluator` with `iou_types="bbox"` | `CocoEvaluator` with `iou_types="bbox"` or `"segm"` | `CocoEvaluator` with `iou_tupes="bbox"` or `"segm"`, `PanopticEvaluator` |
 
 In short, one should prepare the data either in COCO detection or COCO panoptic format, then use
-[`~transformers.DetrFeatureExtractor`] to create `pixel_values`, `pixel_mask` and optional
+[`~transformers.DetrImageProcessor`] to create `pixel_values`, `pixel_mask` and optional
 `labels`, which can then be used to train (or fine-tune) a model. For evaluation, one should first convert the
-outputs of the model using one of the postprocessing methods of [`~transformers.DetrFeatureExtractor`]. These can
+outputs of the model using one of the postprocessing methods of [`~transformers.DetrImageProcessor`]. These can
 be be provided to either `CocoEvaluator` or `PanopticEvaluator`, which allow you to calculate metrics like
 mean Average Precision (mAP) and Panoptic Quality (PQ). The latter objects are implemented in the [original repository](https://github.com/facebookresearch/detr). See the [example notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DETR) for more info regarding evaluation.
 
