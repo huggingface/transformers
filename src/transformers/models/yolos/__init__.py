@@ -29,6 +29,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_yolos"] = ["YolosFeatureExtractor"]
+    _import_structure["image_processing_yolos"] = ["YolosImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -54,6 +55,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_yolos import YolosFeatureExtractor
+        from .image_processing_yolos import YolosImageProcessor
 
     try:
         if not is_torch_available():
