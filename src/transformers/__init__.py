@@ -244,7 +244,7 @@ _import_structure = {
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.gpt_neox": ["GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXConfig"],
     "models.gpt_neox_japanese": ["GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXJapaneseConfig"],
-    "models.gpt_sw3": ["GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP", "GptSw3Config", "GptSw3Tokenizer"],
+    "models.gpt_sw3": ["GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTSw3Config", "GPTSw3Tokenizer"],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -623,7 +623,7 @@ else:
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
-    _import_structure["models.gpt_sw3"].append("GptSw3TokenizerFast")
+    _import_structure["models.gpt_sw3"].append("GPTSw3TokenizerFast")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2TokenizerFast")
@@ -1424,12 +1424,12 @@ else:
     _import_structure["models.gpt_sw3"].extend(
         [
             "GPT_SW3_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "GptSw3DoubleHeadsModel",
-            "GptSw3ForSequenceClassification",
-            "GptSw3ForTokenClassification",
-            "GptSw3LMHeadModel",
-            "GptSw3Model",
-            "GptSw3PreTrainedModel",
+            "GPTSw3DoubleHeadsModel",
+            "GPTSw3ForSequenceClassification",
+            "GPTSw3ForTokenClassification",
+            "GPTSw3LMHeadModel",
+            "GPTSw3Model",
+            "GPTSw3PreTrainedModel",
         ]
     )
     _import_structure["models.gptj"].extend(
@@ -3454,7 +3454,7 @@ if TYPE_CHECKING:
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
     from .models.gpt_neox_japanese import GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXJapaneseConfig
-    from .models.gpt_sw3 import GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP, GptSw3Config, GptSw3Tokenizer
+    from .models.gpt_sw3 import GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTSw3Config, GPTSw3Tokenizer
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
     from .models.groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -3798,7 +3798,7 @@ if TYPE_CHECKING:
         from .models.gpt2 import GPT2TokenizerFast
         from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer
-        from .models.gpt_sw3 import GptSw3TokenizerFast
+        from .models.gpt_sw3 import GPTSw3TokenizerFast
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
         from .models.layoutlmv2 import LayoutLMv2TokenizerFast
@@ -4457,12 +4457,12 @@ if TYPE_CHECKING:
         )
         from .models.gpt_sw3 import (
             GPT_SW3_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GptSw3DoubleHeadsModel,
-            GptSw3ForSequenceClassification,
-            GptSw3ForTokenClassification,
-            GptSw3LMHeadModel,
-            GptSw3Model,
-            GptSw3PreTrainedModel,
+            GPTSw3DoubleHeadsModel,
+            GPTSw3ForSequenceClassification,
+            GPTSw3ForTokenClassification,
+            GPTSw3LMHeadModel,
+            GPTSw3Model,
+            GPTSw3PreTrainedModel,
             load_tf_weights_in_gpt_sw3,
         )
         from .models.gptj import (

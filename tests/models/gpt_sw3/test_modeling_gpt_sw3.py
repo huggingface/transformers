@@ -18,7 +18,7 @@ import datetime
 import math
 import unittest
 
-from transformers import GptSw3Config, is_torch_available
+from transformers import GPTSw3Config, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -31,16 +31,16 @@ if is_torch_available():
 
     from transformers import (
         GPT_SW3_PRETRAINED_MODEL_ARCHIVE_LIST,
-        GptSw3DoubleHeadsModel,
-        GptSw3ForSequenceClassification,
-        GptSw3ForTokenClassification,
-        GptSw3LMHeadModel,
-        GptSw3Model,
-        GptSw3Tokenizer,
+        GPTSw3DoubleHeadsModel,
+        GPTSw3ForSequenceClassification,
+        GPTSw3ForTokenClassification,
+        GPTSw3LMHeadModel,
+        GPTSw3Model,
+        GPTSw3Tokenizer,
     )
 
 
-class GptSw3ModelTester:
+class GPTSw3ModelTester:
     def __init__(
         self,
         parent,
@@ -95,7 +95,7 @@ class GptSw3ModelTester:
         self.pad_token_id = vocab_size - 1
 
     def get_large_model_config(self):
-        return GptSw3Config.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
+        return GPTSw3Config.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -145,7 +145,7 @@ class GptSw3ModelTester:
     def get_config(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
-        return GptSw3Config(
+        return GPTSw3Config(
             vocab_size=self.vocab_size,
             n_embd=self.hidden_size,
             n_layer=self.num_hidden_layers,
@@ -201,7 +201,7 @@ class GptSw3ModelTester:
         )
 
     def create_and_check_gpt_sw3_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
-        model = GptSw3Model(config=config)
+        model = GPTSw3Model(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -213,7 +213,7 @@ class GptSw3ModelTester:
         self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
     def create_and_check_gpt_sw3_model_past(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
-        model = GptSw3Model(config=config)
+        model = GPTSw3Model(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -251,7 +251,7 @@ class GptSw3ModelTester:
     def create_and_check_gpt_sw3_model_attention_mask_past(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args
     ):
-        model = GptSw3Model(config=config)
+        model = GPTSw3Model(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -293,7 +293,7 @@ class GptSw3ModelTester:
     def create_and_check_gpt_sw3_model_past_large_inputs(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args
     ):
-        model = GptSw3Model(config=config)
+        model = GPTSw3Model(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -329,7 +329,7 @@ class GptSw3ModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
-        model = GptSw3LMHeadModel(config)
+        model = GPTSw3LMHeadModel(config)
         model.to(torch_device)
         model.eval()
 
@@ -340,7 +340,7 @@ class GptSw3ModelTester:
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args, gradient_checkpointing=False
     ):
-        model = GptSw3LMHeadModel(config)
+        model = GPTSw3LMHeadModel(config)
         model.to(torch_device)
         if gradient_checkpointing:
             model.gradient_checkpointing_enable()
@@ -353,7 +353,7 @@ class GptSw3ModelTester:
     def create_and_check_double_lm_head_model(
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args
     ):
-        model = GptSw3DoubleHeadsModel(config)
+        model = GPTSw3DoubleHeadsModel(config)
         model.to(torch_device)
         model.eval()
 
@@ -380,7 +380,7 @@ class GptSw3ModelTester:
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
         config.num_labels = self.num_labels
-        model = GptSw3ForSequenceClassification(config)
+        model = GPTSw3ForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
@@ -390,14 +390,14 @@ class GptSw3ModelTester:
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
         config.num_labels = self.num_labels
-        model = GptSw3ForTokenClassification(config)
+        model = GPTSw3ForTokenClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_gpt_sw3_weight_initialization(self, config, *args):
-        model = GptSw3Model(config)
+        model = GPTSw3Model(config)
         model_std = model.config.initializer_range / math.sqrt(2 * model.config.n_layer)
         for key in model.state_dict().keys():
             if "c_proj" in key and "weight" in key:
@@ -429,21 +429,21 @@ class GptSw3ModelTester:
 
 
 @require_torch
-class GptSw3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class GPTSw3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            GptSw3Model,
-            GptSw3LMHeadModel,
-            GptSw3DoubleHeadsModel,
-            GptSw3ForSequenceClassification,
-            GptSw3ForTokenClassification,
+            GPTSw3Model,
+            GPTSw3LMHeadModel,
+            GPTSw3DoubleHeadsModel,
+            GPTSw3ForSequenceClassification,
+            GPTSw3ForTokenClassification,
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (GptSw3LMHeadModel, GptSw3DoubleHeadsModel) if is_torch_available() else ()
-    all_parallelizable_model_classes = (GptSw3LMHeadModel, GptSw3DoubleHeadsModel) if is_torch_available() else ()
+    all_generative_model_classes = (GPTSw3LMHeadModel, GPTSw3DoubleHeadsModel) if is_torch_available() else ()
+    all_parallelizable_model_classes = (GPTSw3LMHeadModel, GPTSw3DoubleHeadsModel) if is_torch_available() else ()
     fx_compatible = False
     test_missing_keys = False
     test_model_parallel = True
@@ -453,7 +453,7 @@ class GptSw3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ == "GptSw3DoubleHeadsModel":
+            if model_class.__name__ == "GPTSw3DoubleHeadsModel":
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.num_choices, self.model_tester.seq_length),
                     dtype=torch.long,
@@ -472,8 +472,8 @@ class GptSw3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = GptSw3ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GptSw3Config, n_embd=37)
+        self.model_tester = GPTSw3ModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=GPTSw3Config, n_embd=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -528,9 +528,9 @@ class GptSw3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     @slow
     def test_batch_generation(self):
-        model = GptSw3LMHeadModel.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
+        model = GPTSw3LMHeadModel.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
         model.to(torch_device)
-        tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
+        tokenizer = GPTSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
 
         tokenizer.padding_side = "left"
 
@@ -587,9 +587,9 @@ class GptSw3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     @slow
     def test_batch_generation_2heads(self):
-        model = GptSw3DoubleHeadsModel.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
+        model = GPTSw3DoubleHeadsModel.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
         model.to(torch_device)
-        tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
+        tokenizer = GPTSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
 
         tokenizer.padding_side = "left"
 
@@ -653,12 +653,12 @@ class GptSw3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     @slow
     def test_model_from_pretrained(self):
         for model_name in GPT_SW3_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GptSw3Model.from_pretrained(model_name)
+            model = GPTSw3Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
 @require_torch
-class GptSw3ModelLanguageGenerationTest(unittest.TestCase):
+class GPTSw3ModelLanguageGenerationTest(unittest.TestCase):
     def _test_lm_generate_gpt_sw3_helper(
         self,
         gradient_checkpointing=False,
@@ -666,7 +666,7 @@ class GptSw3ModelLanguageGenerationTest(unittest.TestCase):
         scale_attn_by_inverse_layer_idx=False,
         verify_outputs=True,
     ):
-        model = GptSw3LMHeadModel.from_pretrained(
+        model = GPTSw3LMHeadModel.from_pretrained(
             "AI-Sweden/gpt-sw3-126m-OLD-NEW",
             reorder_and_upcast_attn=reorder_and_upcast_attn,
             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
@@ -709,8 +709,8 @@ class GptSw3ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gpt_sw3_sample(self):
-        tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
-        model = GptSw3LMHeadModel.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
+        tokenizer = GPTSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
+        model = GPTSw3LMHeadModel.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -735,8 +735,8 @@ class GptSw3ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gpt_sw3_sample_max_time(self):
-        tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
-        model = GptSw3LMHeadModel.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
+        tokenizer = GPTSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
+        model = GPTSw3LMHeadModel.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -781,8 +781,8 @@ class GptSw3ModelLanguageGenerationTest(unittest.TestCase):
             "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"
         )
 
-        gpt_sw3_tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
-        gpt_sw3_model = GptSw3LMHeadModel.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW").to(torch_device)
+        gpt_sw3_tokenizer = GPTSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
+        gpt_sw3_model = GPTSw3LMHeadModel.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW").to(torch_device)
         input_ids = gpt_sw3_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
         outputs = gpt_sw3_model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)

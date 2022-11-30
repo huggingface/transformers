@@ -42,7 +42,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-class GptSw3Tokenizer(PreTrainedTokenizer):
+class GPTSw3Tokenizer(PreTrainedTokenizer):
     """
     Construct a GPT-SW3 tokenizer. Uses an underlying Sentence Piece model.
     """

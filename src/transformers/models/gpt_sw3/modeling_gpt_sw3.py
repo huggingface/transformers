@@ -41,14 +41,14 @@ from ...utils import (
 )
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from ..gpt2.modeling_gpt2 import GPT2Block
-from .configuration_gpt_sw3 import GptSw3Config
+from .configuration_gpt_sw3 import GPTSw3Config
 
 
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = ""
-_CONFIG_FOR_DOC = "GptSw3Config"
-_TOKENIZER_FOR_DOC = "GptSw3Tokenizer"
+_CONFIG_FOR_DOC = "GPTSw3Config"
+_TOKENIZER_FOR_DOC = "GPTSw3Tokenizer"
 
 GPT_SW3_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "AI-Sweden/gpt-sw3-126m-OLD-NEW",  # TODO: Add models
@@ -56,13 +56,13 @@ GPT_SW3_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class GptSw3PreTrainedModel(PreTrainedModel):
+class GPTSw3PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = GptSw3Config
+    config_class = GPTSw3Config
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
@@ -99,12 +99,12 @@ class GptSw3PreTrainedModel(PreTrainedModel):
                 p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, GptSw3Model):
+        if isinstance(module, GPTSw3Model):
             module.gradient_checkpointing = value
 
 
 @dataclass
-class GptSw3DoubleHeadsModelOutput(ModelOutput):
+class GPTSw3DoubleHeadsModelOutput(ModelOutput):
     """
     Base class for outputs of models predicting if two sentences are consecutive or not.
 
@@ -132,7 +132,7 @@ class GptSw3DoubleHeadsModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
-            GptSw3Attentions weights after the attention softmax, used to compute the weighted average in the
+            GPTSw3Attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads.
     """
 
@@ -156,7 +156,7 @@ GPT_SW3_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`GptSw3Config`]): Model configuration class with all the parameters of the model.
+        config ([`GPTSw3Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -171,7 +171,7 @@ GPT_SW3_INPUTS_DOCSTRING = r"""
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
-            Indices can be obtained using [`GptSw3Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`GPTSw3Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -250,7 +250,7 @@ PARALLELIZE_DOCSTRING = r"""
 
     ```python
     # Here is an example of a device map on a machine with 4 GPUs using gpt_sw3-xl, which has a total of 48 attention modules:
-    model = GptSw3LMHeadModel.from_pretrained("gpt_sw3-xl")
+    model = GPTSw3LMHeadModel.from_pretrained("gpt_sw3-xl")
     device_map = {
         0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
         1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
@@ -267,7 +267,7 @@ DEPARALLELIZE_DOCSTRING = r"""
 
     ```python
     # On a 4 GPU machine with gpt_sw3-large:
-    model = GptSw3LMHeadModel.from_pretrained("gpt_sw3-large")
+    model = GPTSw3LMHeadModel.from_pretrained("gpt_sw3-large")
     device_map = {
         0: [0, 1, 2, 3, 4, 5, 6, 7],
         1: [8, 9, 10, 11, 12, 13, 14, 15],
@@ -283,7 +283,7 @@ DEPARALLELIZE_DOCSTRING = r"""
 @add_start_docstrings(
     "The bare GPT_SW3 Model transformer outputting raw hidden-states without any specific head on top.",
     GPT_SW3_START_DOCSTRING,
-) class GptSw3Model(GptSw3Model):
+) class GPTSw3Model(GPTSw3Model):
     _keys_to_ignore_on_load_missing = ["attn.masked_bias"] def __init__(self, config):
         super().__init__(config)
 """
@@ -293,7 +293,7 @@ DEPARALLELIZE_DOCSTRING = r"""
     "The bare GPT_SW3 Model transformer outputting raw hidden-states without any specific head on top.",
     GPT_SW3_START_DOCSTRING,
 )
-class GptSw3Model(GptSw3PreTrainedModel):
+class GPTSw3Model(GPTSw3PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["attn.masked_bias"]
 
     def __init__(self, config):
@@ -571,12 +571,12 @@ class GptSw3Model(GptSw3PreTrainedModel):
     """,
     GPT_SW3_START_DOCSTRING,
 )
-class GptSw3LMHeadModel(GptSw3PreTrainedModel):
+class GPTSw3LMHeadModel(GPTSw3PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.transformer = GptSw3Model(config)
+        self.transformer = GPTSw3Model(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
         # Model parallel
@@ -733,20 +733,20 @@ class GptSw3LMHeadModel(GptSw3PreTrainedModel):
 
 @add_start_docstrings(
     """
-The GptSw3 Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
+The GPTSw3 Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
 RocStories/SWAG tasks. The two heads are two linear layers. The language modeling head has its weights tied to the
 input embeddings, the classification head takes as input the input of a specified classification token index in the
 input sequence).
 """,
     GPT_SW3_START_DOCSTRING,
 )
-class GptSw3DoubleHeadsModel(GptSw3PreTrainedModel):
+class GPTSw3DoubleHeadsModel(GPTSw3PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
         config.num_labels = 1
-        self.transformer = GptSw3Model(config)
+        self.transformer = GPTSw3Model(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.multiple_choice_head = SequenceSummary(config)
 
@@ -815,7 +815,7 @@ class GptSw3DoubleHeadsModel(GptSw3PreTrainedModel):
         }
 
     @add_start_docstrings_to_model_forward(GPT_SW3_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=GptSw3DoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=GPTSw3DoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -833,7 +833,7 @@ class GptSw3DoubleHeadsModel(GptSw3PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, GptSw3DoubleHeadsModelOutput]:
+    ) -> Union[Tuple, GPTSw3DoubleHeadsModelOutput]:
         r"""
         mc_token_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`, *optional*, default to index of the last token of the input):
             Index of the classification token in each input sequence. Selected in the range `[0, input_ids.size(-1) -
@@ -852,10 +852,10 @@ class GptSw3DoubleHeadsModel(GptSw3PreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import GptSw3Tokenizer, GptSw3DoubleHeadsModel
+        >>> from transformers import GPTSw3Tokenizer, GPTSw3DoubleHeadsModel
 
-        >>> tokenizer = GptSw3Tokenizer.from_pretrained("gpt_sw3")
-        >>> model = GptSw3DoubleHeadsModel.from_pretrained("gpt_sw3")
+        >>> tokenizer = GPTSw3Tokenizer.from_pretrained("gpt_sw3")
+        >>> model = GPTSw3DoubleHeadsModel.from_pretrained("gpt_sw3")
 
         >>> # Add a [CLS] to the vocabulary (we should train it also!)
         >>> num_added_tokens = tokenizer.add_special_tokens({"cls_token": "[CLS]"})
@@ -916,7 +916,7 @@ class GptSw3DoubleHeadsModel(GptSw3PreTrainedModel):
                 output = (mc_loss,) + output
             return ((lm_loss,) + output) if lm_loss is not None else output
 
-        return GptSw3DoubleHeadsModelOutput(
+        return GPTSw3DoubleHeadsModelOutput(
             loss=lm_loss,
             mc_loss=mc_loss,
             logits=lm_logits,
@@ -943,7 +943,7 @@ class GptSw3DoubleHeadsModel(GptSw3PreTrainedModel):
     """
     The GPT_SW3 Model transformer with a sequence classification head on top (linear layer).
 
-    [`GptSw3ForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    [`GPTSw3ForSequenceClassification`] uses the last token in order to do the classification, as other causal models
     (e.g. GPT-1) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
@@ -954,13 +954,13 @@ class GptSw3DoubleHeadsModel(GptSw3PreTrainedModel):
     """,
     GPT_SW3_START_DOCSTRING,
 )
-class GptSw3ForSequenceClassification(GptSw3PreTrainedModel):
+class GPTSw3ForSequenceClassification(GPTSw3PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.transformer = GptSw3Model(config)
+        self.transformer = GPTSw3Model(config)
         self.score = nn.Linear(config.n_embd, self.num_labels, bias=False)
 
         # Model parallel
@@ -1082,12 +1082,12 @@ class GptSw3ForSequenceClassification(GptSw3PreTrainedModel):
     """,
     GPT_SW3_START_DOCSTRING,
 )
-class GptSw3ForTokenClassification(GptSw3PreTrainedModel):
+class GPTSw3ForTokenClassification(GPTSw3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.transformer = GptSw3Model(config)
+        self.transformer = GPTSw3Model(config)
         if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None:
             classifier_dropout = config.classifier_dropout
         elif hasattr(config, "hidden_dropout") and config.hidden_dropout is not None:

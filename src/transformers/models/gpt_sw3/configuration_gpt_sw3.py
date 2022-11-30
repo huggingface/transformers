@@ -24,9 +24,9 @@ GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class GptSw3Config(PretrainedConfig):
+class GPTSw3Config(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`GptSw3Model`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`GPTSw3Model`]. It is used to instantiate a
     GPT-SW3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the GPT-SW3.
     [gpt_sw3](https://huggingface.co/gpt_sw3) architecture. # TODO: add correct link.
@@ -38,7 +38,7 @@ class GptSw3Config(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50257):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`GptSw3Model`] or [`TFGptSw3Model`].
+            `inputs_ids` passed when calling [`GPTSw3Model`] or [`TFGPTSw3Model`].
         n_positions (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -63,7 +63,7 @@ class GptSw3Config(PretrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         summary_type (`string`, *optional*, defaults to `"cls_index"`):
-            Argument used when doing sequence summary, used in the models [`GptSw3DoubleHeadsModel`].
+            Argument used when doing sequence summary, used in the models [`GPTSw3DoubleHeadsModel`].
 
             Has to be one of the following options:
 
@@ -73,20 +73,20 @@ class GptSw3Config(PretrainedConfig):
                 - `"cls_index"`: Supply a Tensor of classification token position (like GPT/GPT-2).
                 - `"attn"`: Not implemented now, use multi-head attention.
         summary_use_proj (`bool`, *optional*, defaults to `True`):
-            Argument used when doing sequence summary, used in the models [`GptSw3DoubleHeadsModel`].
+            Argument used when doing sequence summary, used in the models [`GPTSw3DoubleHeadsModel`].
 
             Whether or not to add a projection after the vector extraction.
         summary_activation (`str`, *optional*):
             Argument used when doing sequence summary. Used in for the multiple choice head in
-            [`GptSw3DoubleHeadsModel`].
+            [`GPTSw3DoubleHeadsModel`].
 
             Pass `"tanh"` for a tanh activation to the output, any other value will result in no activation.
         summary_proj_to_labels (`bool`, *optional*, defaults to `True`):
-            Argument used when doing sequence summary, used in the models [`GptSw3DoubleHeadsModel`].
+            Argument used when doing sequence summary, used in the models [`GPTSw3DoubleHeadsModel`].
 
             Whether the projection outputs should have `config.num_labels` or `config.hidden_size` classes.
         summary_first_dropout (`float`, *optional*, defaults to 0.1):
-            Argument used when doing sequence summary, used in the models [`GptSw3DoubleHeadsModel`].
+            Argument used when doing sequence summary, used in the models [`GPTSw3DoubleHeadsModel`].
 
             The dropout ratio to be used after the projection and activation.
         scale_attn_weights (`bool`, *optional*, defaults to `True`):
@@ -102,13 +102,13 @@ class GptSw3Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import GptSw3Config, GptSw3Model
+    >>> from transformers import GPTSw3Config, GPTSw3Model
 
-    >>> # Initializing a GptSw3 configuration
-    >>> configuration = GptSw3Config()
+    >>> # Initializing a GPTSw3 configuration
+    >>> configuration = GPTSw3Config()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = GptSw3Model(configuration)
+    >>> model = GPTSw3Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

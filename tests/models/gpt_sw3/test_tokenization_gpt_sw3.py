@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import GptSw3Tokenizer
+from transformers import GPTSw3Tokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -26,8 +26,8 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_with_bytefallback.mode
 
 @require_sentencepiece
 @require_tokenizers
-class GptSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = GptSw3Tokenizer
+class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    tokenizer_class = GPTSw3Tokenizer
     test_rust_tokenizer = False
     test_sentencepiece = True
     test_sentencepiece_ignore_case = False
@@ -36,7 +36,7 @@ class GptSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = GptSw3Tokenizer(SAMPLE_VOCAB, eos_token="<unk>", bos_token="<unk>", pad_token="<unk>")
+        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB, eos_token="<unk>", bos_token="<unk>", pad_token="<unk>")
 
         tokenizer.save_pretrained(self.tmpdirname)
 
@@ -66,7 +66,7 @@ class GptSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     # TODO: these tests will differ with our 2 tokenizers, might be able to hard-code it for one
     def test_full_tokenizer(self):
-        tokenizer = GptSw3Tokenizer(SAMPLE_VOCAB)
+        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB)
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -135,7 +135,7 @@ class GptSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     def test_fast_encode_decode(self):
-        tokenizer = GptSw3Tokenizer(SAMPLE_VOCAB)
+        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB)
         texts = ["This is a test", "I was born in 92000, and this is falsé."]
         expected_ids_list = [
             [465, 287, 265, 631, 842],

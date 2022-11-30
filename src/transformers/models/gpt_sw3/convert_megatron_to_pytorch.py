@@ -65,7 +65,7 @@ from os.path import isfile
 
 import torch
 
-from transformers import GPT2Config, GptSw3Config
+from transformers import GPT2Config, GPTSw3Config
 
 
 ####################################################################################################
@@ -238,9 +238,9 @@ def main(args):
     if args.gpt2:
         config_hf = GPT2Config()
     else:
-        config_hf = GptSw3Config()
+        config_hf = GPTSw3Config()
     config_hf = copy_config(config_hf=config_hf, config_megatron=config_megatron, gpt2=args.gpt2)
-    config_hf.architectures = ["GptSw3LMHeadModel"]
+    config_hf.architectures = ["GPTSw3LMHeadModel"]
 
     sd_megatron = checkpoint["state_dict"]
 
@@ -252,7 +252,7 @@ def main(args):
     if args.print_checkpoint_structure:
         recursive_print(None, sd_hf)
 
-    config_hf.tokenizer_class = "GptSw3Tokenizer"
+    config_hf.tokenizer_class = "GPTSw3Tokenizer"
 
     # TODO: investigate what should be saved here, especially considering we only use spiece.model as tokenizer
     #  1. config is probably correct

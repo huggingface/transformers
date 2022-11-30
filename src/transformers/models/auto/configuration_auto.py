@@ -74,7 +74,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("fsmt", "FSMTConfig"),
         ("funnel", "FunnelConfig"),
         ("glpn", "GLPNConfig"),
-        ("gpt-sw3", "GptSw3Config"),
+        ("gpt-sw3", "GPTSw3Config"),
         ("gpt2", "GPT2Config"),
         ("gpt_neo", "GPTNeoConfig"),
         ("gpt_neox", "GPTNeoXConfig"),

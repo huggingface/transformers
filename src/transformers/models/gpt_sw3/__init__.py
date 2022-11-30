@@ -22,8 +22,8 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_gpt_sw3": ["GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP", "GptSw3Config", "GptSw3OnnxConfig"],
-    "tokenization_gpt_sw3": ["GptSw3Tokenizer"],
+    "configuration_gpt_sw3": ["GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTSw3Config", "GPTSw3OnnxConfig"],
+    "tokenization_gpt_sw3": ["GPTSw3Tokenizer"],
 }
 
 try:
@@ -42,18 +42,18 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_gpt_sw3"] = [
         "GPT_SW3_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "GptSw3DoubleHeadsModel",
-        "GptSw3ForSequenceClassification",
-        "GptSw3ForTokenClassification",
-        "GptSw3LMHeadModel",
-        "GptSw3Model",
-        "GptSw3PreTrainedModel",
+        "GPTSw3DoubleHeadsModel",
+        "GPTSw3ForSequenceClassification",
+        "GPTSw3ForTokenClassification",
+        "GPTSw3LMHeadModel",
+        "GPTSw3Model",
+        "GPTSw3PreTrainedModel",
         "load_tf_weights_in_gpt_sw3",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_gpt_sw3 import GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP, GptSw3Config, GptSw3OnnxConfig
-    from .tokenization_gpt_sw3 import GptSw3Tokenizer
+    from .configuration_gpt_sw3 import GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTSw3Config, GPTSw3OnnxConfig
+    from .tokenization_gpt_sw3 import GPTSw3Tokenizer
 
     try:
         if not is_tokenizers_available():
@@ -71,12 +71,12 @@ if TYPE_CHECKING:
     else:
         from .modeling_gpt_sw3 import (
             GPT_SW3_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GptSw3DoubleHeadsModel,
-            GptSw3ForSequenceClassification,
-            GptSw3ForTokenClassification,
-            GptSw3LMHeadModel,
-            GptSw3Model,
-            GptSw3PreTrainedModel,
+            GPTSw3DoubleHeadsModel,
+            GPTSw3ForSequenceClassification,
+            GPTSw3ForTokenClassification,
+            GPTSw3LMHeadModel,
+            GPTSw3Model,
+            GPTSw3PreTrainedModel,
             load_tf_weights_in_gpt_sw3,
         )
 
