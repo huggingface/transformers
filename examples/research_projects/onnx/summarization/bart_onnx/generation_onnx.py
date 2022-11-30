@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 
 from transformers import BartConfig
-from transformers.generation_utils import GenerationMixin
+from transformers.generation import GenerationMixin
 
 
 def _convert_past_list_to_tuple(past_key_values):

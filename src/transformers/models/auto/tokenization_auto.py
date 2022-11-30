@@ -86,8 +86,16 @@ else:
                 ),
             ),
             ("canine", ("CanineTokenizer", None)),
+            ("chinese_clip", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "clip",
+                (
+                    "CLIPTokenizer",
+                    "CLIPTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "clipseg",
                 (
                     "CLIPTokenizer",
                     "CLIPTokenizerFast" if is_tokenizers_available() else None,
@@ -136,6 +144,7 @@ else:
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
             ("ibert", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+            ("jukebox", ("JukeboxTokenizer", None)),
             ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlmv2", ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlmv3", ("LayoutLMv3Tokenizer", "LayoutLMv3TokenizerFast" if is_tokenizers_available() else None)),
@@ -241,6 +250,7 @@ else:
             ),
             ("retribert", ("RetriBertTokenizer", "RetriBertTokenizerFast" if is_tokenizers_available() else None)),
             ("roberta", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+            ("roc_bert", ("RoCBertTokenizer", None)),
             ("roformer", ("RoFormerTokenizer", "RoFormerTokenizerFast" if is_tokenizers_available() else None)),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
             ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
@@ -248,6 +258,13 @@ else:
             (
                 "squeezebert",
                 ("SqueezeBertTokenizer", "SqueezeBertTokenizerFast" if is_tokenizers_available() else None),
+            ),
+            (
+                "switch_transformers",
+                (
+                    "T5Tokenizer" if is_sentencepiece_available() else None,
+                    "T5TokenizerFast" if is_tokenizers_available() else None,
+                ),
             ),
             (
                 "t5",
@@ -348,6 +365,7 @@ def get_tokenizer_config(
     use_auth_token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
+    subfolder: str = "",
     **kwargs,
 ):
     """
@@ -383,6 +401,9 @@ def get_tokenizer_config(
             identifier allowed by git.
         local_files_only (`bool`, *optional*, defaults to `False`):
             If `True`, will only try to load the tokenizer configuration from local files.
+        subfolder (`str`, *optional*, defaults to `""`):
+            In case the tokenizer config is located inside a subfolder of the model repo on huggingface.co, you can
+            specify the folder name here.
 
     <Tip>
 
@@ -419,6 +440,7 @@ def get_tokenizer_config(
         use_auth_token=use_auth_token,
         revision=revision,
         local_files_only=local_files_only,
+        subfolder=subfolder,
         _raise_exceptions_for_missing_entries=False,
         _raise_exceptions_for_connection_errors=False,
         _commit_hash=commit_hash,

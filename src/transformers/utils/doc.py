@@ -201,7 +201,7 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
     >>> answer_end_index = outputs.end_logits.argmax()
 
     >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
-    >>> tokenizer.decode(predict_answer_tokens)
+    >>> tokenizer.decode(predict_answer_tokens, skip_special_tokens=True)
     {expected_output}
     ```
 
@@ -1087,7 +1087,7 @@ def add_code_sample_docstrings(
             expected_loss=expected_loss,
         )
 
-        if "SequenceClassification" in model_class and modality == "audio":
+        if ("SequenceClassification" in model_class or "AudioClassification" in model_class) and modality == "audio":
             code_sample = sample_docstrings["AudioClassification"]
         elif "SequenceClassification" in model_class:
             code_sample = sample_docstrings["SequenceClassification"]

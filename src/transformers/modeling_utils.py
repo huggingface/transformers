@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import collections
 import gc
 import json
 import os
@@ -28,7 +28,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 from packaging import version
-from torch import Tensor, device, nn
+from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
 from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
@@ -38,7 +38,7 @@ from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from .dynamic_module_utils import custom_object_save
-from .generation_utils import GenerationMixin
+from .generation import GenerationMixin
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -545,6 +545,7 @@ def _load_state_dict_into_meta_model(
     state_dict_index=None,
     dtype=None,
     load_in_8bit=False,
+    is_safetensors=False,
 ):
     """
     This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
@@ -596,6 +597,9 @@ def _load_state_dict_into_meta_model(
         # in int/uint/bool and not cast them.
         if dtype is not None and torch.is_floating_point(param):
             param = param.to(dtype)
+        # For compatibility with PyTorch which loads float16/bfloat16 weights in fp32
+        if is_safetensors and dtype is None and torch.is_floating_point(param):
+            param = param.to(torch.float32)
 
         if device_map is None:
             param_device = "cpu"
@@ -609,7 +613,8 @@ def _load_state_dict_into_meta_model(
                 raise ValueError(f"{param_name} doesn't have any device set.")
             param_device = device_map[module_name]
         if param_device == "disk":
-            offload_index = offload_weight(param, param_name, offload_folder, offload_index)
+            if not is_safetensors:
+                offload_index = offload_weight(param, param_name, offload_folder, offload_index)
         elif param_device == "cpu" and state_dict_index is not None:
             state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
         elif not load_in_8bit:
@@ -673,7 +678,7 @@ class ModuleUtilsMixin:
             module.mem_rss_pre_forward = 0
 
     @property
-    def device(self) -> device:
+    def device(self) -> torch.device:
         """
         `torch.device`: The device on which the module is (assuming that all the module parameters are on the same
         device).
@@ -1538,6 +1543,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             kwargs:
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        # Checks if the model has been loaded in 8-bit
+        if getattr(self, "is_loaded_in_8bit", False):
+            warnings.warn(
+                "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
+                " behaviors. ",
+                UserWarning,
+            )
+
         if "save_config" in kwargs:
             warnings.warn(
                 "`save_config` is deprecated and will be removed in v5 of Transformers. Use `is_main_process` instead."
@@ -1657,6 +1670,36 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             mem_bufs = sum([buf.nelement() * buf.element_size() for buf in self.buffers()])
             mem = mem + mem_bufs
         return mem
+
+    def to(self, *args, **kwargs):
+        # Checks if the model has been loaded in 8-bit
+        if getattr(self, "is_loaded_in_8bit", False):
+            raise ValueError(
+                "`.to` is not supported for `8-bit` models. Please use the model as it is, since the"
+                " model has already been set to the correct devices and casted to the correct `dtype`."
+            )
+        else:
+            return super().to(*args, **kwargs)
+
+    def half(self, *args):
+        # Checks if the model has been loaded in 8-bit
+        if getattr(self, "is_loaded_in_8bit", False):
+            raise ValueError(
+                "`.half()` is not supported for `8-bit` models. Please use the model as it is, since the"
+                " model has already been casted to the correct `dtype`."
+            )
+        else:
+            return super().half(*args)
+
+    def float(self, *args):
+        # Checks if the model has been loaded in 8-bit
+        if getattr(self, "is_loaded_in_8bit", False):
+            raise ValueError(
+                "`.float()` is not supported for `8-bit` models. Please use the model as it is, since the"
+                " model has already been casted to the correct `dtype`."
+            )
+        else:
+            return super().float(*args)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
@@ -1918,6 +1961,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if low_cpu_mem_usage:
             # low_cpu_mem_usage requires PyTorch >= 1.9 to have the meta device.
             require_version_core("torch>=1.9")
+            if device_map is not None:
+                # The max memory utils require PyTorch >= 1.10 to have torch.cuda.mem_get_info.
+                require_version_core("torch>=1.10")
 
             if is_deepspeed_zero3_enabled():
                 raise ValueError(
@@ -2323,7 +2369,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
 
-            model, missing_keys, unexpected_keys, mismatched_keys, error_msgs = cls._load_pretrained_model(
+            (
+                model,
+                missing_keys,
+                unexpected_keys,
+                mismatched_keys,
+                offload_index,
+                error_msgs,
+            ) = cls._load_pretrained_model(
                 model,
                 state_dict,
                 loaded_state_dict_keys,  # XXX: rename?
@@ -2340,6 +2393,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 load_in_8bit=load_in_8bit,
             )
 
+        model.is_loaded_in_8bit = load_in_8bit
+
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
 
@@ -2348,7 +2403,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:
-            dispatch_model(model, device_map=device_map, offload_dir=offload_folder)
+            dispatch_model(model, device_map=device_map, offload_dir=offload_folder, offload_index=offload_index)
 
         if output_loading_info:
             if loading_info is None:
@@ -2380,19 +2435,27 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         dtype=None,
         load_in_8bit=False,
     ):
+        is_safetensors = False
         if load_in_8bit:
             from .utils.bitsandbytes import set_module_8bit_tensor_to_device
 
         if device_map is not None and "disk" in device_map.values():
-            if offload_folder is None:
+            archive_file = (
+                resolved_archive_file[0] if isinstance(resolved_archive_file, (list, tuple)) else resolved_archive_file
+            )
+            is_safetensors = archive_file.endswith(".safetensors")
+            if offload_folder is None and not is_safetensors:
                 raise ValueError(
                     "The current `device_map` had weights offloaded to the disk. Please provide an `offload_folder`"
-                    " for them."
+                    " for them. Alternatively, make sure you have `safetensors` installed if the model you are using"
+                    " offers the weights in this format."
                 )
-            os.makedirs(offload_folder, exist_ok=True)
+            if offload_folder is not None:
+                os.makedirs(offload_folder, exist_ok=True)
             if offload_state_dict is None:
                 offload_state_dict = True
 
+        is_sharded_safetensors = is_safetensors and sharded_metadata is not None
         # Retrieve missing & unexpected_keys
         model_state_dict = model.state_dict()
         expected_keys = list(model_state_dict.keys())
@@ -2421,8 +2484,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         add_prefix_to_model = has_prefix_module and not expects_prefix_module
 
         if remove_prefix_from_model:
-            expected_keys_not_prefixed = [s for s in expected_keys if not s.startswith(prefix)]
-            expected_keys = [".".join(s.split(".")[1:]) if s.startswith(prefix) else s for s in expected_keys]
+            _prefix = f"{prefix}."
+            expected_keys_not_prefixed = [s for s in expected_keys if not s.startswith(_prefix)]
+            expected_keys = [s[len(_prefix) :] if s.startswith(_prefix) else s for s in expected_keys]
         elif add_prefix_to_model:
             expected_keys = [".".join([prefix, s]) for s in expected_keys]
 
@@ -2467,7 +2531,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             start_prefix = cls.base_model_prefix + "."
         if len(cls.base_model_prefix) > 0 and hasattr(model, cls.base_model_prefix) and not has_prefix_module:
             model_to_load = getattr(model, cls.base_model_prefix)
-            if any(key in expected_keys_not_prefixed for key in loaded_keys):
+            base_model_expected_keys = list(model_to_load.state_dict().keys())
+            if any(key in expected_keys_not_prefixed and key not in base_model_expected_keys for key in loaded_keys):
                 raise ValueError(
                     "The state dictionary of the model you are trying to load is corrupted. Are you sure it was "
                     "properly saved?"
@@ -2504,6 +2569,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         del state_dict[checkpoint_key]
             return mismatched_keys
 
+        folder = os.path.sep.join(resolved_archive_file[0].split(os.path.sep)[:-1])
+        if device_map is not None and is_safetensors:
+            param_device_map = expand_device_map(device_map, original_loaded_keys)
+
+            str_dtype = str(dtype).replace("torch.", "") if dtype is not None else "float32"
+            if sharded_metadata is None:
+                archive_file = (
+                    resolved_archive_file[0]
+                    if isinstance(resolved_archive_file, (list, tuple))
+                    else resolved_archive_file
+                )
+                weight_map = {p: archive_file for p in original_loaded_keys}
+            else:
+                weight_map = {p: os.path.join(folder, f) for p, f in sharded_metadata["weight_map"].items()}
+            offload_index = {
+                p: {"safetensors_file": f, "weight_name": p, "dtype": str_dtype}
+                for p, f in weight_map.items()
+                if param_device_map[p] == "disk"
+            }
+
         if state_dict is not None:
             # Whole checkpoint
             mismatched_keys = _find_mismatched_keys(
@@ -2515,6 +2600,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 ignore_mismatched_sizes,
             )
             error_msgs = _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
+            offload_index = None
         else:
             # Sharded checkpoint or whole but low_cpu_mem_usage==True
 
@@ -2524,7 +2610,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             error_msgs = []
             mismatched_keys = []
-            offload_index = {} if device_map is not None and "disk" in device_map.values() else None
+            if not is_safetensors:
+                offload_index = {} if device_map is not None and "disk" in device_map.values() else None
             if offload_state_dict:
                 state_dict_folder = tempfile.mkdtemp()
                 state_dict_index = {}
@@ -2532,7 +2619,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 state_dict_folder = None
                 state_dict_index = None
 
+            if is_sharded_safetensors:
+                disk_only_shard_files = get_disk_only_shard_files(device_map, sharded_metadata=sharded_metadata)
+                disk_only_shard_files = [os.path.join(folder, f) for f in disk_only_shard_files]
+            else:
+                disk_only_shard_files = []
+
             for shard_file in resolved_archive_file:
+                # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
+                if shard_file in disk_only_shard_files:
+                    continue
                 state_dict = load_state_dict(shard_file)
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
@@ -2560,6 +2656,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         state_dict_index=state_dict_index,
                         dtype=dtype,
                         load_in_8bit=load_in_8bit,
+                        is_safetensors=is_safetensors,
                     )
                     error_msgs += new_error_msgs
                 else:
@@ -2573,13 +2670,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if model != model_to_load:
                     # We need to add the prefix of the base model
                     prefix = cls.base_model_prefix
-                    for weight_name in offload_index:
-                        shutil.move(
-                            os.path.join(offload_folder, f"{weight_name}.dat"),
-                            os.path.join(offload_folder, f"{prefix}.{weight_name}.dat"),
-                        )
+                    if not is_safetensors:
+                        for weight_name in offload_index:
+                            shutil.move(
+                                os.path.join(offload_folder, f"{weight_name}.dat"),
+                                os.path.join(offload_folder, f"{prefix}.{weight_name}.dat"),
+                            )
                     offload_index = {f"{prefix}.{key}": value for key, value in offload_index.items()}
-                save_offload_index(offload_index, offload_folder)
+                if not is_safetensors:
+                    save_offload_index(offload_index, offload_folder)
+                    offload_index = None
 
             if offload_state_dict:
                 # Load back temporarily offloaded state dict
@@ -2633,20 +2733,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " to use it for predictions and inference."
             )
 
-        return model, missing_keys, unexpected_keys, mismatched_keys, error_msgs
+        return model, missing_keys, unexpected_keys, mismatched_keys, offload_index, error_msgs
 
     def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):
         module_keys = set([".".join(key.split(".")[:-1]) for key in names])
 
         # torch.nn.ParameterList is a special case where two parameter keywords
         # are appended to the module name, *e.g.* bert.special_embeddings.0
-        module_keys = module_keys.union(set([".".join(key.split(".")[:-2]) for key in names if key[-1].isdigit()]))
+        module_keys = module_keys.union(
+            set([".".join(key.split(".")[:-2]) for key in names if len(key) > 0 and key[-1].isdigit()])
+        )
 
         retrieved_modules = []
         # retrieve all modules that has at least one missing weight name
         for name, module in self.named_modules():
             if remove_prefix:
-                name = ".".join(name.split(".")[1:]) if name.startswith(self.base_model_prefix) else name
+                _prefix = f"{self.base_model_prefix}."
+                name = name[len(_prefix) :] if name.startswith(_prefix) else name
             elif add_prefix:
                 name = ".".join([self.base_model_prefix, name]) if len(name) > 0 else self.base_model_prefix
 
@@ -3143,3 +3246,26 @@ def unwrap_model(model: nn.Module) -> nn.Module:
         return unwrap_model(model.module)
     else:
         return model
+
+
+def expand_device_map(device_map, param_names):
+    """
+    Expand a device map to return the correspondance parameter name to device.
+    """
+    new_device_map = {}
+    for module, device in device_map.items():
+        new_device_map.update({p: device for p in param_names if p == module or p.startswith(f"{module}.")})
+    return new_device_map
+
+
+def get_disk_only_shard_files(device_map, sharded_metadata):
+    """
+    Returns the list of shard files containing only weights offloaded to disk.
+    """
+    files_content = collections.defaultdict(list)
+    for weight_name, filename in sharded_metadata["weight_map"].items():
+        while len(weight_name) > 0 and weight_name not in device_map:
+            weight_name = ".".join(weight_name.split(".")[:-1])
+        files_content[filename].append(device_map[weight_name])
+
+    return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]

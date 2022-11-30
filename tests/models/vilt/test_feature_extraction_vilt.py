@@ -43,12 +43,13 @@ class ViltFeatureExtractionTester(unittest.TestCase):
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        size=30,
+        size=None,
         size_divisor=2,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
+        size = size if size is not None else {"shortest_edge": 30}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -78,18 +79,19 @@ class ViltFeatureExtractionTester(unittest.TestCase):
         assuming do_resize is set to True with a scalar size and size_divisor.
         """
         if not batched:
+            size = self.size["shortest_edge"]
             image = image_inputs[0]
             if isinstance(image, Image.Image):
                 w, h = image.size
             else:
                 h, w = image.shape[1], image.shape[2]
-            scale = self.size / min(w, h)
+            scale = size / min(w, h)
             if h < w:
-                newh, neww = self.size, scale * w
+                newh, neww = size, scale * w
             else:
-                newh, neww = scale * h, self.size
+                newh, neww = scale * h, size
 
-            max_size = int((1333 / 800) * self.size)
+            max_size = int((1333 / 800) * size)
             if max(newh, neww) > max_size:
                 scale = max_size / max(newh, neww)
                 newh = newh * scale
@@ -233,7 +235,7 @@ class ViltFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
     def test_equivalence_pad_and_create_pixel_mask(self):
         # Initialize feature_extractors
         feature_extractor_1 = self.feature_extraction_class(**self.feat_extract_dict)
-        feature_extractor_2 = self.feature_extraction_class(do_resize=False, do_normalize=False)
+        feature_extractor_2 = self.feature_extraction_class(do_resize=False, do_normalize=False, do_rescale=False)
         # create random PyTorch tensors
         image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
         for image in image_inputs:
