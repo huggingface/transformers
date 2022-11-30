@@ -958,13 +958,13 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import Data2VecTextTokenizer, Data2VecTextForCausalLM, Data2VecTextConfig
+        >>> from transformers import AutoTokenizer, Data2VecTextForCausalLM, Data2VecTextConfig
         >>> import torch
 
-        >>> tokenizer = Data2VecTextTokenizer.from_pretrained("facebook/data2vec-text-base")
-        >>> config = Data2VecTextConfig.from_pretrained("data2vec-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/data2vec-text-base")
+        >>> config = Data2VecTextConfig.from_pretrained("facebook/data2vec-text-base")
         >>> config.is_decoder = True
-        >>> model = Data2VecTextForCausalLM.from_pretrained("data2vec-base", config=config)
+        >>> model = Data2VecTextForCausalLM.from_pretrained("facebook/data2vec-text-base", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
