@@ -25,13 +25,7 @@ import requests
 import timm
 from timm.data import resolve_data_config
 from timm.data.transforms_factory import create_transform
-from transformers import (
-    BitConfig,
-    ViTFeatureExtractor,
-    ViTHybridConfig,
-    ViTHybridForImageClassification,
-    ViTHybridModel,
-)
+from transformers import BitConfig, ViTHybridConfig, ViTHybridForImageClassification, ViTHybridModel
 from transformers.utils import logging
 
 

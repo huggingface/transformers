@@ -27,9 +27,6 @@ from huggingface_hub import hf_hub_download
 from timm import create_model
 from timm.data import resolve_data_config
 from timm.data.transforms_factory import create_transform
-
-# from timm.data import resolve_data_config
-# from timm.data.transforms_factory import create_transform
 from transformers import BitConfig, BitForImageClassification
 from transformers.utils import logging
 
@@ -46,9 +43,10 @@ def get_config(model_name):
     label2id = {v: k for k, v in id2label.items()}
 
     conv_layer = "std_conv" if "bit" in model_name else False
-    # for the ViT-hybrid checkpoints, one needs to additionally set config.layer_type = "bottleneck"
-    # and use a different conv_layer, namely StdConv2dSame
-    # and "stem_type": "same" in the data config
+
+    # note that when using BiT as backbone for ViT-hybrid checkpoints,
+    # one needs to additionally set config.layer_type = "bottleneck", config.stem_type = "same",
+    # config.conv_layer = "std_conv_same"
     config = BitConfig(
         conv_layer=conv_layer,
         num_labels=1000,
@@ -107,8 +105,7 @@ def convert_resnetv2_checkpoint(model_name, pytorch_dump_folder_path):
 
     # verify logits
     transform = create_transform(**resolve_data_config({}, model=timm_model))
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    image = prepare_img()
     pixel_values = transform(image).unsqueeze(0)
 
     with torch.no_grad():

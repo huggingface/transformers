@@ -61,7 +61,6 @@ BIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Can SAME padding for given args be done statically?
 def is_static_pad(kernel_size: int, stride: int = 1, dilation: int = 1, **_):
     return stride == 1 and (dilation * (kernel_size - 1)) % 2 == 0
 
@@ -255,16 +254,17 @@ class BitEmbeddings(nn.Module):
 
         self.convolution = conv_layer(config.num_channels, config.embedding_size, kernel_size=7, stride=2)
 
-        self.norm = None
-        if not config.layer_type == "preactivation":
-            self.norm = partial(BitGroupNormActivation, num_groups=32)(config.embedding_size)
-        
-        self.pad = nn.ConstantPad2d(padding=(1, 1, 1, 1), value=0.0)
-        
+        self.pad = None
         if config.stem_type == "same":
             self.pooler = MaxPool2dSame(kernel_size=3, stride=2)
         else:
+            self.pad = nn.ConstantPad2d(padding=(1, 1, 1, 1), value=0.0)
             self.pooler = nn.MaxPool2d(kernel_size=3, stride=2)
+
+        self.norm = None
+        if not config.layer_type == "preactivation":
+            self.norm = partial(BitGroupNormActivation, num_groups=32)(config.embedding_size)
+
         self.num_channels = config.num_channels
 
     def forward(self, pixel_values: Tensor) -> Tensor:
@@ -274,19 +274,15 @@ class BitEmbeddings(nn.Module):
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
 
-        print("Shape of pixel_values:", pixel_values.shape)
-        print("First vaues of pixel values:", pixel_values[0, 0, :3, :3])
-
         embedding = self.convolution(pixel_values)
-        embedding = self.pad(embedding)
+
+        if self.pad is not None:
+            embedding = self.pad(embedding)
 
         if self.norm is not None:
             embedding = self.norm(embedding)
 
         embedding = self.pooler(embedding)
-
-        print("Shape of embedding:", embedding.shape)
-        print("First values of embedding:", embedding[0, 0, :3, :3])
 
         return embedding
 
@@ -494,15 +490,6 @@ class BitDownsampleConv(nn.Module):
         self.norm = nn.Identity() if preact else norm_layer(out_channels, apply_act=False)
 
     def forward(self, x, print_values=False):
-        # if print_values:
-        #     print("Conv layer:", self.conv_layer)
-        #     print("Hidden states before downsample conv:", x[0, 0, :3, :3])
-
-        z = self.conv(x)
-
-        # if print_values:
-        #     print("Hidden states after downsample conv:", z[0, 0, :3, :3])
-
         return self.norm(self.conv(x))
 
 
