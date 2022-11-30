@@ -85,8 +85,9 @@ def get_padding_value(padding, kernel_size, **kwargs) -> Tuple[Tuple, bool]:
 
 class StdConv2dSame(nn.Conv2d):
     """Conv2d with Weight Standardization. TF compatible SAME padding. Used for ViT Hybrid model.
-    Paper: `Micro-Batch Training with Batch-Channel Normalization and Weight Standardization` -
-        https://arxiv.org/abs/1903.10520v2
+
+    Paper: [Micro-Batch Training with Batch-Channel Normalization and Weight
+    Standardization](https://arxiv.org/abs/1903.10520v2)
     """
 
     def __init__(
@@ -244,6 +245,8 @@ class BitEmbeddings(nn.Module):
         self.convolution = nn.Conv2d(
             config.num_channels, config.embedding_size, kernel_size=7, stride=2, padding=3, bias=False
         )
+        if not config.layer_type == "preactivation":
+            self.norm = partial(BitGroupNormActivation, num_groups=32)(config.embedding_size)
         if config.stem_type == "same":
             self.pooler = MaxPool2dSame(kernel_size=3, stride=2)
         else:

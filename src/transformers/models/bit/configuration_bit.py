@@ -88,7 +88,7 @@ class BitConfig(PretrainedConfig):
         drop_path_rate=0.0,
         output_stride=32,
         width_factor=1,
-        conv_layer="",
+        conv_layer="std_conv",
         **kwargs
     ):
         super().__init__(**kwargs)
