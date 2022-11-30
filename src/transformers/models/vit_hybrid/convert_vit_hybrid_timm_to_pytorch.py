@@ -154,7 +154,7 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
+def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, push_to_hub=False):
     """
     Copy/paste/tweak model's weights to our ViT structure.
     """
@@ -220,6 +220,11 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
         # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
         # feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
+    if push_to_hub:
+        print(f"Pushing model and feature extractor to the hub {vit_name}")
+        model.push_to_hub(f"nielsr/{vit_name}")
+        # feature_extractor.push_to_hub(f"nielsr/{vit_name}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -228,11 +233,14 @@ if __name__ == "__main__":
         "--vit_name",
         default="vit_base_r50_s16_384",
         type=str,
-        help="Name of the ViT timm model you'd like to convert.",
+        help="Name of the hybrid ViT timm model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
+    parser.add_argument(
+        "--push_to_hub", action="store_true", help="Whether to upload the model to the HuggingFace hub."
+    )
 
     args = parser.parse_args()
-    convert_vit_checkpoint(args.vit_name, args.pytorch_dump_folder_path)
+    convert_vit_checkpoint(args.vit_name, args.pytorch_dump_folder_path, args.push_to_hub)
