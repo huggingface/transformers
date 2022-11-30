@@ -98,6 +98,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("markuplm", "MarkupLMModel"),
         ("mask2former", "Mask2FormerModel"),
         ("maskformer", "MaskFormerModel"),
+        ("maskformer-swin", "MaskFormerSwinModel"),
         ("mbart", "MBartModel"),
         ("mctct", "MCTCTModel"),
         ("megatron-bert", "MegatronBertModel"),
@@ -849,6 +850,7 @@ _MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
     [
         # Backbone mapping
+        ("maskformer-swin", "MaskFormerSwinBackbone"),
         ("resnet", "ResNetBackbone"),
     ]
 )

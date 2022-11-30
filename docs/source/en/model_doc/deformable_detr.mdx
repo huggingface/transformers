@@ -27,11 +27,18 @@ Tips:
 - Training Deformable DETR is equivalent to training the original [DETR](detr) model. Demo notebooks can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DETR).
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/deformable_detr_architecture.png"
-alt="drawing" width="600"/> 
+alt="drawing" width="600"/>
 
 <small> Deformable DETR architecture. Taken from the <a href="https://arxiv.org/abs/2010.04159">original paper</a>.</small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/fundamentalvision/Deformable-DETR).
+
+## DeformableDetrImageProcessor
+
+[[autodoc]] DeformableDetrImageProcessor
+    - preprocess
+    - pad_and_create_pixel_mask
+    - post_process_object_detection
 
 ## DeformableDetrFeatureExtractor
 

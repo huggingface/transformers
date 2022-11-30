@@ -710,4 +710,4 @@ class RoCBertModelIntegrationTest(unittest.TestCase):
         # convert to tokens is: ['[CLS]', '巴', '*', '黎', '是', '法', '国', '的', '首', '都', '[SEP]']
         expected_output = torch.tensor([[101, 2349, 115, 7944, 3221, 3791, 1744, 4638, 7674, 6963, 102]])
 
-        self.assertEqual(output_ids, expected_output)
+        assert torch.allclose(output_ids, expected_output)
