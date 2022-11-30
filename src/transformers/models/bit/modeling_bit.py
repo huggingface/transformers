@@ -259,10 +259,12 @@ class BitEmbeddings(nn.Module):
         if not config.layer_type == "preactivation":
             self.norm = partial(BitGroupNormActivation, num_groups=32)(config.embedding_size)
         
+        self.pad = nn.ConstantPad2d(padding=(1, 1, 1, 1), value=0.0)
+        
         if config.stem_type == "same":
             self.pooler = MaxPool2dSame(kernel_size=3, stride=2)
         else:
-            self.pooler = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+            self.pooler = nn.MaxPool2d(kernel_size=3, stride=2)
         self.num_channels = config.num_channels
 
     def forward(self, pixel_values: Tensor) -> Tensor:
@@ -276,6 +278,7 @@ class BitEmbeddings(nn.Module):
         print("First vaues of pixel values:", pixel_values[0,0,:3,:3])
 
         embedding = self.convolution(pixel_values)
+        embedding = self.pad(embedding)
 
         if self.norm is not None:
             embedding = self.norm(embedding)
