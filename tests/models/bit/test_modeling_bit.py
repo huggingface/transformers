@@ -48,7 +48,7 @@ class BitModelTester:
         image_size=32,
         num_channels=3,
         embeddings_size=10,
-        hidden_sizes=[10, 20, 30, 40],
+        hidden_sizes=[8, 16, 32, 64],
         depths=[1, 1, 2, 1],
         is_training=True,
         use_labels=True,
@@ -56,6 +56,7 @@ class BitModelTester:
         num_labels=3,
         scope=None,
         out_features=["stage2", "stage3", "stage4"],
+        num_groups=1,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -71,6 +72,7 @@ class BitModelTester:
         self.scope = scope
         self.num_stages = len(hidden_sizes)
         self.out_features = out_features
+        self.num_groups = num_groups
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -92,6 +94,7 @@ class BitModelTester:
             hidden_act=self.hidden_act,
             num_labels=self.num_labels,
             out_features=self.out_features,
+            num_groups=self.num_groups,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -242,7 +245,7 @@ class BitModelTest(ModelTesterMixin, unittest.TestCase):
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        layers_type = ["basic", "bottleneck"]
+        layers_type = ["preactivation", "bottleneck"]
         for model_class in self.all_model_classes:
             for layer_type in layers_type:
                 config.layer_type = layer_type

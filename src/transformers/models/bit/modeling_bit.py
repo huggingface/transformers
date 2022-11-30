@@ -17,13 +17,14 @@
 import collections
 import math
 from functools import partial
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
 from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ...activations import ACT2FN
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithNoAttention,
@@ -61,20 +62,30 @@ BIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def is_static_pad(kernel_size: int, stride: int = 1, dilation: int = 1, **_):
-    return stride == 1 and (dilation * (kernel_size - 1)) % 2 == 0
+def get_padding_value(padding=None, kernel_size=7, stride=1, dilation=1) -> Tuple[Tuple, bool]:
+    r"""
+    Utility function to get the tuple padding value given the kernel_size and padding
 
-
-def get_padding_value(padding, kernel_size, **kwargs) -> Tuple[Tuple, bool]:
+    Args:
+        padding, Union[`str`, `int`]:
+            padding value, can be either `"same"`, `"valid"`. If a different value is provided the default padding from
+            PyTorch is used.
+        kernel_size, `int`:
+            Kernel size of the convolution layers.
+    """
     dynamic = False
+    if padding is None:
+        padding = ((stride - 1) + dilation * (kernel_size - 1)) // 2
+        return padding, dynamic
+
     if isinstance(padding, str):
         # for any string padding, the padding will be calculated for you, one of three ways
         padding = padding.lower()
         if padding == "same":
             # TF compatible 'SAME' padding, has a performance and GPU memory allocation impact
-            if is_static_pad(kernel_size, **kwargs):
+            if stride == 1 and (dilation * (kernel_size - 1)) % 2 == 0:
                 # static case, no extra overhead
-                padding = get_padding(kernel_size, **kwargs)
+                padding = ((stride - 1) + dilation * (kernel_size - 1)) // 2
             else:
                 # dynamic 'SAME' padding, has runtime/GPU memory overhead
                 padding = 0
@@ -84,7 +95,7 @@ def get_padding_value(padding, kernel_size, **kwargs) -> Tuple[Tuple, bool]:
             padding = 0
         else:
             # Default to PyTorch style 'same'-ish symmetric padding
-            padding = get_padding(kernel_size, **kwargs)
+            padding = ((stride - 1) + dilation * (kernel_size - 1)) // 2
     return padding, dynamic
 
 
@@ -118,12 +129,15 @@ class StdConv2dSame(nn.Conv2d):
             groups=groups,
             bias=bias,
         )
-        self.same_pad = is_dynamic
+        if is_dynamic:
+            self.pad = DynamicPad2d(kernel_size, stride, dilation)
+        else:
+            self.pad = None
         self.eps = eps
 
     def forward(self, x):
-        if self.same_pad:
-            x = pad_same(x, self.kernel_size, self.stride, self.dilation)
+        if self.pad is not None:
+            x = self.pad(x)
         weight = nn.functional.batch_norm(
             self.weight.reshape(1, self.out_channels, -1), None, None, training=True, momentum=0.0, eps=self.eps
         ).reshape_as(self.weight)
@@ -133,7 +147,8 @@ class StdConv2dSame(nn.Conv2d):
 
 def _num_groups(num_channels, num_groups, group_size):
     if group_size:
-        assert num_channels % group_size == 0
+        if num_channels % group_size == 0:
+            raise ValueError("num_channels must divide group_size")
         return num_channels // group_size
     return num_groups
 
@@ -142,42 +157,29 @@ class BitGroupNormActivation(nn.GroupNorm):
     # NOTE num_channel and num_groups order flipped for easier layer swaps / binding of fixed args
     def __init__(
         self,
+        config,
         num_channels,
         num_groups=32,
         eps=1e-5,
         affine=True,
         group_size=None,
         apply_act=True,
-        act_layer=nn.ReLU,
-        inplace=True,
         drop_layer=None,
     ):
         super(BitGroupNormActivation, self).__init__(
             _num_groups(num_channels, num_groups, group_size), num_channels, eps=eps, affine=affine
         )
         self.drop = drop_layer() if drop_layer is not None else nn.Identity()
-        # act_layer = get_act_layer(act_layer)  # string -> nn.Module
-        if act_layer is not None and apply_act:
-            act_args = dict(inplace=True) if inplace else {}
-            self.act = act_layer(**act_args)
+        if apply_act:
+            self.activation = ACT2FN[config.hidden_act]
         else:
-            self.act = nn.Identity()
-        self._fast_norm = False  # TODO add support for fast norm
+            self.activation = nn.Identity()
 
     def forward(self, x):
-        # if self._fast_norm:
-        #     x = fast_group_norm(x, self.num_groups, self.weight, self.bias, self.eps)
-        # else:
         x = nn.functional.group_norm(x, self.num_groups, self.weight, self.bias, self.eps)
         x = self.drop(x)
-        x = self.act(x)
+        x = self.activation(x)
         return x
-
-
-# Calculate symmetric padding for a convolution
-def get_padding(kernel_size: int, stride: int = 1, dilation: int = 1, **_) -> int:
-    padding = ((stride - 1) + dilation * (kernel_size - 1)) // 2
-    return padding
 
 
 class StdConv2d(nn.Conv2d):
@@ -191,7 +193,7 @@ class StdConv2d(nn.Conv2d):
         self, in_channel, out_channels, kernel_size, stride=1, padding=None, dilation=1, groups=1, bias=False, eps=1e-6
     ):
         if padding is None:
-            padding = get_padding(kernel_size, stride, dilation)
+            padding, _ = get_padding_value(padding, kernel_size, stride, dilation)
         super().__init__(
             in_channel,
             out_channels,
@@ -212,32 +214,72 @@ class StdConv2d(nn.Conv2d):
         return x
 
 
-# Calculate asymmetric TensorFlow-like 'SAME' padding for a convolution
-def get_same_padding(x: int, k: int, s: int, d: int):
-    return max((math.ceil(x / s) - 1) * s + (k - 1) * d + 1 - x, 0)
+class DynamicPad2d(nn.Module):
+    r"""
+    A module that wraps dynamic padding of any input, given the parameters of the convolutional layer and the input
+    hidden states.
+    """
 
+    def __init__(self, kernel_size, stride, dilation, value=-float("inf")):
+        super().__init__(self)
+        # Safety checkers
+        if isinstance(kernel_size, int):
+            kernel_size = (kernel_size, kernel_size)
 
-# Dynamically pad input x with 'SAME' padding for conv with specified args
-def pad_same(x, k: List[int], s: List[int], d: List[int] = (1, 1), value: float = 0):
-    ih, iw = x.size()[-2:]
-    pad_h, pad_w = get_same_padding(ih, k[0], s[0], d[0]), get_same_padding(iw, k[1], s[1], d[1])
-    if pad_h > 0 or pad_w > 0:
-        x = nn.functional.pad(x, [pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2], value=value)
-    return x
+        if isinstance(stride, int):
+            stride = (stride, stride)
+
+        if isinstance(dilation, int):
+            dilation = (dilation, dilation)
+
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.dilation = dilation
+        self.value = value
+
+        def compute_padding(x, kernel_size, stride, dilation):
+            return max((math.ceil(x / stride) - 1) * stride + (kernel_size - 1) * dilation + 1 - x, 0)
+
+        self.compute_padding = compute_padding
+
+    def __call__(self, input):
+        # Get width and height
+        input_height, input_width = input.size()[-2:]
+
+        # Compute the padding values
+        padding_height = self.compute_padding(input_height, self.kernel_size[0], self.stride[0], self.dilation[0])
+        padding_width = self.compute_padding(input_width, self.kernel_size[1], self.stride[1], self.dilation[1])
+
+        # apply pad
+        if padding_height > 0 or padding_width > 0:
+            x = nn.functional.pad(
+                input,
+                [
+                    padding_width // 2,
+                    padding_width - padding_width // 2,
+                    padding_height // 2,
+                    padding_height - padding_height // 2,
+                ],
+                value=self.value,
+            )
+        return x
 
 
 class MaxPool2dSame(nn.MaxPool2d):
     """Tensorflow like 'SAME' wrapper for 2D max pooling"""
 
-    def __init__(self, kernel_size: int, stride=None, dilation=1, ceil_mode=False):
+    def __init__(
+        self, kernel_size: int, stride=None, dilation=1, ceil_mode=False, padding=(0, 0), padding_value=-float("inf")
+    ):
         kernel_size = kernel_size if isinstance(kernel_size, collections.abc.Iterable) else (kernel_size, kernel_size)
         stride = stride if isinstance(stride, collections.abc.Iterable) else (stride, stride)
         dilation = dilation if isinstance(dilation, collections.abc.Iterable) else (dilation, dilation)
-        super(MaxPool2dSame, self).__init__(kernel_size, stride, (0, 0), dilation, ceil_mode)
+        super(MaxPool2dSame, self).__init__(kernel_size, stride, padding, dilation, ceil_mode)
+        self.pad = DynamicPad2d(kernel_size, stride, dilation, padding_value)
 
     def forward(self, x):
-        x = pad_same(x, self.kernel_size, self.stride, value=-float("inf"))
-        return nn.functional.max_pool2d(x, self.kernel_size, self.stride, (0, 0), self.dilation, self.ceil_mode)
+        x = self.pad(x)
+        return nn.functional.max_pool2d(x, self.kernel_size, self.stride, self.padding, self.dilation, self.ceil_mode)
 
 
 class BitEmbeddings(nn.Module):
@@ -254,16 +296,17 @@ class BitEmbeddings(nn.Module):
 
         self.convolution = conv_layer(config.num_channels, config.embedding_size, kernel_size=7, stride=2)
 
-        self.pad = None
         if config.stem_type == "same":
             self.pooler = MaxPool2dSame(kernel_size=3, stride=2)
+            self.pad = nn.Identity()
         else:
             self.pad = nn.ConstantPad2d(padding=(1, 1, 1, 1), value=0.0)
             self.pooler = nn.MaxPool2d(kernel_size=3, stride=2)
 
-        self.norm = None
         if not config.layer_type == "preactivation":
-            self.norm = partial(BitGroupNormActivation, num_groups=32)(config.embedding_size)
+            self.norm = partial(BitGroupNormActivation, num_groups=config.num_groups)(config.embedding_size)
+        else:
+            self.norm = nn.Identity()
 
         self.num_channels = config.num_channels
 
@@ -274,14 +317,16 @@ class BitEmbeddings(nn.Module):
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
 
+        # Conv
         embedding = self.convolution(pixel_values)
 
-        if self.pad is not None:
-            embedding = self.pad(embedding)
+        # Eventually pad
+        embedding = self.pad(embedding)
 
-        if self.norm is not None:
-            embedding = self.norm(embedding)
+        # Eventually use BitGroupNorm
+        embedding = self.norm(embedding)
 
+        # and pool
         embedding = self.pooler(embedding)
 
         return embedding
@@ -323,12 +368,12 @@ class BitDropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
-def make_div(v, divisor=8):
+def make_div(value, divisor=8):
     min_value = divisor
-    new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
-    if new_v < 0.9 * v:
-        new_v += divisor
-    return new_v
+    new_value = max(min_value, int(value + divisor / 2) // divisor * divisor)
+    if new_value < 0.9 * value:
+        new_value += divisor
+    return new_value
 
 
 class BitPreActivationBottleneckLayer(nn.Module):
@@ -348,27 +393,25 @@ class BitPreActivationBottleneckLayer(nn.Module):
         dilation=1,
         first_dilation=None,
         groups=1,
-        act_layer=None,
         conv_layer=None,
         norm_layer=None,
-        proj_layer=None,
         drop_path_rate=0.0,
+        num_groups=32,
+        is_first_layer=False,
     ):
         super().__init__()
 
         first_dilation = first_dilation or dilation
         conv_layer = conv_layer or StdConv2d
-        norm_layer = norm_layer or partial(BitGroupNormActivation, num_groups=32)
+        norm_layer = norm_layer or partial(BitGroupNormActivation, num_groups=num_groups)
         out_channels = out_channels or in_channels
         mid_channels = make_div(out_channels * bottle_ratio)
 
-        if proj_layer is not None:
-            self.downsample = proj_layer(
+        if is_first_layer:
+            self.downsample = BitDownsampleConv(
                 in_channels,
                 out_channels,
                 stride=stride,
-                dilation=dilation,
-                first_dilation=first_dilation,
                 preact=True,
                 conv_layer=conv_layer,
                 norm_layer=norm_layer,
@@ -376,27 +419,21 @@ class BitPreActivationBottleneckLayer(nn.Module):
         else:
             self.downsample = None
 
-        self.norm1 = norm_layer(in_channels)
+        self.norm1 = norm_layer(num_channels=in_channels)
         self.conv1 = conv_layer(in_channels, mid_channels, 1)
-        self.norm2 = norm_layer(mid_channels)
+        self.norm2 = norm_layer(num_channels=mid_channels)
         self.conv2 = conv_layer(mid_channels, mid_channels, 3, stride=stride, dilation=first_dilation, groups=groups)
-        self.norm3 = norm_layer(mid_channels)
+        self.norm3 = norm_layer(num_channels=mid_channels)
         self.conv3 = conv_layer(mid_channels, out_channels, 1)
         self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
 
-    def forward(self, x, print_values=False):
+    def forward(self, x):
         x_preact = self.norm1(x)
-
-        # if print_values:
-        #     print("Hidden states after first norm:", x_preact[0, 0, :3, :3])
 
         # shortcut branch
         shortcut = x
         if self.downsample is not None:
-            shortcut = self.downsample(x_preact, print_values)
-
-        # if print_values:
-        #     print("Hidden states after downsample:", shortcut[0, 0, :3, :3])
+            shortcut = self.downsample(x_preact)
 
         # residual branch
         x = self.conv1(x_preact)
@@ -411,6 +448,7 @@ class BitBottleneckLayer(nn.Module):
 
     def __init__(
         self,
+        config,
         in_channels,
         out_channels=None,
         bottle_ratio=0.25,
@@ -418,26 +456,24 @@ class BitBottleneckLayer(nn.Module):
         dilation=1,
         first_dilation=None,
         groups=1,
-        act_layer=None,
         conv_layer=None,
         norm_layer=None,
-        proj_layer=None,
         drop_path_rate=0.0,
+        num_groups=32,
+        is_first_layer=False,
     ):
         super().__init__()
         first_dilation = first_dilation or dilation
-        act_layer = act_layer or nn.ReLU
         conv_layer = conv_layer or StdConv2d
-        norm_layer = norm_layer or partial(BitGroupNormActivation, num_groups=32)
+        norm_layer = norm_layer or partial(BitGroupNormActivation, num_groups=num_groups)
         out_channels = out_channels or in_channels
         mid_chs = make_div(out_channels * bottle_ratio)
 
-        if proj_layer is not None:
-            self.downsample = proj_layer(
+        if is_first_layer:
+            self.downsample = BitDownsampleConv(
                 in_channels,
                 out_channels,
                 stride=stride,
-                dilation=dilation,
                 preact=False,
                 conv_layer=conv_layer,
                 norm_layer=norm_layer,
@@ -452,9 +488,9 @@ class BitBottleneckLayer(nn.Module):
         self.conv3 = conv_layer(mid_chs, out_channels, 1)
         self.norm3 = norm_layer(out_channels, apply_act=False)
         self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
-        self.act3 = act_layer(inplace=True)
+        self.activation = ACT2FN[config.hidden_act]
 
-    def forward(self, x, print_values=False):
+    def forward(self, x):
         # shortcut branch
         shortcut = x
         if self.downsample is not None:
@@ -463,12 +499,18 @@ class BitBottleneckLayer(nn.Module):
         # residual
         x = self.conv1(x)
         x = self.norm1(x)
+
+        # second step
         x = self.conv2(x)
         x = self.norm2(x)
+
+        # third step
         x = self.conv3(x)
         x = self.norm3(x)
+
+        # final step
         x = self.drop_path(x)
-        x = self.act3(x + shortcut)
+        x = self.activation(x + shortcut)
         return x
 
 
@@ -478,8 +520,6 @@ class BitDownsampleConv(nn.Module):
         in_channels,
         out_channels,
         stride=1,
-        dilation=1,
-        first_dilation=None,
         preact=True,
         conv_layer=None,
         norm_layer=None,
@@ -489,7 +529,7 @@ class BitDownsampleConv(nn.Module):
         self.conv = conv_layer(in_channels, out_channels, 1, stride=stride)
         self.norm = nn.Identity() if preact else norm_layer(out_channels, apply_act=False)
 
-    def forward(self, x, print_values=False):
+    def forward(self, x):
         return self.norm(self.conv(x))
 
 
@@ -500,6 +540,7 @@ class BitStage(nn.Module):
 
     def __init__(
         self,
+        config,
         in_channels,
         out_channels,
         stride,
@@ -507,22 +548,36 @@ class BitStage(nn.Module):
         depth,
         bottle_ratio=0.25,
         groups=1,
-        avg_down=False,
         layer_dpr=None,
-        layer_fn=BitPreActivationBottleneckLayer,
-        act_layer=None,
-        conv_layer=None,
-        norm_layer=None,
-        **layer_kwargs
     ):
         super().__init__()
 
         first_dilation = 1 if dilation in (1, 2) else 2
-        layer_kwargs = dict(act_layer=act_layer, conv_layer=conv_layer, norm_layer=norm_layer)
-        if avg_down:
-            # TODO add support for avg_down
-            raise NotImplementedError("avg_down is not implemented")
-        proj_layer = BitDownsampleConv
+
+        # Step 1: Get the layer type
+        if config.layer_type == "bottleneck":
+            layer_fn = BitBottleneckLayer
+        elif config.layer_type == "preactivation":
+            layer_fn = BitPreActivationBottleneckLayer
+        else:
+            raise ValueError(
+                f"Unknown layer type: {config.layer_type}. Please use one of the following: [`'bottleneck'`,"
+                " `'preactivation`]"
+            )
+
+        # Step 2: Getting the convolution type
+        if config.conv_layer == "std_conv":
+            conv_layer = partial(StdConv2d, eps=1e-8)
+        elif config.conv_layer == "std_conv_same":
+            conv_layer = partial(StdConv2dSame, eps=1e-8)
+        else:
+            raise ValueError(
+                f"Convolutional layer {config.conv_layer} not supported! Please use one of the following:"
+                " [`'std_conv'`, `'std_conv_same`]"
+            )
+
+        norm_layer = partial(BitGroupNormActivation, config=config, num_groups=config.num_groups)
+
         prev_chs = in_channels
         self.layers = nn.Sequential()
         for layer_idx in range(depth):
@@ -538,23 +593,19 @@ class BitStage(nn.Module):
                     bottle_ratio=bottle_ratio,
                     groups=groups,
                     first_dilation=first_dilation,
-                    proj_layer=proj_layer,
                     drop_path_rate=drop_path_rate,
-                    **layer_kwargs,
+                    conv_layer=conv_layer,
+                    norm_layer=norm_layer,
+                    is_first_layer=(layer_idx == 0),
                 ),
             )
             prev_chs = out_channels
             first_dilation = dilation
-            proj_layer = None
 
-    def forward(self, input: Tensor, print_values=False) -> Tensor:
+    def forward(self, input: Tensor) -> Tensor:
         hidden_state = input
-        for idx, layer in enumerate(self.layers):
-            # if idx == 0 and print_values:
-            #     print(f"Hidden states before block {idx}", hidden_state[0, 0, :3, :3])
-            hidden_state = layer(hidden_state, print_values=idx == 0)
-            # if idx == 0 and print_values:
-            #     print(f"Hidden states after block {idx}", hidden_state[0, 0, :3, :3])
+        for _, layer in enumerate(self.layers):
+            hidden_state = layer(hidden_state)
         return hidden_state
 
 
@@ -563,45 +614,27 @@ class BitEncoder(nn.Module):
         super().__init__()
         self.stages = nn.ModuleList([])
 
-        act_layer = nn.ReLU
-        if config.conv_layer == "std_conv":
-            conv_layer = partial(StdConv2d, eps=1e-8)
-        elif config.conv_layer == "std_conv_same":
-            conv_layer = partial(StdConv2dSame, eps=1e-8)
-
-        norm_layer = partial(BitGroupNormActivation, num_groups=32)
-
         prev_chs = config.embedding_size
         curr_stride = 4
         dilation = 1
         layer_dprs = [
             x.tolist() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths)).split(config.depths)
         ]
-        if config.layer_type == "bottleneck":
-            layer_fn = BitBottleneckLayer
-        elif config.layer_type == "preactivation":
-            layer_fn = BitPreActivationBottleneckLayer
-        else:
-            raise ValueError("Unknown layer type: {}".format(config.layer_type))
 
-        for stage_idx, (d, c, bdpr) in enumerate(zip(config.depths, config.hidden_sizes, layer_dprs)):
+        for stage_idx, (current_depth, c, bdpr) in enumerate(zip(config.depths, config.hidden_sizes, layer_dprs)):
             out_channels = make_div(c * config.width_factor)
             stride = 1 if stage_idx == 0 else 2
             if curr_stride >= config.output_stride:
                 dilation *= stride
                 stride = 1
             stage = BitStage(
+                config,
                 prev_chs,
                 out_channels,
                 stride=stride,
                 dilation=dilation,
-                depth=d,
-                avg_down=False,
-                act_layer=act_layer,
-                conv_layer=conv_layer,
-                norm_layer=norm_layer,
+                depth=current_depth,
                 layer_dpr=bdpr,
-                layer_fn=layer_fn,
             )
             prev_chs = out_channels
             curr_stride *= stride
@@ -612,13 +645,11 @@ class BitEncoder(nn.Module):
     ) -> BaseModelOutputWithNoAttention:
         hidden_states = () if output_hidden_states else None
 
-        for idx, stage_module in enumerate(self.stages):
+        for stage_module in self.stages:
             if output_hidden_states:
                 hidden_states = hidden_states + (hidden_state,)
 
-            hidden_state = stage_module(hidden_state, print_values=idx == 0)
-            print("Shape of hidden states after stage", idx, hidden_state.shape)
-            print("Hidden states after stage", idx, hidden_state[0, 0, :3, :3])
+            hidden_state = stage_module(hidden_state)
 
         if output_hidden_states:
             hidden_states = hidden_states + (hidden_state,)
@@ -692,8 +723,12 @@ class BitModel(BitPreTrainedModel):
         self.embedder = BitEmbeddings(config)
 
         self.encoder = BitEncoder(config)
-        norm_layer = partial(BitGroupNormActivation, num_groups=32)
-        self.norm = norm_layer(config.hidden_sizes[-1]) if config.layer_type == "preactivation" else nn.Identity()
+        norm_layer = partial(BitGroupNormActivation, num_groups=config.num_groups)
+        self.norm = (
+            norm_layer(config, num_channels=config.hidden_sizes[-1])
+            if config.layer_type == "preactivation"
+            else nn.Identity()
+        )
 
         self.pooler = nn.AdaptiveAvgPool2d((1, 1))
         # Initialize weights and apply final processing
@@ -864,8 +899,8 @@ class BitBackbone(BitPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
-        >>> model = AutoBackbone.from_pretrained("microsoft/resnet-50")
+        >>> processor = AutoImageProcessor.from_pretrained("google/resnetnv2-50")
+        >>> model = AutoBackbone.from_pretrained("google/resnetnv2-50")
 
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
