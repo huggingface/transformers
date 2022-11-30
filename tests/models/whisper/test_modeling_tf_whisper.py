@@ -743,7 +743,7 @@ def _test_large_generation_multilingual(in_queue, out_queue, timeout):
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        EXPECTED_TRANSCRIPT = " Kimura san ni denwa wo kaite moraimashita"
+        EXPECTED_TRANSCRIPT = " Kimura-san called me."
         unittest.TestCase().assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
         model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="translate")
