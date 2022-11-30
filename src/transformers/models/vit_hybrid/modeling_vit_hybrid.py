@@ -54,12 +54,13 @@ VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTEmbeddings with ViT->ViTHybrid
 class ViTHybridEmbeddings(nn.Module):
     """
-    Construct the CLS token, position and patch embeddings.
+    Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
     """
 
-    def __init__(self, config: ViTHybridConfig):
+    def __init__(self, config: ViTHybridConfig, use_mask_token: bool = False) -> None:
         super().__init__()
 
         self.cls_token = nn.Parameter(
@@ -67,6 +68,7 @@ class ViTHybridEmbeddings(nn.Module):
                 torch.zeros(1, 1, config.hidden_size, dtype=torch.float32), mean=0.0, std=config.initializer_range
             )
         )
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
         self.patch_embeddings = ViTHybridPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(
@@ -79,16 +81,64 @@ class ViTHybridEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        embeddings = self.patch_embeddings(pixel_values)
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
+        resolution images.
+
+        Source:
+        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+        """
+
+        num_patches = embeddings.shape[1] - 1
+        num_positions = self.position_embeddings.shape[1] - 1
+        if num_patches == num_positions and height == width:
+            return self.position_embeddings
+        class_pos_embed = self.position_embeddings[:, 0]
+        patch_pos_embed = self.position_embeddings[:, 1:]
+        dim = embeddings.shape[-1]
+        h0 = height // self.config.patch_size
+        w0 = width // self.config.patch_size
+        # we add a small number to avoid floating point error in the interpolation
+        # see discussion at https://github.com/facebookresearch/dino/issues/8
+        h0, w0 = h0 + 0.1, w0 + 0.1
+        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
+            mode="bicubic",
+            align_corners=False,
+        )
+        assert int(h0) == patch_pos_embed.shape[-2] and int(w0) == patch_pos_embed.shape[-1]
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        interpolate_pos_encoding: bool = False,
+    ) -> torch.Tensor:
+        batch_size, num_channels, height, width = pixel_values.shape
+        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+
+        if bool_masked_pos is not None:
+            seq_length = embeddings.shape[1]
+            mask_tokens = self.mask_token.expand(batch_size, seq_length, -1)
+            # replace the masked visual tokens by mask_tokens
+            mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
+            embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
         # add the [CLS] token to the embedded patch tokens
-        batch_size = embeddings.shape[0]
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
-        embeddings = embeddings + self.position_embeddings
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            embeddings = embeddings + self.position_embeddings
 
         embeddings = self.dropout(embeddings)
 
@@ -139,12 +189,18 @@ class ViTHybridPatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(feature_dim, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        num_channels = pixel_values.shape[1]
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+        _, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
+        if not interpolate_pos_encoding:
+            if height != self.image_size[0] or width != self.image_size[1]:
+                raise ValueError(
+                    f"Input image size ({height}*{width}) doesn't match model"
+                    f" ({self.image_size[0]}*{self.image_size[1]})."
+                )
 
         features = self.backbone(pixel_values).feature_maps[-1]
         embeddings = self.projection(features).flatten(2).transpose(1, 2)
@@ -478,12 +534,13 @@ VIT_INPUTS_DOCSTRING = r"""
     "The bare ViT Hybrid Model transformer outputting raw hidden-states without any specific head on top.",
     VIT_START_DOCSTRING,
 )
+# Copied from transformers.models.vit.modeling_vit.ViTModel with ViT->ViTHybrid
 class ViTHybridModel(ViTHybridPreTrainedModel):
-    def __init__(self, config: ViTHybridConfig, add_pooling_layer: bool = True):
+    def __init__(self, config: ViTHybridConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = ViTHybridEmbeddings(config)
+        self.embeddings = ViTHybridEmbeddings(config, use_mask_token=use_mask_token)
         self.encoder = ViTHybridEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -515,9 +572,11 @@ class ViTHybridModel(ViTHybridPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
+        bool_masked_pos: Optional[torch.BoolTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -541,7 +600,9 @@ class ViTHybridModel(ViTHybridPreTrainedModel):
         if pixel_values.dtype != expected_dtype:
             pixel_values = pixel_values.to(expected_dtype)
 
-        embedding_output = self.embeddings(pixel_values)
+        embedding_output = self.embeddings(
+            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
+        )
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -589,6 +650,7 @@ class ViTHybridPooler(nn.Module):
     """,
     VIT_START_DOCSTRING,
 )
+# Copied from transformers.models.vit.modeling_vit.ViTForImageClassification with ViT->ViTHybrid
 class ViTHybridForImageClassification(ViTHybridPreTrainedModel):
     def __init__(self, config: ViTHybridConfig) -> None:
         super().__init__(config)
@@ -617,6 +679,7 @@ class ViTHybridForImageClassification(ViTHybridPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ImageClassifierOutput]:
         r"""
@@ -632,6 +695,7 @@ class ViTHybridForImageClassification(ViTHybridPreTrainedModel):
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
