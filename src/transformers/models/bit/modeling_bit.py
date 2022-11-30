@@ -248,11 +248,19 @@ class BitEmbeddings(nn.Module):
 
     def __init__(self, config: BitConfig):
         super().__init__()
-        self.convolution = nn.Conv2d(
+        if config.conv_layer == "std_conv":
+            conv_layer = partial(StdConv2d, eps=1e-8)
+        elif config.conv_layer == "std_conv_same":
+            conv_layer = partial(StdConv2dSame, eps=1e-8)
+
+        self.convolution = conv_layer(
             config.num_channels, config.embedding_size, kernel_size=7, stride=2, padding=3, bias=False
         )
+       
+        self.norm = None
         if not config.layer_type == "preactivation":
             self.norm = partial(BitGroupNormActivation, num_groups=32)(config.embedding_size)
+        
         if config.stem_type == "same":
             self.pooler = MaxPool2dSame(kernel_size=3, stride=2)
         else:
@@ -267,7 +275,17 @@ class BitEmbeddings(nn.Module):
             )
 
         embedding = self.convolution(pixel_values)
+
+        print("Shape of embeddings after conv2d:", embedding.shape)
+        print("First values:", embedding[0, 0, :3, :3])
+
+        if self.norm is not None:
+            embedding = self.norm(embedding)
+
         embedding = self.pooler(embedding)
+
+        print("Shape of BiT embeddings:", embedding.shape)
+        print("First values of BiT embeddings:", embedding[0,0,:3,:3])
 
         return embedding
 
@@ -341,8 +359,6 @@ class BitPreActivationBottleneckLayer(nn.Module):
     ):
         super().__init__()
 
-        print("hey what's up")
-
         first_dilation = first_dilation or dilation
         conv_layer = conv_layer or StdConv2d
         norm_layer = norm_layer or partial(BitGroupNormActivation, num_groups=32)
@@ -374,16 +390,16 @@ class BitPreActivationBottleneckLayer(nn.Module):
     def forward(self, x, print_values=False):
         x_preact = self.norm1(x)
 
-        if print_values:
-            print("Hidden states after first norm:", x_preact[0, 0, :3, :3])
+        # if print_values:
+        #     print("Hidden states after first norm:", x_preact[0, 0, :3, :3])
 
         # shortcut branch
         shortcut = x
         if self.downsample is not None:
             shortcut = self.downsample(x_preact, print_values)
 
-        if print_values:
-            print("Hidden states after downsample:", shortcut[0, 0, :3, :3])
+        # if print_values:
+        #     print("Hidden states after downsample:", shortcut[0, 0, :3, :3])
 
         # residual branch
         x = self.conv1(x_preact)
@@ -441,7 +457,7 @@ class BitBottleneckLayer(nn.Module):
         self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
         self.act3 = act_layer(inplace=True)
 
-    def forward(self, x):
+    def forward(self, x, print_values=False):
         # shortcut branch
         shortcut = x
         if self.downsample is not None:
@@ -474,18 +490,17 @@ class BitDownsampleConv(nn.Module):
         super(BitDownsampleConv, self).__init__()
         self.conv_layer = conv_layer
         self.conv = conv_layer(in_channels, out_channels, 1, stride=stride)
-        print("Preact:", preact)
         self.norm = nn.Identity() if preact else norm_layer(out_channels, apply_act=False)
 
     def forward(self, x, print_values=False):
-        if print_values:
-            print("Conv layer:", self.conv_layer)
-            print("Hidden states before downsample conv:", x[0, 0, :3, :3])
+        # if print_values:
+        #     print("Conv layer:", self.conv_layer)
+        #     print("Hidden states before downsample conv:", x[0, 0, :3, :3])
 
         z = self.conv(x)
 
-        if print_values:
-            print("Hidden states after downsample conv:", z[0, 0, :3, :3])
+        # if print_values:
+        #     print("Hidden states after downsample conv:", z[0, 0, :3, :3])
 
         return self.norm(self.conv(x))
 
@@ -547,11 +562,11 @@ class BitStage(nn.Module):
     def forward(self, input: Tensor, print_values=False) -> Tensor:
         hidden_state = input
         for idx, layer in enumerate(self.layers):
-            if idx == 0 and print_values:
-                print(f"Hidden states before block {idx}", hidden_state[0, 0, :3, :3])
+            # if idx == 0 and print_values:
+            #     print(f"Hidden states before block {idx}", hidden_state[0, 0, :3, :3])
             hidden_state = layer(hidden_state, print_values=idx == 0)
-            if idx == 0 and print_values:
-                print(f"Hidden states after block {idx}", hidden_state[0, 0, :3, :3])
+            # if idx == 0 and print_values:
+            #     print(f"Hidden states after block {idx}", hidden_state[0, 0, :3, :3])
         return hidden_state
 
 
@@ -614,9 +629,6 @@ class BitEncoder(nn.Module):
                 hidden_states = hidden_states + (hidden_state,)
 
             hidden_state = stage_module(hidden_state, print_values=idx == 0)
-
-            print(f"Hidden states after stage {idx}: ", hidden_state.shape)
-            print(f"Hidden states after stage {idx}: ", hidden_state[0, 0, :3, :3])
 
         if output_hidden_states:
             hidden_states = hidden_states + (hidden_state,)
@@ -716,9 +728,6 @@ class BitModel(BitPreTrainedModel):
 
         embedding_output = self.embedder(pixel_values)
 
-        print("Shape of embeddings:", embedding_output.shape)
-        print("First values of embeddings:", embedding_output[0, 0, :3, :3])
-
         encoder_outputs = self.encoder(
             embedding_output, output_hidden_states=output_hidden_states, return_dict=return_dict
         )
@@ -727,13 +736,7 @@ class BitModel(BitPreTrainedModel):
 
         last_hidden_state = self.norm(last_hidden_state)
 
-        print("Shape of final embeddings:", last_hidden_state.shape)
-        print("Final embeddings:", last_hidden_state[0, 0, :3, :3])
-
         pooled_output = self.pooler(last_hidden_state)
-
-        print("Pooled output:", pooled_output.shape)
-        print("Pool output:", pooled_output[0, 0, :3, :3])
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]

@@ -156,6 +156,7 @@ class ViTHybridPatchEmbeddings(nn.Module):
         embeddings = self.projection(features).flatten(2).transpose(1, 2)
 
         print("Shape of embeddings:", embeddings.shape)
+        print("First values of embeddings:", embeddings[0,:3,:3])
 
         return embeddings
 

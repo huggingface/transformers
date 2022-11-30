@@ -127,7 +127,7 @@ def convert_resnetv2_checkpoint(model_name, pytorch_dump_folder_path):
     print("Logits:", logits[0, :3])
     print("Predicted class:", model.config.id2label[logits.argmax(-1).item()])
     if model_name == "resnetv2_50x1_bitm":
-        expected_slice = torch.tensor([0.4306, -0.0052, -0.6205])
+        expected_slice = torch.tensor([ 0.1665, -0.2718, -1.1446])
     assert torch.allclose(logits[0, :3], expected_slice, atol=1e-3)
     print("Looks ok!")
 
