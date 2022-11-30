@@ -58,12 +58,12 @@ class TrOCRProcessorWithLM(ProcessorMixin):
         decoder (`pyctcdecode.BeamSearchDecoderCTC`):
             An instance of [`pyctcdecode.BeamSearchDecoderCTC`]. The decoder is a required input.
     """
-    feature_extractor_class = "AutoFeatureExtractor"
+    feature_extractor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
         self,
-        feature_extractor: "FeatureExtractionMixin",
+        feature_extractor: "ImageProcessorMixin",
         tokenizer: "PreTrainedTokenizerBase",
         decoder: "BeamSearchDecoderCTC",
     ):
