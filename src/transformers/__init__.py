@@ -1003,15 +1003,6 @@ else:
             "load_tf_weights_in_bert",
         ]
     )
-    _import_structure["models.git"].extend(
-        [
-            "GIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "GITForCausalLM",
-            "GITModel",
-            "GITPreTrainedModel",
-            "GITVisionModel",
-        ]
-    )
     _import_structure["models.bert_generation"].extend(
         [
             "BertGenerationDecoder",
@@ -1384,6 +1375,15 @@ else:
             "FunnelModel",
             "FunnelPreTrainedModel",
             "load_tf_weights_in_funnel",
+        ]
+    )
+    _import_structure["models.git"].extend(
+        [
+            "GIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GITForCausalLM",
+            "GITModel",
+            "GITPreTrainedModel",
+            "GITVisionModel",
         ]
     )
     _import_structure["models.glpn"].extend(

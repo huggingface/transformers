@@ -1238,14 +1238,6 @@ class GITModel(GITPreTrainedModel):
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
-        # TODO fix this
-        # if attention_mask is None:
-        #     attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
-
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        # extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
@@ -1276,6 +1268,7 @@ class GITModel(GITPreTrainedModel):
         hidden_states = torch.cat((projected_visual_features, embedding_output), dim=1)
 
         # An additive mask for masking the future (one direction).
+        # TODO add support for user-provided attention_mask
         tgt_mask = self._generate_future_mask(seq_length, embedding_output.dtype, embedding_output.device)
 
         extended_attention_mask = self.create_attention_mask(
