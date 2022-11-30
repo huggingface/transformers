@@ -105,13 +105,11 @@ def convert_resnetv2_checkpoint(model_name, pytorch_dump_folder_path):
     model.eval()
     model.load_state_dict(state_dict)
 
-    # TODO verify logits
+    # verify logits
     transform = create_transform(**resolve_data_config({}, model=timm_model))
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
     pixel_values = transform(image).unsqueeze(0)
-
-    print("Shape of pixel values:", pixel_values.shape)
 
     with torch.no_grad():
         outputs = model(pixel_values)
@@ -119,12 +117,9 @@ def convert_resnetv2_checkpoint(model_name, pytorch_dump_folder_path):
 
     print("Logits:", logits[0, :3])
     print("Predicted class:", model.config.id2label[logits.argmax(-1).item()])
-    # if model_name == "resnetv2_50x1_bitm":
-    #     expected_slice = torch.tensor([ 0.1665, -0.2718, -1.1446])
     timm_logits = timm_model(pixel_values)
     assert timm_logits.shape == outputs.logits.shape
     assert torch.allclose(timm_logits, outputs.logits, atol=1e-3)
-    # assert torch.allclose(logits[0, :3], expected_slice, atol=1e-3)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:

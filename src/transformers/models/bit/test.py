@@ -1,4 +1,4 @@
-from transformers import BitConfig, BitBackbone
+from transformers import BitBackbone, BitConfig
 
 
 backbone_config = BitConfig(stem_type="same", layer_type="bottleneck", depths=(3, 4, 9), out_features=["stage3"])

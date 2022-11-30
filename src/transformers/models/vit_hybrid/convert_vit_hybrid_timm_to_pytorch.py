@@ -17,15 +17,14 @@
 
 import argparse
 from pathlib import Path
-import requests
 
 import torch
 from PIL import Image
 
+import requests
 import timm
 from timm.data import resolve_data_config
 from timm.data.transforms_factory import create_transform
-
 from transformers import (
     BitConfig,
     ViTFeatureExtractor,
@@ -167,7 +166,13 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
     """
 
     # define default ViT hybrid configuration
-    backbone_config = BitConfig(stem_type="same", conv_layer="std_conv_same", layer_type="bottleneck", depths=(3, 4, 9), out_features=["stage3"])
+    backbone_config = BitConfig(
+        stem_type="same",
+        conv_layer="std_conv_same",
+        layer_type="bottleneck",
+        depths=(3, 4, 9),
+        out_features=["stage3"],
+    )
     config = ViTHybridConfig(backbone_config=backbone_config, image_size=384, num_labels=1000)
     base_model = False
 
@@ -192,9 +197,7 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
     model.load_state_dict(state_dict)
 
     # Check outputs on an image
-    transform = create_transform(
-        **resolve_data_config({}, model=timm_model)
-    )
+    transform = create_transform(**resolve_data_config({}, model=timm_model))
 
     # load image
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"

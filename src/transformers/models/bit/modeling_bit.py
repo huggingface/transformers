@@ -254,7 +254,7 @@ class BitEmbeddings(nn.Module):
             conv_layer = partial(StdConv2dSame, eps=1e-8)
 
         self.convolution = conv_layer(config.num_channels, config.embedding_size, kernel_size=7, stride=2)
-       
+
         self.norm = None
         if not config.layer_type == "preactivation":
             self.norm = partial(BitGroupNormActivation, num_groups=32)(config.embedding_size)
@@ -275,7 +275,7 @@ class BitEmbeddings(nn.Module):
             )
 
         print("Shape of pixel_values:", pixel_values.shape)
-        print("First vaues of pixel values:", pixel_values[0,0,:3,:3])
+        print("First vaues of pixel values:", pixel_values[0, 0, :3, :3])
 
         embedding = self.convolution(pixel_values)
         embedding = self.pad(embedding)
@@ -286,7 +286,7 @@ class BitEmbeddings(nn.Module):
         embedding = self.pooler(embedding)
 
         print("Shape of embedding:", embedding.shape)
-        print("First values of embedding:", embedding[0,0,:3,:3])
+        print("First values of embedding:", embedding[0, 0, :3, :3])
 
         return embedding
 
