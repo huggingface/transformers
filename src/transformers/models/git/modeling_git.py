@@ -88,6 +88,20 @@ class GITVisionModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+    """
+    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    """
+    bsz, src_len = mask.size()
+    tgt_len = tgt_len if tgt_len is not None else src_len
+
+    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+
+    inverted_mask = 1.0 - expanded_mask
+
+    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+
+
 class GITEmbeddings(nn.Module):
     """Construct the embeddings from word and position embeddings."""
 
@@ -1267,20 +1281,32 @@ class GITModel(GITPreTrainedModel):
         # concatenate patch token and text token embeddings
         hidden_states = torch.cat((projected_visual_features, embedding_output), dim=1)
 
-        # An additive mask for masking the future (one direction).
-        # TODO add support for user-provided attention_mask
+        # By default, an additive causal mask is created
+        # for masking the future (one direction).
         tgt_mask = self._generate_future_mask(seq_length, embedding_output.dtype, embedding_output.device)
 
-        extended_attention_mask = self.create_attention_mask(
+        # Create an attention mask of shape (batch_size, 1, tgt_seq_len, src_seq_len)
+        combined_attention_mask = self.create_attention_mask(
             tgt=embedding_output,
             memory=projected_visual_features,
             tgt_mask=tgt_mask,
             past_key_values_length=past_key_values_length,
         )
 
+        if attention_mask is not None:
+            # if the user provides an attention mask, we add it to the default one
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            expanded_attn_mask = _expand_mask(attention_mask, embedding_output.dtype, tgt_len=input_shape[-1]).to(
+                embedding_output.device
+            )
+            if past_key_values_length > 0:
+                expanded_attn_mask = expanded_attn_mask[:, :, -past_key_values_length:, :]
+            else:
+                combined_attention_mask[:, :, -input_shape[1] :, -input_shape[1] :] += expanded_attn_mask
+
         encoder_outputs = self.encoder(
             hidden_states,
-            attention_mask=extended_attention_mask,
+            attention_mask=combined_attention_mask,
             head_mask=head_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
