@@ -19,12 +19,7 @@ import inspect
 import unittest
 
 from transformers import ViTHybridConfig
-from transformers.testing_utils import (
-    require_torch,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -128,16 +123,6 @@ class ViTHybridModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
-
-        # test greyscale images
-        config.num_channels = 1
-        model = ViTHybridForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
-        result = model(pixel_values)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
     def prepare_config_and_inputs_for_common(self):

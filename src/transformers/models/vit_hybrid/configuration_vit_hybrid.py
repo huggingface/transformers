@@ -19,6 +19,7 @@ from typing import Dict
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto.configuration_auto import CONFIG_MAPPING
 from ..bit import BitConfig
 
 
@@ -107,14 +108,24 @@ class ViTHybridConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         if backbone_config is None:
-            # default to BiT backbone
-            backbone_config = BitConfig(
-                stem_type="same",
-                conv_layer="std_conv_same",
-                layer_type="bottleneck",
-                depths=(3, 4, 9),
-                out_features=["stage3"],
-            )
+            logger.info("`backbone_config` is `None`. Initializing the config with a `BiT` backbone.")
+            backbone_config = {
+                "stem_type": "same",
+                "conv_layer": "std_conv_same",
+                "layer_type": "bottleneck",
+                "depths": (3, 4, 9),
+                "out_features": ["stage3"],
+            }
+
+        if isinstance(backbone_config, dict):
+            if "model_type" in backbone_config:
+                backbone_config_class = CONFIG_MAPPING[backbone_config["model_type"]]
+            else:
+                logger.info(
+                    "`model_type` is not found in `backbone_config`. Use `ResNet` as the backbone configuration class."
+                )
+                backbone_config_class = BitConfig
+            backbone_config = backbone_config_class(**backbone_config)
 
         self.backbone_config = backbone_config
         self.hidden_size = hidden_size
@@ -133,8 +144,7 @@ class ViTHybridConfig(PretrainedConfig):
 
     def to_dict(self) -> Dict[str, any]:
         """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-        Returns:
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
             `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
