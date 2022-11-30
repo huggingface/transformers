@@ -25,6 +25,8 @@ from PIL import Image
 import requests
 from huggingface_hub import hf_hub_download
 from timm import create_model
+from timm.data import resolve_data_config
+from timm.data.transforms_factory import create_transform
 
 # from timm.data import resolve_data_config
 # from timm.data.transforms_factory import create_transform
@@ -104,21 +106,12 @@ def convert_resnetv2_checkpoint(model_name, pytorch_dump_folder_path):
     model.load_state_dict(state_dict)
 
     # TODO verify logits
-    # transform = create_transform(**resolve_data_config({}, model=model))
-    # url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    # image = Image.open(requests.get(url, stream=True).raw)
-    # weird bug: we don't get the same pixel values as in Colab
-    # load pixel values from the hub for the moment
-    # pixel_values = transform(image).unsqueeze(0)
-
-    from huggingface_hub import hf_hub_download
-
-    pixel_values = torch.load(
-        hf_hub_download("nielsr/dummy-pixel-values", repo_type="dataset", filename="pixel_values.pt")
-    )
+    transform = create_transform(**resolve_data_config({}, model=timm_model))
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    image = Image.open(requests.get(url, stream=True).raw)
+    pixel_values = transform(image).unsqueeze(0)
 
     print("Shape of pixel values:", pixel_values.shape)
-    print("First values of pixel values:", pixel_values[0, 0, :3, :3])
 
     with torch.no_grad():
         outputs = model(pixel_values)
@@ -126,9 +119,12 @@ def convert_resnetv2_checkpoint(model_name, pytorch_dump_folder_path):
 
     print("Logits:", logits[0, :3])
     print("Predicted class:", model.config.id2label[logits.argmax(-1).item()])
-    if model_name == "resnetv2_50x1_bitm":
-        expected_slice = torch.tensor([ 0.1665, -0.2718, -1.1446])
-    assert torch.allclose(logits[0, :3], expected_slice, atol=1e-3)
+    # if model_name == "resnetv2_50x1_bitm":
+    #     expected_slice = torch.tensor([ 0.1665, -0.2718, -1.1446])
+    timm_logits = timm_model(pixel_values)
+    assert timm_logits.shape == outputs.logits.shape
+    assert torch.allclose(timm_logits, outputs.logits, atol=1e-3)
+    # assert torch.allclose(logits[0, :3], expected_slice, atol=1e-3)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:

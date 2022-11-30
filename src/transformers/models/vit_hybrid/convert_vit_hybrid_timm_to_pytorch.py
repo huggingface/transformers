@@ -16,14 +16,16 @@
 
 
 import argparse
-import json
 from pathlib import Path
+import requests
 
 import torch
 from PIL import Image
 
-import requests
 import timm
+from timm.data import resolve_data_config
+from timm.data.transforms_factory import create_transform
+
 from transformers import (
     BitConfig,
     ViTFeatureExtractor,
@@ -190,15 +192,6 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
     model.load_state_dict(state_dict)
 
     # Check outputs on an image
-    # TODO use feature extractor
-    # from huggingface_hub import hf_hub_download
-
-    # pixel_values = torch.load(
-    #     hf_hub_download("nielsr/dummy-pixel-values", repo_type="dataset", filename="pixel_values.pt")
-    # )
-    from timm.data import resolve_data_config
-    from timm.data.transforms_factory import create_transform
-
     transform = create_transform(
         **resolve_data_config({}, model=timm_model)
     )

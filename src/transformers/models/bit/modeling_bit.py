@@ -253,8 +253,6 @@ class BitEmbeddings(nn.Module):
         elif config.conv_layer == "std_conv_same":
             conv_layer = partial(StdConv2dSame, eps=1e-8)
 
-        print("Conv layer:", conv_layer)
-
         self.convolution = conv_layer(config.num_channels, config.embedding_size, kernel_size=7, stride=2)
        
         self.norm = None
@@ -283,6 +281,9 @@ class BitEmbeddings(nn.Module):
             embedding = self.norm(embedding)
 
         embedding = self.pooler(embedding)
+
+        print("Shape of embedding:", embedding.shape)
+        print("First values of embedding:", embedding[0,0,:3,:3])
 
         return embedding
 
@@ -626,6 +627,8 @@ class BitEncoder(nn.Module):
                 hidden_states = hidden_states + (hidden_state,)
 
             hidden_state = stage_module(hidden_state, print_values=idx == 0)
+            print("Shape of hidden states after stage", idx, hidden_state.shape)
+            print("Hidden states after stage", idx, hidden_state[0, 0, :3, :3])
 
         if output_hidden_states:
             hidden_states = hidden_states + (hidden_state,)
