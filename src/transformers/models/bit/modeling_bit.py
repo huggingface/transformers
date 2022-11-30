@@ -386,6 +386,7 @@ class BitPreActivationBottleneckLayer(nn.Module):
 
     def __init__(
         self,
+        config,
         in_channels,
         out_channels=None,
         bottle_ratio=0.25,
@@ -393,17 +394,25 @@ class BitPreActivationBottleneckLayer(nn.Module):
         dilation=1,
         first_dilation=None,
         groups=1,
-        conv_layer=None,
-        norm_layer=None,
         drop_path_rate=0.0,
-        num_groups=32,
         is_first_layer=False,
     ):
         super().__init__()
 
         first_dilation = first_dilation or dilation
-        conv_layer = conv_layer or StdConv2d
-        norm_layer = norm_layer or partial(BitGroupNormActivation, num_groups=num_groups)
+
+        if config.conv_layer == "std_conv":
+            conv_layer = partial(StdConv2d, eps=1e-8)
+        elif config.conv_layer == "std_conv_same":
+            conv_layer = partial(StdConv2dSame, eps=1e-8)
+        else:
+            raise ValueError(
+                f"Convolutional layer {config.conv_layer} not supported! Please use one of the following:"
+                " [`'std_conv'`, `'std_conv_same`]"
+            )
+
+        norm_layer = partial(BitGroupNormActivation, config=config, num_groups=config.num_groups)
+
         out_channels = out_channels or in_channels
         mid_channels = make_div(out_channels * bottle_ratio)
 
@@ -457,15 +466,25 @@ class BitBottleneckLayer(nn.Module):
         first_dilation=None,
         groups=1,
         conv_layer=None,
-        norm_layer=None,
         drop_path_rate=0.0,
-        num_groups=32,
         is_first_layer=False,
     ):
         super().__init__()
         first_dilation = first_dilation or dilation
-        conv_layer = conv_layer or StdConv2d
-        norm_layer = norm_layer or partial(BitGroupNormActivation, num_groups=num_groups)
+
+        # Getting the convolution type
+        if config.conv_layer == "std_conv":
+            conv_layer = partial(StdConv2d, eps=1e-8)
+        elif config.conv_layer == "std_conv_same":
+            conv_layer = partial(StdConv2dSame, eps=1e-8)
+        else:
+            raise ValueError(
+                f"Convolutional layer {config.conv_layer} not supported! Please use one of the following:"
+                " [`'std_conv'`, `'std_conv_same`]"
+            )
+
+        norm_layer = partial(BitGroupNormActivation, config=config, num_groups=config.num_groups)
+
         out_channels = out_channels or in_channels
         mid_chs = make_div(out_channels * bottle_ratio)
 
@@ -483,10 +502,13 @@ class BitBottleneckLayer(nn.Module):
 
         self.conv1 = conv_layer(in_channels, mid_chs, 1)
         self.norm1 = norm_layer(mid_chs)
+
         self.conv2 = conv_layer(mid_chs, mid_chs, 3, stride=stride, dilation=first_dilation, groups=groups)
         self.norm2 = norm_layer(mid_chs)
+
         self.conv3 = conv_layer(mid_chs, out_channels, 1)
         self.norm3 = norm_layer(out_channels, apply_act=False)
+
         self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
         self.activation = ACT2FN[config.hidden_act]
 
@@ -547,8 +569,7 @@ class BitStage(nn.Module):
         dilation,
         depth,
         bottle_ratio=0.25,
-        groups=1,
-        layer_dpr=None,
+        layer_dropout=None,
     ):
         super().__init__()
 
@@ -565,42 +586,46 @@ class BitStage(nn.Module):
                 " `'preactivation`]"
             )
 
-        # Step 2: Getting the convolution type
-        if config.conv_layer == "std_conv":
-            conv_layer = partial(StdConv2d, eps=1e-8)
-        elif config.conv_layer == "std_conv_same":
-            conv_layer = partial(StdConv2dSame, eps=1e-8)
-        else:
-            raise ValueError(
-                f"Convolutional layer {config.conv_layer} not supported! Please use one of the following:"
-                " [`'std_conv'`, `'std_conv_same`]"
-            )
-
-        norm_layer = partial(BitGroupNormActivation, config=config, num_groups=config.num_groups)
-
         prev_chs = in_channels
         self.layers = nn.Sequential()
         for layer_idx in range(depth):
-            drop_path_rate = layer_dpr[layer_idx] if layer_dpr else 0.0
-            stride = stride if layer_idx == 0 else 1
+            # Get the current hyper-parameters
+            stride, drop_path_rate, is_first_layer = self._get_updated_hyperparameters(
+                layer_idx, stride, layer_dropout
+            )
+
             self.layers.add_module(
                 str(layer_idx),
                 layer_fn(
+                    config,
                     prev_chs,
                     out_channels,
                     stride=stride,
                     dilation=dilation,
                     bottle_ratio=bottle_ratio,
-                    groups=groups,
                     first_dilation=first_dilation,
                     drop_path_rate=drop_path_rate,
-                    conv_layer=conv_layer,
-                    norm_layer=norm_layer,
-                    is_first_layer=(layer_idx == 0),
+                    is_first_layer=is_first_layer,
                 ),
             )
             prev_chs = out_channels
             first_dilation = dilation
+
+    def _get_updated_hyperparameters(self, layer_idx, stride, layer_dropout):
+        r"""
+        Get the new hyper-parameters with respect to the previous ones and the index of the current layer.
+        """
+        if layer_dropout:
+            drop_path_rate = layer_dropout[layer_idx]
+        else:
+            drop_path_rate = 0.0
+
+        if layer_idx != 0:
+            stride = 1
+
+        is_first_layer = layer_idx == 0
+
+        return stride, drop_path_rate, is_first_layer
 
     def forward(self, input: Tensor) -> Tensor:
         hidden_state = input
@@ -615,18 +640,23 @@ class BitEncoder(nn.Module):
         self.stages = nn.ModuleList([])
 
         prev_chs = config.embedding_size
-        curr_stride = 4
+
+        # These needs to stay hardcoded
+        current_stride = 4
         dilation = 1
-        layer_dprs = [
+
+        layer_dropouts = [
             x.tolist() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths)).split(config.depths)
         ]
 
-        for stage_idx, (current_depth, c, bdpr) in enumerate(zip(config.depths, config.hidden_sizes, layer_dprs)):
-            out_channels = make_div(c * config.width_factor)
-            stride = 1 if stage_idx == 0 else 2
-            if curr_stride >= config.output_stride:
-                dilation *= stride
-                stride = 1
+        for stage_idx, (current_depth, current_hidden_size, layer_dropout) in enumerate(
+            zip(config.depths, config.hidden_sizes, layer_dropouts)
+        ):
+            # Get the updated hyper params
+            out_channels, stride, dilation = self._get_updated_hyperparameters(
+                stage_idx, current_stride, current_hidden_size, dilation, config
+            )
+
             stage = BitStage(
                 config,
                 prev_chs,
@@ -634,11 +664,21 @@ class BitEncoder(nn.Module):
                 stride=stride,
                 dilation=dilation,
                 depth=current_depth,
-                layer_dpr=bdpr,
+                layer_dropout=layer_dropout,
             )
+
             prev_chs = out_channels
-            curr_stride *= stride
+            current_stride *= stride
+
             self.stages.add_module(str(stage_idx), stage)
+
+    def _get_updated_hyperparameters(self, stage_idx, current_stride, current_hidden_size, dilation, config):
+        out_channels = make_div(current_hidden_size * config.width_factor)
+        stride = 1 if stage_idx == 0 else 2
+        if current_stride >= config.output_stride:
+            dilation *= stride
+            stride = 1
+        return out_channels, stride, dilation
 
     def forward(
         self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
