@@ -335,9 +335,10 @@ class Jukebox5bModelTester(unittest.TestCase):
 
     @slow
     def test_fp16_slow_sampling(self):
-        model = JukeboxPrior.from_pretrained(self.model_id, min_duration=0).eval().half().to("cuda")
+        prior_id = "ArthurZ/jukebox_prior_0"
+        model = JukeboxPrior.from_pretrained(prior_id, min_duration=0).eval().half().to("cuda")
 
-        labels = self.prepare_inputs(self.model_id)[0].cuda()
+        labels = self.prepare_inputs(prior_id)[0].cuda()
         metadata = model.get_metadata(labels, 0, 7680, 0)
         set_seed(0)
         outputs = model.sample(1, metadata=metadata, sample_tokens=60)
