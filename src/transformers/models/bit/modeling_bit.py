@@ -304,7 +304,9 @@ class BitEmbeddings(nn.Module):
             self.pooler = nn.MaxPool2d(kernel_size=3, stride=2)
 
         if not config.layer_type == "preactivation":
-            self.norm = partial(BitGroupNormActivation, num_groups=config.num_groups)(config.embedding_size)
+            self.norm = partial(BitGroupNormActivation, config=config, num_groups=config.num_groups)(
+                num_channels=config.embedding_size
+            )
         else:
             self.norm = nn.Identity()
 
@@ -501,13 +503,13 @@ class BitBottleneckLayer(nn.Module):
             self.downsample = None
 
         self.conv1 = conv_layer(in_channels, mid_chs, 1)
-        self.norm1 = norm_layer(mid_chs)
+        self.norm1 = norm_layer(num_channels=mid_chs)
 
         self.conv2 = conv_layer(mid_chs, mid_chs, 3, stride=stride, dilation=first_dilation, groups=groups)
-        self.norm2 = norm_layer(mid_chs)
+        self.norm2 = norm_layer(num_channels=mid_chs)
 
         self.conv3 = conv_layer(mid_chs, out_channels, 1)
-        self.norm3 = norm_layer(out_channels, apply_act=False)
+        self.norm3 = norm_layer(num_channels=out_channels, apply_act=False)
 
         self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
         self.activation = ACT2FN[config.hidden_act]
@@ -549,7 +551,7 @@ class BitDownsampleConv(nn.Module):
         super(BitDownsampleConv, self).__init__()
         self.conv_layer = conv_layer
         self.conv = conv_layer(in_channels, out_channels, 1, stride=stride)
-        self.norm = nn.Identity() if preact else norm_layer(out_channels, apply_act=False)
+        self.norm = nn.Identity() if preact else norm_layer(num_channels=out_channels, apply_act=False)
 
     def forward(self, x):
         return self.norm(self.conv(x))
