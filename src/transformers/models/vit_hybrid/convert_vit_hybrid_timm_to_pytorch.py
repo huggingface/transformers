@@ -24,8 +24,13 @@ from PIL import Image
 
 import requests
 import timm
-from huggingface_hub import hf_hub_download
-from transformers import BitConfig, ViTHybridConfig, ViTFeatureExtractor, ViTHybridForImageClassification, ViTHybridModel
+from transformers import (
+    BitConfig,
+    ViTFeatureExtractor,
+    ViTHybridConfig,
+    ViTHybridForImageClassification,
+    ViTHybridModel,
+)
 from transformers.utils import logging
 
 
@@ -36,52 +41,68 @@ logger = logging.get_logger(__name__)
 # here we list all keys to be renamed (original name on the left, our name on the right)
 def create_rename_keys(config, base_model=False):
     rename_keys = []
-    for i in range(config.num_hidden_layers):
-        # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append((f"blocks.{i}.norm1.weight", f"vit.encoder.layer.{i}.layernorm_before.weight"))
-        rename_keys.append((f"blocks.{i}.norm1.bias", f"vit.encoder.layer.{i}.layernorm_before.bias"))
-        rename_keys.append((f"blocks.{i}.attn.proj.weight", f"vit.encoder.layer.{i}.attention.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.attn.proj.bias", f"vit.encoder.layer.{i}.attention.output.dense.bias"))
-        rename_keys.append((f"blocks.{i}.norm2.weight", f"vit.encoder.layer.{i}.layernorm_after.weight"))
-        rename_keys.append((f"blocks.{i}.norm2.bias", f"vit.encoder.layer.{i}.layernorm_after.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"vit.encoder.layer.{i}.intermediate.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"vit.encoder.layer.{i}.intermediate.dense.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"vit.encoder.layer.{i}.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"vit.encoder.layer.{i}.output.dense.bias"))
 
-    # projection layer + position embeddings
-    rename_keys.extend(
-        [
-            ("cls_token", "vit.embeddings.cls_token"),
-            ("patch_embed.proj.weight", "vit.embeddings.patch_embeddings.projection.weight"),
-            ("patch_embed.proj.bias", "vit.embeddings.patch_embeddings.projection.bias"),
-            ("pos_embed", "vit.embeddings.position_embeddings"),
-        ]
+    # stem:
+    rename_keys.append(("cls_token", "vit.embeddings.cls_token"))
+    rename_keys.append(("pos_embed", "vit.embeddings.position_embeddings"))
+
+    rename_keys.append(("patch_embed.proj.weight", "vit.embeddings.patch_embeddings.projection.weight"))
+    rename_keys.append(("patch_embed.proj.bias", "vit.embeddings.patch_embeddings.projection.bias"))
+
+    # backbone
+    rename_keys.append(
+        (
+            "patch_embed.backbone.stem.conv.weight",
+            "vit.embeddings.patch_embeddings.backbone.resnetv2.embedder.convolution.weight",
+        )
+    )
+    rename_keys.append(
+        (
+            "patch_embed.backbone.stem.norm.weight",
+            "vit.embeddings.patch_embeddings.backbone.resnetv2.embedder.norm.weight",
+        )
+    )
+    rename_keys.append(
+        ("patch_embed.backbone.stem.norm.bias", "vit.embeddings.patch_embeddings.backbone.resnetv2.embedder.norm.bias")
     )
 
-    if base_model:
-        # layernorm + pooler
-        rename_keys.extend(
-            [
-                ("norm.weight", "layernorm.weight"),
-                ("norm.bias", "layernorm.bias"),
-                ("pre_logits.fc.weight", "pooler.dense.weight"),
-                ("pre_logits.fc.bias", "pooler.dense.bias"),
-            ]
-        )
+    # rename_keys = []
+    # for i in range(config.num_hidden_layers):
+    #     # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
+    #     rename_keys.append((f"blocks.{i}.norm1.weight", f"vit.encoder.layer.{i}.layernorm_before.weight"))
+    #     rename_keys.append((f"blocks.{i}.norm1.bias", f"vit.encoder.layer.{i}.layernorm_before.bias"))
+    #     rename_keys.append((f"blocks.{i}.attn.proj.weight", f"vit.encoder.layer.{i}.attention.output.dense.weight"))
+    #     rename_keys.append((f"blocks.{i}.attn.proj.bias", f"vit.encoder.layer.{i}.attention.output.dense.bias"))
+    #     rename_keys.append((f"blocks.{i}.norm2.weight", f"vit.encoder.layer.{i}.layernorm_after.weight"))
+    #     rename_keys.append((f"blocks.{i}.norm2.bias", f"vit.encoder.layer.{i}.layernorm_after.bias"))
+    #     rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"vit.encoder.layer.{i}.intermediate.dense.weight"))
+    #     rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"vit.encoder.layer.{i}.intermediate.dense.bias"))
+    #     rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"vit.encoder.layer.{i}.output.dense.weight"))
+    #     rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"vit.encoder.layer.{i}.output.dense.bias"))
 
-        # if just the base model, we should remove "vit" from all keys that start with "vit"
-        rename_keys = [(pair[0], pair[1][4:]) if pair[1].startswith("vit") else pair for pair in rename_keys]
-    else:
-        # layernorm + classification head
-        rename_keys.extend(
-            [
-                ("norm.weight", "vit.layernorm.weight"),
-                ("norm.bias", "vit.layernorm.bias"),
-                ("head.weight", "classifier.weight"),
-                ("head.bias", "classifier.bias"),
-            ]
-        )
+    # if base_model:
+    #     # layernorm + pooler
+    #     rename_keys.extend(
+    #         [
+    #             ("norm.weight", "layernorm.weight"),
+    #             ("norm.bias", "layernorm.bias"),
+    #             ("pre_logits.fc.weight", "pooler.dense.weight"),
+    #             ("pre_logits.fc.bias", "pooler.dense.bias"),
+    #         ]
+    #     )
+
+    #     # if just the base model, we should remove "vit" from all keys that start with "vit"
+    #     rename_keys = [(pair[0], pair[1][4:]) if pair[1].startswith("vit") else pair for pair in rename_keys]
+    # else:
+    #     # layernorm + classification head
+    #     rename_keys.extend(
+    #         [
+    #             ("norm.weight", "vit.layernorm.weight"),
+    #             ("norm.bias", "vit.layernorm.bias"),
+    #             ("head.weight", "classifier.weight"),
+    #             ("head.bias", "classifier.bias"),
+    #         ]
+    #     )
 
     return rename_keys
 
@@ -138,13 +159,16 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
     """
 
     # define default ViT hybrid configuration
-    backbone_config = BitConfig()
+    backbone_config = BitConfig(stem_type="same", layer_type="bottleneck", depths=(3, 4, 9), out_features=["stage3"])
     config = ViTHybridConfig(backbone_config=backbone_config, image_size=384, num_labels=1000)
     base_model = False
 
     # load original model from timm
     timm_model = timm.create_model(vit_name, pretrained=True)
     timm_model.eval()
+
+    for name, param in timm_model.named_parameters():
+        print(name, param.shape)
 
     # load state_dict of original model, remove and rename some keys
     state_dict = timm_model.state_dict()
@@ -160,7 +184,7 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
         model = ViTHybridModel(config).eval()
     else:
         model = ViTHybridForImageClassification(config).eval()
-    model.load_state_dict(state_dict)
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
 
     # Check outputs on an image, prepared by ViTFeatureExtractor
     feature_extractor = ViTFeatureExtractor(size=config.image_size)
