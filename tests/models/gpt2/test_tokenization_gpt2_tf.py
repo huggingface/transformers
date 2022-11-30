@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 
 from transformers import AutoConfig, TFGPT2LMHeadModel, is_keras_nlp_available, is_tf_available
 from transformers.models.gpt2.tokenization_gpt2 import GPT2Tokenizer
-from transformers.testing_utils import slow, require_keras_nlp
+from transformers.testing_utils import require_keras_nlp, slow
 
 
 if is_keras_nlp_available():
