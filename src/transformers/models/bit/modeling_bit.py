@@ -159,15 +159,15 @@ class BitGroupNormActivation(nn.GroupNorm):
         self,
         config,
         num_channels,
-        num_groups=32,
         eps=1e-5,
         affine=True,
         group_size=None,
         apply_act=True,
         drop_layer=None,
     ):
+
         super(BitGroupNormActivation, self).__init__(
-            _num_groups(num_channels, num_groups, group_size), num_channels, eps=eps, affine=affine
+            _num_groups(num_channels, config.num_groups, group_size), num_channels, eps=eps, affine=affine
         )
         self.drop = drop_layer() if drop_layer is not None else nn.Identity()
         if apply_act:
@@ -304,9 +304,7 @@ class BitEmbeddings(nn.Module):
             self.pooler = nn.MaxPool2d(kernel_size=3, stride=2)
 
         if not config.layer_type == "preactivation":
-            self.norm = partial(BitGroupNormActivation, config=config, num_groups=config.num_groups)(
-                num_channels=config.embedding_size
-            )
+            self.norm = partial(BitGroupNormActivation, config=config)(num_channels=config.embedding_size)
         else:
             self.norm = nn.Identity()
 
@@ -413,7 +411,7 @@ class BitPreActivationBottleneckLayer(nn.Module):
                 " [`'std_conv'`, `'std_conv_same`]"
             )
 
-        norm_layer = partial(BitGroupNormActivation, config=config, num_groups=config.num_groups)
+        norm_layer = partial(BitGroupNormActivation, config=config)
 
         out_channels = out_channels or in_channels
         mid_channels = make_div(out_channels * bottle_ratio)
@@ -485,7 +483,7 @@ class BitBottleneckLayer(nn.Module):
                 " [`'std_conv'`, `'std_conv_same`]"
             )
 
-        norm_layer = partial(BitGroupNormActivation, config=config, num_groups=config.num_groups)
+        norm_layer = partial(BitGroupNormActivation, config=config)
 
         out_channels = out_channels or in_channels
         mid_chs = make_div(out_channels * bottle_ratio)
@@ -765,7 +763,7 @@ class BitModel(BitPreTrainedModel):
         self.embedder = BitEmbeddings(config)
 
         self.encoder = BitEncoder(config)
-        norm_layer = partial(BitGroupNormActivation, num_groups=config.num_groups)
+        norm_layer = BitGroupNormActivation
         self.norm = (
             norm_layer(config, num_channels=config.hidden_sizes[-1])
             if config.layer_type == "preactivation"

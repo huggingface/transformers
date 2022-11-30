@@ -51,8 +51,6 @@ class BitConfig(PretrainedConfig):
             are supported.
         num_groups (`int`, *optional*, defaults to `32`):
             Number of groups used for the `BitGroupNormActivation` layers
-        downsample_in_first_stage (`bool`, *optional*, defaults to `False`):
-            If `True`, the first stage will downsample the inputs using a `stride` of 2.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop path rate for the stochastic depth.
         output_stride (`int`, *optional*, defaults to 32):
@@ -105,7 +103,6 @@ class BitConfig(PretrainedConfig):
         self.layer_type = layer_type
         self.hidden_act = hidden_act
         self.num_groups = num_groups
-        self.downsample_in_first_stage = downsample_in_first_stage
         self.drop_path_rate = drop_path_rate
         self.output_stride = output_stride
         self.width_factor = width_factor
