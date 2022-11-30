@@ -1305,8 +1305,9 @@ class Trainer:
                         jit_inputs = tuple(jit_inputs)
                         jit_model = torch.jit.trace(jit_model, jit_inputs, strict=False)
                 jit_model = torch.jit.freeze(jit_model)
-                jit_model(**example_batch)
-                jit_model(**example_batch)
+                with torch.no_grad():
+                    jit_model(**example_batch)
+                    jit_model(**example_batch)
                 model = jit_model
                 self.use_cpu_amp = False
                 self.use_cuda_amp = False
