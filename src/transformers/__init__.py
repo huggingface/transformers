@@ -525,6 +525,7 @@ _import_structure = {
         "is_datasets_available",
         "is_faiss_available",
         "is_flax_available",
+        "is_keras_nlp_available",
         "is_phonemizer_available",
         "is_psutil_available",
         "is_py3nvml_available",

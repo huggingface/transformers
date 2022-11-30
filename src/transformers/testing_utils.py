@@ -58,6 +58,7 @@ from .utils import (
     is_ipex_available,
     is_jumanpp_available,
     is_librosa_available,
+    is_keras_nlp_available,
     is_natten_available,
     is_onnx_available,
     is_pandas_available,
@@ -390,6 +391,14 @@ def require_tensorflow_text(test_case):
     installed.
     """
     return unittest.skipUnless(is_tensorflow_text_available(), "test requires tensorflow_text")(test_case)
+
+
+def require_keras_nlp(test_case):
+    """
+    Decorator marking a test that requires tensorflow_text. These tests are skipped when tensroflow_text isn't
+    installed.
+    """
+    return unittest.skipUnless(is_keras_nlp_available(), "test requires keras_nlp")(test_case)
 
 
 def require_pandas(test_case):
