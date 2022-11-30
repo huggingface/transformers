@@ -43,7 +43,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "MobileNetV2Config"
-_FEAT_EXTRACTOR_FOR_DOC = "MobileNetV2FeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "MobileNetV2ImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "google/mobilenet_v2_1.0_224"
@@ -486,8 +486,8 @@ MOBILENET_V2_START_DOCSTRING = r"""
 MOBILENET_V2_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`MobileNetV2FeatureExtractor`]. See
-            [`MobileNetV2FeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`MobileNetV2ImageProcessor`]. See
+            [`MobileNetV2ImageProcessor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -811,17 +811,17 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import MobileNetV2FeatureExtractor, MobileNetV2ForSemanticSegmentation
+        >>> from transformers import MobileNetV2ImageProcessor, MobileNetV2ForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = MobileNetV2FeatureExtractor.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
+        >>> image_processor = MobileNetV2ImageProcessor.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
         >>> model = MobileNetV2ForSemanticSegmentation.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
