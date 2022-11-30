@@ -1125,7 +1125,8 @@ class GenerationMixin:
                 The parameter for repetition penalty. 1.0 means no penalty. See [this
                 paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
             encoder_repetition_penalty (`float`, *optional*, defaults to `model.config.encoder_repetition_penalty` or 1.0 if the config does not set any value):
-                The paramater for encoder_repetition_penalty. An exponential penalty on sequences that are not in the original input. 1.0 means no penalty.
+                The paramater for encoder_repetition_penalty. An exponential penalty on sequences that are not in the
+                original input. 1.0 means no penalty.
             pad_token_id (`int`, *optional*, defaults to `model.config.pad_token_id`):
                 The id of the *padding* token.
             bos_token_id (`int`, *optional*, defaults to `model.config.bos_token_id`):
