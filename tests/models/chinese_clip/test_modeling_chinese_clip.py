@@ -688,6 +688,7 @@ class ChineseCLIPModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[40.7611, 44.5213, 40.1370, 47.3728]], device=torch_device)
+        probs = outputs.logits_per_image.softmax(dim=1)
+        expected_probs = torch.tensor([[1.2686e-03, 5.4499e-02, 6.7968e-04, 9.4355e-01]], device=torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-2))
+        self.assertTrue(torch.allclose(probs, expected_probs, atol=5e-3))
