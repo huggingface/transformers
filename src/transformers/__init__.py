@@ -160,6 +160,7 @@ _import_structure = {
         "BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BigBirdPegasusConfig",
     ],
+    "models.bit": ["BIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BitConfig"],
     "models.blenderbot": ["BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BlenderbotConfig", "BlenderbotTokenizer"],
     "models.blenderbot_small": [
         "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1044,6 +1045,14 @@ else:
             "BigBirdPegasusForSequenceClassification",
             "BigBirdPegasusModel",
             "BigBirdPegasusPreTrainedModel",
+        ]
+    )
+    _import_structure["models.bit"].extend(
+        [
+            "BIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BitForImageClassification",
+            "BitModel",
+            "BitPreTrainedModel",
         ]
     )
     _import_structure["models.blenderbot"].extend(
@@ -3392,6 +3401,7 @@ if TYPE_CHECKING:
     from .models.bertweet import BertweetTokenizer
     from .models.big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig
     from .models.bigbird_pegasus import BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdPegasusConfig
+    from .models.bit import BIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BitConfig
     from .models.blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig, BlenderbotTokenizer
     from .models.blenderbot_small import (
         BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4165,6 +4175,12 @@ if TYPE_CHECKING:
             BigBirdPegasusForSequenceClassification,
             BigBirdPegasusModel,
             BigBirdPegasusPreTrainedModel,
+        )
+        from .models.bit import (
+            BIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BitForImageClassification,
+            BitModel,
+            BitPreTrainedModel,
         )
         from .models.blenderbot import (
             BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,

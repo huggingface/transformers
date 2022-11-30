@@ -36,6 +36,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("bert-generation", "BertGenerationEncoder"),
         ("big_bird", "BigBirdModel"),
         ("bigbird_pegasus", "BigBirdPegasusModel"),
+        ("bit", "BitModel"),
         ("blenderbot", "BlenderbotModel"),
         ("blenderbot-small", "BlenderbotSmallModel"),
         ("bloom", "BloomModel"),
@@ -370,6 +371,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image Classification mapping
         ("beit", "BeitForImageClassification"),
+        ("bit", "BitForImageClassification"),
         ("convnext", "ConvNextForImageClassification"),
         ("cvt", "CvtForImageClassification"),
         ("data2vec-vision", "Data2VecVisionForImageClassification"),
@@ -852,6 +854,7 @@ _MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
     [
         # Backbone mapping
+        ("bit", "BitBackbone"),
         ("maskformer-swin", "MaskFormerSwinBackbone"),
         ("resnet", "ResNetBackbone"),
     ]

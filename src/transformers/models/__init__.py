@@ -30,6 +30,7 @@ from . import (
     bertweet,
     big_bird,
     bigbird_pegasus,
+    bit,
     blenderbot,
     blenderbot_small,
     bloom,

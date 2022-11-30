@@ -995,6 +995,30 @@ class BigBirdPegasusPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+BIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class BitForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class BitModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class BitPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
