@@ -86,7 +86,6 @@ class BitConfig(PretrainedConfig):
         stem_type="",
         layer_type="preactivation",
         hidden_act="relu",
-        downsample_in_first_stage=False,
         drop_path_rate=0.0,
         output_stride=32,
         width_factor=1,

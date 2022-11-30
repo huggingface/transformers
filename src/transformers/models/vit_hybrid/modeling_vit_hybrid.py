@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Google AI, Ross Wightman, The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Google AI, Ross Wightman, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -79,10 +79,7 @@ class ViTHybridEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-    ) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         embeddings = self.patch_embeddings(pixel_values)
 
         # add the [CLS] token to the embedded patch tokens
@@ -132,10 +129,7 @@ class ViTHybridPatchEmbeddings(nn.Module):
             feature_size = (
                 feature_size if isinstance(feature_size, collections.abc.Iterable) else (feature_size, feature_size)
             )
-            if hasattr(self.backbone, "feature_info"):
-                feature_dim = self.backbone.feature_info.channels()[-1]
-            else:
-                feature_dim = self.backbone.num_features
+            feature_dim = self.backbone.channels[-1]
 
         assert feature_size[0] % patch_size[0] == 0 and feature_size[1] % patch_size[1] == 0
         self.grid_size = (feature_size[0] // patch_size[0], feature_size[1] // patch_size[1])
@@ -147,16 +141,14 @@ class ViTHybridPatchEmbeddings(nn.Module):
         self.projection = nn.Conv2d(feature_dim, hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        batch_size, num_channels, height, width = pixel_values.shape
-        features = self.backbone(pixel_values).feature_maps[-1]
+        num_channels = pixel_values.shape[1]
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        embeddings = self.projection(features).flatten(2).transpose(1, 2)
 
-        print("Shape of embeddings:", embeddings.shape)
-        print("First values of embeddings:", embeddings[0, :3, :3])
+        features = self.backbone(pixel_values).feature_maps[-1]
+        embeddings = self.projection(features).flatten(2).transpose(1, 2)
 
         return embeddings
 

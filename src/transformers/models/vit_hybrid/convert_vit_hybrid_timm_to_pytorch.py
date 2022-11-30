@@ -198,15 +198,11 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
     image = Image.open(requests.get(url, stream=True).raw)
     pixel_values = transform(image).unsqueeze(0)
 
-    print("First values of pixel values:", pixel_values.shape)
-    print(pixel_values[0, :5, :5, :5])
-
     with torch.no_grad():
         outputs = model(pixel_values)
         logits = outputs.logits
 
     print("Predicted class:", logits.argmax(-1).item())
-
     if base_model:
         timm_pooled_output = timm_model.forward_features(pixel_values)
         assert timm_pooled_output.shape == outputs.pooler_output.shape

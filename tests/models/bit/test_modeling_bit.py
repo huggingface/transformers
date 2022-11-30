@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Bit model. """
+""" Testing suite for the PyTorch BiT model. """
 
 
 import inspect
@@ -52,7 +52,6 @@ class BitModelTester:
         depths=[1, 1, 2, 1],
         is_training=True,
         use_labels=True,
-        hidden_act="relu",
         num_labels=3,
         scope=None,
         out_features=["stage2", "stage3", "stage4"],
@@ -67,7 +66,6 @@ class BitModelTester:
         self.depths = depths
         self.is_training = is_training
         self.use_labels = use_labels
-        self.hidden_act = hidden_act
         self.num_labels = num_labels
         self.scope = scope
         self.num_stages = len(hidden_sizes)
@@ -91,7 +89,6 @@ class BitModelTester:
             embeddings_size=self.embeddings_size,
             hidden_sizes=self.hidden_sizes,
             depths=self.depths,
-            hidden_act=self.hidden_act,
             num_labels=self.num_labels,
             out_features=self.out_features,
             num_groups=self.num_groups,
@@ -102,11 +99,7 @@ class BitModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        # expected last hidden states: B, C, H // 32, W // 32
-        self.parent.assertEqual(
-            result.last_hidden_state.shape,
-            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.hidden_sizes[-1], 4, 4))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
@@ -124,11 +117,11 @@ class BitModelTester:
 
         # verify hidden states
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 4, 4])
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[0], 8, 8])
 
         # verify channels
         self.parent.assertEqual(len(model.channels), len(config.out_features))
-        self.parent.assertListEqual(model.channels, config.hidden_sizes[1:])
+        self.parent.assertListEqual(model.channels, config.hidden_sizes)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
