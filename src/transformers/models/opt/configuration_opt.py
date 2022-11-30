@@ -74,6 +74,10 @@ class OPTConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        enable_bias (`bool`, *optional*, defaults to `True`):
+            Whether or not if the linear layers in the attention blocks should use the bias term.
+        layer_norm_elementwise_affine (`bool`, *optional*, defaults to `True`):
+            Whether or not if the layer norms should have learnable parameters.
 
     Example:
 
@@ -112,6 +116,8 @@ class OPTConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=2,
         eos_token_id=2,
+        enable_bias=True,
+        layer_norm_elementwise_affine=True,
         **kwargs
     ):
         super().__init__(
@@ -134,6 +140,9 @@ class OPTConfig(PretrainedConfig):
         self.layerdrop = layerdrop
         self.use_cache = use_cache
         self.do_layer_norm_before = do_layer_norm_before
+        # We keep these variables at `True` for backward compatibility.
+        self.enable_bias = enable_bias
+        self.layer_norm_elementwise_affine = layer_norm_elementwise_affine
 
         # Note that the only purpose of `_remove_final_layer_norm` is to keep backward compatibility
         # with checkpoints that have been fine-tuned before transformers v4.20.1
