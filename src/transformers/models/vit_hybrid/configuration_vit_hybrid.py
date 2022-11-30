@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Google AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ ViT Hybrid model configuration"""
+
+import copy
+from typing import Dict
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -104,6 +107,7 @@ class ViTHybridConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         if backbone_config is None:
+            # default to BiT backbone
             backbone_config = BitConfig(
                 stem_type="same",
                 conv_layer="std_conv_same",
@@ -126,3 +130,14 @@ class ViTHybridConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
+
+    def to_dict(self) -> Dict[str, any]:
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+        Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["backbone_config"] = self.backbone_config.to_dict()
+        output["model_type"] = self.__class__.model_type
+        return output

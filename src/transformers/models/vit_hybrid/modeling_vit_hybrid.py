@@ -115,7 +115,7 @@ class ViTHybridPatchEmbeddings(nn.Module):
 
         if feature_size is None:
             with torch.no_grad():
-                # NOTE Most reliable way of determining output dims is to run forward pass
+                # NOTE Most reliable way of determining spatial output dimensions is to run forward pass
                 training = self.backbone.training
                 if training:
                     self.backbone.eval()
