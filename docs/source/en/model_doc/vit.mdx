@@ -40,7 +40,7 @@ Tips:
   used for classification. The authors also add absolute position embeddings, and feed the resulting sequence of
   vectors to a standard Transformer encoder.
 - As the Vision Transformer expects each image to be of the same size (resolution), one can use
-  [`ViTFeatureExtractor`] to resize (or rescale) and normalize images for the model.
+  [`ViTImageProcessor`] to resize (or rescale) and normalize images for the model.
 - Both the patch resolution and image resolution used during pre-training or fine-tuning are reflected in the name of
   each checkpoint. For example, `google/vit-base-patch16-224` refers to a base-sized architecture with patch
   resolution of 16x16 and fine-tuning resolution of 224x224. All checkpoints can be found on the [hub](https://huggingface.co/models?search=vit).
@@ -67,7 +67,7 @@ Following the original Vision Transformer, some follow-up works have been made:
   The authors of DeiT also released more efficiently trained ViT models, which you can directly plug into [`ViTModel`] or
   [`ViTForImageClassification`]. There are 4 variants available (in 3 different sizes): *facebook/deit-tiny-patch16-224*,
   *facebook/deit-small-patch16-224*, *facebook/deit-base-patch16-224* and *facebook/deit-base-patch16-384*. Note that one should
-  use [`DeiTFeatureExtractor`] in order to prepare images for the model.
+  use [`DeiTImageProcessor`] in order to prepare images for the model.
 
 - [BEiT](beit) (BERT pre-training of Image Transformers) by Microsoft Research. BEiT models outperform supervised pre-trained
   vision transformers using a self-supervised method inspired by BERT (masked image modeling) and based on a VQ-VAE.

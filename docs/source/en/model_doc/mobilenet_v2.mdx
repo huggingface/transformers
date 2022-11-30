@@ -28,7 +28,7 @@ Tips:
 
 - Even though the checkpoint is trained on images of specific size, the model will work on images of any size. The smallest supported image size is 32x32.
 
-- One can use [`MobileNetV2FeatureExtractor`] to prepare images for the model.
+- One can use [`MobileNetV2ImageProcessor`] to prepare images for the model.
 
 - The available image classification checkpoints are pre-trained on [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k) (also referred to as ILSVRC 2012, a collection of 1.3 million images and 1,000 classes). However, the model predicts 1001 classes: the 1000 classes from ImageNet plus an extra “background” class (index 0).
 

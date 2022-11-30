@@ -44,7 +44,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "Swinv2Config"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/swinv2-tiny-patch4-window8-256"
@@ -968,8 +968,8 @@ SWINV2_START_DOCSTRING = r"""
 SWINV2_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`AutoImageProcessor.__call__`] for details.
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
@@ -1136,7 +1136,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import AutoFeatureExtractor, Swinv2ForMaskedImageModeling
+        >>> from transformers import AutoImageProcessor, Swinv2ForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -1144,11 +1144,11 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
+        >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
         >>> model = Swinv2ForMaskedImageModeling.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
-        >>> pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+        >>> pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
         >>> # create random boolean mask of shape (batch_size, num_patches)
         >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
 

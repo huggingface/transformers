@@ -44,7 +44,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "DeiTConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "DeiTFeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "DeiTImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/deit-base-distilled-patch16-224"
@@ -433,8 +433,8 @@ DEIT_START_DOCSTRING = r"""
 DEIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`DeiTFeatureExtractor`]. See
-            [`DeiTFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`DeiTImageProcessor`]. See
+            [`DeiTImageProcessor.__call__`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -611,7 +611,7 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import DeiTFeatureExtractor, DeiTForMaskedImageModeling
+        >>> from transformers import DeiTImageProcessor, DeiTForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -619,11 +619,11 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        >>> image_processor = DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
         >>> model = DeiTForMaskedImageModeling.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
-        >>> pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+        >>> pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
         >>> # create random boolean mask of shape (batch_size, num_patches)
         >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
 
@@ -721,7 +721,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import DeiTFeatureExtractor, DeiTForImageClassification
+        >>> from transformers import DeiTImageProcessor, DeiTForImageClassification
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -732,10 +732,10 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
 
         >>> # note: we are loading a DeiTForImageClassificationWithTeacher from the hub here,
         >>> # so the head will be randomly initialized, hence the predictions will be random
-        >>> feature_extractor = DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        >>> image_processor = DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
         >>> model = DeiTForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
         >>> # model predicts one of the 1000 ImageNet classes

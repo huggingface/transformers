@@ -90,12 +90,12 @@ You'll also want to create a dictionary that maps a label id to a label class wh
 
 ## Preprocess
 
-The next step is to load a SegFormer feature extractor to prepare the images and annotations for the model. Some datasets, like this one, use the zero-index as the background class. However, the background class isn't actually included in the 150 classes, so you'll need to set `reduce_labels=True` to subtract one from all the labels. The zero-index is replaced by `255` so it's ignored by SegFormer's loss function:
+The next step is to load a SegFormer image processor to prepare the images and annotations for the model. Some datasets, like this one, use the zero-index as the background class. However, the background class isn't actually included in the 150 classes, so you'll need to set `reduce_labels=True` to subtract one from all the labels. The zero-index is replaced by `255` so it's ignored by SegFormer's loss function:
 
 ```py
->>> from transformers import AutoFeatureExtractor
+>>> from transformers import AutoImageProcessor
 
->>> feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/mit-b0", reduce_labels=True)
+>>> feature_extractor = AutoImageProcessor.from_pretrained("nvidia/mit-b0", reduce_labels=True)
 ```
 
 It is common to apply some data augmentations to an image dataset to make a model more robust against overfitting. In this guide, you'll use the [`ColorJitter`](https://pytorch.org/vision/stable/generated/torchvision.transforms.ColorJitter.html) function from [torchvision](https://pytorch.org/vision/stable/index.html) to randomly change the color properties of an image, but you can also use any image library you like.
@@ -106,7 +106,7 @@ It is common to apply some data augmentations to an image dataset to make a mode
 >>> jitter = ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.1)
 ```
 
-Now create two preprocessing functions to prepare the images and annotations for the model. These functions convert the images into `pixel_values` and annotations to `labels`. For the training set, `jitter` is applied before providing the images to the feature extractor. For the test set, the feature extractor crops and normalizes the `images`, and only crops the `labels` because no data augmentation is applied during testing.
+Now create two preprocessing functions to prepare the images and annotations for the model. These functions convert the images into `pixel_values` and annotations to `labels`. For the training set, `jitter` is applied before providing the images to the image processor. For the test set, the image processor crops and normalizes the `images`, and only crops the `labels` because no data augmentation is applied during testing.
 
 ```py
 >>> def train_transforms(example_batch):
@@ -281,7 +281,7 @@ The simplest way to try out your finetuned model for inference is to use it in a
   'mask': <PIL.Image.Image image mode=L size=640x427 at 0x7FD5B2062E10>}]
 ```
 
-You can also manually replicate the results of the `pipeline` if you'd like. Process the image with a feature extractor and place the `pixel_values` on a GPU:
+You can also manually replicate the results of the `pipeline` if you'd like. Process the image with an image processor and place the `pixel_values` on a GPU:
 
 ```py
 >>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # use GPU if available, otherwise use a CPU
