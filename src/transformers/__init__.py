@@ -2105,6 +2105,14 @@ else:
             "TimeSeriesTransformerPreTrainedModel",
         ]
     )
+    _import_structure["models.timesformer"].extend(
+        [
+            "TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TimesformerForVideoClassification",
+            "TimesformerModel",
+            "TimesformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.trajectory_transformer"].extend(
         [
             "TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2154,6 +2162,15 @@ else:
             "VanForImageClassification",
             "VanModel",
             "VanPreTrainedModel",
+        ]
+    )
+    _import_structure["models.videomae"].extend(
+        [
+            "VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VideoMAEForPreTraining",
+            "VideoMAEForVideoClassification",
+            "VideoMAEModel",
+            "VideoMAEPreTrainedModel",
         ]
     )
     _import_structure["models.videomae"].extend(
@@ -2217,23 +2234,6 @@ else:
             "ViTMSNForImageClassification",
             "ViTMSNModel",
             "ViTMSNPreTrainedModel",
-        ]
-    )
-    _import_structure["models.videomae"].extend(
-        [
-            "VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "VideoMAEForPreTraining",
-            "VideoMAEModel",
-            "VideoMAEPreTrainedModel",
-            "VideoMAEForVideoClassification",
-        ]
-    )
-    _import_structure["models.timesformer"].extend(
-        [
-            "TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TimesformerModel",
-            "TimesformerPreTrainedModel",
-            "TimesformerForVideoClassification",
         ]
     )
     _import_structure["models.wav2vec2"].extend(
