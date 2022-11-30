@@ -36,9 +36,14 @@ if is_vision_available():
 
     from transformers.image_transforms import (
         center_crop,
+        center_to_corners_format,
+        corners_to_center_format,
         get_resize_output_image_size,
+        id_to_rgb,
         normalize,
+        pad,
         resize,
+        rgb_to_id,
         to_channel_dimension_format,
         to_pil_image,
     )
@@ -56,6 +61,8 @@ class ImageTransformsTester(unittest.TestCase):
         [
             ("numpy_float_channels_first", (3, 4, 5), np.float32),
             ("numpy_float_channels_last", (4, 5, 3), np.float32),
+            ("numpy_float_channels_first", (3, 4, 5), np.float64),
+            ("numpy_float_channels_last", (4, 5, 3), np.float64),
             ("numpy_int_channels_first", (3, 4, 5), np.int32),
             ("numpy_uint_channels_first", (3, 4, 5), np.uint8),
         ]
@@ -66,6 +73,27 @@ class ImageTransformsTester(unittest.TestCase):
         pil_image = to_pil_image(image)
         self.assertIsInstance(pil_image, PIL.Image.Image)
         self.assertEqual(pil_image.size, (5, 4))
+
+        # make sure image is correctly rescaled
+        self.assertTrue(np.abs(np.asarray(pil_image)).sum() > 0)
+
+    @parameterized.expand(
+        [
+            ("numpy_float_channels_first", (3, 4, 5), np.float32),
+            ("numpy_float_channels_first", (3, 4, 5), np.float64),
+            ("numpy_float_channels_last", (4, 5, 3), np.float32),
+            ("numpy_float_channels_last", (4, 5, 3), np.float64),
+        ]
+    )
+    @require_vision
+    def test_to_pil_image_from_float(self, name, image_shape, dtype):
+        image = np.random.rand(*image_shape).astype(dtype)
+        pil_image = to_pil_image(image)
+        self.assertIsInstance(pil_image, PIL.Image.Image)
+        self.assertEqual(pil_image.size, (5, 4))
+
+        # make sure image is correctly rescaled
+        self.assertTrue(np.abs(np.asarray(pil_image)).sum() > 0)
 
     @require_tf
     def test_to_pil_image_from_tensorflow(self):
@@ -178,6 +206,11 @@ class ImageTransformsTester(unittest.TestCase):
     def test_normalize(self):
         image = np.random.randint(0, 256, (224, 224, 3)) / 255
 
+        # Test that exception is raised if inputs are incorrect
+        # Not a numpy array image
+        with self.assertRaises(ValueError):
+            normalize(5, 5, 5)
+
         # Number of mean values != number of channels
         with self.assertRaises(ValueError):
             normalize(image, mean=(0.5, 0.6), std=1)
@@ -219,3 +252,188 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertIsInstance(cropped_image, np.ndarray)
         self.assertEqual(cropped_image.shape, (300, 260, 3))
         self.assertTrue(np.allclose(cropped_image, expected_image))
+
+    def test_center_to_corners_format(self):
+        bbox_center = np.array([[10, 20, 4, 8], [15, 16, 3, 4]])
+        expected = np.array([[8, 16, 12, 24], [13.5, 14, 16.5, 18]])
+        self.assertTrue(np.allclose(center_to_corners_format(bbox_center), expected))
+
+        # Check that the function and inverse function are inverse of each other
+        self.assertTrue(np.allclose(corners_to_center_format(center_to_corners_format(bbox_center)), bbox_center))
+
+    def test_corners_to_center_format(self):
+        bbox_corners = np.array([[8, 16, 12, 24], [13.5, 14, 16.5, 18]])
+        expected = np.array([[10, 20, 4, 8], [15, 16, 3, 4]])
+        self.assertTrue(np.allclose(corners_to_center_format(bbox_corners), expected))
+
+        # Check that the function and inverse function are inverse of each other
+        self.assertTrue(np.allclose(center_to_corners_format(corners_to_center_format(bbox_corners)), bbox_corners))
+
+    def test_rgb_to_id(self):
+        # test list input
+        rgb = [125, 4, 255]
+        self.assertEqual(rgb_to_id(rgb), 16712829)
+
+        # test numpy array input
+        color = np.array(
+            [
+                [
+                    [213, 54, 165],
+                    [88, 207, 39],
+                    [156, 108, 128],
+                ],
+                [
+                    [183, 194, 46],
+                    [137, 58, 88],
+                    [114, 131, 233],
+                ],
+            ]
+        )
+        expected = np.array([[10827477, 2608984, 8416412], [3064503, 5782153, 15303538]])
+        self.assertTrue(np.allclose(rgb_to_id(color), expected))
+
+    def test_id_to_rgb(self):
+        # test int input
+        self.assertEqual(id_to_rgb(16712829), [125, 4, 255])
+
+        # test array input
+        id_array = np.array([[10827477, 2608984, 8416412], [3064503, 5782153, 15303538]])
+        color = np.array(
+            [
+                [
+                    [213, 54, 165],
+                    [88, 207, 39],
+                    [156, 108, 128],
+                ],
+                [
+                    [183, 194, 46],
+                    [137, 58, 88],
+                    [114, 131, 233],
+                ],
+            ]
+        )
+        self.assertTrue(np.allclose(id_to_rgb(id_array), color))
+
+    def test_pad(self):
+        # fmt: off
+        image = np.array([[
+            [0, 1],
+            [2, 3],
+        ]])
+        # fmt: on
+
+        # Test that exception is raised if unknown padding mode is specified
+        with self.assertRaises(ValueError):
+            pad(image, 10, mode="unknown")
+
+        # Test that exception is raised if invalid padding is specified
+        with self.assertRaises(ValueError):
+            # Cannot pad on channel dimension
+            pad(image, (5, 10, 10))
+
+        # Test image is padded equally on all sides is padding is an int
+        # fmt: off
+        expected_image = np.array([
+            [[0, 0, 0, 0],
+             [0, 0, 1, 0],
+             [0, 2, 3, 0],
+             [0, 0, 0, 0]],
+        ])
+        # fmt: on
+        self.assertTrue(np.allclose(expected_image, pad(image, 1)))
+
+        # Test the left and right of each axis is padded (pad_left, pad_right)
+        # fmt: off
+        expected_image = np.array(
+            [[0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0],
+             [0, 0, 0, 1, 0],
+             [0, 0, 2, 3, 0],
+             [0, 0, 0, 0, 0]])
+        # fmt: on
+        self.assertTrue(np.allclose(expected_image, pad(image, (2, 1))))
+
+        # Test only one axis is padded (pad_left, pad_right)
+        # fmt: off
+        expected_image = np.array([[
+            [9, 9],
+            [9, 9],
+            [0, 1],
+            [2, 3],
+            [9, 9]
+        ]])
+        # fmt: on
+        self.assertTrue(np.allclose(expected_image, pad(image, ((2, 1), (0, 0)), constant_values=9)))
+
+        # Test padding with a constant value
+        # fmt: off
+        expected_image = np.array([[
+            [8, 8, 0, 1, 9],
+            [8, 8, 2, 3, 9],
+            [8, 8, 7, 7, 9],
+            [8, 8, 7, 7, 9]
+        ]])
+        # fmt: on
+        self.assertTrue(np.allclose(expected_image, pad(image, ((0, 2), (2, 1)), constant_values=((6, 7), (8, 9)))))
+
+        # fmt: off
+        image = np.array([[
+            [0, 1, 2],
+            [3, 4, 5],
+            [6, 7, 8],
+        ]])
+        # fmt: on
+
+        # Test padding with PaddingMode.REFLECT
+        # fmt: off
+        expected_image = np.array([[
+            [2, 1, 0, 1, 2, 1],
+            [5, 4, 3, 4, 5, 4],
+            [8, 7, 6, 7, 8, 7],
+            [5, 4, 3, 4, 5, 4],
+            [2, 1, 0, 1, 2, 1],
+        ]])
+        # fmt: on
+        self.assertTrue(np.allclose(expected_image, pad(image, ((0, 2), (2, 1)), mode="reflect")))
+
+        # Test padding with PaddingMode.REPLICATE
+        # fmt: off
+        expected_image = np.array([[
+            [0, 0, 0, 1, 2, 2],
+            [3, 3, 3, 4, 5, 5],
+            [6, 6, 6, 7, 8, 8],
+            [6, 6, 6, 7, 8, 8],
+            [6, 6, 6, 7, 8, 8],
+        ]])
+        # fmt: on
+        self.assertTrue(np.allclose(expected_image, pad(image, ((0, 2), (2, 1)), mode="replicate")))
+
+        # Test padding with PaddingMode.SYMMETRIC
+        # fmt: off
+        expected_image = np.array([[
+            [1, 0, 0, 1, 2, 2],
+            [4, 3, 3, 4, 5, 5],
+            [7, 6, 6, 7, 8, 8],
+            [7, 6, 6, 7, 8, 8],
+            [4, 3, 3, 4, 5, 5],
+        ]])
+        # fmt: on
+        self.assertTrue(np.allclose(expected_image, pad(image, ((0, 2), (2, 1)), mode="symmetric")))
+
+        # Test we can specify the output data format
+        # Test padding with PaddingMode.REFLECT
+        # fmt: off
+        image = np.array([[
+            [0, 1],
+            [2, 3],
+        ]])
+        expected_image = np.array([
+            [[0], [1], [0], [1], [0]],
+            [[2], [3], [2], [3], [2]],
+            [[0], [1], [0], [1], [0]],
+            [[2], [3], [2], [3], [2]]
+        ])
+        # fmt: on
+        self.assertTrue(
+            np.allclose(expected_image, pad(image, ((0, 2), (2, 1)), mode="reflect", data_format="channels_last"))
+        )

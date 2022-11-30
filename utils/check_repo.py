@@ -39,7 +39,10 @@ PRIVATE_MODELS = [
     "LongT5Stack",
     "RealmBertModel",
     "T5Stack",
+    "SwitchTransformersStack",
     "TFDPRSpanPredictor",
+    "MaskFormerSwinModel",
+    "MaskFormerSwinPreTrainedModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -51,6 +54,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TableTransformerDecoder",  # Building part of bigger (tested) model.
     "TimeSeriesTransformerEncoder",  # Building part of bigger (tested) model.
     "TimeSeriesTransformerDecoder",  # Building part of bigger (tested) model.
+    "JukeboxVQVAE",  # Building part of bigger (tested) model.
+    "JukeboxPrior",  # Building part of bigger (tested) model.
     "DeformableDetrEncoder",  # Building part of bigger (tested) model.
     "DeformableDetrDecoder",  # Building part of bigger (tested) model.
     "OPTDecoder",  # Building part of bigger (tested) model.
@@ -146,6 +151,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "CLIPSegTextModel",
     "EsmForProteinFolding",
     "TimeSeriesTransformerForPrediction",
+    "JukeboxVQVAE",
+    "JukeboxPrior",
     "PegasusXEncoder",
     "PegasusXDecoder",
     "PegasusXDecoderWrapper",
@@ -172,7 +179,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "PLBartDecoderWrapper",
     "BeitForMaskedImageModeling",
     "CLIPTextModel",
+    "CLIPTextModelWithProjection",
     "CLIPVisionModel",
+    "CLIPVisionModelWithProjection",
     "GroupViTTextModel",
     "GroupViTVisionModel",
     "TFCLIPTextModel",
@@ -661,6 +670,11 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "PyTorchBenchmarkArguments",
     "TensorFlowBenchmark",
     "TensorFlowBenchmarkArguments",
+    "MaskFormerSwinBackbone",
+    "ResNetBackbone",
+    "AutoBackbone",
+    "MaskFormerSwinConfig",
+    "MaskFormerSwinModel",
 ]
 
 

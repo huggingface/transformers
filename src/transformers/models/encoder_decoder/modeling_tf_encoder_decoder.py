@@ -271,7 +271,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         # Add `decoder_input_ids` because `self.decoder` requires it.
-        input_ids = tf.constant(DUMMY_INPUTS)
+        input_ids = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
         dummy = {"input_ids": input_ids, "decoder_input_ids": input_ids}
         return dummy
 

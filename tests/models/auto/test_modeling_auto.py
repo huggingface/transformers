@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
     RequestCounter,
-    require_scatter,
     require_torch,
     slow,
 )
@@ -197,7 +196,6 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsInstance(model, BertForQuestionAnswering)
 
     @slow
-    @require_scatter
     def test_table_question_answering_model_from_pretrained(self):
         for model_name in TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST[5:6]:
             config = AutoConfig.from_pretrained(model_name)
