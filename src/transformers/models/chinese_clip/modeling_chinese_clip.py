@@ -1105,7 +1105,6 @@ class ChineseCLIPVisionTransformer(nn.Module):
     "The text model from CHINESE_CLIP without any head or projection on top.",
     CHINESE_CLIP_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertModel with BERT->CHINESE_CLIP,Bert->ChineseCLIPText
 class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     """
 
