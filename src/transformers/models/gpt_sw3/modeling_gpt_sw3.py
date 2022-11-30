@@ -51,7 +51,9 @@ _CONFIG_FOR_DOC = "GPTSw3Config"
 _TOKENIZER_FOR_DOC = "GPTSw3Tokenizer"
 
 GPT_SW3_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "AI-Sweden/gpt-sw3-126m-OLD-NEW",  # TODO: Add models
+    "AI-Sweden/gpt-sw3-126m",  # TODO: Add models
+    "AI-Sweden/gpt-sw3-356m",
+    "AI-Sweden/gpt-sw3-1.3b"
     # See all gpt-sw3 models at https://huggingface.co/models?filter=gpt-sw3
 ]
 
