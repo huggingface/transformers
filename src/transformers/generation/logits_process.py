@@ -174,6 +174,8 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
     Args:
         hallucination_penalty (`float`):
             The parameter for hallucination penalty. 1.0 means no penalty.
+        encoder_input_ids (`int`):
+            The encoder_input_ids that should not be repeated within the decoder ids.
     """
 
     def __init__(self, penalty: float, encoder_input_ids: torch.LongTensor):

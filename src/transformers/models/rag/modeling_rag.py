@@ -1455,6 +1455,8 @@ class RagTokenForGeneration(RagPreTrainedModel):
             use_cache: (`bool`, *optional*, defaults to `True`):
                 Whether or not the model should use the past last key/values attentions (if applicable to the model) to
                 speed up decoding.
+            encoder_repetition_penalty (`float`, *optional*, defaults to `model.config.encoder_repetition_penalty` or 1.0 if the config does not set any value):
+                The paramater for encoder_repetition_penalty. An exponential penalty on sequences that are not in the original input. 1.0 means no penalty.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
             bos_token_id (`int`, *optional*):
