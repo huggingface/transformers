@@ -5821,14 +5821,14 @@ class ViTPreTrainedModel(metaclass=DummyObject):
 VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class ViTHybirdModel(metaclass=DummyObject):
+class ViTHybridForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class ViTHybridForImageClassification(metaclass=DummyObject):
+class ViTHybridModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
