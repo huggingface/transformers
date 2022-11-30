@@ -17,11 +17,14 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-# rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_torch_available,
+)
 
 
-_import_structure = {"configuration_bit": ["BIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BitConfig", "BitOnnxConfig"]}
+_import_structure = {"configuration_vit_hybrid": ["VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTHybridConfig"]}
 
 try:
     if not is_torch_available():
@@ -29,16 +32,16 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_bit"] = [
-        "BIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "BitForImageClassification",
-        "BitModel",
-        "BitPreTrainedModel",
-        "BitBackbone",
+    _import_structure["modeling_vit_hybrid"] = [
+        "VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "ViTHybridForImageClassification",
+        "ViTHybridModel",
+        "ViTHybridPreTrainedModel",
     ]
 
+
 if TYPE_CHECKING:
-    from .configuration_bit import BIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BitConfig, BitOnnxConfig
+    from .configuration_vit_hybrid import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTHybridConfig
 
     try:
         if not is_torch_available():
@@ -46,15 +49,15 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_bit import (
-            BIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BitBackbone,
-            BitForImageClassification,
-            BitModel,
-            BitPreTrainedModel,
+        from .modeling_vit_hybrid import (
+            VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ViTHybridForImageClassification,
+            ViTHybridModel,
+            ViTHybridPreTrainedModel,
         )
+
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

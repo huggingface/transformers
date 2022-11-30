@@ -998,6 +998,13 @@ class BigBirdPegasusPreTrainedModel(metaclass=DummyObject):
 BIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class BitBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class BitForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -5805,6 +5812,30 @@ class ViTModel(metaclass=DummyObject):
 
 
 class ViTPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class ViTHybirdModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ViTHybridForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ViTHybridPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

@@ -89,6 +89,7 @@ class BitConfig(PretrainedConfig):
         output_stride=32,
         width_factor=1,
         conv_layer="std_conv",
+        out_features=None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -106,3 +107,13 @@ class BitConfig(PretrainedConfig):
         self.output_stride = output_stride
         self.width_factor = width_factor
         self.conv_layer = conv_layer
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+        if out_features is not None:
+            if not isinstance(out_features, list):
+                raise ValueError("out_features should be a list")
+            for feature in out_features:
+                if feature not in self.stage_names:
+                    raise ValueError(
+                        f"Feature {feature} is not a valid feature name. Valid names are {self.stage_names}"
+                    )
+        self.out_features = out_features

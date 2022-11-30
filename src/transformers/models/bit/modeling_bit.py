@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch BiT model. Also supports backbones for ViT hybrid."""
+""" PyTorch BiT model. Also supports backbone for ViT hybrid."""
 
 import collections
 import math
@@ -24,14 +24,20 @@ import torch.utils.checkpoint
 from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...activations import ACT2FN
 from ...modeling_outputs import (
+    BackboneOutput,
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_bit import BitConfig
 
 
@@ -385,71 +391,6 @@ class BitPreActivationBottleneckLayer(nn.Module):
         return x + shortcut
 
 
-class BitDownsampleConv(nn.Module):
-    def __init__(
-        self,
-        in_channels,
-        out_channels,
-        stride=1,
-        dilation=1,
-        first_dilation=None,
-        preact=True,
-        conv_layer=None,
-        norm_layer=None,
-    ):
-        super(BitDownsampleConv, self).__init__()
-        self.conv_layer = conv_layer
-        self.conv = conv_layer(in_channels, out_channels, 1, stride=stride)
-        self.norm = nn.Identity() if preact else norm_layer(out_channels, apply_act=False)
-
-    def forward(self, x, print_values=False):
-        if print_values:
-            print("Conv layer:", self.conv_layer)
-            print("Hidden states before downsample conv:", x[0, 0, :3, :3])
-
-        z = self.conv(x)
-
-        if print_values:
-            print("Hidden states after downsample conv:", z[0, 0, :3, :3])
-
-        return self.norm(self.conv(x))
-
-
-class BitConvLayer(nn.Module):
-    def __init__(
-        self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu"
-    ):
-        super().__init__()
-        self.convolution = nn.Conv2d(
-            in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=kernel_size // 2, bias=False
-        )
-        self.normalization = nn.BatchNorm2d(out_channels)
-        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
-
-    def forward(self, input: Tensor) -> Tensor:
-        hidden_state = self.convolution(input)
-        hidden_state = self.normalization(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        return hidden_state
-
-
-class BitShortCut(nn.Module):
-    """
-    ResNet shortcut, used to project the residual features to the correct size. If needed, it is also used to
-    downsample the input using `stride=2`.
-    """
-
-    def __init__(self, in_channels: int, out_channels: int, stride: int = 2):
-        super().__init__()
-        self.convolution = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False)
-        self.normalization = nn.BatchNorm2d(out_channels)
-
-    def forward(self, input: Tensor) -> Tensor:
-        hidden_state = self.convolution(input)
-        hidden_state = self.normalization(hidden_state)
-        return hidden_state
-
-
 class BitBottleneckLayer(nn.Module):
     """Non Pre-activation bottleneck block, equivalent to V1.5/V1b bottleneck. Used for ViT."""
 
@@ -514,6 +455,36 @@ class BitBottleneckLayer(nn.Module):
         x = self.drop_path(x)
         x = self.act3(x + shortcut)
         return x
+
+
+class BitDownsampleConv(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        stride=1,
+        dilation=1,
+        first_dilation=None,
+        preact=True,
+        conv_layer=None,
+        norm_layer=None,
+    ):
+        super(BitDownsampleConv, self).__init__()
+        self.conv_layer = conv_layer
+        self.conv = conv_layer(in_channels, out_channels, 1, stride=stride)
+        self.norm = nn.Identity() if preact else norm_layer(out_channels, apply_act=False)
+
+    def forward(self, x, print_values=False):
+        if print_values:
+            print("Conv layer:", self.conv_layer)
+            print("Hidden states before downsample conv:", x[0, 0, :3, :3])
+
+        z = self.conv(x)
+
+        if print_values:
+            print("Hidden states after downsample conv:", z[0, 0, :3, :3])
+
+        return self.norm(self.conv(x))
 
 
 class BitStage(nn.Module):
@@ -847,3 +818,84 @@ class BitForImageClassification(BitPreTrainedModel):
             return (loss,) + output if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+
+@add_start_docstrings(
+    """
+    BiT backbone, to be used with frameworks like DETR and MaskFormer.
+    """,
+    BIT_START_DOCSTRING,
+)
+class BitBackbone(BitPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.stage_names = config.stage_names
+        self.resnetv2 = BitModel(config)
+
+        self.out_features = config.out_features
+
+        out_feature_channels = {}
+        out_feature_channels["stem"] = config.embedding_size
+        for idx, stage in enumerate(self.stage_names[1:]):
+            out_feature_channels[stage] = config.hidden_sizes[idx]
+
+        self.out_feature_channels = out_feature_channels
+
+        # initialize weights and apply final processing
+        self.post_init()
+
+    @property
+    def channels(self):
+        return [self.out_feature_channels[name] for name in self.out_features]
+
+    @add_start_docstrings_to_model_forward(BIT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+    ) -> BackboneOutput:
+        """
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoBackbone
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
+        >>> model = AutoBackbone.from_pretrained("microsoft/resnet-50")
+
+        >>> inputs = processor(image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        outputs = self.resnetv2(pixel_values, output_hidden_states=True, return_dict=True)
+
+        hidden_states = outputs.hidden_states
+
+        feature_maps = ()
+        for idx, stage in enumerate(self.stage_names):
+            if stage in self.out_features:
+                feature_maps += (hidden_states[idx],)
+
+        if not return_dict:
+            output = (feature_maps,)
+            if output_hidden_states:
+                output += (outputs.hidden_states,)
+            return output
+
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            attentions=None,
+        )
