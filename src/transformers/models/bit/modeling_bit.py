@@ -279,16 +279,10 @@ class BitEmbeddings(nn.Module):
 
         embedding = self.convolution(pixel_values)
 
-        print("Shape of embeddings after conv2d:", embedding.shape)
-        print("First values:", embedding[0, 0, :3, :3])
-
         if self.norm is not None:
             embedding = self.norm(embedding)
 
         embedding = self.pooler(embedding)
-
-        print("Shape of BiT embeddings:", embedding.shape)
-        print("First values of BiT embeddings:", embedding[0,0,:3,:3])
 
         return embedding
 
