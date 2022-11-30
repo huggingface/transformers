@@ -315,6 +315,8 @@ class TFFunnelAttentionStructure:
         """Apply 1D pooling to a tensor of size [B x T (x H)]."""
         if tensor is None:
             return None
+        if isinstance(stride, float) or stride < 1:
+            raise ValueError("Stride must be an integer >= 1")
 
         # Do the pool recursively if tensor is a list or tuple of tensors.
         if isinstance(tensor, (tuple, list)):
