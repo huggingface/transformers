@@ -343,7 +343,7 @@ class TimesformerModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_for_video_classification(self):
-        model = TimesformerForVideoClassification.from_pretrained("fcakyon/timesformer-base-finetuned-k400").to(
+        model = TimesformerForVideoClassification.from_pretrained("facebook/timesformer-base-finetuned-k400").to(
             torch_device
         )
 

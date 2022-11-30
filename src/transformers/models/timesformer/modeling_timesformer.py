@@ -37,7 +37,7 @@ _CONFIG_FOR_DOC = "TimesformerConfig"
 _CHECKPOINT_FOR_DOC = "facebook/timesformer"
 
 TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "fcakyon/timesformer-base-finetuned-k400",
+    "facebook/timesformer-base-finetuned-k400",
     # See all TimeSformer models at https://huggingface.co/models?filter=timesformer
 ]
 
