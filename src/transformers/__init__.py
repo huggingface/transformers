@@ -2173,15 +2173,6 @@ else:
             "VideoMAEPreTrainedModel",
         ]
     )
-    _import_structure["models.videomae"].extend(
-        [
-            "VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "VideoMAEForPreTraining",
-            "VideoMAEForVideoClassification",
-            "VideoMAEModel",
-            "VideoMAEPreTrainedModel",
-        ]
-    )
     _import_structure["models.vilt"].extend(
         [
             "VILT_PRETRAINED_MODEL_ARCHIVE_LIST",
