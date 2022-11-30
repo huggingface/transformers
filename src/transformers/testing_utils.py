@@ -395,8 +395,7 @@ def require_tensorflow_text(test_case):
 
 def require_keras_nlp(test_case):
     """
-    Decorator marking a test that requires keras_nlp. These tests are skipped when keras_nlp isn't
-    installed.
+    Decorator marking a test that requires keras_nlp. These tests are skipped when keras_nlp isn't installed.
     """
     return unittest.skipUnless(is_keras_nlp_available(), "test requires keras_nlp")(test_case)
 
