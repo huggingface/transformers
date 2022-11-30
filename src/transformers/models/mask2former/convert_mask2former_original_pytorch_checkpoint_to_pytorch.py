@@ -359,79 +359,129 @@ class OriginalMask2FormerCheckpointToOursConverter:
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
     def replace_deformable_detr_encoder_layers(self, dst_state_dict: StateDict, src_state_dict: StateDict):
-        dst_prefix: str = "pixel_level_module.decoder.multi_scale_deform_attn_module.encoder.deformable_detr.layers"
+        dst_prefix: str = "pixel_level_module.decoder.msda_module.encoder.layers"
         src_prefix: str = "sem_seg_head.pixel_decoder.transformer.encoder.layers"
 
         renamed_keys = []
-        for i in range(self.config.decoder_config.decoder_layers):
+        
+        for i in range(self.config.pixel_decoder_config.encoder_layers):
 
             renamed_keys.append(
                 (
-                    f"{src_prefix}.{i}.self_attn.sampling_offsets.weight",
-                    f"{dst_prefix}.{i}.self_attn.sampling_offsets.weight",
+                    f"{src_prefix}.{i}.self_attn.sampling_offsets.weight", 
+                    f"{dst_prefix}.{i}.self_attn.sampling_offsets.weight"
                 )
             )
             renamed_keys.append(
                 (
-                    f"{src_prefix}.{i}.self_attn.sampling_offsets.bias",
-                    f"{dst_prefix}.{i}.self_attn.sampling_offsets.bias",
+                    f"{src_prefix}.{i}.self_attn.sampling_offsets.bias", 
+                    f"{dst_prefix}.{i}.self_attn.sampling_offsets.bias"
                 )
             )
             renamed_keys.append(
                 (
-                    f"{src_prefix}.{i}.self_attn.attention_weights.weight",
-                    f"{dst_prefix}.{i}.self_attn.attention_weights.weight",
+                    f"{src_prefix}.{i}.self_attn.attention_weights.weight", 
+                    f"{dst_prefix}.{i}.self_attn.attention_weights.weight"
                 )
             )
             renamed_keys.append(
                 (
-                    f"{src_prefix}.{i}.self_attn.attention_weights.bias",
-                    f"{dst_prefix}.{i}.self_attn.attention_weights.bias",
+                    f"{src_prefix}.{i}.self_attn.attention_weights.bias", 
+                    f"{dst_prefix}.{i}.self_attn.attention_weights.bias"
                 )
             )
             renamed_keys.append(
-                (f"{src_prefix}.{i}.self_attn.value_proj.weight", f"{dst_prefix}.{i}.self_attn.value_proj.weight")
+                (
+                    f"{src_prefix}.{i}.self_attn.value_proj.weight", 
+                    f"{dst_prefix}.{i}.self_attn.value_proj.weight"
+                )
             )
             renamed_keys.append(
-                (f"{src_prefix}.{i}.self_attn.value_proj.bias", f"{dst_prefix}.{i}.self_attn.value_proj.bias")
+                (
+                    f"{src_prefix}.{i}.self_attn.value_proj.bias", 
+                    f"{dst_prefix}.{i}.self_attn.value_proj.bias"
+                )
             )
             renamed_keys.append(
-                (f"{src_prefix}.{i}.self_attn.output_proj.weight", f"{dst_prefix}.{i}.self_attn.output_proj.weight")
+                (
+                    f"{src_prefix}.{i}.self_attn.output_proj.weight", 
+                    f"{dst_prefix}.{i}.self_attn.output_proj.weight"
+                )
             )
             renamed_keys.append(
-                (f"{src_prefix}.{i}.self_attn.output_proj.bias", f"{dst_prefix}.{i}.self_attn.output_proj.bias")
+                (
+                    f"{src_prefix}.{i}.self_attn.output_proj.bias", 
+                    f"{dst_prefix}.{i}.self_attn.output_proj.bias"
+                )
             )
             renamed_keys.append(
-                (f"{src_prefix}.{i}.self_attn.norm1.weight", f"{dst_prefix}.{i}.self_attn.self_attn_layer_norm.weight")
+                (
+                    f"{src_prefix}.{i}.norm1.weight", 
+                    f"{dst_prefix}.{i}.self_attn_layer_norm.weight"
+                )
             )
             renamed_keys.append(
-                (f"{src_prefix}.{i}.self_attn.norm1.bias", f"{dst_prefix}.{i}.self_attn.self_attn_layer_norm.bias")
+                (
+                    f"{src_prefix}.{i}.norm1.bias", 
+                    f"{dst_prefix}.{i}.self_attn_layer_norm.bias"
+                )
             )
             renamed_keys.append(
-                (f"{src_prefix}.{i}.self_attn.linear1.weight", f"{dst_prefix}.{i}.self_attn.fc1.weight")
+                (
+                    f"{src_prefix}.{i}.linear1.weight", 
+                    f"{dst_prefix}.{i}.fc1.weight"
+                )
             )
-            renamed_keys.append((f"{src_prefix}.{i}.self_attn.linear1.bias", f"{dst_prefix}.{i}.self_attn.fc1.bias"))
             renamed_keys.append(
-                (f"{src_prefix}.{i}.self_attn.norm2.weight", f"{dst_prefix}.{i}.self_attn.final_layer_norm.weight")
+                (
+                    f"{src_prefix}.{i}.linear1.bias", 
+                    f"{dst_prefix}.{i}.fc1.bias"
+                )
             )
             renamed_keys.append(
-                (f"{src_prefix}.{i}.self_attn.norm2.bias", f"{dst_prefix}.{i}.self_attn.final_layer_norm.bias")
+                (
+                    f"{src_prefix}.{i}.norm2.weight", 
+                    f"{dst_prefix}.{i}.final_layer_norm.weight"
+                )
+            )
+            renamed_keys.append(
+                (
+                    f"{src_prefix}.{i}.norm2.bias", 
+                    f"{dst_prefix}.{i}.final_layer_norm.bias"
+                )
             )
 
-        self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
+            renamed_keys.append(
+                (
+                    f"{src_prefix}.{i}.linear2.weight", 
+                    f"{dst_prefix}.{i}.fc2.weight"
+                )
+            )
+            renamed_keys.append(
+                (
+                    f"{src_prefix}.{i}.linear2.bias", 
+                    f"{dst_prefix}.{i}.fc2.bias"
+                )
+            )
+        
+        return renamed_keys
 
     def replace_deformable_detr_encoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
-        dst_prefix: str = "pixel_level_module.decoder.multi_scale_deform_attn_module.encoder"
+        dst_prefix: str = "pixel_level_module.decoder.msda_module"
         src_prefix: str = "sem_seg_head.pixel_decoder.transformer"
 
-        renamed_keys = [(f"{src_prefix}.level_embed", f"{dst_prefix}.level_embed")]
+        renamed_keys = self.replace_deformable_detr_encoder_layers(dst_state_dict,src_state_dict)
 
-        self.replace_deformable_detr_encoder_layers(dst_state_dict, src_state_dict)
+        renamed_keys.extend(
+            [
+            (f"{src_prefix}.level_embed", f"{dst_prefix}.level_embed")
+            ]
+        )
 
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
-    def replace_deform_attn_encoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
-        dst_prefix: str = "pixel_level_module.decoder.multi_scale_deform_attn_module"
+    def replace_msda_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
+        dst_prefix: str = "pixel_level_module.decoder.msda_module"
         src_prefix: str = "sem_seg_head.pixel_decoder"
 
         renamed_keys = []
@@ -451,12 +501,14 @@ class OriginalMask2FormerCheckpointToOursConverter:
 
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
+        self.replace_deformable_detr_encoder(dst_state_dict, src_state_dict)
+
     def replace_pixel_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
         dst_prefix: str = "pixel_level_module.decoder"
         src_prefix: str = "sem_seg_head.pixel_decoder"
 
         self.replace_backbone(dst_state_dict, src_state_dict, self.config)
-        self.replace_deform_attn_encoder(dst_state_dict, src_state_dict)
+        self.replace_msda_module(dst_state_dict, src_state_dict)
 
         def rename_keys_for_conv(detectron_conv: str, mine_conv: str):
             return [
@@ -892,7 +944,6 @@ if __name__ == "__main__":
             mask2former_for_instance_segmentation
         )
 
-        # commenting test model for now due to mismatch in feature values -> need to fix
         test(original_model, mask2former_for_instance_segmentation, feature_extractor)
 
         model_name = get_model_name(checkpoint_file)

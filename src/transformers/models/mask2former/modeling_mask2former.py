@@ -1154,7 +1154,6 @@ class Mask2FormerSwinEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerSwinModel with MaskFormer->Mask2Former
 class Mask2FormerSwinModel(nn.Module, ModuleUtilsMixin):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__()
@@ -1165,7 +1164,6 @@ class Mask2FormerSwinModel(nn.Module, ModuleUtilsMixin):
         self.embeddings = Mask2FormerSwinEmbeddings(config)
         self.encoder = Mask2FormerSwinEncoder(config, self.embeddings.patch_grid)
 
-        self.layernorm = nn.LayerNorm(self.num_features, eps=config.layer_norm_eps)
         self.pooler = nn.AdaptiveAvgPool1d(1) if add_pooling_layer else None
 
     def get_input_embeddings(self):
@@ -1215,7 +1213,6 @@ class Mask2FormerSwinModel(nn.Module, ModuleUtilsMixin):
         )
 
         sequence_output = encoder_outputs.last_hidden_state
-        sequence_output = self.layernorm(sequence_output)
 
         pooled_output = None
         if self.pooler is not None:
@@ -1480,10 +1477,10 @@ class MaskedAttentionDecoderLayer(nn.Module):
         # Self Attention Block
         residual = hidden_states
 
-        hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states, position_embeddings=query_position_embeddings, attention_mask=None,
-            output_attentions=output_attentions,
-        )
+        # hidden_states, self_attn_weights = self.self_attn(
+        #     hidden_states=hidden_states, position_embeddings=query_position_embeddings, attention_mask=None,
+        #     output_attentions=output_attentions,
+        # )
 
         query = key = self.with_pos_embed(hidden_states, query_position_embeddings)
 
