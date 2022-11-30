@@ -113,6 +113,7 @@ class OptimizerNames(ExplicitEnum):
     ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
     ADAMW_BNB = "adamw_bnb_8bit"
+    ADAMW_ANYPRECISION = "adamw_anyprecision"
     SGD = "sgd"
     ADAGRAD = "adagrad"
 
@@ -401,7 +402,9 @@ class TrainingArguments:
 
             The options should be separated by whitespaces.
         optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_hf"`):
-            The optimizer to use: adamw_hf, adamw_torch, adamw_apex_fused, or adafactor.
+            The optimizer to use: adamw_hf, adamw_torch, adamw_apex_fused, adamw_anyprecision or adafactor.
+        optim_args (`str`, *optional*):
+            Optional arguments that are supplied to AnyPrecisionAdamW.
         adafactor (`bool`, *optional*, defaults to `False`):
             This argument is deprecated. Use `--optim adafactor` instead.
         group_by_length (`bool`, *optional*, defaults to `False`):
@@ -413,8 +416,8 @@ class TrainingArguments:
             instance of `Dataset`.
         report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
-            `"comet_ml"`, `"mlflow"`, `"neptune"`, `"tensorboard"` and `"wandb"`. Use `"all"` to report to all
-            integrations installed, `"none"` for no integrations.
+            `"comet_ml"`, `"mlflow"`, `"neptune"`, `"tensorboard"`,`"clearml"` and `"wandb"`. Use `"all"` to report to
+            all integrations installed, `"none"` for no integrations.
         ddp_find_unused_parameters (`bool`, *optional*):
             When using distributed training, the value of the flag `find_unused_parameters` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
@@ -857,6 +860,7 @@ class TrainingArguments:
         default="adamw_hf",
         metadata={"help": "The optimizer to use."},
     )
+    optim_args: Optional[str] = field(default=None, metadata={"help": "Optional arguments to supply to optimizer."})
     adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
     group_by_length: bool = field(
         default=False,
@@ -1082,7 +1086,7 @@ class TrainingArguments:
                 if self.no_cuda and not is_torch_bf16_cpu_available():
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/cpu. You need torch>=1.10")
-                elif not self.no_cuda and not is_torch_bf16_gpu_available():
+                elif not self.no_cuda and torch.cuda.is_available() and not is_torch_bf16_gpu_available():
                     # gpu
                     raise ValueError(
                         "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
@@ -1410,7 +1414,7 @@ class TrainingArguments:
                 raise ImportError("--deepspeed requires deepspeed: `pip install deepspeed`.")
             import deepspeed
 
-            deepspeed.init_distributed()
+            deepspeed.init_distributed(timeout=timedelta(seconds=self.ddp_timeout))
 
             # workaround for setups like notebooks where the launcher can't be used,
             # but deepspeed requires a dist env.

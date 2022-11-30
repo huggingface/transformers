@@ -227,12 +227,20 @@ class ModelOutput(OrderedDict):
             # if we provided an iterator as first field and the iterator is a (key, value) iterator
             # set the associated fields
             if first_field_iterator:
-                for element in iterator:
+                for idx, element in enumerate(iterator):
                     if (
                         not isinstance(element, (list, tuple))
                         or not len(element) == 2
                         or not isinstance(element[0], str)
                     ):
+                        if idx == 0:
+                            # If we do not have an iterator of key/values, set it as attribute
+                            self[class_fields[0].name] = first_field
+                        else:
+                            # If we have a mixed iterator, raise an error
+                            raise ValueError(
+                                f"Cannot set key/value for {element}. It needs to be a tuple (key, value)."
+                            )
                         break
                     setattr(self, element[0], element[1])
                     if element[1] is not None:
@@ -334,6 +342,28 @@ class ContextManagers:
 
     def __exit__(self, *args, **kwargs):
         self.stack.__exit__(*args, **kwargs)
+
+
+def can_return_loss(model_class):
+    """
+    Check if a given model can return loss.
+
+    Args:
+        model_class (`type`): The class of the model.
+    """
+    model_name = model_class.__name__
+    if model_name.startswith("TF"):
+        signature = inspect.signature(model_class.call)
+    elif model_name.startswith("Flax"):
+        signature = inspect.signature(model_class.__call__)
+    else:
+        signature = inspect.signature(model_class.forward)
+
+    for p in signature.parameters:
+        if p == "return_loss" and signature.parameters[p].default is True:
+            return True
+
+    return False
 
 
 def find_labels(model_class):

@@ -64,6 +64,13 @@ class ConditionalDetrFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class ConditionalDetrImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class ConvNextFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -79,6 +86,13 @@ class ConvNextImageProcessor(metaclass=DummyObject):
 
 
 class DeformableDetrFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class DeformableDetrImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
@@ -106,7 +120,21 @@ class DetrFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class DetrImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class DonutFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class DonutImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
@@ -225,6 +253,41 @@ class MaskFormerFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class MaskFormerImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class MobileNetV1FeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class MobileNetV1ImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class MobileNetV2FeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class MobileNetV2ImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class MobileViTFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -240,6 +303,13 @@ class MobileViTImageProcessor(metaclass=DummyObject):
 
 
 class OwlViTFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class OwlViTImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
@@ -338,6 +408,13 @@ class ViTImageProcessor(metaclass=DummyObject):
 
 
 class YolosFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class YolosImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

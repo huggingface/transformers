@@ -21,6 +21,28 @@ class VisualQuestionAnsweringPipeline(Pipeline):
     Visual Question Answering pipeline using a `AutoModelForVisualQuestionAnswering`. This pipeline is currently only
     available in PyTorch.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> oracle = pipeline(model="dandelin/vilt-b32-finetuned-vqa")
+    >>> image_url = "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/lena.png"
+    >>> oracle(question="What is she wearing ?", image=image_url)
+    [{'score': 0.948, 'answer': 'hat'}, {'score': 0.009, 'answer': 'fedora'}, {'score': 0.003, 'answer': 'clothes'}, {'score': 0.003, 'answer': 'sun hat'}, {'score': 0.002, 'answer': 'nothing'}]
+
+    >>> oracle(question="What is she wearing ?", image=image_url, top_k=1)
+    [{'score': 0.948, 'answer': 'hat'}]
+
+    >>> oracle(question="Is this a person ?", image=image_url, top_k=1)
+    [{'score': 0.993, 'answer': 'yes'}]
+
+    >>> oracle(question="Is this a man ?", image=image_url, top_k=1)
+    [{'score': 0.996, 'answer': 'no'}]
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
+
     This visual question answering pipeline can currently be loaded from [`pipeline`] using the following task
     identifiers: `"visual-question-answering", "vqa"`.
 
