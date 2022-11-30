@@ -58,7 +58,7 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
 
 BIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/resnetnv2-50",
-    # See all BiT models at https://huggingface.co/models?filter=bit
+    # See all BiT models at https://huggingface.co/models?filter=resnetv2
 ]
 
 
@@ -705,7 +705,7 @@ class BitEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNet->Bit,resnet->bit
+# Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNet->Bit,resnet->resnetv2
 class BitPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -713,7 +713,7 @@ class BitPreTrainedModel(PreTrainedModel):
     """
 
     config_class = BitConfig
-    base_model_prefix = "bit"
+    base_model_prefix = "resnetv2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
@@ -826,7 +826,7 @@ class BitForImageClassification(BitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.bit = BitModel(config)
+        self.resnetv2 = BitModel(config)
         # classification head
         self.classifier = nn.Sequential(
             nn.Flatten(),
@@ -857,7 +857,7 @@ class BitForImageClassification(BitPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.bit(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        outputs = self.resnetv2(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
@@ -904,7 +904,7 @@ class BitBackbone(BitPreTrainedModel):
         super().__init__(config)
 
         self.stage_names = config.stage_names
-        self.bit = BitModel(config)
+        self.resnetv2 = BitModel(config)
 
         self.out_features = config.out_features
 
@@ -952,7 +952,7 @@ class BitBackbone(BitPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        outputs = self.bit(pixel_values, output_hidden_states=True, return_dict=True)
+        outputs = self.resnetv2(pixel_values, output_hidden_states=True, return_dict=True)
 
         hidden_states = outputs.hidden_states
 
