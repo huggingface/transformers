@@ -1589,7 +1589,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
         >>> import numpy
 
         >>> from transformers import DetrFeatureExtractor, DetrForSegmentation
-        >>> from transformers.models.detr.feature_extraction_detr import rgb_to_id
+        >>> from transformers.image_transforms import rgb_to_id
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -2289,8 +2289,6 @@ def generalized_box_iou(boxes1, boxes2):
 
 
 # below: taken from https://github.com/facebookresearch/detr/blob/master/util/misc.py#L306
-
-
 def _max_by_axis(the_list):
     # type: (List[List[int]]) -> List[int]
     maxes = the_list[0]

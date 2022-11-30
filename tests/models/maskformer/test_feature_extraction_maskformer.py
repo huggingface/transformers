@@ -31,7 +31,7 @@ if is_torch_available():
 
     if is_vision_available():
         from transformers import MaskFormerFeatureExtractor
-        from transformers.models.maskformer.feature_extraction_maskformer import binary_mask_to_rle
+        from transformers.models.maskformer.image_processing_maskformer import binary_mask_to_rle
         from transformers.models.maskformer.modeling_maskformer import MaskFormerForInstanceSegmentationOutput
 
 if is_vision_available():
@@ -46,9 +46,8 @@ class MaskFormerFeatureExtractionTester(unittest.TestCase):
         num_channels=3,
         min_resolution=30,
         max_resolution=400,
+        size=None,
         do_resize=True,
-        size=32,
-        max_size=1333,  # by setting max_size > max_resolution we're effectively not testing this :p
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
@@ -62,12 +61,11 @@ class MaskFormerFeatureExtractionTester(unittest.TestCase):
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.do_resize = do_resize
-        self.size = size
-        self.max_size = max_size
+        self.size = {"shortest_edge": 32, "longest_edge": 1333} if size is None else size
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
-        self.size_divisibility = 0
+        self.size_divisor = 0
         # for the post_process_functions
         self.batch_size = 2
         self.num_queries = 3
@@ -82,11 +80,10 @@ class MaskFormerFeatureExtractionTester(unittest.TestCase):
         return {
             "do_resize": self.do_resize,
             "size": self.size,
-            "max_size": self.max_size,
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
-            "size_divisibility": self.size_divisibility,
+            "size_divisor": self.size_divisor,
             "num_labels": self.num_labels,
             "reduce_labels": self.reduce_labels,
             "ignore_index": self.ignore_index,
@@ -104,14 +101,14 @@ class MaskFormerFeatureExtractionTester(unittest.TestCase):
             else:
                 h, w = image.shape[1], image.shape[2]
             if w < h:
-                expected_height = int(self.size * h / w)
-                expected_width = self.size
+                expected_height = int(self.size["shortest_edge"] * h / w)
+                expected_width = self.size["shortest_edge"]
             elif w > h:
-                expected_height = self.size
-                expected_width = int(self.size * w / h)
+                expected_height = self.size["shortest_edge"]
+                expected_width = int(self.size["shortest_edge"] * w / h)
             else:
-                expected_height = self.size
-                expected_width = self.size
+                expected_height = self.size["shortest_edge"]
+                expected_width = self.size["shortest_edge"]
 
         else:
             expected_values = []
@@ -260,7 +257,7 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         # Initialize feature_extractors
         feature_extractor_1 = self.feature_extraction_class(**self.feat_extract_dict)
         feature_extractor_2 = self.feature_extraction_class(
-            do_resize=False, do_normalize=False, num_labels=self.feature_extract_tester.num_classes
+            do_resize=False, do_normalize=False, do_rescale=False, num_labels=self.feature_extract_tester.num_classes
         )
         # create random PyTorch tensors
         image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
@@ -283,23 +280,23 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
     ):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # prepare image and target
-        batch_size = self.feature_extract_tester.batch_size
         num_labels = self.feature_extract_tester.num_labels
         annotations = None
         instance_id_to_semantic_id = None
+        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False)
         if with_segmentation_maps:
             high = num_labels
             if is_instance_map:
-                high * 2
                 labels_expanded = list(range(num_labels)) * 2
                 instance_id_to_semantic_id = {
                     instance_id: label_id for instance_id, label_id in enumerate(labels_expanded)
                 }
-            annotations = [np.random.randint(0, high, (384, 384)).astype(np.uint8) for _ in range(batch_size)]
+            annotations = [
+                np.random.randint(0, high * 2, (img.size[1], img.size[0])).astype(np.uint8) for img in image_inputs
+            ]
             if segmentation_type == "pil":
                 annotations = [Image.fromarray(annotation) for annotation in annotations]
 
-        image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False)
         inputs = feature_extractor(
             image_inputs,
             annotations,
@@ -313,18 +310,18 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
     def test_init_without_params(self):
         pass
 
-    def test_with_size_divisibility(self):
-        size_divisibilities = [8, 16, 32]
+    def test_with_size_divisor(self):
+        size_divisors = [8, 16, 32]
         weird_input_sizes = [(407, 802), (582, 1094)]
-        for size_divisibility in size_divisibilities:
-            feat_extract_dict = {**self.feat_extract_dict, **{"size_divisibility": size_divisibility}}
+        for size_divisor in size_divisors:
+            feat_extract_dict = {**self.feat_extract_dict, **{"size_divisor": size_divisor}}
             feature_extractor = self.feature_extraction_class(**feat_extract_dict)
             for weird_input_size in weird_input_sizes:
                 inputs = feature_extractor([np.ones((3, *weird_input_size))], return_tensors="pt")
                 pixel_values = inputs["pixel_values"]
                 # check if divisible
-                self.assertTrue((pixel_values.shape[-1] % size_divisibility) == 0)
-                self.assertTrue((pixel_values.shape[-2] % size_divisibility) == 0)
+                self.assertTrue((pixel_values.shape[-1] % size_divisor) == 0)
+                self.assertTrue((pixel_values.shape[-2] % size_divisor) == 0)
 
     def test_call_with_segmentation_maps(self):
         def common(is_instance_map=False, segmentation_type=None):

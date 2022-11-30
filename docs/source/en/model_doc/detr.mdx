@@ -114,7 +114,7 @@ Tips:
   It is advised to use a batch size of 2 per GPU. See [this Github thread](https://github.com/facebookresearch/detr/issues/150) for more info.
 
 There are three ways to instantiate a DETR model (depending on what you prefer):
-  
+
 Option 1: Instantiate DETR with pre-trained weights for entire model
 ```py
 >>> from transformers import DetrForObjectDetection
@@ -165,6 +165,15 @@ mean Average Precision (mAP) and Panoptic Quality (PQ). The latter objects are i
 ## DetrConfig
 
 [[autodoc]] DetrConfig
+
+## DetrImageProcessor
+
+[[autodoc]] DetrImageProcessor
+    - preprocess
+    - post_process_object_detection
+    - post_process_semantic_segmentation
+    - post_process_instance_segmentation
+    - post_process_panoptic_segmentation
 
 ## DetrFeatureExtractor
 

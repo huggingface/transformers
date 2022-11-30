@@ -27,7 +27,7 @@ Tips:
 - Demo notebooks (regarding inference and fine-tuning on custom data) can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/YOLOS).
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/yolos_architecture.png"
-alt="drawing" width="600"/> 
+alt="drawing" width="600"/>
 
 <small> YOLOS architecture. Taken from the <a href="https://arxiv.org/abs/2106.00666">original paper</a>.</small>
 
@@ -37,6 +37,12 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
 
 [[autodoc]] YolosConfig
 
+## YolosImageProcessor
+
+[[autodoc]] YolosImageProcessor
+    - preprocess
+    - pad
+    - post_process_object_detection
 
 ## YolosFeatureExtractor
 
