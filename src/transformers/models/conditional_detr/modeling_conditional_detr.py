@@ -153,8 +153,8 @@ class ConditionalDetrObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~ConditionalDetrFeatureExtractor.post_process_object_detection`] to
-            retrieve the unnormalized bounding boxes.
+            possible padding). You can use [`~ConditionalDetrImageProcessor.post_process_object_detection`] to retrieve
+            the unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
@@ -217,13 +217,13 @@ class ConditionalDetrSegmentationOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~ConditionalDetrFeatureExtractor.post_process_object_detection`] to
-            retrieve the unnormalized bounding boxes.
+            possible padding). You can use [`~ConditionalDetrImageProcessor.post_process_object_detection`] to retrieve
+            the unnormalized bounding boxes.
         pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height/4, width/4)`):
             Segmentation masks logits for all queries. See also
-            [`~ConditionalDetrFeatureExtractor.post_process_semantic_segmentation`] or
-            [`~ConditionalDetrFeatureExtractor.post_process_instance_segmentation`]
-            [`~ConditionalDetrFeatureExtractor.post_process_panoptic_segmentation`] to evaluate semantic, instance and
+            [`~ConditionalDetrImageProcessor.post_process_semantic_segmentation`] or
+            [`~ConditionalDetrImageProcessor.post_process_instance_segmentation`]
+            [`~ConditionalDetrImageProcessor.post_process_panoptic_segmentation`] to evaluate semantic, instance and
             panoptic segmentation masks respectively.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -1097,8 +1097,8 @@ CONDITIONAL_DETR_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`ConditionalDetrFeatureExtractor`]. See
-            [`ConditionalDetrFeatureExtractor.__call__`] for details.
+            Pixel values can be obtained using [`ConditionalDetrImageProcessor`]. See
+            [`ConditionalDetrImageProcessor.__call__`] for details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
@@ -1519,18 +1519,18 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, AutoModel
+        >>> from transformers import AutoImageProcessor, AutoModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/conditional-detr-resnet-50")
+        >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/conditional-detr-resnet-50")
         >>> model = AutoModel.from_pretrained("microsoft/conditional-detr-resnet-50")
 
         >>> # prepare image for the model
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> # forward pass
         >>> outputs = model(**inputs)
@@ -1687,25 +1687,25 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, AutoModelForObjectDetection
+        >>> from transformers import AutoImageProcessor, AutoModelForObjectDetection
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/conditional-detr-resnet-50")
+        >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/conditional-detr-resnet-50")
         >>> model = AutoModelForObjectDetection.from_pretrained("microsoft/conditional-detr-resnet-50")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> outputs = model(**inputs)
 
         >>> # convert outputs (bounding boxes and class logits) to COCO API
         >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = feature_extractor.post_process_object_detection(
-        ...     outputs, threshold=0.5, target_sizes=target_sizes
-        ... )[0]
+        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
+        ...     0
+        ... ]
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(
@@ -1880,7 +1880,7 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
         >>> import numpy
 
         >>> from transformers import (
-        ...     AutoFeatureExtractor,
+        ...     AutoImageProcessor,
         ...     ConditionalDetrConfig,
         ...     ConditionalDetrForSegmentation,
         ... )
@@ -1889,21 +1889,21 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/conditional-detr-resnet-50")
+        >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/conditional-detr-resnet-50")
 
         >>> # randomly initialize all weights of the model
         >>> config = ConditionalDetrConfig()
         >>> model = ConditionalDetrForSegmentation(config)
 
         >>> # prepare image for the model
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> # forward pass
         >>> outputs = model(**inputs)
 
-        >>> # Use the `post_process_panoptic_segmentation` method of `ConditionalDetrFeatureExtractor` to retrieve post-processed panoptic segmentation maps
+        >>> # Use the `post_process_panoptic_segmentation` method of `ConditionalDetrImageProcessor` to retrieve post-processed panoptic segmentation maps
         >>> # Segmentation results are returned as a list of dictionaries
-        >>> result = feature_extractor.post_process_panoptic_segmentation(outputs, target_sizes=[(300, 500)])
+        >>> result = image_processor.post_process_panoptic_segmentation(outputs, target_sizes=[(300, 500)])
         >>> # A tensor of shape (height, width) where each value denotes a segment id, filled with -1 if no segment is found
         >>> panoptic_seg = result[0]["segmentation"]
         >>> # Get prediction score and segment_id to class_id mapping of each segment

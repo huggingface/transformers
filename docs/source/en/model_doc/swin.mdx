@@ -33,7 +33,7 @@ prediction tasks such as object detection (58.7 box AP and 51.1 mask AP on COCO 
 The hierarchical design and the shifted window approach also prove beneficial for all-MLP architectures.*
 
 Tips:
-- One can use the [`AutoFeatureExtractor`] API to prepare images for the model.
+- One can use the [`AutoImageProcessor`] API to prepare images for the model.
 - Swin pads the inputs supporting any input height and width (if divisible by `32`).
 - Swin can be used as a *backbone*. When `output_hidden_states = True`, it will output both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, sequence_length, num_channels)`.
 
