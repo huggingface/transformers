@@ -144,7 +144,6 @@ from .utils import (
     is_ipex_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
-    is_torch_tensorrt_fx_available,
     is_torch_tpu_available,
     is_torchdynamo_available,
     logging,
@@ -637,32 +636,8 @@ class Trainer:
         self._memory_tracker.stop_and_update_metrics()
 
         # torchdynamo
-        if args.torchdynamo:
-            if not is_torchdynamo_available():
-                raise RuntimeError("Torchdynamo is not installed.")
-            import torchdynamo
-            from torchdynamo.optimizations import backends
-
-            def get_ctx():
-                # Normal
-                if args.torchdynamo == "eager":
-                    return torchdynamo.optimize("eager")
-                elif args.torchdynamo == "nvfuser":
-                    return torchdynamo.optimize("aot_nvfuser")
-                # TensorRT
-                if args.torchdynamo in ["fx2trt-fp16", "fx2trt"]:
-                    if not is_torch_tensorrt_fx_available():
-                        raise RuntimeError("Torch-TensorRT FX path is not installed.")
-                    if args.torchdynamo == "fx2trt-fp16":
-                        return torchdynamo.optimize(backends.fx2trt_compiler_fp16)
-                    elif args.torchdynamo == "fx2trt":
-                        return torchdynamo.optimize(backends.fx2trt_compiler)
-                else:
-                    raise RuntimeError(f"Torchdynamo backend {args.torchdynamo} is not supported.")
-
-            self.ctx_manager_torchdynamo = get_ctx()
-        else:
-            self.ctx_manager_torchdynamo = contextlib.nullcontext()
+        if args.torchdynamo is not None and not is_torchdynamo_available():
+            raise RuntimeError("Using torchdynamo requires a nighly install of PyTorch.")
 
     def add_callback(self, callback):
         """
@@ -1339,6 +1314,10 @@ class Trainer:
         return model
 
     def _wrap_model(self, model, training=True, dataloader=None):
+        if self.args.torchdynamo is not None:
+            import torch._dynamo as dynamo
+
+            model = dynamo.optimize(self.args.torchdynamo)(model)
         if self.args.use_ipex:
             dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
             model = self.ipex_optimize_model(model, training, dtype=dtype)
@@ -2494,18 +2473,7 @@ class Trainer:
         """
         A helper wrapper to group together context managers.
         """
-        return ContextManagers(
-            [
-                self.torchdynamo_smart_context_manager(),
-                self.autocast_smart_context_manager(),
-            ]
-        )
-
-    def torchdynamo_smart_context_manager(self):
-        """
-        A helper wrapper that creates an appropriate context manager for `torchdynamo`.
-        """
-        return self.ctx_manager_torchdynamo
+        return self.autocast_smart_context_manager()
 
     def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = True):
         """
