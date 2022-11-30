@@ -341,6 +341,8 @@ class BitPreActivationBottleneckLayer(nn.Module):
     ):
         super().__init__()
 
+        print("hey what's up")
+
         first_dilation = first_dilation or dilation
         conv_layer = conv_layer or StdConv2d
         norm_layer = norm_layer or partial(BitGroupNormActivation, num_groups=32)
@@ -472,6 +474,7 @@ class BitDownsampleConv(nn.Module):
         super(BitDownsampleConv, self).__init__()
         self.conv_layer = conv_layer
         self.conv = conv_layer(in_channels, out_channels, 1, stride=stride)
+        print("Preact:", preact)
         self.norm = nn.Identity() if preact else norm_layer(out_channels, apply_act=False)
 
     def forward(self, x, print_values=False):
@@ -568,17 +571,17 @@ class BitEncoder(nn.Module):
         prev_chs = config.embedding_size
         curr_stride = 4
         dilation = 1
-        block_dprs = [
+        layer_dprs = [
             x.tolist() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths)).split(config.depths)
         ]
         if config.layer_type == "bottleneck":
-            block_fn = BitBottleneckLayer
+            layer_fn = BitBottleneckLayer
         elif config.layer_type == "preactivation":
-            block_fn = BitPreActivationBottleneckLayer
+            layer_fn = BitPreActivationBottleneckLayer
         else:
             raise ValueError("Unknown layer type: {}".format(config.layer_type))
 
-        for stage_idx, (d, c, bdpr) in enumerate(zip(config.depths, config.hidden_sizes, block_dprs)):
+        for stage_idx, (d, c, bdpr) in enumerate(zip(config.depths, config.hidden_sizes, layer_dprs)):
             out_channels = make_div(c * config.width_factor)
             stride = 1 if stage_idx == 0 else 2
             if curr_stride >= config.output_stride:
@@ -594,8 +597,8 @@ class BitEncoder(nn.Module):
                 act_layer=act_layer,
                 conv_layer=conv_layer,
                 norm_layer=norm_layer,
-                block_dpr=bdpr,
-                block_fn=block_fn,
+                layer_dpr=bdpr,
+                layer_fn=layer_fn,
             )
             prev_chs = out_channels
             curr_stride *= stride
