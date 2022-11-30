@@ -154,6 +154,9 @@ class ViTHybridPatchEmbeddings(nn.Module):
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
         embeddings = self.projection(features).flatten(2).transpose(1, 2)
+
+        print("Shape of embeddings:", embeddings.shape)
+
         return embeddings
 
 

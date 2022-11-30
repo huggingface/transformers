@@ -42,6 +42,7 @@ logger = logging.get_logger(__name__)
 def create_rename_keys(config, base_model=False):
     rename_keys = []
 
+    # fmt: off
     # stem:
     rename_keys.append(("cls_token", "vit.embeddings.cls_token"))
     rename_keys.append(("pos_embed", "vit.embeddings.position_embeddings"))
@@ -50,21 +51,15 @@ def create_rename_keys(config, base_model=False):
     rename_keys.append(("patch_embed.proj.bias", "vit.embeddings.patch_embeddings.projection.bias"))
 
     # backbone
-    rename_keys.append(
-        (
-            "patch_embed.backbone.stem.conv.weight",
-            "vit.embeddings.patch_embeddings.backbone.resnetv2.embedder.convolution.weight",
-        )
-    )
-    rename_keys.append(
-        (
-            "patch_embed.backbone.stem.norm.weight",
-            "vit.embeddings.patch_embeddings.backbone.resnetv2.embedder.norm.weight",
-        )
-    )
-    rename_keys.append(
-        ("patch_embed.backbone.stem.norm.bias", "vit.embeddings.patch_embeddings.backbone.resnetv2.embedder.norm.bias")
-    )
+    rename_keys.append(("patch_embed.backbone.stem.conv.weight", "vit.embeddings.patch_embeddings.backbone.resnetv2.embedder.convolution.weight"))
+    rename_keys.append(("patch_embed.backbone.stem.norm.weight", "vit.embeddings.patch_embeddings.backbone.resnetv2.embedder.norm.weight"))
+    rename_keys.append(("patch_embed.backbone.stem.norm.bias", "vit.embeddings.patch_embeddings.backbone.resnetv2.embedder.norm.bias"))
+
+    for stage_idx in range(len(config.backbone_config.depths)):
+        for layer_idx in range(config.backbone_config.depths[i]):
+            rename_keys.append((f"patch_embed.backbone.stages.{stage_idx}.blocks.{layer_idx}.downsample.conv.weight", f"vit.embeddings.patch_embeddings.backbone.resnetv2.encoder.stages.{stage_idx}.layers.{layer_idx}.downsample.conv.weight"))
+            rename_keys.append((f"patch_embed.backbone.stages.{stage_idx}.blocks.{layer_idx}.downsample.norm.weight", f"vit.embeddings.patch_embeddings.backbone.resnetv2.encoder.stages.{stage_idx}.layers.{layer_idx}.downsample.norm.weight"))
+            rename_keys.append((f"patch_embed.backbone.stages.{stage_idx}.blocks.{layer_idx}.downsample.norm.bias", f"vit.embeddings.patch_embeddings.backbone.resnetv2.encoder.stages.{stage_idx}.layers.{layer_idx}.downsample.norm.bias"))
 
     # rename_keys = []
     # for i in range(config.num_hidden_layers):
@@ -103,6 +98,7 @@ def create_rename_keys(config, base_model=False):
     #             ("head.bias", "classifier.bias"),
     #         ]
     #     )
+    # fmt: on
 
     return rename_keys
 
@@ -167,9 +163,6 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
     timm_model = timm.create_model(vit_name, pretrained=True)
     timm_model.eval()
 
-    for name, param in timm_model.named_parameters():
-        print(name, param.shape)
-
     # load state_dict of original model, remove and rename some keys
     state_dict = timm_model.state_dict()
     if base_model:
@@ -186,10 +179,28 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
         model = ViTHybridForImageClassification(config).eval()
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
 
-    # Check outputs on an image, prepared by ViTFeatureExtractor
-    feature_extractor = ViTFeatureExtractor(size=config.image_size)
-    encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
-    pixel_values = encoding["pixel_values"]
+    # Check outputs on an image
+    # TODO use feature extractor
+    # from huggingface_hub import hf_hub_download
+
+    # pixel_values = torch.load(
+    #     hf_hub_download("nielsr/dummy-pixel-values", repo_type="dataset", filename="pixel_values.pt")
+    # )
+    from timm.data import resolve_data_config
+    from timm.data.transforms_factory import create_transform
+
+    transform = create_transform(
+        **resolve_data_config({}, model=timm_model)
+    )
+
+    # load image
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    image = Image.open(requests.get(url, stream=True).raw)
+    pixel_values = transform(image).unsqueeze(0)
+
+    print("First values of pixel values:", pixel_values.shape)
+    print(pixel_values[0, :5, :5, :5])
+
     outputs = model(pixel_values)
 
     if base_model:
@@ -205,8 +216,8 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         print(f"Saving model {vit_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-        feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+        # feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
