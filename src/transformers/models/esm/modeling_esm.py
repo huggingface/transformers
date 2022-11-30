@@ -67,6 +67,7 @@ def gelu(x):
     """
     return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
+
 def symmetrize(x):
     "Make layer symmetric in final two dimensions, used for contact prediction."
     return x + x.transpose(-1, -2)
@@ -82,7 +83,6 @@ def apc(x):
     avg.div_(a12)  # in-place to reduce memory
     normalized = x - avg
     return normalized
-
 
 
 class RotaryEmbedding(torch.nn.Module):
@@ -798,8 +798,9 @@ class EsmModel(EsmPreTrainedModel):
 
         self.pooler = EsmPooler(config) if add_pooling_layer else None
 
-        self.contact_head = EsmContactPredictionHead(in_features=config.num_hidden_layers * config.num_attention_heads,
-                                                     bias=True)
+        self.contact_head = EsmContactPredictionHead(
+            in_features=config.num_hidden_layers * config.num_attention_heads, bias=True
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -952,6 +953,12 @@ class EsmModel(EsmPreTrainedModel):
     def predict_contacts(self, tokens, attention_mask=None):
         attns = self(tokens, attention_mask=attention_mask, return_dict=True, output_attentions=True).attentions
         attns = torch.stack(attns, dim=1)  # Matches the original model layout
+        # In the original model, attentions for padding tokens are completely zeroed out.
+        # This makes no difference most of the time because the other tokens won't attend to them,
+        # but it does for the contact prediction task, which takes attentions as input,
+        # so we have to mimic that here.
+        attns *= attention_mask.unsqueeze(1).unsqueeze(2).unsqueeze(3)
+        attns *= attention_mask.unsqueeze(1).unsqueeze(2).unsqueeze(4)
         return self.contact_head(tokens, attns)
 
 

@@ -356,11 +356,10 @@ def convert_esm_checkpoint_to_pytorch(
 
         if not is_folding_model:
             # Let's check contact prediction too
-            our_output = model.predict_contacts(hf_tokens['input_ids'], hf_tokens['attention_mask'])
-            their_output = esm.predict_contacts(hf_tokens['input_ids'])
+            our_output = model.predict_contacts(hf_tokens["input_ids"], hf_tokens["attention_mask"])
+            their_output = esm.predict_contacts(hf_tokens["input_ids"])
             max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
             success = torch.allclose(our_output, their_output, atol=1e-5)
-            breakpoint()
 
         print("Contact prediction testing:")
         print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-5
