@@ -131,7 +131,6 @@ class ViTHybridPatchEmbeddings(nn.Module):
             )
             feature_dim = self.backbone.channels[-1]
 
-        assert feature_size[0] % patch_size[0] == 0 and feature_size[1] % patch_size[1] == 0
         self.grid_size = (feature_size[0] // patch_size[0], feature_size[1] // patch_size[1])
         self.num_patches = self.grid_size[0] * self.grid_size[1]
         self.image_size = image_size

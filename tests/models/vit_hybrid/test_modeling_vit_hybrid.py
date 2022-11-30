@@ -45,7 +45,7 @@ class ViTHybridModelTester:
         self,
         parent,
         batch_size=13,
-        image_size=30,
+        image_size=64,
         patch_size=2,
         num_channels=3,
         is_training=True,
@@ -79,8 +79,10 @@ class ViTHybridModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
 
-        # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
+        # in ViT hybrid, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
+        # the number of patches is based on the feature map of the backbone, which by default uses an output stride
+        # of 32, which means that the feature map has a spatial resolution of 1/32 of the input image size
+        num_patches = (self.image_size // 32) ** 2
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
@@ -127,11 +129,7 @@ class ViTHybridModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        config, pixel_values, labels = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
