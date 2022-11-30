@@ -43,7 +43,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_trillsson_efficient"] = [
         "TRILLSSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "Trillsson_efficientForConditionalGeneration",
         "Trillsson_efficientModel",
         "Trillsson_efficientPreTrainedModel",
         "Trillsson_efficientForSequenceClassification",

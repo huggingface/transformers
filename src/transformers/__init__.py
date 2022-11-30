@@ -2108,9 +2108,9 @@ else:
     _import_structure["models.trillsson_efficient"].extend(
         [
             "TRILLSSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Trillsson_efficientForSequenceClassification",
             "Trillsson_efficientModel",
             "Trillsson_efficientPreTrainedModel",
-            "Trillsson_efficientForSequenceClassification",
         ]
     )
     _import_structure["models.trocr"].extend(

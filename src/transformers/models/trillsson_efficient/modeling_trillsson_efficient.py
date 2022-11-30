@@ -37,6 +37,11 @@ _FEAT_EXTRACTOR_FOR_DOC = "Trillsson_efficientFeatureExtractor"
 _CHECKPOINT_FOR_DOC = "vumichien/nonsemantic-speech-trillsson3"
 _EXPECTED_OUTPUT_SHAPE = [1, 1024]
 
+# Audio class docstring
+_SEQ_CLASS_CHECKPOINT = "vumichien/trillsson3-ft-keyword-spotting"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
+_SEQ_CLASS_EXPECTED_LOSS = 9.88
+
 TRILLSSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "vumichien/nonsemantic-speech-trillsson3",
 ]
@@ -469,7 +474,6 @@ class Trillsson_efficientModel(Trillsson_efficientPreTrainedModel):
         )
 
         # building inverted residual blocks
-        # layers = []
         self.block = nn.ModuleList()
         current_num_blocks = 0
         total_blocks = float(sum(blocks_args[0] for blocks_args in block_configs))
@@ -611,16 +615,16 @@ class Trillsson_efficientForSequenceClassification(Trillsson_efficientPreTrained
         for param in self.trillsson.parameters():
             param.requires_grad = False
 
-    # @add_start_docstrings_to_model_forward(TRILLSSON_EFFICIENT_INPUTS_DOCSTRING)
-    # @add_code_sample_docstrings(
-    #     processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-    #     checkpoint=_SEQ_CLASS_CHECKPOINT,
-    #     output_type=SequenceClassifierOutput,
-    #     config_class=_CONFIG_FOR_DOC,
-    #     modality="audio",
-    #     expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-    #     expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
-    # )
+    @add_start_docstrings_to_model_forward(TRILLSSON_EFFICIENT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="audio",
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
+    )
     def forward(
         self,
         input_values: Optional[torch.Tensor],
