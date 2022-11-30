@@ -26,9 +26,9 @@ GPT_SW3_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class GptSw3Config(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`GptSw3Model`]. It is used to
-    instantiate a GPT-SW3 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the GPT-SW3.
+    This is the configuration class to store the configuration of a [`GptSw3Model`]. It is used to instantiate a
+    GPT-SW3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the GPT-SW3.
     [gpt_sw3](https://huggingface.co/gpt_sw3) architecture. # TODO: add correct link.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -137,13 +137,11 @@ class GptSw3Config(PretrainedConfig):
         attn_pdrop=0.1,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
-
         summary_type="cls_index",
         summary_use_proj=True,
         summary_activation=None,
         summary_proj_to_labels=True,
         summary_first_dropout=0.1,
-
         scale_attn_weights=True,
         use_cache=False,
         bos_token_id=3,

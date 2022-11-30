@@ -16,14 +16,13 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union, List
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ..gpt2.modeling_gpt2 import GPT2Block
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -31,7 +30,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel, SequenceSummary
-from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
+from ...pytorch_utils import Conv1D
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -41,6 +40,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
+from ..gpt2.modeling_gpt2 import GPT2Block
 from .configuration_gpt_sw3 import GptSw3Config
 
 
@@ -54,6 +54,7 @@ GPT_SW3_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "/home/ariel/gpt_sw3/hf_new/126m/",  # TODO: Add models
     # See all gpt-sw3 models at https://huggingface.co/models?filter=gpt-sw3
 ]
+
 
 class GptSw3PreTrainedModel(PreTrainedModel):
     """
@@ -282,12 +283,11 @@ DEPARALLELIZE_DOCSTRING = r"""
 @add_start_docstrings(
     "The bare GPT_SW3 Model transformer outputting raw hidden-states without any specific head on top.",
     GPT_SW3_START_DOCSTRING,
-)
-class GptSw3Model(GptSw3Model):
-    _keys_to_ignore_on_load_missing = ["attn.masked_bias"]
-    def __init__(self, config):
+) class GptSw3Model(GptSw3Model):
+    _keys_to_ignore_on_load_missing = ["attn.masked_bias"] def __init__(self, config):
         super().__init__(config)
 """
+
 
 @add_start_docstrings(
     "The bare GPT_SW3 Model transformer outputting raw hidden-states without any specific head on top.",

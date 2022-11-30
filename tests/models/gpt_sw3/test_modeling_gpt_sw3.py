@@ -432,7 +432,13 @@ class GptSw3ModelTester:
 class GptSw3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (GptSw3Model, GptSw3LMHeadModel, GptSw3DoubleHeadsModel, GptSw3ForSequenceClassification, GptSw3ForTokenClassification)
+        (
+            GptSw3Model,
+            GptSw3LMHeadModel,
+            GptSw3DoubleHeadsModel,
+            GptSw3ForSequenceClassification,
+            GptSw3ForTokenClassification,
+        )
         if is_torch_available()
         else ()
     )
@@ -721,9 +727,7 @@ class GptSw3ModelLanguageGenerationTest(unittest.TestCase):
         output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = (
-            "Today is a nice day and the weather looks good! The wind has shaken the sky, but"
-        )
+        EXPECTED_OUTPUT_STR = "Today is a nice day and the weather looks good! The wind has shaken the sky, but"
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
         self.assertTrue(
             all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
@@ -788,15 +792,15 @@ class GptSw3ModelLanguageGenerationTest(unittest.TestCase):
         self.assertListEqual(
             generated_text,
             [
-                "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
-                "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, "
-                "with offices in Hong Kong (China), New York (United States), and the US.\nHistory.\nDuplex "
-                "Microsystems (DMs) are a set of 10-by-10-inch (10.5 x 10.5 cm) microscopes that are used to detect "
-                "microorganisms and other life-threatening microorganisms. DMs are made of metal-containing materials "
-                "such as carbon nanotubes (CNTs), which are used to detect microorganisms. The DMs are designed to "
-                "detect microorganisms by detecting chemical reactions, such as nitroglycerin (NG) and ammonia (NH4)."
-                "\nIn 2010, Google announced it would invest $1.5 billion in the development of a new DM system, which "
-                "would be based on deep-dissipation microscopes. The project was completed in 2012, and has received "
-                "funding from the National Science"
+                "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research"
+                " laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London,"
+                " with offices in Hong Kong (China), New York (United States), and the US.\nHistory.\nDuplex"
+                " Microsystems (DMs) are a set of 10-by-10-inch (10.5 x 10.5 cm) microscopes that are used to detect"
+                " microorganisms and other life-threatening microorganisms. DMs are made of metal-containing materials"
+                " such as carbon nanotubes (CNTs), which are used to detect microorganisms. The DMs are designed to"
+                " detect microorganisms by detecting chemical reactions, such as nitroglycerin (NG) and ammonia"
+                " (NH4).\nIn 2010, Google announced it would invest $1.5 billion in the development of a new DM"
+                " system, which would be based on deep-dissipation microscopes. The project was completed in 2012, and"
+                " has received funding from the National Science"
             ],
         )

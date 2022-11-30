@@ -1,13 +1,13 @@
 import os
-import unicodedata
 import re
+import unicodedata
 
 from ... import is_torch_available
 
-# In src/transformers/tokenization_utils_base.py
-# if TYPE_CHECKING:
+
 if is_torch_available():
     import torch
+
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -15,6 +15,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
@@ -51,25 +52,27 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
-            self,
-            vocab_file,
-            do_lower_case=False,
-            remove_space=False,
-            keep_accents=False,
-            pad_token=None,
-            unk_token=None,
-            eos_token=None,
-            bos_token=None,
-            sp_model_kwargs: Optional[Dict[str, Any]] = None,
-            **kwargs
+        self,
+        vocab_file,
+        do_lower_case=False,
+        remove_space=False,
+        keep_accents=False,
+        pad_token=None,
+        unk_token=None,
+        eos_token=None,
+        bos_token=None,
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs
     ) -> None:
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         name_or_path = kwargs.get("name_or_path")
         if name_or_path is None:
-            logger.warning("name_or_path not provided, will work for all GPTSw3 models except gpt-sw3-7b,"
-                           " you are testing the model, this can safely be ignored")
+            logger.warning(
+                "name_or_path not provided, will work for all GPTSw3 models except gpt-sw3-7b,"
+                " you are testing the model, this can safely be ignored"
+            )
             name_or_path = "None"
 
         # Default definitions for our 2 tokenizer versions, with None-checks to enable proper testing
@@ -151,9 +154,7 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
         text = self.non_printing_characters_re.sub("", text)
 
         # Normalize whitespaces
-        text = "".join(
-            [char if char not in self.whitespaces else " " for char in text]
-        )
+        text = "".join([char if char not in self.whitespaces else " " for char in text])
 
         # NFC Unicode normalization
         text = unicodedata.normalize("NFC", text)
@@ -218,14 +219,14 @@ class GptSw3Tokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
-    def encode_fast(self, text: Union[str, List[str]], return_tensors: Union[str, bool] = False
-                    ) -> Union[List[int], List[List[int]], "torch.Tensor"]:
+    def encode_fast(
+        self, text: Union[str, List[str]], return_tensors: Union[str, bool] = False
+    ) -> Union[List[int], List[List[int]], "torch.Tensor"]:
         """
         Encodes a text or batch of texts to token ids using preprocessing and the raw SP tokenizer. This has reduced
         functionality but is often much faster.
 
-        Does NOT handle special tokens correctly, these can manually be added
-        as ids afterwards.
+        Does NOT handle special tokens correctly, these can manually be added as ids afterwards.
 
         Does NOT support padding, these can manually be added as ids afterwards.
 

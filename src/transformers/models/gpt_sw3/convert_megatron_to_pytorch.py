@@ -61,13 +61,11 @@
 
 import argparse
 import os
-import re
-import zipfile
-from os.path import join, isfile
+from os.path import isfile
 
 import torch
 
-from transformers import AutoTokenizer, GptSw3Config, GPT2Config
+from transformers import GPT2Config, GptSw3Config
 
 
 ####################################################################################################
@@ -119,12 +117,13 @@ def convert_megatron_checkpoint(sd_megatron, config, gpt2=False):
     heads = config.n_head
     hidden_size_per_head = config.n_embd // config.n_head
 
-    word_embeddings = sd_megatron["model.language_model.embedding.word_embeddings.weight"][: vocab_size, :]
+    word_embeddings = sd_megatron["model.language_model.embedding.word_embeddings.weight"][:vocab_size, :]
     sd_hf = {
         "transformer.wte.weight": word_embeddings,
         "transformer.wpe.weight": sd_megatron["model.language_model.embedding.position_embeddings.weight"],
         "transformer.ln_f.weight": sd_megatron["model.language_model.encoder.final_layernorm.weight"],
-        "transformer.ln_f.bias": sd_megatron["model.language_model.encoder.final_layernorm.bias"]}
+        "transformer.ln_f.bias": sd_megatron["model.language_model.encoder.final_layernorm.bias"],
+    }
 
     pf = "model.language_model.encoder.layers."
     for i in range(layers):
@@ -145,13 +144,19 @@ def convert_megatron_checkpoint(sd_megatron, config, gpt2=False):
             val2 = fix_query_key_value_ordering(val2, 3, heads, hidden_size_per_head)
             sd_hf[f"transformer.h.{i}.attn.c_attn.bias"] = val2
 
-            sd_hf[f"transformer.h.{i}.attn.c_proj.weight"] = sd_megatron[f"{pf}{i}.self_attention.dense.weight"].transpose(0, 1)
+            sd_hf[f"transformer.h.{i}.attn.c_proj.weight"] = sd_megatron[
+                f"{pf}{i}.self_attention.dense.weight"
+            ].transpose(0, 1)
             sd_hf[f"transformer.h.{i}.attn.c_proj.bias"] = sd_megatron[f"{pf}{i}.self_attention.dense.bias"]
             sd_hf[f"transformer.h.{i}.ln_2.weight"] = sd_megatron[f"{pf}{i}.post_attention_layernorm.weight"]
             sd_hf[f"transformer.h.{i}.ln_2.bias"] = sd_megatron[f"{pf}{i}.post_attention_layernorm.bias"]
-            sd_hf[f"transformer.h.{i}.mlp.c_fc.weight"] = sd_megatron[f"{pf}{i}.mlp.dense_h_to_4h.weight"].transpose(0, 1)
+            sd_hf[f"transformer.h.{i}.mlp.c_fc.weight"] = sd_megatron[f"{pf}{i}.mlp.dense_h_to_4h.weight"].transpose(
+                0, 1
+            )
             sd_hf[f"transformer.h.{i}.mlp.c_fc.bias"] = sd_megatron[f"{pf}{i}.mlp.dense_h_to_4h.bias"]
-            sd_hf[f"transformer.h.{i}.mlp.c_proj.weight"] = sd_megatron[f"{pf}{i}.mlp.dense_4h_to_h.weight"].transpose(0, 1)
+            sd_hf[f"transformer.h.{i}.mlp.c_proj.weight"] = sd_megatron[f"{pf}{i}.mlp.dense_4h_to_h.weight"].transpose(
+                0, 1
+            )
             sd_hf[f"transformer.h.{i}.mlp.c_proj.bias"] = sd_megatron[f"{pf}{i}.mlp.dense_4h_to_h.bias"]
         else:
             sd_hf[f"transformer.h.{i}.ln_1.weight"] = sd_megatron[f"{pf}{i}.input_layernorm.weight"]
@@ -268,14 +273,9 @@ if __name__ == "__main__":
         "--checkpoint_path",
         type=str,
         required=True,
-        help="e.g. megatron_gpt--val_loss=2.42-step=38000-consumed_samples=54720000"
+        help="e.g. megatron_gpt--val_loss=2.42-step=38000-consumed_samples=54720000",
     )
-    parser.add_argument(
-        "--save_path",
-        type=str,
-        required=True,
-        help="e.g. /home/user/gpt-sw3/hf"
-    )
+    parser.add_argument("--save_path", type=str, required=True, help="e.g. /home/user/gpt-sw3/hf")
     parser.add_argument(
         "--print-checkpoint-structure",
         action="store_true",
