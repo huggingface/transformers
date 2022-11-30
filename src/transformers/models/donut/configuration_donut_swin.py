@@ -72,7 +72,7 @@ class DonutSwinConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        output_hidden_states_before_downsampling (`bool`, `optional`, defaults to False):
+        output_hidden_states_before_downsampling (`bool`, `optional`, defaults to `False`):
             Whether or not to output hidden states before downsampling when `output_hidden_states=True`.
 
     Example:

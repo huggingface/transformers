@@ -76,7 +76,7 @@ class Swinv2Config(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         encoder_stride (`int`, `optional`, defaults to 32):
             Factor to increase the spatial resolution by in the decoder head for masked image modeling.
-        output_hidden_states_before_downsampling (`bool`, `optional`, defaults to False):
+        output_hidden_states_before_downsampling (`bool`, `optional`, defaults to `False`):
             Whether or not to output hidden states before downsampling when `output_hidden_states=True`.
 
     Example:

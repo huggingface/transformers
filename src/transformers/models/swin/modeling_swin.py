@@ -827,8 +827,7 @@ class SwinEncoder(nn.Module):
 
             if output_hidden_states and self.config.output_hidden_states_before_downsampling:
                 batch_size, _, hidden_size = hidden_states_before_downsampling.shape
-                # rearrange b (h w) c -> b c h w
-                # here we use the original (not downsampled) height and width
+                # (b, h*w, c) ->(b, h, w, c) where h and w are the original (not downsampled) height and width
                 reshaped_hidden_state = hidden_states_before_downsampling.view(
                     batch_size, *(output_dimensions[0], output_dimensions[1]), hidden_size
                 )
@@ -837,7 +836,7 @@ class SwinEncoder(nn.Module):
                 all_reshaped_hidden_states += (reshaped_hidden_state,)
             elif output_hidden_states and not self.config.output_hidden_states_before_downsampling:
                 batch_size, _, hidden_size = hidden_states.shape
-                # rearrange b (h w) c -> b c h w
+                # (b, h*w, c) ->(b, h, w, c)
                 reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size)
                 reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
                 all_hidden_states += (hidden_states,)
