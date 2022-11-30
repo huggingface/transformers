@@ -1237,7 +1237,8 @@ class SwinBackbone(SwinPreTrainedModel):
         super().__init__(config)
 
         self.stage_names = config.stage_names
-        assert config.output_hidden_states_before_downsampling is True
+        # make sure model outputs hidden states before downsampling
+        config.output_hidden_states_before_downsampling = True
         self.swin = SwinModel(config)
 
         self.out_features = config.out_features
@@ -1299,7 +1300,7 @@ class SwinBackbone(SwinPreTrainedModel):
         # we skip the stem
         for idx, (stage, hidden_state) in enumerate(zip(self.stage_names[1:], hidden_states[1:])):
             if stage in self.out_features:
-                # TODO can we simplify this?s
+                # TODO can we simplify this?
                 batch_size, num_channels, height, width = hidden_state.shape
                 hidden_state = hidden_state.permute(0, 2, 3, 1).contiguous()
                 hidden_state = hidden_state.view(batch_size, height * width, num_channels)

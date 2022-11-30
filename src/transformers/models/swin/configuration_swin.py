@@ -86,8 +86,8 @@ class SwinConfig(PretrainedConfig):
         output_hidden_states_before_downsampling (`bool`, `optional`, defaults to `False`):
             Whether or not to output hidden states before downsampling when `output_hidden_states=True`.
         out_features (`List[str]`, *optional*):
-            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`,
-            `"stage3"`, `"stage4"`.
+            If used as backbone, list of features to output. Can be any of `"stage1"`, `"stage2"`, `"stage3"`,
+            `"stage4"`.
 
     Example:
 

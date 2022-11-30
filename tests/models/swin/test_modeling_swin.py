@@ -271,7 +271,6 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            print("Model class:", model_class)
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
