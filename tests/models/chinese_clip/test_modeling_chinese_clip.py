@@ -53,7 +53,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import CLIPProcessor
+    from transformers import ChineseCLIPProcessor
 
 
 class ChineseCLIPTextModelTester:
@@ -667,7 +667,7 @@ class ChineseCLIPModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
         model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
         model = ChineseCLIPModel.from_pretrained(model_name).to(torch_device)
-        processor = CLIPProcessor.from_pretrained(model_name)
+        processor = ChineseCLIPProcessor.from_pretrained(model_name)
 
         image = prepare_img()
         inputs = processor(text=["杰尼龟", "妙蛙种子", "小火龙", "皮卡丘"], images=image, padding=True, return_tensors="pt").to(
@@ -690,4 +690,4 @@ class ChineseCLIPModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor([[40.7611, 44.5213, 40.1370, 47.3728]], device=torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-2))
