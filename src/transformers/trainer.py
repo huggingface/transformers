@@ -3180,7 +3180,9 @@ class Trainer:
         sizes = self._nested_gather(size).cpu()
 
         max_size = max(s[1] for s in sizes)
-        if tensor.shape[1] == max_size:
+        # When extracting XLA graphs for compilation, max_size is 0,
+        # so use inequality to avoid errors.
+        if tensor.shape[1] >= max_size:
             return tensor
 
         # Then pad to the maximum size
