@@ -66,7 +66,6 @@ class SwinModelTester:
         use_labels=True,
         type_sequence_label_size=10,
         encoder_stride=8,
-        output_hidden_states_before_downsampling=True,
         out_features=["stage1", "stage2", "stage3"],
     ):
         self.parent = parent
@@ -93,7 +92,6 @@ class SwinModelTester:
         self.use_labels = use_labels
         self.type_sequence_label_size = type_sequence_label_size
         self.encoder_stride = encoder_stride
-        self.output_hidden_states_before_downsampling = output_hidden_states_before_downsampling
         self.out_features = out_features
 
     def prepare_config_and_inputs(self):
@@ -127,7 +125,6 @@ class SwinModelTester:
             layer_norm_eps=self.layer_norm_eps,
             initializer_range=self.initializer_range,
             encoder_stride=self.encoder_stride,
-            output_hidden_states_before_downsampling=self.output_hidden_states_before_downsampling,
             out_features=self.out_features,
         )
 
