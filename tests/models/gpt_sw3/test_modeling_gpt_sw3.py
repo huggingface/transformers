@@ -95,7 +95,7 @@ class GptSw3ModelTester:
         self.pad_token_id = vocab_size - 1
 
     def get_large_model_config(self):
-        return GptSw3Config.from_pretrained("/home/ariel/gpt_sw3/hf_new/126m/")
+        return GptSw3Config.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -528,9 +528,9 @@ class GptSw3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     @slow
     def test_batch_generation(self):
-        model = GptSw3LMHeadModel.from_pretrained("/home/ariel/gpt_sw3/hf_new/126m/")
+        model = GptSw3LMHeadModel.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
         model.to(torch_device)
-        tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m")
+        tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
 
         tokenizer.padding_side = "left"
 
@@ -587,9 +587,9 @@ class GptSw3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     @slow
     def test_batch_generation_2heads(self):
-        model = GptSw3DoubleHeadsModel.from_pretrained("/home/ariel/gpt_sw3/hf_new/126m/")
+        model = GptSw3DoubleHeadsModel.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
         model.to(torch_device)
-        tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m")
+        tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
 
         tokenizer.padding_side = "left"
 
@@ -667,7 +667,7 @@ class GptSw3ModelLanguageGenerationTest(unittest.TestCase):
         verify_outputs=True,
     ):
         model = GptSw3LMHeadModel.from_pretrained(
-            "/home/ariel/gpt_sw3/hf_new/126m/",
+            "AI-Sweden/gpt-sw3-126m-OLD-NEW",
             reorder_and_upcast_attn=reorder_and_upcast_attn,
             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
         )
@@ -709,8 +709,8 @@ class GptSw3ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gpt_sw3_sample(self):
-        tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m")
-        model = GptSw3LMHeadModel.from_pretrained("/home/ariel/gpt_sw3/hf_new/126m/")
+        tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
+        model = GptSw3LMHeadModel.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -735,8 +735,8 @@ class GptSw3ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gpt_sw3_sample_max_time(self):
-        tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m")
-        model = GptSw3LMHeadModel.from_pretrained("/home/ariel/gpt_sw3/hf_new/126m/")
+        tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
+        model = GptSw3LMHeadModel.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
         model.to(torch_device)
 
         torch.manual_seed(0)
@@ -781,8 +781,8 @@ class GptSw3ModelLanguageGenerationTest(unittest.TestCase):
             "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"
         )
 
-        gpt_sw3_tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m")
-        gpt_sw3_model = GptSw3LMHeadModel.from_pretrained("/home/ariel/gpt_sw3/hf_new/126m/").to(torch_device)
+        gpt_sw3_tokenizer = GptSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW")
+        gpt_sw3_model = GptSw3LMHeadModel.from_pretrained("AI-Sweden/gpt-sw3-126m-OLD-NEW").to(torch_device)
         input_ids = gpt_sw3_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
         outputs = gpt_sw3_model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
