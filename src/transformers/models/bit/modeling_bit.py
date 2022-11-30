@@ -253,9 +253,9 @@ class BitEmbeddings(nn.Module):
         elif config.conv_layer == "std_conv_same":
             conv_layer = partial(StdConv2dSame, eps=1e-8)
 
-        self.convolution = conv_layer(
-            config.num_channels, config.embedding_size, kernel_size=7, stride=2, padding=3, bias=False
-        )
+        print("Conv layer:", conv_layer)
+
+        self.convolution = conv_layer(config.num_channels, config.embedding_size, kernel_size=7, stride=2)
        
         self.norm = None
         if not config.layer_type == "preactivation":
@@ -273,6 +273,9 @@ class BitEmbeddings(nn.Module):
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
+
+        print("Shape of pixel_values:", pixel_values.shape)
+        print("First vaues of pixel values:", pixel_values[0,0,:3,:3])
 
         embedding = self.convolution(pixel_values)
 
