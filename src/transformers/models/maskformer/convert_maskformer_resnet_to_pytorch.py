@@ -34,11 +34,12 @@ logger = logging.get_logger(__name__)
 
 
 def get_maskformer_config(model_name: str):
-    if "resnet101-c" in model_name:
+    if "resnet101c" in model_name:
         # TODO use ResNet-C model here instead
         # backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-101", use_deeplab_stem=True)
         raise NotImplementedError("To do")
     elif "resnet101" in model_name:
+        print("we're here")
         backbone_config = ResNetConfig.from_pretrained(
             "microsoft/resnet-101", out_features=["stage1", "stage2", "stage3", "stage4"]
         )
@@ -275,6 +276,9 @@ def convert_maskformer_checkpoint(
         data = pickle.load(f)
     state_dict = data["model"]
 
+    for name, param in state_dict.items():
+        print(name, param.shape)
+
     # rename keys
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
@@ -296,14 +300,33 @@ def convert_maskformer_checkpoint(
 
     # verify results
     image = prepare_img()
-    feature_extractor = MaskFormerFeatureExtractor(ignore_index=255, reduce_labels=True)
+    if "vistas" in model_name:
+        ignore_index = 65
+    elif "cityscapes" in model_name:
+        ignore_index = 65535
+    else:
+        ignore_index = 255
+    reduce_labels = True if "ade" in model_name else False
+    feature_extractor = MaskFormerFeatureExtractor(ignore_index=ignore_index, reduce_labels=reduce_labels)
 
     inputs = feature_extractor(image, return_tensors="pt")
 
     outputs = model(**inputs)
-    expected_logits = torch.tensor(
-        [[6.7710, -0.1452, -3.5687], [1.9165, -1.0010, -1.8614], [3.6209, -0.2950, -1.3813]]
-    )
+
+    print("Logits:", outputs.class_queries_logits[0, :3, :3])
+
+    if model_name == "maskformer-resnet50-ade":
+        expected_logits = torch.tensor(
+            [[6.7710, -0.1452, -3.5687], [1.9165, -1.0010, -1.8614], [3.6209, -0.2950, -1.3813]]
+        )
+    elif model_name == "maskformer-resnet50-vistas":
+        expected_logits = torch.tensor(
+            [[-6.3917, -1.5216, -1.1392], [-5.5335, -4.5318, -1.8339], [-4.3576, -4.0301, 0.2162]]
+        )
+    elif model_name == "maskformer-resnet101-cityscapes":
+        expected_logits = torch.tensor(
+            [[-1.8861, -1.5465, 0.6749], [-2.3677, -1.6707, -0.0867], [-2.2314, -1.9530, -0.9132]]
+        )
     assert torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_logits, atol=1e-4)
     print("Looks ok!")
 
