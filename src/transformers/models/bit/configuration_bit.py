@@ -74,7 +74,7 @@ class BitConfig(PretrainedConfig):
     >>> configuration = model.config
     ```
     """
-    model_type = "resnetv2"
+    model_type = "bit"
     layer_types = ["preactivation", "bottleneck"]
 
     def __init__(

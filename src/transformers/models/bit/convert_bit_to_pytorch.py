@@ -59,15 +59,15 @@ def get_config(model_name):
 
 def rename_key(name):
     if "stem.conv" in name:
-        name = name.replace("stem.conv", "resnetv2.embedder.convolution")
+        name = name.replace("stem.conv", "bit.embedder.convolution")
     if "blocks" in name:
         name = name.replace("blocks", "layers")
     if "head.fc" in name:
         name = name.replace("head.fc", "classifier.1")
     if name.startswith("norm"):
-        name = "resnetv2." + name
-    if "resnetv2" not in name and "classifier" not in name:
-        name = "resnetv2.encoder." + name
+        name = "bit." + name
+    if "bit" not in name and "classifier" not in name:
+        name = "bit.encoder." + name
 
     return name
 
@@ -80,7 +80,7 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_resnetv2_checkpoint(model_name, pytorch_dump_folder_path):
+def convert_bit_checkpoint(model_name, pytorch_dump_folder_path):
     """
     Copy/paste/tweak model's weights to our BiT structure.
     """
@@ -141,4 +141,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_resnetv2_checkpoint(args.model_name, args.pytorch_dump_folder_path)
+    convert_bit_checkpoint(args.model_name, args.pytorch_dump_folder_path)
