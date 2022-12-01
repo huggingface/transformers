@@ -716,7 +716,7 @@ class BitPreTrainedModel(PreTrainedModel):
     """
 
     config_class = BitConfig
-    base_model_prefix = "resnetv2"
+    base_model_prefix = "bit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
