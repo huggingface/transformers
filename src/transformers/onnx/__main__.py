@@ -72,7 +72,6 @@ def main():
         f"--framework {args.framework}" if args.framework is not None else "",
         f"{args.output}",
     ]
-    print(" ".join(cmd_line))
     proc = subprocess.Popen(" ".join(cmd_line), stdout=subprocess.PIPE, shell=True)
     proc.wait()
 
