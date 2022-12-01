@@ -303,9 +303,9 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     @slow
     def test_batch_generation(self):
-        model = BioGptForCausalLM.from_pretrained("kamalkraj/biogpt")
+        model = BioGptForCausalLM.from_pretrained("microsoft/biogpt")
         model.to(torch_device)
-        tokenizer = BioGptTokenizer.from_pretrained("kamalkraj/biogpt")
+        tokenizer = BioGptTokenizer.from_pretrained("microsoft/biogpt")
 
         tokenizer.padding_side = "left"
 
@@ -356,7 +356,7 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 class BioGptModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_lm_head_model(self):
-        model = BioGptForCausalLM.from_pretrained("kamalkraj/biogpt")
+        model = BioGptForCausalLM.from_pretrained("microsoft/biogpt")
         input_ids = torch.tensor([[2, 4805, 9, 656, 21]])
         output = model(input_ids)[0]
 
@@ -373,8 +373,8 @@ class BioGptModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_biogpt_generation(self):
-        tokenizer = BioGptTokenizer.from_pretrained("kamalkraj/biogpt")
-        model = BioGptForCausalLM.from_pretrained("kamalkraj/biogpt")
+        tokenizer = BioGptTokenizer.from_pretrained("microsoft/biogpt")
+        model = BioGptForCausalLM.from_pretrained("microsoft/biogpt")
         model.to(torch_device)
 
         torch.manual_seed(0)

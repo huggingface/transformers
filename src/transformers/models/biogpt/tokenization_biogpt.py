@@ -30,13 +30,13 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "kamalkraj/biogpt": "https://huggingface.co/kamalkraj/biogpt/resolve/main/vocab.json",
+        "microsoft/biogpt": "https://huggingface.co/microsoft/biogpt/resolve/main/vocab.json",
     },
-    "merges_file": {"kamalkraj/biogpt": "https://huggingface.co/kamalkraj/biogpt/resolve/main/merges.txt"},
+    "merges_file": {"microsoft/biogpt": "https://huggingface.co/microsoft/biogpt/resolve/main/merges.txt"},
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "kamalkraj/biogpt": 1024,
+    "microsoft/biogpt": 1024,
 }
 
 

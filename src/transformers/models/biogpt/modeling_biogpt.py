@@ -33,12 +33,12 @@ from .configuration_biogpt import BioGptConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "kamalkraj/biogpt"
+_CHECKPOINT_FOR_DOC = "microsoft/biogpt"
 _CONFIG_FOR_DOC = "BioGptConfig"
 _TOKENIZER_FOR_DOC = "BioGptTokenizer"
 
 BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "kamalkraj/biogpt",
+    "microsoft/biogpt",
     # See all BioGPT models at https://huggingface.co/models?filter=biogpt
 ]
 

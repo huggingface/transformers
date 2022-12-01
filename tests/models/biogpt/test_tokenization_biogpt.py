@@ -85,7 +85,7 @@ class BioGptTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = BioGptTokenizer.from_pretrained("kamalkraj/biogpt")
+        tokenizer = BioGptTokenizer.from_pretrained("microsoft/biogpt")
 
         text = tokenizer.encode("sequence builders", add_special_tokens=False)
         text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
