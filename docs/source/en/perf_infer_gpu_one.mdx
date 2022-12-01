@@ -13,6 +13,10 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 
 This document will be completed soon with information on how to infer on a single GPU. In the meantime you can check out [the guide for training on a single GPU](perf_train_gpu_one) and [the guide for inference on CPUs](perf_infer_cpu).
 
+## `BetterTransformer` for faster inference
+
+We have recently integrated `BetterTransformer` for faster inference on GPU for text, image and audio models. Check the documentation about this integration [here](https://huggingface.co/docs/optimum/bettertransformer/overview) for more details.
+
 ## `bitsandbytes` integration for Int8 mixed-precision matrix decomposition
 
 Note that this feature is also totally applicable in a multi GPU setup as well.
