@@ -57,8 +57,6 @@ class BitConfig(PretrainedConfig):
             The drop path rate for the stochastic depth.
         embedding_dynamic_padding (`bool`, *optional*, defaults to `False`):
             Whether or not to make use of dynamic padding for the embedding layer.
-        downsample_in_first_stage (`bool`, *optional*, defaults to `True`):
-            Whether to add downsampling layer on the first stage
         output_stride (`int`, *optional*, defaults to 32):
             The output stride of the model.
         width_factor (`int`, *optional*, defaults to 1):
@@ -97,8 +95,6 @@ class BitConfig(PretrainedConfig):
         num_groups=32,
         out_features=None,
         embedding_dynamic_padding=False,
-        downsample_in_first_stage=True,
-        stem_type="same",
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -120,9 +116,6 @@ class BitConfig(PretrainedConfig):
         self.output_stride = output_stride
         self.width_factor = width_factor
         self.embedding_dynamic_padding = embedding_dynamic_padding
-        self.downsample_in_first_stage = downsample_in_first_stage
-
-        self.stem_type = stem_type
 
         self.global_padding = global_padding
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
