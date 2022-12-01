@@ -361,12 +361,12 @@ def convert_esm_checkpoint_to_pytorch(
             max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
             success = torch.allclose(our_output, their_output, atol=1e-5)
 
-        print("Contact prediction testing:")
-        print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-5
-        print("Do both models output the same tensors?", "🔥" if success else "💩")
+            print("Contact prediction testing:")
+            print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-5
+            print("Do both models output the same tensors?", "🔥" if success else "💩")
 
-        if not success:
-            raise Exception("Something went wRoNg")
+            if not success:
+                raise Exception("Something went wRoNg")
 
         pathlib.Path(pytorch_dump_folder_path).mkdir(parents=True, exist_ok=True)
         print(f"Saving model to {pytorch_dump_folder_path}")
