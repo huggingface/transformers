@@ -772,11 +772,6 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
         )
 
         if attention_mask is not None:
-            attention_mask = tf.cond(
-                tf.greater(tf.shape(attention_mask)[-1], seq_len) & tf.greater(seq_len, 0),
-                lambda: attention_mask[:, : seq_len + past_key_values_length],
-                lambda: attention_mask,
-            )
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             expanded_attn_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
             combined_attention_mask = (
