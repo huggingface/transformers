@@ -181,30 +181,32 @@ class FeatureExtractionSavingTestMixin:
         image_inputs = prepare_image_inputs(self.feature_extract_tester, equal_resolution=False, torchify=True)
 
         encoding = feature_extractor(image_inputs, return_tensors="pt")
-        self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
-        self.assertEqual(encoding.pixel_values.dtype, torch.float32)
+        # for layoutLM compatiblity 
+        if not isinstance(encoding, list):
+            self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
+            self.assertEqual(encoding.pixel_values.dtype, torch.float32)
 
-        encoding = feature_extractor(image_inputs, return_tensors="pt").to(device="cpu", dtype=torch.float16)
-        self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
-        self.assertEqual(encoding.pixel_values.dtype, torch.float16)
+            encoding = feature_extractor(image_inputs, return_tensors="pt").to(device="cpu", dtype=torch.float16)
+            self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
+            self.assertEqual(encoding.pixel_values.dtype, torch.float16)
 
-        encoding = feature_extractor(image_inputs, return_tensors="pt").to(torch.float16)
-        self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
-        self.assertEqual(encoding.pixel_values.dtype, torch.float16)
+            encoding = feature_extractor(image_inputs, return_tensors="pt").to(torch.float16)
+            self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
+            self.assertEqual(encoding.pixel_values.dtype, torch.float16)
 
-        encoding = feature_extractor(image_inputs, return_tensors="pt").to("cpu")
-        self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
-        self.assertEqual(encoding.pixel_values.dtype, torch.float32)
+            encoding = feature_extractor(image_inputs, return_tensors="pt").to("cpu")
+            self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
+            self.assertEqual(encoding.pixel_values.dtype, torch.float32)
 
-        encoding = feature_extractor(image_inputs, return_tensors="pt").to("cpu", dtype=torch.bfloat16)
-        self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
-        self.assertEqual(encoding.pixel_values.dtype, torch.bfloat16)
+            encoding = feature_extractor(image_inputs, return_tensors="pt").to("cpu", dtype=torch.bfloat16)
+            self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
+            self.assertEqual(encoding.pixel_values.dtype, torch.bfloat16)
 
-        with self.assertRaises(ValueError):
-            _ = feature_extractor(image_inputs, return_tensors="pt").to("cpu", torch.bfloat16)
+            with self.assertRaises(ValueError):
+                _ = feature_extractor(image_inputs, return_tensors="pt").to("cpu", torch.bfloat16)
 
-        encoding = feature_extractor(image_inputs, return_tensors="pt").to("float16")
-        self.assertEqual(encoding.pixel_values.dtype, torch.float16)
+            encoding = feature_extractor(image_inputs, return_tensors="pt").to("float16")
+            self.assertEqual(encoding.pixel_values.dtype, torch.float16)
 
 
 class FeatureExtractorUtilTester(unittest.TestCase):
