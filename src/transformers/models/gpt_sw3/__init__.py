@@ -48,7 +48,6 @@ else:
         "GPTSw3LMHeadModel",
         "GPTSw3Model",
         "GPTSw3PreTrainedModel",
-        "load_tf_weights_in_gpt_sw3",
     ]
 
 if TYPE_CHECKING:
@@ -77,7 +76,6 @@ if TYPE_CHECKING:
             GPTSw3LMHeadModel,
             GPTSw3Model,
             GPTSw3PreTrainedModel,
-            load_tf_weights_in_gpt_sw3,
         )
 
 else:

@@ -4461,7 +4461,6 @@ if TYPE_CHECKING:
             GPTSw3LMHeadModel,
             GPTSw3Model,
             GPTSw3PreTrainedModel,
-            load_tf_weights_in_gpt_sw3,
         )
         from .models.gptj import (
             GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
