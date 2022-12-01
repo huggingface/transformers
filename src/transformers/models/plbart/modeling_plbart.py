@@ -559,7 +559,7 @@ PLBART_GENERATION_EXAMPLE = r"""
     >>> values, predictions = probs.topk(5)
 
     >>> tokenizer.decode(predictions).split()
-    ['same', 'first', 'highest', 'result', 'Fib']
+    ['first', 'same', 'highest', 'result', 'number']
     ```
 """
 

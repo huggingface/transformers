@@ -15,6 +15,7 @@
 """
 Image/Text processor class for OWL-ViT
 """
+
 from typing import List
 
 import numpy as np
@@ -33,15 +34,15 @@ class OwlViTProcessor(ProcessorMixin):
 
     Args:
         feature_extractor ([`OwlViTFeatureExtractor`]):
-            The feature extractor is a required input.
+            The image processor is a required input.
         tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
             The tokenizer is a required input.
     """
     feature_extractor_class = "OwlViTFeatureExtractor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def __call__(self, text=None, images=None, query_images=None, padding="max_length", return_tensors="np", **kwargs):
         """
