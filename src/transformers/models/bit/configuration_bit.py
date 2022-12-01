@@ -50,7 +50,7 @@ class BitConfig(PretrainedConfig):
             The non-linear activation function in each block. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"`
             are supported.
         num_groups (`int`, *optional*, defaults to `32`):
-            Number of groups used for the `BitGroupNormActivation` layers
+            Number of groups used for the `BitGroupNormActivation` layers.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop path rate for the stochastic depth.
         output_stride (`int`, *optional*, defaults to 32):
