@@ -92,7 +92,7 @@ def rename_key(name, config):
     if name == "upsample.0.weight" and config.upsampler == "pixelshuffledirect":
         name = name.replace("upsample.0.weight", "upsample.conv.weight")
     if name == "upsample.0.bias" and config.upsampler == "pixelshuffledirect":
-        name = name.replace("upsample.0.bias", "upsample.conv.bias")
+        name = name.replace("upsample.0.bias", "upsample.conv.bias")   
 
     if (
         "upsample" in name
@@ -103,7 +103,12 @@ def rename_key(name, config):
         or "conv_last" in name
         or "aux" in name
     ):
-        pass
+        if config.upsampler == "nearest+conv":
+            if "conv_before_upsample.0" in name:
+                name = name.replace("conv_before_upsample.0", "conv_before_upsample")
+            name = "upsample." + name
+        else:
+            pass
     else:
         name = "swin2sr." + name
 

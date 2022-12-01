@@ -1007,11 +1007,30 @@ class UpsampleOneStep(nn.Module):
 
 
 class NearestConvUpsampler(nn.Module):
-    def __init__(self):
-        return -1
+    def __init__(self, config, num_features):
+        super().__init__()
+        if config.upscale != 4:
+                raise ValueError("The nearest+conv upsampler only supports an upscale factor of 4 at the moment.")
 
-    def forward(self):
-        return -1
+        self.conv_before_upsample = nn.Conv2d(config.embed_dim, num_features, 3, 1, 1)
+        self.act = nn.LeakyReLU(inplace=True)
+        self.conv_up1 = nn.Conv2d(num_features, num_features, 3, 1, 1)
+        self.conv_up2 = nn.Conv2d(num_features, num_features, 3, 1, 1)
+        self.conv_hr = nn.Conv2d(num_features, num_features, 3, 1, 1)
+        self.conv_last = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
+        self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+
+    def forward(self, sequence_output):
+        sequence_output = self.conv_before_upsample(sequence_output)
+        sequence_output = self.act(sequence_output)
+        sequence_output = self.lrelu(
+            self.conv_up1(torch.nn.functional.interpolate(sequence_output, scale_factor=2, mode="nearest"))
+        )
+        sequence_output = self.lrelu(
+            self.conv_up2(torch.nn.functional.interpolate(sequence_output, scale_factor=2, mode="nearest"))
+        )
+        reconstruction = self.conv_last(self.lrelu(self.conv_hr(sequence_output)))
+        return reconstruction
 
 
 @add_start_docstrings(
@@ -1050,16 +1069,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             self.upsample = UpsampleOneStep(config.upscale, config.embed_dim, config.num_channels)
         elif self.upsampler == "nearest+conv":
             # for real-world SR (less artifacts)
-            if self.upscale != 4:
-                raise ValueError("The nearesst+conv upsampler only supports an upscale factor of 4 at the moment.")
-            self.conv_before_upsample = nn.Sequential(
-                nn.Conv2d(config.embed_dim, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True)
-            )
-            self.conv_up1 = nn.Conv2d(num_features, num_features, 3, 1, 1)
-            self.conv_up2 = nn.Conv2d(num_features, num_features, 3, 1, 1)
-            self.conv_hr = nn.Conv2d(num_features, num_features, 3, 1, 1)
-            self.conv_last = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
-            self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+            self.upsample = NearestConvUpsampler(config, num_features)
         else:
             # for image denoising and JPEG compression artifact reduction
             self.conv_last = nn.Conv2d(config.embed_dim, config.num_channels, 3, 1, 1)
@@ -1139,14 +1149,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             reconstruction = self.upsample(sequence_output)
         elif self.upsampler == "nearest+conv":
             # for real-world SR
-            sequence_output = self.conv_before_upsample(sequence_output)
-            sequence_output = self.lrelu(
-                self.conv_up1(torch.nn.functional.interpolate(sequence_output, scale_factor=2, mode="nearest"))
-            )
-            sequence_output = self.lrelu(
-                self.conv_up2(torch.nn.functional.interpolate(sequence_output, scale_factor=2, mode="nearest"))
-            )
-            reconstruction = self.conv_last(self.lrelu(self.conv_hr(sequence_output)))
+            reconstruction = self.upsample(sequence_output)
         else:
             reconstruction = pixel_values + self.conv_last(sequence_output)
 
