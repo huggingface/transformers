@@ -338,8 +338,9 @@ class RobertaPreLayerNormAttention(nn.Module):
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
+        hidden_states_pre_layer_norm = self.LayerNorm(hidden_states)
         self_outputs = self.self(
-            self.LayerNorm(hidden_states),
+            hidden_states_pre_layer_norm,
             attention_mask,
             head_mask,
             encoder_hidden_states,

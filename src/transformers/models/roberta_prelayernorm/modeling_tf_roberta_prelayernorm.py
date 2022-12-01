@@ -367,8 +367,9 @@ class TFRobertaPreLayerNormAttention(tf.keras.layers.Layer):
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
+        hidden_states_pre_layer_norm = self.LayerNorm(inputs=input_tensor)
         self_outputs = self.self_attention(
-            hidden_states=self.LayerNorm(inputs=input_tensor),
+            hidden_states=hidden_states_pre_layer_norm,
             attention_mask=attention_mask,
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,

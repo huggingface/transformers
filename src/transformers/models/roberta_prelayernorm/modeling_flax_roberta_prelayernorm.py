@@ -392,11 +392,12 @@ class FlaxRobertaPreLayerNormAttention(nn.Module):
         deterministic=True,
         output_attentions: bool = False,
     ):
+        hidden_states_pre_layer_norm = self.LayerNorm(hidden_states)
         # Attention mask comes in as attention_mask.shape == (*batch_sizes, kv_length)
         # FLAX expects: attention_mask.shape == (*batch_sizes, 1, 1, kv_length) such that it is broadcastable
         # with attn_weights.shape == (*batch_sizes, num_heads, q_length, kv_length)
         attn_outputs = self.self(
-            self.LayerNorm(hidden_states),
+            hidden_states_pre_layer_norm,
             attention_mask,
             layer_head_mask=layer_head_mask,
             key_value_states=key_value_states,
