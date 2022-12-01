@@ -229,4 +229,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     check_model_table(args.fix_and_overwrite)
-    check_onnx_model_list(args.fix_and_overwrite)
