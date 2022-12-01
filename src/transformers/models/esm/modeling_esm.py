@@ -73,7 +73,7 @@ def symmetrize(x):
     return x + x.transpose(-1, -2)
 
 
-def apc(x):
+def average_product_correct(x):
     "Perform average product correct, used for contact prediction."
     a1 = x.sum(-1, keepdims=True)
     a2 = x.sum(-2, keepdims=True)
@@ -154,11 +154,11 @@ class EsmContactPredictionHead(nn.Module):
         batch_size, layers, heads, seqlen, _ = attentions.size()
         attentions = attentions.view(batch_size, layers * heads, seqlen, seqlen)
 
-        # features: B x C x T x T
+        # features: batch x channels x tokens x tokens (symmetric)
         attentions = attentions.to(
             self.regression.weight.device
         )  # attentions always float32, may need to convert to float16
-        attentions = apc(symmetrize(attentions))
+        attentions = average_product_correct(symmetrize(attentions))
         attentions = attentions.permute(0, 2, 3, 1)
         return self.activation(self.regression(attentions).squeeze(3))
 

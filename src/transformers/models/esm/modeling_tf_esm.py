@@ -76,7 +76,7 @@ def symmetrize(x):
     return x + tf.linalg.matrix_transpose(x)  # Transposes last two dimensions only
 
 
-def apc(x):
+def average_product_correct(x):
     "Perform average product correct, used for contact prediction."
     a1 = tf.reduce_sum(x, -1, keepdims=True)
     a2 = tf.reduce_sum(x, -2, keepdims=True)
@@ -163,8 +163,8 @@ class TFEsmContactPredictionHead(Layer):
         batch_size, layers, heads, seqlen, _ = shape_list(attentions)
         attentions = tf.reshape(attentions, (batch_size, layers * heads, seqlen, seqlen))
 
-        # features: B x C x T x T
-        attentions = apc(symmetrize(attentions))
+        # features: batch x channels x tokens x tokens (symmetric)
+        attentions = average_product_correct(symmetrize(attentions))
         attentions = tf.transpose(attentions, perm=(0, 2, 3, 1))
         return tf.squeeze(self.regression(attentions), 3)
 
