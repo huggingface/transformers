@@ -161,11 +161,11 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, push_to_hub=False
 
     # define default ViT hybrid configuration
     backbone_config = BitConfig(
-        stem_type="same",
-        conv_layer="std_conv_same",
+        global_padding="same",
         layer_type="bottleneck",
         depths=(3, 4, 9),
         out_features=["stage3"],
+        embedding_dynamic_padding=True,
     )
     config = ViTHybridConfig(backbone_config=backbone_config, image_size=384, num_labels=1000)
     base_model = False

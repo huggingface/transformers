@@ -188,7 +188,7 @@ class DynamicPad2d(nn.Module):
     hidden states.
     """
 
-    def __init__(self, kernel_size, stride, dilation, value=-float("inf")):
+    def __init__(self, kernel_size, stride, dilation, value=0):
         super().__init__()
         # Safety checkers
         if isinstance(kernel_size, int):
@@ -243,7 +243,7 @@ class BitMaxPool2d(nn.MaxPool2d):
         dilation=1,
         ceil_mode=False,
         padding=(0, 0),
-        padding_value=-float("inf"),
+        padding_value=0,
         use_dynamic_padding=True,
     ):
         kernel_size = kernel_size if isinstance(kernel_size, collections.abc.Iterable) else (kernel_size, kernel_size)
@@ -273,7 +273,7 @@ class BitEmbeddings(nn.Module):
         self.pooler = BitMaxPool2d(kernel_size=3, stride=2, use_dynamic_padding=config.embedding_dynamic_padding)
 
         # Use the same padding strategy as convolutional layers
-        if config.global_padding == "SAME":
+        if config.global_padding is not None and config.global_padding.upper() == "SAME":
             self.pad = nn.Identity()
         else:
             self.pad = nn.ConstantPad2d(padding=(1, 1, 1, 1), value=0.0)
@@ -443,17 +443,17 @@ class BitBottleneckLayer(nn.Module):
         groups=1,
         drop_path_rate=0.0,
         is_first_layer=False,
-        use_activation=False,
     ):
         super().__init__()
         first_dilation = first_dilation or dilation
+
         conv_layer = partial(WeightStandardizedConv2d, eps=1e-8, padding=config.global_padding)
 
         norm_layer = partial(BitGroupNormActivation, config=config)
         out_channels = out_channels or in_channels
         mid_chs = make_div(out_channels * bottle_ratio)
 
-        if is_first_layer and config.downsample_in_first_stage:
+        if is_first_layer:
             self.downsample = BitDownsampleConv(
                 in_channels,
                 out_channels,
@@ -473,10 +473,7 @@ class BitBottleneckLayer(nn.Module):
         self.norm3 = norm_layer(num_channels=out_channels, apply_act=False)
         self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
 
-        if use_activation:
-            self.activation = ACT2FN[config.hidden_act]
-        else:
-            self.activation = nn.Identity()
+        self.activation = ACT2FN[config.hidden_act]
 
     def forward(self, x):
         # shortcut branch
@@ -490,10 +487,10 @@ class BitBottleneckLayer(nn.Module):
 
         x = self.conv2(x)
         x = self.norm2(x)
-        
+
         x = self.conv3(x)
         x = self.norm3(x)
-        
+
         x = self.drop_path(x)
         x = self.activation(x + shortcut)
         return x
@@ -540,7 +537,7 @@ class BitStage(nn.Module):
 
         # Get the layer type
         if config.layer_type == "bottleneck":
-            layer_fn = partial(BitBottleneckLayer, use_activation=True)
+            layer_fn = partial(BitBottleneckLayer)
         else:
             layer_fn = partial(BitPreActBottleneckLayer, use_activation=False)
 
