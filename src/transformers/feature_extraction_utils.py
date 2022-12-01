@@ -132,8 +132,8 @@ class BatchFeature(UserDict):
             return self
 
         # Convert to TensorType
-        if not isinstance(tensor_type, TensorType):
-            tensor_type = TensorType(tensor_type)
+        # Convert to TensorType
+        tensor_type = TensorType(tensor_type)
 
         # Get a function reference for the correct framework
         if tensor_type == TensorType.TENSORFLOW:
@@ -197,9 +197,8 @@ class BatchFeature(UserDict):
             target_dtype = getattr(target_framework, float_precision)
         else:
             raise ValueError(
-                f"Failed to import the`dtype` {target_dtype} from the framework {target_framework} - please use a"
-                " supported",
-                " `dtype` for your targetted framework.",
+                f"Failed to import the `dtype` {target_dtype} from the framework {target_framework} - please use a"
+                " supported `dtype` for your targeted framework.",
             )
 
         # Do the tensor conversion in batch
