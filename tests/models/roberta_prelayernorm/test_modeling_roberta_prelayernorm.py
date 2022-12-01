@@ -514,7 +514,7 @@ class RobertaPreLayerNormModelIntegrationTest(TestCasePlus):
         expected_shape = torch.Size((1, 11, 50265))
         self.assertEqual(output.shape, expected_shape)
         # compare the actual values for a slice.
-        expected_slice = torch.tensor(
+        EXPECTED_SLICE = torch.tensor(
             [[[40.4880, 18.0199, -5.2367], [-1.8877, -4.0885, 10.7085], [-2.2613, -5.6110, 7.2665]]]
         )
 
@@ -525,7 +525,7 @@ class RobertaPreLayerNormModelIntegrationTest(TestCasePlus):
         # with torch.no_grad():
         #     expected_slice = model(input_ids)[0][:, :3, :3].detach()
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(output[:, :3, :3], EXPECTED_SLICE, atol=1e-4))
 
     @slow
     def test_inference_no_head(self):
@@ -535,7 +535,7 @@ class RobertaPreLayerNormModelIntegrationTest(TestCasePlus):
         with torch.no_grad():
             output = model(input_ids)[0]
         # compare the actual values for a slice.
-        expected_slice = torch.tensor(
+        EXPECTED_SLICE = torch.tensor(
             [[[0.0208, -0.0356, 0.0237], [-0.1569, -0.0411, -0.2626], [0.1879, 0.0125, -0.0089]]]
         )
 
@@ -544,4 +544,4 @@ class RobertaPreLayerNormModelIntegrationTest(TestCasePlus):
         # with torch.no_grad():
         #     expected_slice = model(input_ids)[0][:, :3, :3].detach()
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(output[:, :3, :3], EXPECTED_SLICE, atol=1e-4))

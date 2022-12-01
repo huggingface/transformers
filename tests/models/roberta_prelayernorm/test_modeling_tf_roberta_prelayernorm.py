@@ -658,10 +658,10 @@ class TFRobertaPreLayerNormModelIntegrationTest(unittest.TestCase):
         expected_shape = [1, 11, 50265]
         self.assertEqual(list(output.numpy().shape), expected_shape)
         # compare the actual values for a slice.
-        expected_slice = tf.constant(
+        EXPECTED_SLICE = tf.constant(
             [[[40.4880, 18.0199, -5.2367], [-1.8877, -4.0885, 10.7085], [-2.2613, -5.6110, 7.2665]]]
         )
-        self.assertTrue(numpy.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-4))
+        self.assertTrue(numpy.allclose(output[:, :3, :3].numpy(), EXPECTED_SLICE.numpy(), atol=1e-4))
 
     @slow
     def test_inference_no_head(self):
@@ -670,7 +670,7 @@ class TFRobertaPreLayerNormModelIntegrationTest(unittest.TestCase):
         input_ids = tf.constant([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]
         # compare the actual values for a slice.
-        expected_slice = tf.constant(
+        EXPECTED_SLICE = tf.constant(
             [[[0.0208, -0.0356, 0.0237], [-0.1569, -0.0411, -0.2626], [0.1879, 0.0125, -0.0089]]]
         )
-        self.assertTrue(numpy.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-4))
+        self.assertTrue(numpy.allclose(output[:, :3, :3].numpy(), EXPECTED_SLICE.numpy(), atol=1e-4))
