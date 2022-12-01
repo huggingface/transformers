@@ -48,7 +48,7 @@ from .utils import (
 
 if TYPE_CHECKING:
     if is_torch_available():
-        import torch
+        import torch  # noqa
 
 
 logger = logging.get_logger(__name__)
@@ -139,7 +139,7 @@ class BatchFeature(UserDict):
         elif tensor_type == TensorType.PYTORCH:
             if not is_torch_available():
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
-            import torch
+            import torch  # noqa
 
             def as_tensor(value):
                 if isinstance(value, (list, tuple)) and len(value) > 0 and isinstance(value[0], np.ndarray):
@@ -176,120 +176,40 @@ class BatchFeature(UserDict):
         return self
 
     @torch_required
-    def _check_if_dtype(self, dtype):
-        import torch
-
-        if not is_torch_dtype(dtype):
-            if isinstance(dtype, str):
-                if hasattr(torch, dtype):
-                    dtype = getattr(torch, dtype)
-                    # needs a safety checker if you pass "cuda"
-                    if is_torch_dtype(dtype):
-                        return dtype
-            return None
-        else:
-            return dtype
-
-    @torch_required
-    def _parse_to_args(self, *args, **kwargs) -> Tuple["torch.device", "torch.dtype"]:
-        r"""
-        Parse the arguments to return a tuple containing the corresponding `device` and/or `dtype`
-        """
-        import torch
-
-        # Case 1: no arguments
-        if len(args) == 0 and kwargs is None:
-            raise ValueError("Use at least one argument when calling `.to`")
-        # Case 2: non-keyword arguments AND keyword arguments
-        elif len(args) >= 0 and len(set(kwargs)) > 0:
-            # Too many arguments
-            if len(args) + len(kwargs.keys()) > 2:
-                raise ValueError(
-                    "Too many arguments for `.to` function. Supported arguments are `'device'` and `'dtype'` and you"
-                    f" provided {args} and {kwargs}"
-                )
-
-            # Check correct kwargs
-            if len(args) == 0 and (not (("device" in set(kwargs)) or ("dtype" in set(kwargs)))):
-                raise ValueError(
-                    "Please use correct keyword arguments for `.to`. Supported arguments are `'device'` and `'dtype'`"
-                )
-
-            # If an argument combined with a keyword argument `e.g.  x.to(0, dtype=torch.float16)`
-            if len(args) == 1:
-                if "dtype" not in set(kwargs):
-                    raise ValueError(
-                        "Please pass `dtype=dtype` when calling `.to` together with a non-keyword argument for"
-                        " `device`."
-                    )
-                device = args[0]
-                dtype = kwargs.pop("dtype", None)
-            # else, `e.g.  x.to(device=0, dtype=torch.float16)`
-            else:
-                device = kwargs.pop("device", None)
-                dtype = kwargs.pop("dtype", None)
-
-            if not is_torch_dtype(dtype):
-                if isinstance(dtype, str):
-                    if hasattr(torch, dtype):
-                        dtype = getattr(torch, dtype)
-                        pass
-                raise ValueError(f"An unvalid `dtype` has been passed. {dtype} is not a supported  `dtype`")
-
-        elif len(args) >= 2:
-            raise ValueError(
-                "Too many non-keyword arguments provided to `.to` function. Please pass keywords arguments"
-                " `.to(device=device, dtype=dtype)` when using multiple arguments"
-            )
-        elif len(args) == 1 and len(set(kwargs)) == 0:
-            # it either a `device` or a `dtype`
-            # First we check if it's a `dtype`
-            dtype = self._check_if_dtype(args[0])
-            device = None
-            if dtype is None:
-                device = args[0]
-        else:
-            raise ValueError(f"Invalid arguments passed to `to` function. You have provided {args} and {kwargs}")
-
-        return device, dtype
-
-    @torch_required
-    def to(self, *args, **kwargs) -> "BatchFeature":
+    def to(self, target_dtype_or_device) -> "BatchFeature":
         """
         Send all values to device by calling `v.to(device)` (PyTorch only). Or cast the values to the indicated dtype
 
         Args:
-            device (`str` or `torch.device`): The device to put the tensors on.
-            dtype (`str` or `torch.dtype`): The dtype to cast the tensors on.
+            device (`str` or `torch.device`, or `torch.dtype`): The device to put the tensors on.
 
         Returns:
             [`BatchFeature`]: The same instance after modification.
         """
-        import torch
+        import torch  # noqa
 
-        device, dtype = self._parse_to_args(*args, **kwargs)
-
-        if device is not None:
-            # This check catches things like APEX blindly calling "to" on all inputs to a module
-            # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
-            # into a HalfTensor
-            if isinstance(device, str) or is_torch_device(device) or isinstance(device, int):
-                self.data = {k: v.to(device=device) for k, v in self.data.items()}
-            else:
-                logger.warning(f"Attempting to cast a BatchFeature to type {str(device)}. This is not supported.")
-        if dtype is not None:
-            casted_data = {}
-            if dtype not in [torch.float16, torch.bfloat16, torch.float, torch.double, torch.half]:
-                logger.warning(
-                    f"Attempting to cast a BatchFeature to type {str(dtype)}. This is not supported and you will"
-                    " encounter unexpected behavior."
-                )
+        # This check catches things like APEX blindly calling "to" on all inputs to a module
+        # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
+        # into a HalfTensor
+        if (
+            isinstance(target_dtype_or_device, str)
+            or is_torch_device(target_dtype_or_device)
+            or isinstance(target_dtype_or_device, int)
+            or is_torch_dtype(target_dtype_or_device)
+        ):
+            new_data = {}
             for k, v in self.data.items():
-                if torch.is_floating_point(v):
-                    casted_data[k] = v.to(dtype)
+                # for `dtype` cast it only on non-floating points
+                if is_torch_dtype(target_dtype_or_device) and not torch.is_floating_point(v):
+                    new_data[k] = v
                 else:
-                    casted_data[k] = v
-            self.data = casted_data
+                    new_data[k] = v.to(target_dtype_or_device)
+            self.data = new_data
+        else:
+            logger.warning(
+                f"Attempting to cast a BatchFeature to type {str(target_dtype_or_device)}. This is not supported."
+            )
+
         return self
 
 
