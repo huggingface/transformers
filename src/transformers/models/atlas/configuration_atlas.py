@@ -25,6 +25,22 @@ ATLAS_CONFIG_DOC = r"""
     can be used to control the model outputs. Read the documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        generator_config (:obj:`T5Config`):
+            The configuration of the T5 model that is used as the generator model
+        retriever_config (:obj:`BertConfig`):
+            The configuration of the Bert model that is used as the retriever model
+        
+        generator
+        question_encoder
+        
+        
+        
+        
+        
+        
+        
+        
+        # OLD
         title_sep (`str`, *optional*, defaults to  `" / "`):
             Separator inserted between the title and the text of the retrieved document when calling [`AtlasRetriever`].
         doc_sep (`str`, *optional*, defaults to  `" // "`):
