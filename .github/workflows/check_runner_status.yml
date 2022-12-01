@@ -49,7 +49,7 @@ jobs:
           echo "Runner availability: ${{ needs.check_runner_status.result }}"
 
       - uses: actions/checkout@v3
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
       - name: Send message to Slack
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
