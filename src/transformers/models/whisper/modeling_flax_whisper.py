@@ -43,7 +43,7 @@ _TOKENIZER_FOR_DOC = "WhisperTokenizer"
 
 WHISPER_START_DOCSTRING = r"""
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    library implements for all its models (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
     This model is also a Flax Linen
     [flax.nn.Module](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html) subclass. Use it as a
