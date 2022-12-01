@@ -242,19 +242,20 @@ PARALLELIZE_DOCSTRING = r"""
         device_map (`Dict[int, list]`, optional, defaults to None):
             A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
             automatically mapped to the first device (for esoteric reasons). That means that the first device should
-            have fewer attention modules mapped to it than other devices. For reference, the gpt_sw3 models have the
+            have fewer attention modules mapped to it than other devices. For reference, the gpt-sw3 models have the
             following number of attention modules:
 
-                - gpt_sw3: 12
-                - gpt_sw3-medium: 24
-                - gpt_sw3-large: 36
-                - gpt_sw3-xl: 48
+                - gpt-sw3-126m: 12
+                - gpt_sw3-356m: 16
+                - gpt_sw3-1.3b: 24
+                - gpt_sw3-6.7b: 32
+                - gpt_sw3-20b: 44
 
     Example:
 
     ```python
-    # Here is an example of a device map on a machine with 4 GPUs using gpt_sw3-xl, which has a total of 48 attention modules:
-    model = GPTSw3LMHeadModel.from_pretrained("gpt_sw3-xl")
+    # Here is an example of a device map on a machine with 4 GPUs using gpt-sw3-20b, which has a total of 44 attention modules:
+    model = GPTSw3LMHeadModel.from_pretrained("AI-Sweden/gpt-sw3-20b")
     device_map = {
         0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
         1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
@@ -270,8 +271,8 @@ DEPARALLELIZE_DOCSTRING = r"""
     Example:
 
     ```python
-    # On a 4 GPU machine with gpt_sw3-large:
-    model = GPTSw3LMHeadModel.from_pretrained("gpt_sw3-large")
+    # On a 4 GPU machine with gpt_sw3-1.3b:
+    model = GPTSw3LMHeadModel.from_pretrained("AI-Sweden/gpt-sw3-1.3b")
     device_map = {
         0: [0, 1, 2, 3, 4, 5, 6, 7],
         1: [8, 9, 10, 11, 12, 13, 14, 15],
