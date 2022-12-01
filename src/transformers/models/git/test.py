@@ -1,25 +1,25 @@
-import torch
+from PIL import Image
 
-from transformers import GITConfig, GITForCausalLM
+import requests
+from transformers import BertTokenizer, CLIPFeatureExtractor, GITModel, GITProcessor
 
 
-# Initializing a GIT microsoft/git-base style configuration
-configuration = GITConfig()
+processor = GITProcessor(
+    feature_extractor=CLIPFeatureExtractor.from_pretrained("openai/clip-vit-base-patch32"),
+    tokenizer=BertTokenizer.from_pretrained("bert-base-uncased"),
+)
+model = GITModel.from_pretrained("nielsr/git-base-coco")
 
-# Initializing a model (with random weights) from the microsoft/git-base style configuration
-model = GITForCausalLM(configuration)
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-pixel_values = torch.randn(1, 3, 224, 224)
-input_ids = torch.tensor([[101]])
+text = "this is an image of two cats"
 
-dict_outputs = model(input_ids, pixel_values=pixel_values, output_hidden_states=True)
+print(processor.tokenizer.model_input_names)
 
-for k, v in dict_outputs.items():
-    if isinstance(v, torch.Tensor):
-        print(k, v.shape)
-    else:
-        print(k, len(v))
+inputs = processor(text, images=image, return_tensors="pt")
 
-tuple_outputs = model(input_ids, pixel_values=pixel_values, output_hidden_states=True, return_dict=False)
+for k, v in inputs.items():
+    print(k, v.shape)
 
-print(len(tuple_outputs))
+outputs = model(**inputs)

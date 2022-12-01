@@ -1238,9 +1238,9 @@ class GITModel(GITPreTrainedModel):
 
         >>> text = "this is an image of two cats"
 
-        >>> pixel_values = processor(text, images=image, return_tensors="pt").pixel_values
+        >>> inputs = processor(text, images=image, return_tensors="pt")
 
-        >>> outputs = model(pixel_values=pixel_values)
+        >>> outputs = model(**inputs)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
