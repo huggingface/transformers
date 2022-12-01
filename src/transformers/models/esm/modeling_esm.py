@@ -788,7 +788,6 @@ class EsmModel(EsmPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
     supports_gradient_checkpointing = False
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Esm
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -950,7 +949,7 @@ class EsmModel(EsmPreTrainedModel):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
-    def predict_contacts(self, tokens, attention_mask=None):
+    def predict_contacts(self, tokens, attention_mask):
         attns = self(tokens, attention_mask=attention_mask, return_dict=True, output_attentions=True).attentions
         attns = torch.stack(attns, dim=1)  # Matches the original model layout
         # In the original model, attentions for padding tokens are completely zeroed out.
@@ -1050,7 +1049,7 @@ class EsmForMaskedLM(EsmPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def predict_contacts(self, tokens, attention_mask=None):
+    def predict_contacts(self, tokens, attention_mask):
         return self.esm.predict_contacts(tokens, attention_mask=attention_mask)
 
 
