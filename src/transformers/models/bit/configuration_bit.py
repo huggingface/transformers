@@ -56,7 +56,7 @@ class BitConfig(PretrainedConfig):
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop path rate for the stochastic depth.
         embedding_dynamic_padding (`bool`, *optional*, defaults to `False`):
-            Make use of dynamic padding for the embedding layer
+            Whether or not to make use of dynamic padding for the embedding layer.
         output_stride (`int`, *optional*, defaults to 32):
             The output stride of the model.
         width_factor (`int`, *optional*, defaults to 1):
