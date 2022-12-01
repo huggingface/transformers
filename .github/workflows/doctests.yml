@@ -25,7 +25,7 @@ jobs:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
@@ -65,7 +65,7 @@ jobs:
     if: always()
     needs: [run_doctests]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions/download-artifact@v2
       - name: Send message to Slack
         env:
