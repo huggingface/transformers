@@ -474,15 +474,15 @@ class TFWhisperPreTrainedModel(TFPreTrainedModel):
             self.main_input_name: tf.random.uniform(
                 [2, self.config.num_mel_bins, self.config.max_source_positions * 2 - 1], dtype=tf.float32
             ),
-            "decoder_input_ids": tf.constant([[2, 3]], dtype=tf.int64),
+            "decoder_input_ids": tf.constant([[2, 3]], dtype=tf.int32),
         }
 
     @tf.function(
         input_signature=[
             {
                 "input_features": tf.TensorSpec((None, None, None), tf.float32, name="input_features"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int64, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int64, name="decoder_attention_mask"),
+                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
             }
         ]
     )
@@ -772,11 +772,6 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
         )
 
         if attention_mask is not None:
-            attention_mask = tf.cond(
-                tf.greater(tf.shape(attention_mask)[-1], seq_len) & tf.greater(seq_len, 0),
-                lambda: attention_mask[:, : seq_len + past_key_values_length],
-                lambda: attention_mask,
-            )
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             expanded_attn_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
             combined_attention_mask = (
