@@ -339,9 +339,9 @@ def is_hf_dataset(dataset):
     if not is_datasets_available():
         return False
 
-    from datasets import Dataset
+    from datasets import Dataset, IterableDataset
 
-    return isinstance(dataset, Dataset)
+    return isinstance(dataset, (Dataset, IterableDataset))
 
 
 def _get_mapping_values(mapping):
@@ -591,6 +591,8 @@ class TrainingSummary:
 
         if model_name is None:
             model_name = Path(trainer.args.output_dir).name
+        if len(model_name) == 0:
+            model_name = finetuned_from
 
         # Add `generated_from_trainer` to the tags
         if tags is None:
