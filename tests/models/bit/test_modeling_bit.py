@@ -306,6 +306,6 @@ class BitModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-11.1069, -9.7877, -8.3777]).to(torch_device)
+        expected_slice = torch.tensor([[-0.6526, -0.5263, -1.4398]]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

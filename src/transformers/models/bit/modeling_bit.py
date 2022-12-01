@@ -293,6 +293,11 @@ class BitEmbeddings(nn.Module):
             conv_layer = partial(StdConv2d, eps=1e-8)
         elif config.conv_layer == "std_conv_same":
             conv_layer = partial(StdConv2dSame, eps=1e-8)
+        else:
+            raise ValueError(
+                f"Conv type {config.conv_layer} not supported, please use one of the following: [`'std_conv'`,"
+                " `'std_conv_same'`]"
+            )
 
         self.convolution = conv_layer(config.num_channels, config.embedding_size, kernel_size=7, stride=2)
 
