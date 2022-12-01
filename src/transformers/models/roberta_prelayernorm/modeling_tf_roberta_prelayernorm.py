@@ -352,6 +352,7 @@ class TFRobertaPreLayerNormAttention(tf.keras.layers.Layer):
         self.dense_output = TFRobertaPreLayerNormSelfOutput(config, name="output")
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention.prune_heads
     def prune_heads(self, heads):
         raise NotImplementedError
 
@@ -1369,6 +1370,7 @@ class TFRobertaPreLayerNormForSequenceClassification(
         expected_output="'optimism'",
         expected_loss=0.08,
     )
+    # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForSequenceClassification.call with roberta->roberta_prelayernorm
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1586,6 +1588,7 @@ class TFRobertaPreLayerNormForTokenClassification(TFRobertaPreLayerNormPreTraine
         expected_output="['O', 'ORG', 'ORG', 'O', 'O', 'O', 'O', 'O', 'LOC', 'O', 'LOC', 'LOC']",
         expected_loss=0.01,
     )
+    # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForTokenClassification.call with roberta->roberta_prelayernorm
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1674,6 +1677,7 @@ class TFRobertaPreLayerNormForQuestionAnswering(TFRobertaPreLayerNormPreTrainedM
         expected_output="' puppet'",
         expected_loss=0.86,
     )
+    # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForQuestionAnswering.call with roberta->roberta_prelayernorm
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,

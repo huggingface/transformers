@@ -17,9 +17,9 @@
 from collections import OrderedDict
 from typing import Mapping
 
+from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
-from ..bert.configuration_bert import BertConfig
 
 
 logger = logging.get_logger(__name__)
@@ -31,7 +31,8 @@ ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class RobertaPreLayerNormConfig(BertConfig):
+# Copied from transformers.models.roberta.configuration_roberta.RobertaConfig with roberta-base->andreasmadsen/efficient_mlm_m0.40,RoBERTa->RoBERTa-PreLayerNorm,Roberta->RobertaPreLayerNorm,roberta->roberta-prelayernorm
+class RobertaPreLayerNormConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RobertaPreLayerNormModel`] or a
     [`TFRobertaPreLayerNormModel`]. It is used to instantiate a RoBERTa-PreLayerNorm model according to the specified
@@ -66,6 +67,7 @@ class RobertaPreLayerNormConfig(BertConfig):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
 
+# Copied from transformers.models.roberta.configuration_roberta.RobertaOnnxConfig with Roberta->RobertaPreLayerNorm
 class RobertaPreLayerNormOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:

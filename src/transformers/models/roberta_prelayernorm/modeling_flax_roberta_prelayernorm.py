@@ -52,6 +52,7 @@ _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 remat = nn_partitioning.remat
 
 
+# Copied from transformers.models.roberta.modeling_flax_roberta.create_position_ids_from_input_ids
 def create_position_ids_from_input_ids(input_ids, padding_idx):
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
