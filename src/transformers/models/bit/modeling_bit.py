@@ -351,7 +351,7 @@ def make_div(value, divisor=8):
     return new_value
 
 
-class BitBottleneckLayer(nn.Module):
+class BitPreActBottleneckLayer(nn.Module):
     """Pre-activation (v2) bottleneck block.
     Follows the implementation of "Identity Mappings in Deep Residual Networks":
     https://github.com/KaimingHe/resnet-1k-layers/blob/master/resnet-pre-act.lua
@@ -428,6 +428,77 @@ class BitBottleneckLayer(nn.Module):
         return self.activation(x + shortcut)
 
 
+class BitBottleneckLayer(nn.Module):
+    """Non Pre-activation bottleneck block, equivalent to V1.5/V1b bottleneck. Used for ViT."""
+
+    def __init__(
+        self,
+        config,
+        in_channels,
+        out_channels=None,
+        bottle_ratio=0.25,
+        stride=1,
+        dilation=1,
+        first_dilation=None,
+        groups=1,
+        drop_path_rate=0.0,
+        is_first_layer=False,
+        use_activation=False,
+    ):
+        super().__init__()
+        first_dilation = first_dilation or dilation
+        conv_layer = partial(WeightStandardizedConv2d, eps=1e-8, padding=config.global_padding)
+
+        norm_layer = partial(BitGroupNormActivation, config=config)
+        out_channels = out_channels or in_channels
+        mid_chs = make_div(out_channels * bottle_ratio)
+
+        if is_first_layer and config.downsample_in_first_stage:
+            self.downsample = BitDownsampleConv(
+                in_channels,
+                out_channels,
+                stride=stride,
+                preact=False,
+                conv_layer=conv_layer,
+                norm_layer=norm_layer,
+            )
+        else:
+            self.downsample = None
+
+        self.conv1 = conv_layer(in_channels, mid_chs, 1)
+        self.norm1 = norm_layer(num_channels=mid_chs)
+        self.conv2 = conv_layer(mid_chs, mid_chs, 3, stride=stride, dilation=first_dilation, groups=groups)
+        self.norm2 = norm_layer(num_channels=mid_chs)
+        self.conv3 = conv_layer(mid_chs, out_channels, 1)
+        self.norm3 = norm_layer(num_channels=out_channels, apply_act=False)
+        self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
+
+        if use_activation:
+            self.activation = ACT2FN[config.hidden_act]
+        else:
+            self.activation = nn.Identity()
+
+    def forward(self, x):
+        # shortcut branch
+        shortcut = x
+        if self.downsample is not None:
+            shortcut = self.downsample(x)
+
+        # residual
+        x = self.conv1(x)
+        x = self.norm1(x)
+
+        x = self.conv2(x)
+        x = self.norm2(x)
+        
+        x = self.conv3(x)
+        x = self.norm3(x)
+        
+        x = self.drop_path(x)
+        x = self.activation(x + shortcut)
+        return x
+
+
 class BitDownsampleConv(nn.Module):
     def __init__(
         self,
@@ -468,7 +539,10 @@ class BitStage(nn.Module):
         first_dilation = 1 if dilation in (1, 2) else 2
 
         # Get the layer type
-        layer_fn = partial(BitBottleneckLayer, use_activation=config.layer_type == "bottleneck")
+        if config.layer_type == "bottleneck":
+            layer_fn = partial(BitBottleneckLayer, use_activation=True)
+        else:
+            layer_fn = partial(BitPreActBottleneckLayer, use_activation=False)
 
         prev_chs = in_channels
         self.layers = nn.Sequential()
