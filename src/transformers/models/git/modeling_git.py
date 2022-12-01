@@ -35,19 +35,14 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_git import GITConfig, GITVisionConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "microsoft/git-base"
+# TODO update checkpoint
+_CHECKPOINT_FOR_DOC = "nielsr/git-base"
 _CONFIG_FOR_DOC = "GITConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
 
@@ -591,7 +586,7 @@ class GITPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, GITEncoder):
+        if isinstance(module, (GITEncoder, GITVisionEncoder)):
             module.gradient_checkpointing = value
 
 
@@ -1200,12 +1195,7 @@ class GITModel(GITPreTrainedModel):
         return full_attention_mask
 
     @add_start_docstrings_to_model_forward(GIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPooling,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1230,7 +1220,28 @@ class GITModel(GITPreTrainedModel):
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
-        """
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import GITProcessor, GITModel
+        >>> import requests
+        >>> from PIL import Image
+
+        >>> processor = GITProcessor.from_pretrained("nielsr/git-base-coco")
+        >>> model = GITModel.from_pretrained("nielsr/git-base-coco")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> text = "this is an image of two cats"
+
+        >>> pixel_values = processor(text, images=image, return_tensors="pt").pixel_values
+
+        >>> outputs = model(pixel_values=pixel_values)
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
