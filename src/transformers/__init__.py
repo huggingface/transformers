@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.26.0.dev0"
+__version__ = "4.25.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -348,6 +348,7 @@ _import_structure = {
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
     ],
+    "models.oneformer": ["ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "OneFormerConfig"],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.opt": ["OPTConfig"],
     "models.owlvit": [
@@ -798,7 +799,8 @@ else:
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
-    _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
+    _import_structure["models.oneformer"].append("OneFormerFeatureExtractor")
+    _import_structure["models.owlvit"].append("OwlViTFeatureExtractor")
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
@@ -1868,6 +1870,14 @@ else:
             "NystromformerLayer",
             "NystromformerModel",
             "NystromformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.oneformer"].extend(
+        [
+            "ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "OneFormerForUniversalSegmentation",
+            "OneFormerModel",
+            "OneFormerPreTrainedModel",
         ]
     )
     _import_structure["models.openai"].extend(
@@ -3723,6 +3733,7 @@ if TYPE_CHECKING:
     from .models.nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NatConfig
     from .models.nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
+    from .models.oneformer import ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, OneFormerConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.opt import OPTConfig
     from .models.owlvit import (
@@ -4115,7 +4126,7 @@ if TYPE_CHECKING:
         from .models.mobilenet_v1 import MobileNetV1FeatureExtractor, MobileNetV1ImageProcessor
         from .models.mobilenet_v2 import MobileNetV2FeatureExtractor, MobileNetV2ImageProcessor
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
-        from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
+        from .models.owlvit import OwlViTFeatureExtractor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
         from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
@@ -5871,6 +5882,12 @@ if TYPE_CHECKING:
             TFMPNetPreTrainedModel,
         )
         from .models.mt5 import TFMT5EncoderModel, TFMT5ForConditionalGeneration, TFMT5Model
+        from .models.oneformer import (
+            ONEFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            OneFormerForUniversalSegmentation,
+            OneFormerModel,
+            OneFormerPreTrainedModel,
+        )
         from .models.openai import (
             TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFOpenAIGPTDoubleHeadsModel,
