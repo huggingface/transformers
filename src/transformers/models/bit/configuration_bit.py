@@ -49,12 +49,14 @@ class BitConfig(PretrainedConfig):
         hidden_act (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function in each block. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"`
             are supported.
-        convolutional_padding (`str`, *optional*, defaults to `"valid"`):
-            padding strategy to use for `StdConv2d` layers, it can be either `"valid"`, or `"same"`.
+        convolutional_padding (`str`, *optional*, defaults to `None`):
+            padding strategy to use for `StdConv2d` layers, it can be either `"valid"`, `"same"`, or `None`.
         num_groups (`int`, *optional*, defaults to `32`):
             Number of groups used for the `BitGroupNormActivation` layers.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop path rate for the stochastic depth.
+        embedding_dynamic_padding (`bool`, *optional*, defaults to `False`):
+            Make use of dynamic padding for the embedding layer
         output_stride (`int`, *optional*, defaults to 32):
             The output stride of the model.
         width_factor (`int`, *optional*, defaults to 1):
@@ -83,7 +85,6 @@ class BitConfig(PretrainedConfig):
         embedding_size=64,
         hidden_sizes=[256, 512, 1024, 2048],
         depths=[3, 4, 6, 3],
-        stem_type="",
         layer_type="preactivation",
         hidden_act="relu",
         drop_path_rate=0.0,
@@ -92,6 +93,7 @@ class BitConfig(PretrainedConfig):
         convolutional_padding=None,
         num_groups=32,
         out_features=None,
+        embedding_dynamic_padding=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -101,13 +103,13 @@ class BitConfig(PretrainedConfig):
         self.embedding_size = embedding_size
         self.hidden_sizes = hidden_sizes
         self.depths = depths
-        self.stem_type = stem_type
         self.layer_type = layer_type
         self.hidden_act = hidden_act
         self.num_groups = num_groups
         self.drop_path_rate = drop_path_rate
         self.output_stride = output_stride
         self.width_factor = width_factor
+        self.embedding_dynamic_padding = embedding_dynamic_padding
         self.convolutional_padding = (
             convolutional_padding if convolutional_padding is None else convolutional_padding.upper()
         )

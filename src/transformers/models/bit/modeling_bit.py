@@ -233,17 +233,27 @@ class DynamicPad2d(nn.Module):
         return input
 
 
-class MaxPool2dSame(nn.MaxPool2d):
+class BitMaxPool2d(nn.MaxPool2d):
     """Tensorflow like 'SAME' wrapper for 2D max pooling"""
 
     def __init__(
-        self, kernel_size: int, stride=None, dilation=1, ceil_mode=False, padding=(0, 0), padding_value=-float("inf")
+        self,
+        kernel_size: int,
+        stride=None,
+        dilation=1,
+        ceil_mode=False,
+        padding=(0, 0),
+        padding_value=-float("inf"),
+        use_dynamic_padding=True,
     ):
         kernel_size = kernel_size if isinstance(kernel_size, collections.abc.Iterable) else (kernel_size, kernel_size)
         stride = stride if isinstance(stride, collections.abc.Iterable) else (stride, stride)
         dilation = dilation if isinstance(dilation, collections.abc.Iterable) else (dilation, dilation)
-        super(MaxPool2dSame, self).__init__(kernel_size, stride, padding, dilation, ceil_mode)
-        self.pad = DynamicPad2d(kernel_size, stride, dilation, padding_value)
+        super(BitMaxPool2d, self).__init__(kernel_size, stride, padding, dilation, ceil_mode)
+        if use_dynamic_padding:
+            self.pad = DynamicPad2d(kernel_size, stride, dilation, padding_value)
+        else:
+            self.pad = nn.Identity()
 
     def forward(self, x):
         x = self.pad(x)
@@ -260,11 +270,12 @@ class BitEmbeddings(nn.Module):
 
         self.convolution = conv_layer(config.num_channels, config.embedding_size, kernel_size=7, stride=2)
 
-        if config.stem_type == "same":
-            self.pooler = MaxPool2dSame(kernel_size=3, stride=2)
+        self.pooler = BitMaxPool2d(kernel_size=3, stride=2, use_dynamic_padding=config.embedding_dynamic_padding)
+
+        # Use the same padding strategy as convolutional layers
+        if config.convolutional_padding == "SAME":
             self.pad = nn.Identity()
         else:
-            self.pooler = nn.MaxPool2d(kernel_size=3, stride=2)
             self.pad = nn.ConstantPad2d(padding=(1, 1, 1, 1), value=0.0)
 
         if not config.layer_type == "preactivation":
