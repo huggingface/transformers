@@ -162,7 +162,7 @@ class BeamSearchTester:
         # add num_beams * batch_idx
         expected_output_indices = (
             cut_expected_tensor(next_indices)
-            + (torch.arange(self.num_beams * self.batch_size, device=torch_device) // self.num_beams) * self.num_beams
+            + (torch.arange(self.num_beams * self.batch_size, device=torch_device) // self.num_beams) * self.num_beams #TODO floor division 
         )
 
         self.parent.assertListEqual(expected_output_tokens.tolist(), output_tokens.tolist())
@@ -401,7 +401,7 @@ class ConstrainedBeamSearchTester:
         # add num_beams * batch_idx
         expected_output_indices = (
             cut_expected_tensor(next_indices)
-            + (torch.arange(self.num_beams * self.batch_size, device=torch_device) // self.num_beams) * self.num_beams
+            + (torch.arange(self.num_beams * self.batch_size, device=torch_device) // self.num_beams) * self.num_beams #TODO floor division 
         )
 
         self.parent.assertListEqual(expected_output_tokens.tolist(), output_tokens.tolist())
