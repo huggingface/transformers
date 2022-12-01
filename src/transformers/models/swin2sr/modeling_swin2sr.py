@@ -27,7 +27,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageSuperResolutionOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -295,7 +295,7 @@ class Swin2SRSelfAttention(nn.Module):
         relative_coords_h = torch.arange(-(self.window_size[0] - 1), self.window_size[0], dtype=torch.float32)
         relative_coords_w = torch.arange(-(self.window_size[1] - 1), self.window_size[1], dtype=torch.float32)
         relative_coords_table = (
-            torch.stack(torch.meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
+            torch.stack(meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
             .permute(1, 2, 0)
             .contiguous()
             .unsqueeze(0)
@@ -315,7 +315,7 @@ class Swin2SRSelfAttention(nn.Module):
         # get pair-wise relative position index for each token inside the window
         coords_h = torch.arange(self.window_size[0])
         coords_w = torch.arange(self.window_size[1])
-        coords = torch.stack(torch.meshgrid([coords_h, coords_w]))
+        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
         coords_flatten = torch.flatten(coords, 1)
         relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
         relative_coords = relative_coords.permute(1, 2, 0).contiguous()
@@ -889,6 +889,9 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         # 2. normalize
         self.mean = self.mean.type_as(pixel_values)
         pixel_values = (pixel_values - self.mean) * self.img_range
+
+        print("Shape of pixel values after padding:", pixel_values.shape)
+
         return pixel_values
 
     @add_start_docstrings_to_model_forward(SWIN2SR_INPUTS_DOCSTRING)

@@ -772,7 +772,7 @@ else:
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
-    _import_structure["models.owlvit"].append("OwlViTFeatureExtractor")
+    _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
@@ -2104,8 +2104,8 @@ else:
             "SwitchTransformersForConditionalGeneration",
             "SwitchTransformersModel",
             "SwitchTransformersPreTrainedModel",
-            "SwitchTransformersTop1Router",
             "SwitchTransformersSparseMLP",
+            "SwitchTransformersTop1Router",
         ]
     )
     _import_structure["models.t5"].extend(

@@ -18,9 +18,10 @@ import argparse
 
 import torch
 from PIL import Image
+from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 import requests
-from transformers import Swin2SRConfig, Swin2SRForImageSuperResolution, Swin2SRImageProcessor
+from transformers import Swin2SRConfig, Swin2SRForImageSuperResolution
 
 
 def get_config(checkpoint_url):
@@ -160,11 +161,24 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
             raise ValueError(f"Unexpected key {key} in state_dict")
 
     # verify values
-    processor = Swin2SRImageProcessor()
     url = "https://github.com/mv-lab/swin2sr/blob/main/testsets/real-inputs/shanghai.jpg?raw=true"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    # TODO use processor
+    # processor = Swin2SRImageProcessor()
+    # pixel_values = processor(image, return_tensors="pt").pixel_values
 
-    pixel_values = processor(image).pixel_values
+    image_size = 126 if "Jpeg" in checkpoint_url else 256
+    transforms = Compose(
+        [
+            Resize((image_size, image_size)),
+            ToTensor(),
+            Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
+    pixel_values = transforms(image).unsqueeze(0)
+
+    if config.num_channels == 1:
+        pixel_values = pixel_values[:, 0, :, :].unsqueeze(1)
 
     outputs = model(pixel_values)
 
@@ -227,12 +241,12 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     if pytorch_dump_folder_path is not None:
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        print(f"Saving image processor to {pytorch_dump_folder_path}")
-        processor.save_pretrained(pytorch_dump_folder_path)
+        # print(f"Saving image processor to {pytorch_dump_folder_path}")
+        # processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         model.push_to_hub(f"nielsr/{model_name}")
-        processor.push_to_hub(f"nielsr/{model_name}")
+        # processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
