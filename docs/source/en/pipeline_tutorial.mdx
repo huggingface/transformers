@@ -52,11 +52,11 @@ Let's take [openai/whisper-large](https://huggingface.co/openai/whisper-large) t
 {'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its creed.'}
 ```
 
-Now this is more appropriate !
-Really check out the hub, for different languages, models specialized in your field and more.
-And you can check out the live results directly from the hub to see if it fits or 
-handle corner cases better than another one.
-If you don't find any, start [`training`]
+Now this result looks more accurate!
+We really encourage you to check out the Hub for models in different languages, models specialized in your field, and more.
+You can check out and compare model results directly from your browser on the Hub to see if it fits or 
+handles corner cases better than other ones.
+And if you don't find a model for your use case, you can always start [training](training) your own!
 
 If you have several inputs, you can pass your input as a list:
 
@@ -77,7 +77,7 @@ If you want to iterate over a whole dataset, or want to use it for inference in 
 
 ## Parameters
 
-[`pipeline`] supports many parameters, some are task specific, some are general for all pipelines.
+[`pipeline`] supports many parameters; some are task specific, and some are general to all pipelines.
 In general you can specify parameters anywhere you want:
 
 ```py
@@ -91,14 +91,14 @@ Let's check out 3 important ones:
 
 ### Device
 
-If you use `device=n` the pipeline will automatically put the model on said device.
-This will work regardless wether you are using `PyTorch` or `Tensorflow`.
+If you use `device=n`, the pipeline automatically puts the model on the specified device.
+This will work regardless of whether you are using PyTorch or Tensorflow.
 
 ```py
 generator(model="openai/whisper-large", device=0)
 ```
 
-If the model is too large for a single GPU, you can also use [`accelerate`](https://huggingface.co/docs/accelerate/index) (`device_map="auto"`).
+If the model is too large for a single GPU, you can set `device_map="auto"` to allow 🤗 [Accelerate](https://huggingface.co/docs/accelerate) to automatically determine how to load and store the model weights.
 
 ```py
 #!pip install accelerate
@@ -117,21 +117,16 @@ audio_filenames = [f"audio_{i}.flac" for i in range(10)]
 texts = generator(audio_filenames)
 ```
 
-This will actually run the pipeline on all 10 audio files you are providing, but it will pass them by batches of 2
-to the model (which is on GPU where batching is more likely to help), without any further code from you. 
-The output should always match what you would have received without batching. It is only meant as a way to help 
-get more speed out of the pipeline. 
+This runs the pipeline on the 10 provided audio files, but it will pass them in batches of 2
+to the model (which is on a GPU, where batching is more likely to help) without requiring any further code from you. 
+The output should always match what you would have received without batching. It is only meant as a way to help you get more speed out of a pipeline.
 
-Pipelines alleviate some complexity of batching, because for some pipelines, 
-a single item (like a long audio file) need to be chunked into multiple parts
-for processing by a model. Pipeline [abstract that away for you](./main_classes/pipelines#pipeline-chunk-batching)
+Pipelines can also alleviate some of the complexities of batching because, for some pipelines, a single item (like a long audio file) needs to be chunked into multiple parts to be processed by a model. The pipeline performs this [*chunk batching*](./main_classes/pipelines#pipeline-chunk-batching) for you.
 
 ### Task specific parameters
 
-All tasks provide task specific parameters which should help you get the job done.
-For instance, the [`transformers.AutomaticSpeechRecognitionPipeline.__call__`] method
-
-Here we can see `return_timestamps` which sounds promising for subtitling videos.
+All tasks provide task specific parameters which allow for additional flexibility and options to help you get your job done.
+For instance, the [`transformers.AutomaticSpeechRecognitionPipeline.__call__`] method has a `return_timestamps` parameter which sounds promising for subtitling videos:
 
 
 ```py
@@ -164,25 +159,19 @@ Here we can see `return_timestamps` which sounds promising for subtitling videos
 ]}
 ```
 
-With that parameter, the model inferred the texts, but also outputted along **when** the various words were pronounced
+As you can see, the model inferred the text and also outputted **when** the various words were pronounced
 in the sentence.
 
-There are many parameters for all tasks, really check out the docs to find them.
-For instance this pipeline also handles `chunk_length_s` which is helpful to work on 
-really long audio files which the models cannot handle on their own. This is helpful when
-subtitling entire movies or hour-long videos.
+There are many parameters available for each task, so check out each task's API reference to see what you can tinker with!
+For instance, the [`~transformers.AutomaticSpeechRecognitionPipeline`] has a `chunk_length_s` parameter which is helpful for working on really long audio files (for example, subtitling entire movies or hour-long videos) that a model typically cannot handle on its own.
 
 
-Cannot you find a parameter which would really help you out ?
-[Request it](https://github.com/huggingface/transformers/issues/new?assignees=&labels=feature&template=feature-request.yml)
+If you can't find a parameter that would really help you out, feel free to [request it](https://github.com/huggingface/transformers/issues/new?assignees=&labels=feature&template=feature-request.yml)!
 
 
 ## Using pipelines on a dataset
 
-So you have a large dataset and want to run inference on it to get something like a
-metric for it, perfect !
-
-The easiest and more generic way we recomment is using an iterator.
+The pipeline can also run inference on a large dataset. The easiest way we recommend doing this is by using an iterator:
 
 ```py
 def data():
@@ -196,16 +185,15 @@ for out in pipe(data()):
     generated_characters += len(out["generated_text"])
 ```
 
-The iterator `data()` will yield each result. The pipeline will automatically
-recognize that the input is iterable, and will start fetching the data while
-it continues to process it on the GPU. This uses [DataLoader](https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader) under the hood.
-This is important so you don't have to allocate memory for the whole dataset
+The iterator `data()` yields each result, and the pipeline automatically
+recognizes the input is iterable and will start fetching the data while
+it continues to process it on the GPU (this uses [DataLoader](https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader) under the hood).
+This is important because you don't have to allocate memory for the whole dataset
 and you can feed the GPU as fast as possible.
 
-Since batching could speed things up, using `batch_size` here and tuning it could be important.
+Since batching could speed things up, it may be useful to try tuning the `batch_size` parameter here.
 
-Turns out we also have a fantasic library for [datasets](https://github.com/huggingface/datasets/).
-which makes this even simpler.
+The simplest way to iterate over a dataset is to just load one from 🤗 [Datasets](https://github.com/huggingface/datasets/):
 
 ```py
 # KeyDataset is a util that will just output the item we're interested in.
@@ -228,7 +216,7 @@ page.
 
 [Link](./pipeline_webserver)
 
-### Vision pipeline
+## Vision pipeline
 
 Using a [`pipeline`] for vision tasks is practically identical.
 
@@ -250,7 +238,7 @@ Specify your task and pass your image to the classifier. The image can be a link
 
 ### Text pipeline
 
-Using a [`pipeline`] for nlp tasks is practically identical.
+Using a [`pipeline`] for NLP tasks is practically identical.
 
 ```py
 >>> from transformers import pipeline
@@ -271,7 +259,7 @@ Using a [`pipeline`] for nlp tasks is practically identical.
 
 The [`pipeline`] supports more than one modality. For example, a visual question answering (VQA) task combines text and image. Feel free to use any image link you like and a question you want to ask about the image. The image can be a URL or a local path to the image.
 
-For example, if you use the same image from the vision pipeline above:
+For example, if you use this [invoice image](https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png):
 
 ```py
 >>> from transformers import pipeline
