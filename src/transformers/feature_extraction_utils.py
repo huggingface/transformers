@@ -181,7 +181,7 @@ class BatchFeature(UserDict):
         Send all values to device by calling `v.to(device)` (PyTorch only). Or cast the values to the indicated dtype
 
         Args:
-            device (`str` or `torch.device`, or `torch.dtype`): The device to put the tensors on.
+            target_dtype_or_device (`str` or `torch.device`, or `torch.dtype`): The device to put the tensors on.
 
         Returns:
             [`BatchFeature`]: The same instance after modification.
