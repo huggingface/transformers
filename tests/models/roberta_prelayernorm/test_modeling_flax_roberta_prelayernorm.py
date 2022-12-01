@@ -24,7 +24,6 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, id
 
 if is_flax_available():
     import jax.numpy as jnp
-
     from transformers.models.roberta_prelayernorm.modeling_flax_roberta_prelayernorm import (
         FlaxRobertaPreLayerNormForCausalLM,
         FlaxRobertaPreLayerNormForMaskedLM,
@@ -34,6 +33,7 @@ if is_flax_available():
         FlaxRobertaPreLayerNormForTokenClassification,
         FlaxRobertaPreLayerNormModel,
     )
+
 
 # Copied from tests.models.roberta.test_modelling_flax_roberta.FlaxRobertaModelTester with Roberta->RobertaPreLayerNorm
 class FlaxRobertaPreLayerNormModelTester(unittest.TestCase):
@@ -175,8 +175,7 @@ class TFRobertaPreLayerNormModelIntegrationTest(unittest.TestCase):
         self.assertEqual(list(output.shape), expected_shape)
         # compare the actual values for a slice.
         EXPECTED_SLICE = np.array(
-            [[[40.4880, 18.0199, -5.2367], [-1.8877, -4.0885, 10.7085], [-2.2613, -5.6110, 7.2665]]],
-            dtype=np.float32
+            [[[40.4880, 18.0199, -5.2367], [-1.8877, -4.0885, 10.7085], [-2.2613, -5.6110, 7.2665]]], dtype=np.float32
         )
         self.assertTrue(np.allclose(output[:, :3, :3], EXPECTED_SLICE, atol=1e-4))
 
@@ -188,7 +187,6 @@ class TFRobertaPreLayerNormModelIntegrationTest(unittest.TestCase):
         output = model(input_ids)[0]
         # compare the actual values for a slice.
         EXPECTED_SLICE = np.array(
-            [[[0.0208, -0.0356, 0.0237], [-0.1569, -0.0411, -0.2626], [0.1879, 0.0125, -0.0089]]],
-            dtype=np.float32
+            [[[0.0208, -0.0356, 0.0237], [-0.1569, -0.0411, -0.2626], [0.1879, 0.0125, -0.0089]]], dtype=np.float32
         )
         self.assertTrue(np.allclose(output[:, :3, :3], EXPECTED_SLICE, atol=1e-4))
