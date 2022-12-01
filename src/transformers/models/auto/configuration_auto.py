@@ -375,7 +375,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("fsmt", "FairSeq Machine-Translation"),
         ("funnel", "Funnel Transformer"),
         ("glpn", "GLPN"),
-        ("gpt-sw3", "gpt-sw3"),
+        ("gpt-sw3", "GPT-Sw3"),
         ("gpt2", "OpenAI GPT-2"),
         ("gpt_neo", "GPT Neo"),
         ("gpt_neox", "GPT NeoX"),
