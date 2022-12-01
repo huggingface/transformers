@@ -49,8 +49,8 @@ class BitConfig(PretrainedConfig):
         hidden_act (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function in each block. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"`
             are supported.
-        global_padding (`str`, *optional*, defaults to `None`):
-            padding strategy to use for most of the layers, it can be either `"valid"`, `"same"`, or `None`.
+        global_padding (`str`, *optional*):
+            Padding strategy to use for the convolutional layers. Can be either `"valid"`, `"same"`, or `None`.
         num_groups (`int`, *optional*, defaults to `32`):
             Number of groups used for the `BitGroupNormActivation` layers.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
