@@ -43,7 +43,7 @@ _TOKENIZER_FOR_DOC = "WhisperTokenizer"
 
 WHISPER_START_DOCSTRING = r"""
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods
-    the library implements for all its models (such as downloading or saving, resizing the input embeddings, 
+    the library implements for all its models (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
     This model is also a Flax Linen
     [flax.nn.Module](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html) subclass. Use it as a
@@ -74,11 +74,11 @@ WHISPER_INPUTS_DOCSTRING = r"""
         input_features (`numpy.ndarray` of shape `(batch_size, feature_size, sequence_length)`):
             Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained
             by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`,
-            *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into 
+            *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
             `input_features`, the [`WhisperFeatureExtractor`] should be used for extracting the features, padding
             and conversion into a tensor of type `numpy.ndarray`. See [`~WhisperFeatureExtractor.__call__`]
         attention_mask (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Whisper does not support masking of the `input_features`, this argument is preserved for 
+            Whisper does not support masking of the `input_features`, this argument is preserved for
             compatibility, but is not used. By default the silence in the input log mel spectrogram are ignored.
         decoder_input_ids (`numpy.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -87,7 +87,7 @@ WHISPER_INPUTS_DOCSTRING = r"""
             [What are decoder input IDs?](../glossary#decoder-input-ids)
             Whisper uses the `decoder_start_token_id` as the starting token for `decoder_input_ids` generation.
         decoder_attention_mask (`numpy.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will 
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will
             also be used by default.
             If you want to change padding behavior, you should modify to your needs. See diagram 1 in [the
             paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
@@ -99,7 +99,7 @@ WHISPER_INPUTS_DOCSTRING = r"""
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
             range `[0, config.max_position_embeddings - 1]`.
         output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under 
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under
             returned tensors for more detail.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
@@ -113,15 +113,15 @@ WHISPER_ENCODE_INPUTS_DOCSTRING = r"""
         input_features (`numpy.ndarray` of shape `(batch_size, feature_size, sequence_length)`):
             Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained
             by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`,
-            *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into 
-            `input_features`, the [`WhisperFeatureExtractor`] should be used for extracting the mel features, 
+            *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+            `input_features`, the [`WhisperFeatureExtractor`] should be used for extracting the mel features,
             padding and conversion into a tensor of type `numpy.ndarray`. See
             [`~WhisperFeatureExtractor.__call__`].
         attention_mask (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
-            Whisper does not support masking of the `input_features`, this argument is preserved for 
+            Whisper does not support masking of the `input_features`, this argument is preserved for
             compatibility, but is not used. By default the silence in the input log mel spectrogram are ignored.
         output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under 
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under
             returned tensors for more detail.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
@@ -138,9 +138,9 @@ WHISPER_DECODE_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
             [What are decoder input IDs?](../glossary#decoder-input-ids)
         encoder_outputs (`tuple(tuple(numpy.ndarray)`):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`) 
+            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence
-            of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the 
+            of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the
             decoder.
         encoder_attention_mask (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
            Whisper does not support masking of the `input_features`, this argument is preserved for compatibility,
@@ -153,10 +153,10 @@ WHISPER_DECODE_INPUTS_DOCSTRING = r"""
         decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
             range `[0, config.max_position_embeddings - 1]`.
-        past_key_values (`Dict[str, numpy.ndarray]`, *optional*, returned by `init_cache` or when passing previous 
+        past_key_values (`Dict[str, numpy.ndarray]`, *optional*, returned by `init_cache` or when passing previous
         `past_key_values`):
             Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for
-            fast auto-regressive decoding. Pre-computed key and value hidden-states are of shape 
+            fast auto-regressive decoding. Pre-computed key and value hidden-states are of shape
             *[batch_size, max_length]*.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under
