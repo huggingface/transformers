@@ -78,6 +78,7 @@ class BitConfig(PretrainedConfig):
     """
     model_type = "bit"
     layer_types = ["preactivation", "bottleneck"]
+    supported_padding = ["SAME", "VALID"]
 
     def __init__(
         self,
@@ -99,6 +100,8 @@ class BitConfig(PretrainedConfig):
         super().__init__(**kwargs)
         if layer_type not in self.layer_types:
             raise ValueError(f"layer_type={layer_type} is not one of {','.join(self.layer_types)}")
+        if global_padding is not None and global_padding.upper() in self.supported_padding:
+            global_padding = global_padding.upper()
         self.num_channels = num_channels
         self.embedding_size = embedding_size
         self.hidden_sizes = hidden_sizes
@@ -110,7 +113,8 @@ class BitConfig(PretrainedConfig):
         self.output_stride = output_stride
         self.width_factor = width_factor
         self.embedding_dynamic_padding = embedding_dynamic_padding
-        self.global_padding = global_padding if global_padding is None else global_padding.upper()
+
+        self.global_padding = global_padding
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
         if out_features is not None:
             if not isinstance(out_features, list):
