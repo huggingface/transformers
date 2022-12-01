@@ -24,6 +24,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 _import_structure = {
     "configuration_atlas": ["AtlasConfig"],
     "retrieval_atlas": ["AtlasRetriever"],
+    "tokenization_atlas": ["AtlasTokenizer"],
 }
 
 try:
@@ -42,6 +43,7 @@ else:
 if TYPE_CHECKING:
     from .configuration_atlas import AtlasConfig
     from .retrieval_atlas import AtlasRetriever
+    from .tokenization_atlas import AtlasTokenizer
 
     try:
         if not is_torch_available():

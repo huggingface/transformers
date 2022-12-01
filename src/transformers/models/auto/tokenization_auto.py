@@ -233,7 +233,7 @@ else:
             ("prophetnet", ("ProphetNetTokenizer", None)),
             ("qdqbert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("rag", ("RagTokenizer", None)),
-            ("atlas", ("RagTokenizer", None)),
+            ("atlas", ("AtlasTokenizer", None)),
             ("realm", ("RealmTokenizer", "RealmTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "reformer",

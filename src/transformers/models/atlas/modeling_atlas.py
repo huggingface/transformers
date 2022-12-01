@@ -493,7 +493,7 @@ ATLAS_FORWARD_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings_to_model_forward(ATLAS_START_DOCSTRING)
-# Copied from transformers.models.rag.modeling_rag.RagModel with RAG->ATLAS,Rag->Atlas,facebook/rag-token-base->facebook/atlas-base
+# Copied from transformers.models.rag.modeling_rag.RagModel with RAG->ATLAS,Rag->Atlas,rag->atlas
 class AtlasModel(AtlasPreTrainedModel):
     def __init__(
         self,
@@ -562,15 +562,15 @@ class AtlasModel(AtlasPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import RagTokenizer, AtlasRetriever, AtlasModel
+        >>> from transformers import AtlasTokenizer, AtlasRetriever, AtlasModel
         >>> import torch
 
-        >>> tokenizer = RagTokenizer.from_pretrained("facebook/atlas-base")
+        >>> tokenizer = AtlasTokenizer.from_pretrained("facebook/atlas-token-base")
         >>> retriever = AtlasRetriever.from_pretrained(
-        ...     "facebook/atlas-base", index_name="exact", use_dummy_dataset=True
+        ...     "facebook/atlas-token-base", index_name="exact", use_dummy_dataset=True
         ... )
         >>> # initialize with AtlasRetriever to do everything in one forward call
-        >>> model = AtlasModel.from_pretrained("facebook/atlas-base", retriever=retriever)
+        >>> model = AtlasModel.from_pretrained("facebook/atlas-token-base", retriever=retriever)
 
         >>> inputs = tokenizer("How many people live in Paris?", return_tensors="pt")
         >>> outputs = model(input_ids=inputs["input_ids"])
@@ -810,10 +810,10 @@ class AtlasSequenceForGeneration(AtlasPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import RagTokenizer, AtlasRetriever, AtlasSequenceForGeneration
+        >>> from transformers import AtlasTokenizer, AtlasRetriever, AtlasSequenceForGeneration
         >>> import torch
 
-        >>> tokenizer = RagTokenizer.from_pretrained("facebook/atlas-sequence-nq")
+        >>> tokenizer = AtlasTokenizer.from_pretrained("facebook/atlas-sequence-nq")
         >>> retriever = AtlasRetriever.from_pretrained(
         ...     "facebook/atlas-sequence-nq", index_name="exact", use_dummy_dataset=True
         ... )
@@ -1279,10 +1279,10 @@ class AtlasTokenForGeneration(AtlasPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import RagTokenizer, AtlasRetriever, AtlasTokenForGeneration
+        >>> from transformers import AtlasTokenizer, AtlasRetriever, AtlasTokenForGeneration
         >>> import torch
 
-        >>> tokenizer = RagTokenizer.from_pretrained("facebook/atlas-token-nq")
+        >>> tokenizer = AtlasTokenizer.from_pretrained("facebook/atlas-token-nq")
         >>> retriever = AtlasRetriever.from_pretrained(
         ...     "facebook/atlas-token-nq", index_name="exact", use_dummy_dataset=True
         ... )

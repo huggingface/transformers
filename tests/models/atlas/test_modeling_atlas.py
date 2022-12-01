@@ -62,7 +62,7 @@ if is_torch_available() and is_datasets_available() and is_faiss_available():
         AtlasRetriever,
         AtlasSequenceForGeneration,
         AtlasTokenForGeneration,
-        RagTokenizer,
+        AtlasTokenizer,
     )
     from transformers.modeling_outputs import BaseModelOutput
 
@@ -904,7 +904,7 @@ class AtlasModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_atlas_sequence_generate_batch(self):
-        tokenizer = RagTokenizer.from_pretrained("facebook/atlas-sequence-nq")
+        tokenizer = AtlasTokenizer.from_pretrained("facebook/atlas-sequence-nq")
         retriever = AtlasRetriever.from_pretrained(
             "facebook/atlas-sequence-nq", index_name="exact", use_dummy_dataset=True
         )
@@ -943,7 +943,7 @@ class AtlasModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_atlas_sequence_generate_batch_from_context_input_ids(self):
-        tokenizer = RagTokenizer.from_pretrained("facebook/atlas-sequence-nq")
+        tokenizer = AtlasTokenizer.from_pretrained("facebook/atlas-sequence-nq")
         retriever = AtlasRetriever.from_pretrained(
             "facebook/atlas-sequence-nq", index_name="exact", use_dummy_dataset=True
         )
@@ -993,7 +993,7 @@ class AtlasModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_atlas_token_generate_batch(self):
-        tokenizer = RagTokenizer.from_pretrained("facebook/atlas-token-nq")
+        tokenizer = AtlasTokenizer.from_pretrained("facebook/atlas-token-nq")
         retriever = AtlasRetriever.from_pretrained("facebook/atlas-token-nq", index_name="exact", use_dummy_dataset=True)
         atlas_token = AtlasTokenForGeneration.from_pretrained("facebook/atlas-token-nq", retriever=retriever).to(
             torch_device

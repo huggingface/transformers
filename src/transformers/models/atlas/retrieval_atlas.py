@@ -25,7 +25,7 @@ from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import cached_file, is_datasets_available, is_faiss_available, logging, requires_backends
 from .configuration_atlas import AtlasConfig
-from .tokenization_atlas import RagTokenizer
+from .tokenization_atlas import AtlasTokenizer
 
 
 if is_datasets_available():
@@ -419,7 +419,7 @@ class AtlasRetriever:
     def from_pretrained(cls, retriever_name_or_path, indexed_dataset=None, **kwargs):
         requires_backends(cls, ["datasets", "faiss"])
         config = kwargs.pop("config", None) or AtlasConfig.from_pretrained(retriever_name_or_path, **kwargs)
-        atlas_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path, config=config)
+        atlas_tokenizer = AtlasTokenizer.from_pretrained(retriever_name_or_path, config=config)
         question_encoder_tokenizer = atlas_tokenizer.question_encoder
         generator_tokenizer = atlas_tokenizer.generator
         if indexed_dataset is not None:
@@ -448,7 +448,7 @@ class AtlasRetriever:
                 self.index.dataset._indexes["embeddings"] = faiss_index
                 self.config.passages_path = passages_path
         self.config.save_pretrained(save_directory)
-        atlas_tokenizer = RagTokenizer(
+        atlas_tokenizer = AtlasTokenizer(
             question_encoder=self.question_encoder_tokenizer,
             generator=self.generator_tokenizer,
         )
