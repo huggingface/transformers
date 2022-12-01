@@ -863,14 +863,14 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
         r"""
         Args:
             batch_size (`int`):
-                batch_size used for fast auto-regressive decoding. Defines the batch size of the initialized 
+                batch_size used for fast auto-regressive decoding. Defines the batch size of the initialized
                 cache.
             max_length (`int`):
-                maximum possible length for auto-regressive decoding. Defines the sequence length of the 
+                maximum possible length for auto-regressive decoding. Defines the sequence length of the
                 initialized cache.
             encoder_outputs (`Union[FlaxBaseModelOutput, tuple(tuple(jnp.ndarray)]`):
                 `encoder_outputs` consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*:
-                `attentions`). `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, 
+                `attentions`). `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`,
                 *optional*) is a sequence of hidden-states at the output of the last layer of the encoder.
                 Used in the cross-attention of the decoder.
         """
@@ -1445,7 +1445,7 @@ append_replace_return_docstrings(
 
 def convert_unroll_to_scan(model, params: Union[Dict, FrozenDict]):
     r"""
-    Convert a `PyTree` of unrolled model parameters to a scanned block of model parameters. This method can be 
+    Convert a `PyTree` of unrolled model parameters to a scanned block of model parameters. This method can be
     used to explicitly convert the model parameters to scanned format. This returns a new `params` tree and does
     not convert the `params` in place.
     ```"""
