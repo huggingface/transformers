@@ -18,7 +18,7 @@ runtimes and hardware. In this guide, we'll show you how to export 🤗 Transfor
 models to [ONNX (Open Neural Network eXchange)](http://onnx.ai).
 
 To do that, it is possible to use the [`optimum.exporters.onnx` tool](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model).
-The `transformers.onnx` command-line tool also exists, and may be the one you are used to. The `optimum.exporters.onnx` tool is very similar,
+The `transformers.onnx` command-line tool also exists, and may be the one you are used to. Do not worry, the `optimum.exporters.onnx` tool is very similar,
 but integrates better we the rest of the [🤗 Optimum library](https://github.com/huggingface/optimum) to perform various optimizations and
 inference with the exported ONNX models.
 
@@ -26,9 +26,19 @@ inference with the exported ONNX models.
 <Tip>
 
 Once exported, a model can be optimized for inference via techniques such as
-quantization and graph optimization. If you are interested in optimizing your models to run with
-maximum efficiency, check out the [🤗 Optimum
+[quantization](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/quantization) and
+[graph optimization](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/optimization).
+If you are interested in optimizing your models to run with maximum efficiency, check out the [🤗 Optimum
 library](https://github.com/huggingface/optimum).
+
+</Tip>
+
+<Tip>
+
+Once exported, and potentially optimized for inference, you can run your ONNX model with ONNX Runtime, with
+[models](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/models) and
+[pipelines](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/pipelines) classes following a very similar
+API to what you are used to in 🤗 Transformers !
 
 </Tip>
 
@@ -36,6 +46,6 @@ library](https://github.com/huggingface/optimum).
 # Contributing the export to ONNX for a new architecture
 
 Although `optimum.exporters.onnx` already supports a wide variety of models, it is possible that the model you want to export
-is not supported yet. You can either a feature request in the [🤗 Optimum library](https://github.com/huggingface/optimum) repo,
-or contribute and add support for the architecture yourself!
+is not supported yet. You can either open a feature request in the [🤗 Optimum library](https://github.com/huggingface/optimum/issues)
+repo, or contribute and add support for the architecture yourself!
 You can learn how to add support for a model [here](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/contribute).
