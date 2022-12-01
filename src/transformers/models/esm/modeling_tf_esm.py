@@ -796,8 +796,9 @@ class TFEsmMainLayer(Layer):
         self.encoder = TFEsmEncoder(config, name="encoder")
         self.pooler = TFEsmPooler(config, name="pooler") if add_pooling_layer else None
 
-        self.contact_head = TFEsmContactPredictionHead(in_features=self.config.num_hidden_layers * self.config.num_attention_heads,
-                                                       bias=True, name="contact_head")
+        self.contact_head = TFEsmContactPredictionHead(
+            in_features=self.config.num_hidden_layers * self.config.num_attention_heads, bias=True, name="contact_head"
+        )
 
     def build(self, input_shape):
         super().build(input_shape)
