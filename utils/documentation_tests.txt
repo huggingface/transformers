@@ -146,6 +146,9 @@ src/transformers/models/resnet/modeling_tf_resnet.py
 src/transformers/models/roberta/configuration_roberta.py
 src/transformers/models/roberta/modeling_roberta.py
 src/transformers/models/roberta/modeling_tf_roberta.py
+src/transformers/models/roberta_prelayernorm/configuration_roberta_prelayernorm.py
+src/transformers/models/roberta_prelayernorm/modeling_roberta_prelayernorm.py
+src/transformers/models/roberta_prelayernorm/modeling_tf_roberta_prelayernorm.py
 src/transformers/models/roc_bert/modeling_roc_bert.py
 src/transformers/models/roc_bert/tokenization_roc_bert.py
 src/transformers/models/segformer/modeling_segformer.py
