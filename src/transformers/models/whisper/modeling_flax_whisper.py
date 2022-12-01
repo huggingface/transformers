@@ -1,5 +1,5 @@
-from typing import Union, Dict, Optional, Tuple
 from functools import partial
+from typing import Dict, Optional, Tuple, Union
 
 import flax.linen as nn
 import jax
@@ -19,7 +19,6 @@ from ...modeling_flax_outputs import (
     FlaxSeq2SeqLMOutput,
     FlaxSeq2SeqModelOutput,
 )
-
 from ...modeling_flax_utils import (
     ACT2FN,
     FlaxPreTrainedModel,
@@ -29,6 +28,7 @@ from ...modeling_flax_utils import (
 )
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_whisper import WhisperConfig
+
 
 scan_with_axes = nn_partitioning.scan_with_axes
 
