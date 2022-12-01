@@ -273,7 +273,7 @@ class BitEmbeddings(nn.Module):
         self.pooler = BitMaxPool2d(kernel_size=3, stride=2, use_dynamic_padding=config.embedding_dynamic_padding)
 
         # Use the same padding strategy as convolutional layers
-        if config.convolutional_padding == "SAME":
+        if config.global_padding == "SAME":
             self.pad = nn.Identity()
         else:
             self.pad = nn.ConstantPad2d(padding=(1, 1, 1, 1), value=0.0)
@@ -377,7 +377,7 @@ class BitBottleneckLayer(nn.Module):
 
         first_dilation = first_dilation or dilation
 
-        conv_layer = partial(WeightStandardizedConv2d, eps=1e-8, padding=config.convolutional_padding)
+        conv_layer = partial(WeightStandardizedConv2d, eps=1e-8, padding=config.global_padding)
 
         norm_layer = partial(BitGroupNormActivation, config=config)
 
@@ -645,7 +645,7 @@ class BitModel(BitPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        conv_layer = partial(WeightStandardizedConv2d, eps=1e-8, padding=config.convolutional_padding)
+        conv_layer = partial(WeightStandardizedConv2d, eps=1e-8, padding=config.global_padding)
 
         self.embedder = BitEmbeddings(config, conv_layer)
 
