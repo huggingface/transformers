@@ -23,6 +23,8 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, id
 
 
 if is_flax_available():
+    import jax.numpy as jnp
+
     from transformers.models.roberta_prelayernorm.modeling_flax_roberta_prelayernorm import (
         FlaxRobertaPreLayerNormForCausalLM,
         FlaxRobertaPreLayerNormForMaskedLM,
@@ -159,3 +161,34 @@ class FlaxRobertaPreLayerNormModelTest(FlaxModelTesterMixin, unittest.TestCase):
             model = model_class_name.from_pretrained("andreasmadsen/efficient_mlm_m0.40", from_pt=True)
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
+
+
+@require_flax
+class TFRobertaPreLayerNormModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_masked_lm(self):
+        model = FlaxRobertaPreLayerNormForMaskedLM.from_pretrained("andreasmadsen/efficient_mlm_m0.40", from_pt=True)
+
+        input_ids = np.array([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]], dtype=jnp.int32)
+        output = model(input_ids)[0]
+        expected_shape = [1, 11, 50265]
+        self.assertEqual(list(output.shape), expected_shape)
+        # compare the actual values for a slice.
+        EXPECTED_SLICE = np.array(
+            [[[40.4880, 18.0199, -5.2367], [-1.8877, -4.0885, 10.7085], [-2.2613, -5.6110, 7.2665]]],
+            dtype=np.float32
+        )
+        self.assertTrue(np.allclose(output[:, :3, :3], EXPECTED_SLICE, atol=1e-4))
+
+    @slow
+    def test_inference_no_head(self):
+        model = FlaxRobertaPreLayerNormModel.from_pretrained("andreasmadsen/efficient_mlm_m0.40", from_pt=True)
+
+        input_ids = np.array([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]], dtype=jnp.int32)
+        output = model(input_ids)[0]
+        # compare the actual values for a slice.
+        EXPECTED_SLICE = np.array(
+            [[[0.0208, -0.0356, 0.0237], [-0.1569, -0.0411, -0.2626], [0.1879, 0.0125, -0.0089]]],
+            dtype=np.float32
+        )
+        self.assertTrue(np.allclose(output[:, :3, :3], EXPECTED_SLICE, atol=1e-4))
