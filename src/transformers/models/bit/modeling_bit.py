@@ -58,7 +58,7 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
 
 BIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/resnetnv2-50",
-    # See all BiT models at https://huggingface.co/models?filter=resnetv2
+    # See all BiT models at https://huggingface.co/models?filter=bit
 ]
 
 
