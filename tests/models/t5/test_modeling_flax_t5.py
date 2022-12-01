@@ -27,7 +27,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
+from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
@@ -853,6 +853,21 @@ class FlaxT5ModelIntegrationTests(unittest.TestCase):
     @slow
     def test_small_generation(self):
         model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small")
+        model.config.max_length = 8
+        model.config.num_beams = 1
+        model.config.do_sample = False
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        input_ids = tokenizer("summarize: Hello there", return_tensors="np").input_ids
+
+        sequences = model.generate(input_ids).sequences
+
+        output_str = tokenizer.batch_decode(sequences, skip_special_tokens=True)[0]
+        self.assertTrue(output_str == "Hello there!")
+
+    @slow
+    def test_small_generation_bfloat16(self):
+        model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small", dtype=jnp.bfloat16)
         model.config.max_length = 8
         model.config.num_beams = 1
         model.config.do_sample = False

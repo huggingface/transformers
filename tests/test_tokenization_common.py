@@ -385,6 +385,33 @@ class TokenizerTesterMixin:
 
         self.assertEqual(reverse_text, text)
 
+        special_tokens = tokenizer.all_special_tokens
+        special_tokens_string = tokenizer.convert_tokens_to_string(special_tokens)
+        for special_token in special_tokens:
+            self.assertIn(special_token, special_tokens_string)
+
+        if self.test_rust_tokenizer:
+            rust_tokenizer = self.get_rust_tokenizer()
+            special_tokens_string_rust = rust_tokenizer.convert_tokens_to_string(special_tokens)
+            self.assertEqual(special_tokens_string, special_tokens_string_rust)
+
+    def test_sentencepiece_tokenize_and_decode(self):
+        if not self.test_sentencepiece:
+            return
+
+        text = "This is text to test the tokenizer."
+        if self.test_rust_tokenizer:
+            tokenizer = self.get_tokenizer()
+            rust_tokenizer = self.get_rust_tokenizer()
+
+            slow_ids = tokenizer(text).input_ids
+            fast_ids = rust_tokenizer(text).input_ids
+            self.assertEqual(slow_ids, fast_ids)
+
+            slow_decoded = tokenizer.decode(slow_ids)
+            fast_decoded = rust_tokenizer.decode(slow_ids)
+            self.assertEqual(slow_decoded, fast_decoded)
+
     def test_subword_regularization_tokenizer(self) -> None:
         if not self.test_sentencepiece:
             return

@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import os
-from typing import TYPE_CHECKING, List, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Iterable, List, Tuple, Union
 
 import numpy as np
 from packaging import version
@@ -72,7 +72,15 @@ def is_valid_image(img):
 
 
 def valid_images(imgs):
-    return all(is_valid_image(img) for img in imgs)
+    # If we have an list of images, make sure every image is valid
+    if isinstance(imgs, (list, tuple)):
+        for img in imgs:
+            if not valid_images(img):
+                return False
+    # If not a list of tuple, we have been given a single image or batched tensor of images
+    elif not is_valid_image(imgs):
+        return False
+    return True
 
 
 def is_batched(img):
@@ -153,6 +161,47 @@ def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> T
         return image.shape[-3], image.shape[-2]
     else:
         raise ValueError(f"Unsupported data format: {channel_dim}")
+
+
+def is_valid_annotation_coco_detection(annotation: Dict[str, Union[List, Tuple]]) -> bool:
+    if (
+        isinstance(annotation, dict)
+        and "image_id" in annotation
+        and "annotations" in annotation
+        and isinstance(annotation["annotations"], (list, tuple))
+        and (
+            # an image can have no annotations
+            len(annotation["annotations"]) == 0
+            or isinstance(annotation["annotations"][0], dict)
+        )
+    ):
+        return True
+    return False
+
+
+def is_valid_annotation_coco_panoptic(annotation: Dict[str, Union[List, Tuple]]) -> bool:
+    if (
+        isinstance(annotation, dict)
+        and "image_id" in annotation
+        and "segments_info" in annotation
+        and "file_name" in annotation
+        and isinstance(annotation["segments_info"], (list, tuple))
+        and (
+            # an image can have no segments
+            len(annotation["segments_info"]) == 0
+            or isinstance(annotation["segments_info"][0], dict)
+        )
+    ):
+        return True
+    return False
+
+
+def valid_coco_detection_annotations(annotations: Iterable[Dict[str, Union[List, Tuple]]]) -> bool:
+    return all(is_valid_annotation_coco_detection(ann) for ann in annotations)
+
+
+def valid_coco_panoptic_annotations(annotations: Iterable[Dict[str, Union[List, Tuple]]]) -> bool:
+    return all(is_valid_annotation_coco_panoptic(ann) for ann in annotations)
 
 
 def load_image(image: Union[str, "PIL.Image.Image"]) -> "PIL.Image.Image":
@@ -364,7 +413,7 @@ class ImageFeatureExtractionMixin:
                 If `size` is an int and `default_to_square` is `True`, then image will be resized to (size, size). If
                 `size` is an int and `default_to_square` is `False`, then smaller edge of the image will be matched to
                 this number. i.e, if height > width, then image will be rescaled to (size * height / width, size).
-            resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
+            resample (`int`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 The filter to user for resampling.
             default_to_square (`bool`, *optional*, defaults to `True`):
                 How to convert `size` when it is a single int. If set to `True`, the `size` will be converted to a

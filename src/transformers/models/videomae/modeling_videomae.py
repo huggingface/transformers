@@ -510,8 +510,8 @@ VIDEOMAE_START_DOCSTRING = r"""
 VIDEOMAE_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`VideoMAEFeatureExtractor`]. See
-            [`VideoMAEFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`VideoMAEImageProcessor`]. See
+            [`VideoMAEImageProcessor.__call__`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -565,13 +565,13 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values,
-        bool_masked_pos=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        pixel_values: torch.FloatTensor,
+        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutput]:
         r"""
         Returns:
 
@@ -581,7 +581,7 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         >>> from decord import VideoReader, cpu
         >>> import numpy as np
 
-        >>> from transformers import VideoMAEFeatureExtractor, VideoMAEModel
+        >>> from transformers import VideoMAEImageProcessor, VideoMAEModel
         >>> from huggingface_hub import hf_hub_download
 
 
@@ -605,11 +605,11 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=4, seg_len=len(videoreader))
         >>> video = videoreader.get_batch(indices).asnumpy()
 
-        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base")
+        >>> image_processor = VideoMAEImageProcessor.from_pretrained("MCG-NJU/videomae-base")
         >>> model = VideoMAEModel.from_pretrained("MCG-NJU/videomae-base")
 
         >>> # prepare video for the model
-        >>> inputs = feature_extractor(list(video), return_tensors="pt")
+        >>> inputs = image_processor(list(video), return_tensors="pt")
 
         >>> # forward pass
         >>> outputs = model(**inputs)
@@ -753,29 +753,29 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
     @replace_return_docstrings(output_type=VideoMAEForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values,
-        bool_masked_pos,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        pixel_values: torch.FloatTensor,
+        bool_masked_pos: torch.BoolTensor,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, VideoMAEForPreTrainingOutput]:
         r"""
         Returns:
 
         Examples:
         ```python
-        >>> from transformers import VideoMAEFeatureExtractor, VideoMAEForPreTraining
+        >>> from transformers import VideoMAEImageProcessor, VideoMAEForPreTraining
         >>> import numpy as np
         >>> import torch
 
         >>> num_frames = 16
         >>> video = list(np.random.randn(16, 3, 224, 224))
 
-        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base")
+        >>> image_processor = VideoMAEImageProcessor.from_pretrained("MCG-NJU/videomae-base")
         >>> model = VideoMAEForPreTraining.from_pretrained("MCG-NJU/videomae-base")
 
-        >>> pixel_values = feature_extractor(video, return_tensors="pt").pixel_values
+        >>> pixel_values = image_processor(video, return_tensors="pt").pixel_values
 
         >>> num_patches_per_frame = (model.config.image_size // model.config.patch_size) ** 2
         >>> seq_length = (num_frames // model.config.tubelet_size) * num_patches_per_frame
@@ -926,7 +926,7 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple, ImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -942,7 +942,7 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         >>> import torch
         >>> import numpy as np
 
-        >>> from transformers import VideoMAEFeatureExtractor, VideoMAEForVideoClassification
+        >>> from transformers import VideoMAEImageProcessor, VideoMAEForVideoClassification
         >>> from huggingface_hub import hf_hub_download
 
         >>> np.random.seed(0)
@@ -968,10 +968,10 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=4, seg_len=len(videoreader))
         >>> video = videoreader.get_batch(indices).asnumpy()
 
-        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
+        >>> image_processor = VideoMAEImageProcessor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
         >>> model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
 
-        >>> inputs = feature_extractor(list(video), return_tensors="pt")
+        >>> inputs = image_processor(list(video), return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)

@@ -144,12 +144,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
         self.assertEqual(output, {"text": "(Applaudissements)"})
-        with self.assertRaises(ValueError) as v:
-            _ = speech_recognizer(waveform, chunk_length_s=10)
-        self.assertEqual(
-            str(v.exception),
-            "`chunk_length_s` is only valid for CTC models, use other chunking options for other models",
-        )
+        output = speech_recognizer(waveform, chunk_length_s=10)
+        self.assertEqual(output, {"text": "(Applaudissements)"})
 
         # Non CTC models cannot use return_timestamps
         with self.assertRaises(ValueError) as v:
@@ -260,6 +256,22 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         filename = ds[40]["file"]
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
+
+    @require_torch
+    @slow
+    def test_torch_whisper(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny",
+            framework="pt",
+        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": " A man said to the universe, Sir, I exist."})
+
+        output = speech_recognizer([filename], chunk_length_s=5, batch_size=4)
+        self.assertEqual(output, [{"text": " A man said to the universe, Sir, I exist."}])
 
     @require_torch
     @slow

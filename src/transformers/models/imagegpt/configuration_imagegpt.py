@@ -197,6 +197,6 @@ class ImageGPTOnnxConfig(OnnxConfig):
         """
 
         input_image = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
-        inputs = dict(preprocessor(input_image, framework))
+        inputs = dict(preprocessor(images=input_image, return_tensors=framework))
 
         return inputs

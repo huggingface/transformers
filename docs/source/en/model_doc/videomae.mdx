@@ -23,16 +23,28 @@ The abstract from the paper is the following:
 
 Tips:
 
-- One can use [`VideoMAEFeatureExtractor`] to prepare videos for the model. It will resize + normalize all frames of a video for you.
+- One can use [`VideoMAEImageProcessor`] to prepare videos for the model. It will resize + normalize all frames of a video for you.
 - [`VideoMAEForPreTraining`] includes the decoder on top for self-supervised pre-training.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/videomae_architecture.jpeg"
-alt="drawing" width="600"/> 
+alt="drawing" width="600"/>
 
 <small> VideoMAE pre-training. Taken from the <a href="https://arxiv.org/abs/2203.12602">original paper</a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/MCG-NJU/VideoMAE).
+
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with VideoMAE. If
+you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll
+review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+
+**Video classification**
+- [A notebook](https://github.com/huggingface/notebooks/blob/main/examples/video_classification.ipynb) that shows how
+to fine-tune a VideoMAE model on a custom dataset.
+- [Video classification task page](https://huggingface.co/tasks/video-classification)
+- [A 🤗 Space](https://huggingface.co/spaces/sayakpaul/video-classification-ucf101-subset) showing how to perform inference with a video classification model.
 
 
 ## VideoMAEConfig
@@ -43,6 +55,11 @@ The original code can be found [here](https://github.com/MCG-NJU/VideoMAE).
 
 [[autodoc]] VideoMAEFeatureExtractor
     - __call__
+
+## VideoMAEImageProcessor
+
+[[autodoc]] VideoMAEImageProcessor
+    - preprocess
 
 ## VideoMAEModel
 

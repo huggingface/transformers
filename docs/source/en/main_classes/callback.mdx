@@ -37,6 +37,7 @@ By default a [`Trainer`] will use the following callbacks:
   installed.
 - [`~integrations.CodeCarbonCallback`] if [codecarbon](https://pypi.org/project/codecarbon/) is
   installed.
+- [`~integrations.ClearMLCallback`] if [clearml](https://github.com/allegroai/clearml) is installed.
 
 The main class that implements callbacks is [`TrainerCallback`]. It gets the
 [`TrainingArguments`] used to instantiate the [`Trainer`], can access that
@@ -72,6 +73,8 @@ Here is the list of the available [`TrainerCallback`] in the library:
 [[autodoc]] integrations.CodeCarbonCallback
 
 [[autodoc]] integrations.NeptuneCallback
+
+[[autodoc]] integrations.ClearMLCallback
 
 ## TrainerCallback
 

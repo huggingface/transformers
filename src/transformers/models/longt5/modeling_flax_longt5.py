@@ -368,6 +368,7 @@ class FlaxLongT5Attention(nn.Module):
                 self.relative_attention_num_buckets,
                 self.n_heads,
                 embedding_init=jax.nn.initializers.normal(kv_init_std),
+                dtype=self.dtype,
             )
 
     @staticmethod
@@ -2032,6 +2033,7 @@ class FlaxLongT5Module(nn.Module):
             self.config.vocab_size,
             self.config.d_model,
             embedding_init=jax.nn.initializers.normal(self.config.initializer_factor * 1.0),
+            dtype=self.dtype,
         )
 
         encoder_config = copy.deepcopy(self.config)
@@ -2160,6 +2162,7 @@ class FlaxLongT5ForConditionalGenerationModule(nn.Module):
             self.config.vocab_size,
             self.config.d_model,
             embedding_init=jax.nn.initializers.normal(self.config.initializer_factor),
+            dtype=self.dtype,
         )
 
         encoder_config = copy.deepcopy(self.config)

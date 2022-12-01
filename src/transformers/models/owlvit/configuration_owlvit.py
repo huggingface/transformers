@@ -165,6 +165,8 @@ class OwlViTVisionConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
+        num_channels (`int`, *optional*, defaults to 3):
+            Number of channels in the input images.
         image_size (`int`, *optional*, defaults to 768):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 32):
@@ -206,6 +208,7 @@ class OwlViTVisionConfig(PretrainedConfig):
         intermediate_size=3072,
         num_hidden_layers=12,
         num_attention_heads=12,
+        num_channels=3,
         image_size=768,
         patch_size=32,
         hidden_act="quick_gelu",
@@ -222,6 +225,7 @@ class OwlViTVisionConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.num_channels = num_channels
         self.image_size = image_size
         self.patch_size = patch_size
         self.hidden_act = hidden_act
@@ -260,9 +264,9 @@ class OwlViTConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_config_dict (`dict`, *optional*):
+        text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`OwlViTTextConfig`].
-        vision_config_dict (`dict`, *optional*):
+        vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`OwlViTVisionConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
             Dimensionality of text and vision projection layers.
@@ -285,15 +289,15 @@ class OwlViTConfig(PretrainedConfig):
         return_dict=True,
         **kwargs
     ):
-        super().__init__(text_config=text_config, vision_config=vision_config, **kwargs)
+        super().__init__(**kwargs)
 
         if text_config is None:
             text_config = {}
-            logger.info("text_config_dict is None. Initializing the OwlViTTextConfig with default values.")
+            logger.info("text_config is None. Initializing the OwlViTTextConfig with default values.")
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config_dict is None. initializing the OwlViTVisionConfig with default values.")
+            logger.info("vision_config is None. initializing the OwlViTVisionConfig with default values.")
 
         self.text_config = OwlViTTextConfig(**text_config)
         self.vision_config = OwlViTVisionConfig(**vision_config)

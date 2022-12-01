@@ -650,13 +650,15 @@ def _test_large_logits_librispeech(in_queue, out_queue, timeout):
         input_speech = _load_datasamples(1)
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        processed_inputs = processor(audio=input_speech, text="This part of the speech", return_tensors="tf")
+        processed_inputs = processor(
+            audio=input_speech, text="This part of the speech", add_special_tokens=False, return_tensors="tf"
+        )
         input_features = processed_inputs.input_features
-        labels = processed_inputs.labels
+        decoder_input_ids = processed_inputs.labels
 
         logits = model(
             input_features,
-            decoder_input_ids=labels,
+            decoder_input_ids=decoder_input_ids,
             output_hidden_states=False,
             output_attentions=False,
             use_cache=False,
@@ -741,7 +743,7 @@ def _test_large_generation_multilingual(in_queue, out_queue, timeout):
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        EXPECTED_TRANSCRIPT = " Kimura san ni denwa wo kaite moraimashita"
+        EXPECTED_TRANSCRIPT = " Kimura-san called me."
         unittest.TestCase().assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
         model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="translate")
