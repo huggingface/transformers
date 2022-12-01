@@ -1877,7 +1877,39 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         future_time_features: Optional[torch.Tensor],
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> torch.Tensor:
+    ) -> SampleTimeSeriesPredictionOutput:
+        r"""
+
+        Auto-regressively generates sequences of `num_parallel_samples` predictions from distribution head using
+        **greedy decoding** for `prediction_length` time steps.
+
+        Parameters:
+            static_categorical_features (`torch.LongTensor` of shape `(batch_size, number of static categorical features)`):
+                Static categorical features for which the model will learn an embedding, which it will add to the
+                values of the time series.
+            static_real_features (`torch.FloatTensor` of shape `(batch_size, number of static real features)`):
+                Static real features which the model will add to the values of the time series.
+            past_time_features  (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`):
+                Time features, which the model internally will add to `past_values`
+            past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+                Past values of the time series, that serve as context in order to predict the future.
+            past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
+                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+                in `[0, 1]`:
+
+                - 1 for values that are **observed**,
+                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+            future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`):
+                Future time features, which the model internally will add to predicted `future_values`.
+            output_attentions (`bool`, *optional*, defaults to `False`):
+                Whether or not the model should returns all attentions.
+            output_hidden_states (`bool`, *optional*, defaults to `False`):
+                Whether or not the model should return all hidden-states.
+        Returns:
+            `SampleTimeSeriesPredictionOutput` containing:
+                - `sequences` (`torch.FloatTensor` of shape `(batch_size, num_samples, prediction_length)`): sampled
+                  sequences of predictions.
+        """
         outputs = self(
             static_categorical_features=static_categorical_features,
             static_real_features=static_real_features,
