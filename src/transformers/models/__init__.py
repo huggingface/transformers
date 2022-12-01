@@ -38,6 +38,7 @@ from . import (
     byt5,
     camembert,
     canine,
+    chinese_clip,
     clip,
     clipseg,
     codegen,
