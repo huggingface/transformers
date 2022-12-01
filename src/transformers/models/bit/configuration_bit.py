@@ -100,8 +100,11 @@ class BitConfig(PretrainedConfig):
         super().__init__(**kwargs)
         if layer_type not in self.layer_types:
             raise ValueError(f"layer_type={layer_type} is not one of {','.join(self.layer_types)}")
-        if global_padding is not None and global_padding.upper() in self.supported_padding:
-            global_padding = global_padding.upper()
+        if global_padding is not None:
+            if global_padding.upper() in self.supported_padding:
+                global_padding = global_padding.upper()
+            else:
+                raise ValueError(f"Padding strategy {global_padding} not supported")
         self.num_channels = num_channels
         self.embedding_size = embedding_size
         self.hidden_sizes = hidden_sizes
