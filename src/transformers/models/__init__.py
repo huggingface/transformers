@@ -127,6 +127,7 @@ from . import (
     prophetnet,
     qdqbert,
     rag,
+    atlas,
     realm,
     reformer,
     regnet,

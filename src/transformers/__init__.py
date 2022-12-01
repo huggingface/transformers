@@ -343,6 +343,7 @@ _import_structure = {
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
+    "models.atlas": ["AtlasConfig", "AtlasRetriever"],
     "models.realm": ["REALM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RealmConfig", "RealmTokenizer"],
     "models.reformer": ["REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ReformerConfig"],
     "models.regnet": ["REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "RegNetConfig"],
@@ -1879,6 +1880,9 @@ else:
     _import_structure["models.rag"].extend(
         ["RagModel", "RagPreTrainedModel", "RagSequenceForGeneration", "RagTokenForGeneration"]
     )
+    _import_structure["models.atlas"].extend(
+        ["AtlasModel", "AtlasPreTrainedModel", "AtlasSequenceForGeneration", "AtlasTokenForGeneration"]
+    )
     _import_structure["models.realm"].extend(
         [
             "REALM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2827,6 +2831,14 @@ else:
             "TFRagTokenForGeneration",
         ]
     )
+    _import_structure["models.atlas"].extend(
+        [
+            "TFAtlasModel",
+            "TFAtlasPreTrainedModel",
+            "TFAtlasSequenceForGeneration",
+            "TFAtlasTokenForGeneration",
+        ]
+    )
     _import_structure["models.regnet"].extend(
         [
             "TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3555,6 +3567,7 @@ if TYPE_CHECKING:
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
+    from .models.atlas import AtlasConfig, AtlasRetriever
     from .models.realm import REALM_PRETRAINED_CONFIG_ARCHIVE_MAP, RealmConfig, RealmTokenizer
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
     from .models.regnet import REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP, RegNetConfig
@@ -4832,6 +4845,7 @@ if TYPE_CHECKING:
             load_tf_weights_in_qdqbert,
         )
         from .models.rag import RagModel, RagPreTrainedModel, RagSequenceForGeneration, RagTokenForGeneration
+        from .models.atlas import AtlasModel, AtlasPreTrainedModel, AtlasSequenceForGeneration, AtlasTokenForGeneration
         from .models.realm import (
             REALM_PRETRAINED_MODEL_ARCHIVE_LIST,
             RealmEmbedder,
@@ -5598,6 +5612,7 @@ if TYPE_CHECKING:
         from .models.opt import TFOPTForCausalLM, TFOPTModel, TFOPTPreTrainedModel
         from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel, TFPegasusPreTrainedModel
         from .models.rag import TFRagModel, TFRagPreTrainedModel, TFRagSequenceForGeneration, TFRagTokenForGeneration
+        from .models.atlas import TFAtlasModel, TFAtlasPreTrainedModel, TFAtlasSequenceForGeneration, TFAtlasTokenForGeneration
         from .models.regnet import (
             TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRegNetForImageClassification,
