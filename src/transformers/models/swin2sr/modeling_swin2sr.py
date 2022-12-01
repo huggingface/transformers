@@ -982,22 +982,36 @@ class Upsample(nn.Sequential):
         super(Upsample, self).__init__(*m)
 
 
-# TODO inherit from nn.Module here
-class UpsampleOneStep(nn.Sequential):
+class UpsampleOneStep(nn.Module):
     """UpsampleOneStep module (the difference with Upsample is that it always only has 1conv + 1pixelshuffle)
-       Used in lightweight SR to save parameters.
-    Args:
-        scale (int): Scale factor. Supported scales: 2^n and 3.
-        num_feat (int): Channel number of intermediate features.
-    """
+    
+    Used in lightweight SR to save parameters.
 
-    def __init__(self, scale, num_feat, num_out_ch, input_resolution=None):
-        self.num_feat = num_feat
-        self.input_resolution = input_resolution
-        m = []
-        m.append(nn.Conv2d(num_feat, (scale**2) * num_out_ch, 3, 1, 1))
-        m.append(nn.PixelShuffle(scale))
-        super(UpsampleOneStep, self).__init__(*m)
+    Args:
+        scale (int):
+            Scale factor. Supported scales: 2^n and 3.
+        in_channels (int):
+            Channel number of intermediate features.
+    """
+    def __init__(self, scale, in_channels, out_channels):
+        super().__init__()
+
+        self.conv = nn.Conv2d(in_channels, (scale**2) * out_channels, 3, 1, 1)
+        self.pixel_shuffle = nn.PixelShuffle(scale)
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.pixel_shuffle(x)
+
+        return x
+
+
+class NearestConvUpsampler(nn.Module):
+    def __init__(self):
+        return -1
+
+    def forward(self):
+        return -1
 
 
 @add_start_docstrings(
@@ -1033,10 +1047,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
             self.conv_last = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
         elif self.upsampler == "pixelshuffledirect":
             # for lightweight SR (to save parameters)
-            patches_resolution = self.swin2sr.embeddings.patch_embeddings.patches_resolution
-            self.upsample = UpsampleOneStep(
-                config.upscale, config.embed_dim, config.num_channels, (patches_resolution[0], patches_resolution[1])
-            )
+            self.upsample = UpsampleOneStep(config.upscale, config.embed_dim, config.num_channels)
         elif self.upsampler == "nearest+conv":
             # for real-world SR (less artifacts)
             if self.upscale != 4:

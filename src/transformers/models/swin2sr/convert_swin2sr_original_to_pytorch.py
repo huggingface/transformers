@@ -52,7 +52,7 @@ def get_config(checkpoint_url):
     return config
 
 
-def rename_key(name):
+def rename_key(name, config):
     if "patch_embed.proj" in name and "layers" not in name:
         name = name.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
     if "patch_embed.norm" in name:
@@ -88,6 +88,11 @@ def rename_key(name):
         name = "layernorm.weight"
     if name == "norm.bias":
         name = "layernorm.bias"
+
+    if name == "upsample.0.weight" and config.upsampler == "pixelshuffledirect":
+        name = name.replace("upsample.0.weight", "upsample.conv.weight")
+    if name == "upsample.0.bias" and config.upsampler == "pixelshuffledirect":
+        name = name.replace("upsample.0.bias", "upsample.conv.bias")
 
     if (
         "upsample" in name
@@ -137,7 +142,7 @@ def convert_state_dict(orig_state_dict, config):
                 ] = val[-dim:]
             pass
         else:
-            orig_state_dict[rename_key(key)] = val
+            orig_state_dict[rename_key(key, config)] = val
 
     return orig_state_dict
 
