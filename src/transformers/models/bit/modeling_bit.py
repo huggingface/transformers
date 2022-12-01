@@ -99,7 +99,7 @@ def get_padding_value(padding=None, kernel_size=7, stride=1, dilation=1) -> Tupl
     return padding, dynamic
 
 
-class StdConv2dSame(nn.Conv2d):
+class WeightStandardizedConv2d(nn.Conv2d):
     """Conv2d with Weight Standardization. TF compatible SAME padding. Used for ViT Hybrid model.
 
     Paper: [Micro-Batch Training with Batch-Channel Normalization and Weight
@@ -182,38 +182,6 @@ class BitGroupNormActivation(nn.GroupNorm):
         return x
 
 
-class StdConv2d(nn.Conv2d):
-    """Conv2d with Weight Standardization. Used for BiT ResNet-V2 models.
-
-    Paper: `Micro-Batch Training with Batch-Channel Normalization and Weight Standardization` -
-        https://arxiv.org/abs/1903.10520v2
-    """
-
-    def __init__(
-        self, in_channel, out_channels, kernel_size, stride=1, padding=None, dilation=1, groups=1, bias=False, eps=1e-6
-    ):
-        if padding is None:
-            padding, _ = get_padding_value(padding, kernel_size, stride, dilation)
-        super().__init__(
-            in_channel,
-            out_channels,
-            kernel_size,
-            stride=stride,
-            padding=padding,
-            dilation=dilation,
-            groups=groups,
-            bias=bias,
-        )
-        self.eps = eps
-
-    def forward(self, x):
-        weight = nn.functional.batch_norm(
-            self.weight.reshape(1, self.out_channels, -1), None, None, training=True, momentum=0.0, eps=self.eps
-        ).reshape_as(self.weight)
-        x = nn.functional.conv2d(x, weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
-        return x
-
-
 class DynamicPad2d(nn.Module):
     r"""
     A module that wraps dynamic padding of any input, given the parameters of the convolutional layer and the input
@@ -221,7 +189,7 @@ class DynamicPad2d(nn.Module):
     """
 
     def __init__(self, kernel_size, stride, dilation, value=-float("inf")):
-        super().__init__(self)
+        super().__init__()
         # Safety checkers
         if isinstance(kernel_size, int):
             kernel_size = (kernel_size, kernel_size)
@@ -252,7 +220,7 @@ class DynamicPad2d(nn.Module):
 
         # apply pad
         if padding_height > 0 or padding_width > 0:
-            x = nn.functional.pad(
+            input = nn.functional.pad(
                 input,
                 [
                     padding_width // 2,
@@ -262,7 +230,7 @@ class DynamicPad2d(nn.Module):
                 ],
                 value=self.value,
             )
-        return x
+        return input
 
 
 class MaxPool2dSame(nn.MaxPool2d):
@@ -287,17 +255,8 @@ class BitEmbeddings(nn.Module):
     BiT Embeddings (stem) composed of a single aggressive convolution.
     """
 
-    def __init__(self, config: BitConfig):
+    def __init__(self, config: BitConfig, conv_layer: nn.Module):
         super().__init__()
-        if config.conv_layer == "std_conv":
-            conv_layer = partial(StdConv2d, eps=1e-8)
-        elif config.conv_layer == "std_conv_same":
-            conv_layer = partial(StdConv2dSame, eps=1e-8)
-        else:
-            raise ValueError(
-                f"Conv type {config.conv_layer} not supported, please use one of the following: [`'std_conv'`,"
-                " `'std_conv_same'`]"
-            )
 
         self.convolution = conv_layer(config.num_channels, config.embedding_size, kernel_size=7, stride=2)
 
@@ -305,8 +264,8 @@ class BitEmbeddings(nn.Module):
             self.pooler = MaxPool2dSame(kernel_size=3, stride=2)
             self.pad = nn.Identity()
         else:
-            self.pad = nn.ConstantPad2d(padding=(1, 1, 1, 1), value=0.0)
             self.pooler = nn.MaxPool2d(kernel_size=3, stride=2)
+            self.pad = nn.ConstantPad2d(padding=(1, 1, 1, 1), value=0.0)
 
         if not config.layer_type == "preactivation":
             self.norm = partial(BitGroupNormActivation, config=config)(num_channels=config.embedding_size)
@@ -381,7 +340,7 @@ def make_div(value, divisor=8):
     return new_value
 
 
-class BitPreActivationBottleneckLayer(nn.Module):
+class BitBottleneckLayer(nn.Module):
     """Pre-activation (v2) bottleneck block.
     Follows the implementation of "Identity Mappings in Deep Residual Networks":
     https://github.com/KaimingHe/resnet-1k-layers/blob/master/resnet-pre-act.lua
@@ -401,20 +360,13 @@ class BitPreActivationBottleneckLayer(nn.Module):
         groups=1,
         drop_path_rate=0.0,
         is_first_layer=False,
+        use_activation=False,
     ):
         super().__init__()
 
         first_dilation = first_dilation or dilation
 
-        if config.conv_layer == "std_conv":
-            conv_layer = partial(StdConv2d, eps=1e-8)
-        elif config.conv_layer == "std_conv_same":
-            conv_layer = partial(StdConv2dSame, eps=1e-8)
-        else:
-            raise ValueError(
-                f"Convolutional layer {config.conv_layer} not supported! Please use one of the following:"
-                " [`'std_conv'`, `'std_conv_same`]"
-            )
+        conv_layer = partial(WeightStandardizedConv2d, eps=1e-8, padding=config.convolutional_padding)
 
         norm_layer = partial(BitGroupNormActivation, config=config)
 
@@ -435,11 +387,19 @@ class BitPreActivationBottleneckLayer(nn.Module):
 
         self.norm1 = norm_layer(num_channels=in_channels)
         self.conv1 = conv_layer(in_channels, mid_channels, 1)
+
         self.norm2 = norm_layer(num_channels=mid_channels)
         self.conv2 = conv_layer(mid_channels, mid_channels, 3, stride=stride, dilation=first_dilation, groups=groups)
+
         self.norm3 = norm_layer(num_channels=mid_channels)
         self.conv3 = conv_layer(mid_channels, out_channels, 1)
+
         self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
+
+        if use_activation:
+            self.activation = ACT2FN[config.hidden_act]
+        else:
+            self.activation = nn.Identity()
 
     def forward(self, x):
         x_preact = self.norm1(x)
@@ -454,91 +414,81 @@ class BitPreActivationBottleneckLayer(nn.Module):
         x = self.conv2(self.norm2(x))
         x = self.conv3(self.norm3(x))
         x = self.drop_path(x)
-        return x + shortcut
+        return self.activation(x + shortcut)
 
 
-class BitBottleneckLayer(nn.Module):
-    """Non Pre-activation bottleneck block, equivalent to V1.5/V1b bottleneck. Used for ViT."""
+# class BitBottleneckLayer(nn.Module):
+#     """Non Pre-activation bottleneck block, equivalent to V1.5/V1b bottleneck. Used for ViT."""
 
-    def __init__(
-        self,
-        config,
-        in_channels,
-        out_channels=None,
-        bottle_ratio=0.25,
-        stride=1,
-        dilation=1,
-        first_dilation=None,
-        groups=1,
-        conv_layer=None,
-        drop_path_rate=0.0,
-        is_first_layer=False,
-    ):
-        super().__init__()
-        first_dilation = first_dilation or dilation
+#     def __init__(
+#         self,
+#         config,
+#         in_channels,
+#         out_channels=None,
+#         bottle_ratio=0.25,
+#         stride=1,
+#         dilation=1,
+#         first_dilation=None,
+#         groups=1,
+#         drop_path_rate=0.0,
+#         is_first_layer=False,
+#     ):
+#         super().__init__()
+#         first_dilation = first_dilation or dilation
 
-        # Getting the convolution type
-        if config.conv_layer == "std_conv":
-            conv_layer = partial(StdConv2d, eps=1e-8)
-        elif config.conv_layer == "std_conv_same":
-            conv_layer = partial(StdConv2dSame, eps=1e-8)
-        else:
-            raise ValueError(
-                f"Convolutional layer {config.conv_layer} not supported! Please use one of the following:"
-                " [`'std_conv'`, `'std_conv_same`]"
-            )
+#         conv_layer = partial(WeightStandardizedConv2d, eps=1e-8, padding=config.convolutional_padding)
 
-        norm_layer = partial(BitGroupNormActivation, config=config)
+#         norm_layer = partial(BitGroupNormActivation, config=config)
 
-        out_channels = out_channels or in_channels
-        mid_chs = make_div(out_channels * bottle_ratio)
+#         out_channels = out_channels or in_channels
+#         mid_chs = make_div(out_channels * bottle_ratio)
 
-        if is_first_layer:
-            self.downsample = BitDownsampleConv(
-                in_channels,
-                out_channels,
-                stride=stride,
-                preact=False,
-                conv_layer=conv_layer,
-                norm_layer=norm_layer,
-            )
-        else:
-            self.downsample = None
+#         if is_first_layer:
+#             self.downsample = BitDownsampleConv(
+#                 in_channels,
+#                 out_channels,
+#                 stride=stride,
+#                 preact=False,
+#                 conv_layer=conv_layer,
+#                 norm_layer=norm_layer,
+#             )
+#         else:
+#             self.downsample = None
 
-        self.conv1 = conv_layer(in_channels, mid_chs, 1)
-        self.norm1 = norm_layer(num_channels=mid_chs)
+#         self.conv1 = conv_layer(in_channels, mid_chs, 1)
+#         self.norm1 = norm_layer(num_channels=mid_chs)
 
-        self.conv2 = conv_layer(mid_chs, mid_chs, 3, stride=stride, dilation=first_dilation, groups=groups)
-        self.norm2 = norm_layer(num_channels=mid_chs)
+#         self.conv2 = conv_layer(mid_chs, mid_chs, 3, stride=stride, dilation=first_dilation, groups=groups)
+#         self.norm2 = norm_layer(num_channels=mid_chs)
 
-        self.conv3 = conv_layer(mid_chs, out_channels, 1)
-        self.norm3 = norm_layer(num_channels=out_channels, apply_act=False)
+#         self.conv3 = conv_layer(mid_chs, out_channels, 1)
+#         self.norm3 = norm_layer(num_channels=out_channels, apply_act=False)
 
-        self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
-        self.activation = ACT2FN[config.hidden_act]
+#         self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
+#         self.activation = ACT2FN[config.hidden_act]
 
-    def forward(self, x):
-        # shortcut branch
-        shortcut = x
-        if self.downsample is not None:
-            shortcut = self.downsample(x)
+#     def forward(self, x):
+#         # shortcut branch
+#         shortcut = x
+#         if self.downsample is not None:
+#             shortcut = self.downsample(x)
 
-        # residual
-        x = self.conv1(x)
-        x = self.norm1(x)
+#         # residual
+#         x = self.conv1(x)
+#         x = self.norm1(x)
 
-        # second step
-        x = self.conv2(x)
-        x = self.norm2(x)
+#         # second step
+#         x = self.conv2(x)
+#         x = self.norm2(x)
 
-        # third step
-        x = self.conv3(x)
-        x = self.norm3(x)
+#         # third step
+#         x = self.conv3(x)
+#         x = self.norm3(x)
 
-        # final step
-        x = self.drop_path(x)
-        x = self.activation(x + shortcut)
-        return x
+#         # final step
+#         x = self.drop_path(x)
+#         x = self.activation(x + shortcut)
+#         return x
 
 
 class BitDownsampleConv(nn.Module):
@@ -580,16 +530,8 @@ class BitStage(nn.Module):
 
         first_dilation = 1 if dilation in (1, 2) else 2
 
-        # Step 1: Get the layer type
-        if config.layer_type == "bottleneck":
-            layer_fn = BitBottleneckLayer
-        elif config.layer_type == "preactivation":
-            layer_fn = BitPreActivationBottleneckLayer
-        else:
-            raise ValueError(
-                f"Unknown layer type: {config.layer_type}. Please use one of the following: [`'bottleneck'`,"
-                " `'preactivation`]"
-            )
+        # Get the layer type
+        layer_fn = partial(BitBottleneckLayer, use_activation=config.layer_type == "bottleneck")
 
         prev_chs = in_channels
         self.layers = nn.Sequential()
@@ -640,7 +582,7 @@ class BitStage(nn.Module):
 
 
 class BitEncoder(nn.Module):
-    def __init__(self, config: BitConfig):
+    def __init__(self, config: BitConfig, conv_layer: nn.Module):
         super().__init__()
         self.stages = nn.ModuleList([])
 
@@ -765,9 +707,12 @@ class BitModel(BitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        self.embedder = BitEmbeddings(config)
 
-        self.encoder = BitEncoder(config)
+        conv_layer = partial(WeightStandardizedConv2d, eps=1e-8, padding=config.convolutional_padding)
+
+        self.embedder = BitEmbeddings(config, conv_layer)
+
+        self.encoder = BitEncoder(config, conv_layer)
         norm_layer = BitGroupNormActivation
         self.norm = (
             norm_layer(config, num_channels=config.hidden_sizes[-1])

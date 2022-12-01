@@ -49,6 +49,8 @@ class BitConfig(PretrainedConfig):
         hidden_act (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function in each block. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"`
             are supported.
+        convolutional_padding (`str`, *optional*, defaults to `"valid"`):
+            padding strategy to use for `StdConv2d` layers, it can be either `"valid"`, or `"same"`.
         num_groups (`int`, *optional*, defaults to `32`):
             Number of groups used for the `BitGroupNormActivation` layers.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
@@ -87,7 +89,7 @@ class BitConfig(PretrainedConfig):
         drop_path_rate=0.0,
         output_stride=32,
         width_factor=1,
-        conv_layer="std_conv",
+        convolutional_padding=None,
         num_groups=32,
         out_features=None,
         **kwargs
@@ -106,7 +108,9 @@ class BitConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.output_stride = output_stride
         self.width_factor = width_factor
-        self.conv_layer = conv_layer
+        self.convolutional_padding = (
+            convolutional_padding if convolutional_padding is None else convolutional_padding.upper()
+        )
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
         if out_features is not None:
             if not isinstance(out_features, list):
