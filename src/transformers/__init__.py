@@ -171,6 +171,13 @@ _import_structure = {
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
+    "models.chinese_clip": [
+        "CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ChineseCLIPConfig",
+        "ChineseCLIPProcessor",
+        "ChineseCLIPTextConfig",
+        "ChineseCLIPVisionConfig",
+    ],
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPConfig",
@@ -526,6 +533,7 @@ _import_structure = {
         "is_datasets_available",
         "is_faiss_available",
         "is_flax_available",
+        "is_keras_nlp_available",
         "is_phonemizer_available",
         "is_psutil_available",
         "is_py3nvml_available",
@@ -736,12 +744,17 @@ else:
     _import_structure["image_transforms"] = ["rescale", "resize", "to_pil_image"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
+    _import_structure["models.chinese_clip"].extend(["ChineseCLIPFeatureExtractor", "ChineseCLIPImageProcessor"])
     _import_structure["models.clip"].extend(["CLIPFeatureExtractor", "CLIPImageProcessor"])
-    _import_structure["models.conditional_detr"].append("ConditionalDetrFeatureExtractor")
+    _import_structure["models.conditional_detr"].extend(
+        ["ConditionalDetrFeatureExtractor", "ConditionalDetrImageProcessor"]
+    )
     _import_structure["models.convnext"].extend(["ConvNextFeatureExtractor", "ConvNextImageProcessor"])
-    _import_structure["models.deformable_detr"].append("DeformableDetrFeatureExtractor")
+    _import_structure["models.deformable_detr"].extend(
+        ["DeformableDetrFeatureExtractor", "DeformableDetrImageProcessor"]
+    )
     _import_structure["models.deit"].extend(["DeiTFeatureExtractor", "DeiTImageProcessor"])
-    _import_structure["models.detr"].append("DetrFeatureExtractor")
+    _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor"])
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
@@ -750,18 +763,18 @@ else:
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
-    _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
+    _import_structure["models.maskformer"].extend(["MaskFormerFeatureExtractor", "MaskFormerImageProcessor"])
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
-    _import_structure["models.owlvit"].append("OwlViTFeatureExtractor")
+    _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
-    _import_structure["models.yolos"].extend(["YolosFeatureExtractor"])
+    _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
 
 # Timm-backed objects
 try:
@@ -1086,6 +1099,15 @@ else:
             "CanineModel",
             "CaninePreTrainedModel",
             "load_tf_weights_in_canine",
+        ]
+    )
+    _import_structure["models.chinese_clip"].extend(
+        [
+            "CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ChineseCLIPModel",
+            "ChineseCLIPPreTrainedModel",
+            "ChineseCLIPTextModel",
+            "ChineseCLIPVisionModel",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -3383,6 +3405,13 @@ if TYPE_CHECKING:
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
+    from .models.chinese_clip import (
+        CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ChineseCLIPConfig,
+        ChineseCLIPProcessor,
+        ChineseCLIPTextConfig,
+        ChineseCLIPVisionConfig,
+    )
     from .models.clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPConfig,
@@ -3715,6 +3744,7 @@ if TYPE_CHECKING:
         is_datasets_available,
         is_faiss_available,
         is_flax_available,
+        is_keras_nlp_available,
         is_phonemizer_available,
         is_psutil_available,
         is_py3nvml_available,
@@ -3881,12 +3911,13 @@ if TYPE_CHECKING:
         from .image_transforms import rescale, resize, to_pil_image
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor, BeitImageProcessor
+        from .models.chinese_clip import ChineseCLIPFeatureExtractor, ChineseCLIPImageProcessor
         from .models.clip import CLIPFeatureExtractor, CLIPImageProcessor
-        from .models.conditional_detr import ConditionalDetrFeatureExtractor
+        from .models.conditional_detr import ConditionalDetrFeatureExtractor, ConditionalDetrImageProcessor
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
-        from .models.deformable_detr import DeformableDetrFeatureExtractor
+        from .models.deformable_detr import DeformableDetrFeatureExtractor, DeformableDetrImageProcessor
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
-        from .models.detr import DetrFeatureExtractor
+        from .models.detr import DetrFeatureExtractor, DetrImageProcessor
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.flava import FlavaFeatureExtractor, FlavaImageProcessor, FlavaProcessor
@@ -3895,18 +3926,18 @@ if TYPE_CHECKING:
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2ImageProcessor
         from .models.layoutlmv3 import LayoutLMv3FeatureExtractor, LayoutLMv3ImageProcessor
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
-        from .models.maskformer import MaskFormerFeatureExtractor
+        from .models.maskformer import MaskFormerFeatureExtractor, MaskFormerImageProcessor
         from .models.mobilenet_v1 import MobileNetV1FeatureExtractor, MobileNetV1ImageProcessor
         from .models.mobilenet_v2 import MobileNetV2FeatureExtractor, MobileNetV2ImageProcessor
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
-        from .models.owlvit import OwlViTFeatureExtractor
+        from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
         from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
-        from .models.yolos import YolosFeatureExtractor
+        from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
 
     # Modeling
     try:
@@ -4182,6 +4213,13 @@ if TYPE_CHECKING:
             CanineModel,
             CaninePreTrainedModel,
             load_tf_weights_in_canine,
+        )
+        from .models.chinese_clip import (
+            CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ChineseCLIPModel,
+            ChineseCLIPPreTrainedModel,
+            ChineseCLIPTextModel,
+            ChineseCLIPVisionModel,
         )
         from .models.clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
