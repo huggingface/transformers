@@ -38,7 +38,7 @@ class GPTSw3Config(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50257):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`GPTSw3Model`] or [`TFGPTSw3Model`].
+            `inputs_ids` passed when calling [`GPTSw3Model`].
         n_positions (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
