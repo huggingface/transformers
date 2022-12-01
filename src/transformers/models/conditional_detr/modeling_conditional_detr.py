@@ -1884,7 +1884,7 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
         ...     ConditionalDetrConfig,
         ...     ConditionalDetrForSegmentation,
         ... )
-        >>> from transformers.models.conditional_detr.feature_extraction_conditional_detr import rgb_to_id
+        >>> from transformers.image_transforms import rgb_to_id
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
