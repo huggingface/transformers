@@ -43,12 +43,12 @@ from .generation import TFGenerationMixin
 from .tf_utils import shape_list
 from .utils import (
     DUMMY_INPUTS,
+    FLAX_WEIGHTS_INDEX_NAME,
+    FLAX_WEIGHTS_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
     TF2_WEIGHTS_INDEX_NAME,
     TF2_WEIGHTS_NAME,
-    FLAX_WEIGHTS_INDEX_NAME,
-    FLAX_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     ModelOutput,
@@ -2548,7 +2548,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 elif from_flax and os.path.isfile(os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)):
                     # Load from a Flax checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)
-                elif from_flax and os.path.isfile(os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_INDEX_NAME)):
+                elif from_flax and os.path.isfile(
+                    os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_INDEX_NAME)
+                ):
                     # Load from a sharded Flax checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_INDEX_NAME)
                     is_sharded = True
@@ -2572,13 +2574,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_INDEX_NAME)
                     is_sharded = True
                 # At this stage we don't have a weight file so we will raise an error.
-                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)) or os.path.isfile(os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_INDEX_NAME)):
+                elif os.path.isfile(
+                    os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)
+                ) or os.path.isfile(os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_INDEX_NAME)):
                     raise EnvironmentError(
-                        f"Error no file named {TF2_WEIGHTS_NAME} found in directory {pretrained_model_name_or_path} but "
-                        "there is a file for Flax weights. Use `from_flax=True` to load this model from those "
-                        "weights."
+                        f"Error no file named {TF2_WEIGHTS_NAME} found in directory"
+                        f" {pretrained_model_name_or_path} but there is a file for Flax weights. Use `from_flax=True`"
+                        " to load this model from those weights."
                     )
-                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)) or os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)):
+                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)) or os.path.isfile(
+                    os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)
+                ):
                     raise EnvironmentError(
                         f"Error no file named {TF2_WEIGHTS_NAME} found in directory {pretrained_model_name_or_path} "
                         "but there is a file for PyTorch weights. Use `from_pt=True` to load this model from those "
@@ -2627,7 +2633,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         resolved_archive_file = cached_file(
                             pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME, **cached_file_kwargs
                         )
-                        if resolved_archive_file is not None: #TODO Arthur, add safetensors support for sharded tf 
+                        if resolved_archive_file is not None:  # TODO Arthur, add safetensors support for sharded tf
                             is_sharded = True
                             raise NotImplementedError(
                                 "Support for sharded checkpoints using safetensors is coming soon!"
@@ -2756,7 +2762,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             )
         elif from_flax:
             try:
-                from .modeling_flax_pytorch_utils import load_flax_checkpoint_in_tf2_model
+                from .modeling_tf_flax_utils import load_flax_checkpoint_in_tf2_model
 
                 model = load_flax_checkpoint_in_tf2_model(model, resolved_archive_file)
             except ImportError:
