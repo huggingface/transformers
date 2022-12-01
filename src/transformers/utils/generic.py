@@ -123,6 +123,19 @@ def is_torch_device(x):
     return False if not is_torch_available() else _is_torch_device(x)
 
 
+def _is_torch_dtype(x):
+    import torch
+
+    return isinstance(x, torch.dtype)
+
+
+def is_torch_dtype(x):
+    """
+    Tests if `x` is a torch device or not. Safe to call even if torch is not installed.
+    """
+    return False if not is_torch_available() else _is_torch_dtype(x)
+
+
 def _is_tensorflow(x):
     import tensorflow as tf
 
