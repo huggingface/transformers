@@ -1640,7 +1640,10 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, AltCLIPOutput]:
         r"""
-        Returns: Examples:
+        Returns:
+
+        Examples:
+
         ```python
         >>> from PIL import Image
         >>> import requests
