@@ -204,21 +204,21 @@ class BatchFeature(UserDict):
                 device = kwargs.pop("device", None)
                 # Check if the args are a device or a dtype
                 if device is None and len(args) > 0:
-                        # device should be always the first argument
-                        arg = args[0]
-                        if is_torch_dtype(arg):
-                            # Ignore the dtype
-                            logger.warning(
-                                "Attempting to cast a non-floating point element of BatchFeature to `dtype`"
-                                f" {str(arg)}. This is not supported."
-                            )
-                        elif isinstance(arg, str) or is_torch_device(arg) or isinstance(arg, int):
-                            device = arg
-                        else:
-                            # it's something else
-                            logger.warning(
-                                f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported."
-                            )
+                    # device should be always the first argument
+                    arg = args[0]
+                    if is_torch_dtype(arg):
+                        # Ignore the dtype
+                        logger.warning(
+                            "Attempting to cast a non-floating point element of BatchFeature to `dtype`"
+                            f" {str(arg)}. This is not supported."
+                        )
+                    elif isinstance(arg, str) or is_torch_device(arg) or isinstance(arg, int):
+                        device = arg
+                    else:
+                        # it's something else
+                        raise ValueError(
+                            f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported."
+                        )
                 # Finally send to device
                 if device is not None:
                     new_data[k] = v.to(device=device)
