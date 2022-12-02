@@ -38,8 +38,7 @@ class TableTransformerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`TableTransformerModel`]. It is used to
     instantiate a Table Transformer model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Table Transformer
-    [microsoft/table-transformer-detection](https://huggingface.co/microsoft/table-transformer-detection)
-    architecture.
+    [microsoft/table-transformer-detection](https://huggingface.co/microsoft/table-transformer-detection) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
