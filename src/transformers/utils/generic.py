@@ -136,7 +136,7 @@ def _is_torch_dtype(x):
 
 def is_torch_dtype(x):
     """
-    Tests if `x` is a torch device or not. Safe to call even if torch is not installed.
+    Tests if `x` is a torch dtype or not. Safe to call even if torch is not installed.
     """
     return False if not is_torch_available() else _is_torch_dtype(x)
 
