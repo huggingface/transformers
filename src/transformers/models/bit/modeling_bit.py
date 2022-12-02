@@ -351,7 +351,7 @@ def make_div(value, divisor=8):
     return new_value
 
 
-class BitPreActBottleneckLayer(nn.Module):
+class BitPreActivationBottleneckLayer(nn.Module):
     """Pre-activation (v2) bottleneck block.
     Follows the implementation of "Identity Mappings in Deep Residual Networks":
     https://github.com/KaimingHe/resnet-1k-layers/blob/master/resnet-pre-act.lua
@@ -539,7 +539,7 @@ class BitStage(nn.Module):
         if config.layer_type == "bottleneck":
             layer_fn = partial(BitBottleneckLayer)
         else:
-            layer_fn = partial(BitPreActBottleneckLayer, use_activation=False)
+            layer_fn = partial(BitPreActivationBottleneckLayer, use_activation=False)
 
         prev_chs = in_channels
         self.layers = nn.Sequential()
