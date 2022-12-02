@@ -61,6 +61,9 @@ class BitConfig(PretrainedConfig):
             The output stride of the model.
         width_factor (`int`, *optional*, defaults to 1):
             The width factor for the model.
+        out_features (`List[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has).
 
     Example:
     ```python
@@ -88,13 +91,13 @@ class BitConfig(PretrainedConfig):
         depths=[3, 4, 6, 3],
         layer_type="preactivation",
         hidden_act="relu",
-        drop_path_rate=0.0,
-        output_stride=32,
-        width_factor=1,
         global_padding=None,
         num_groups=32,
-        out_features=None,
+        drop_path_rate=0.0,
         embedding_dynamic_padding=False,
+        output_stride=32,
+        width_factor=1,
+        out_features=None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -111,13 +114,13 @@ class BitConfig(PretrainedConfig):
         self.depths = depths
         self.layer_type = layer_type
         self.hidden_act = hidden_act
+        self.global_padding = global_padding
         self.num_groups = num_groups
         self.drop_path_rate = drop_path_rate
+        self.embedding_dynamic_padding = embedding_dynamic_padding
         self.output_stride = output_stride
         self.width_factor = width_factor
-        self.embedding_dynamic_padding = embedding_dynamic_padding
 
-        self.global_padding = global_padding
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
         if out_features is not None:
             if not isinstance(out_features, list):
