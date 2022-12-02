@@ -282,7 +282,7 @@ class OneFormerConfig(PretrainedConfig):
             text_encoder_config["text_encoder_num_layers"] = 6
             text_encoder_config["text_encoder_vocab_size"] = 49408
             text_encoder_config["text_encoder_proj_layers"] = 2
-            text_encoder_config["text_encoder_n_ctx"] = 1
+            text_encoder_config["text_encoder_n_ctx"] = 16
         
         if decoder_config is None:
             decoder_config = {}
