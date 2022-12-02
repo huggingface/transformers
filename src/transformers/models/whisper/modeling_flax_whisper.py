@@ -619,10 +619,12 @@ class FlaxWhisperEncoder(nn.Module):
         hidden_states = jax.nn.gelu(self.conv1(input_features), approximate=False)
         hidden_states = jax.nn.gelu(self.conv2(hidden_states), approximate=False)
 
-        assert hidden_states.shape[1:] == (
-            self.config.max_source_positions,
-            self.config.d_model,
-        ), "incorrect audio shape"
+        if hidden_states.shape[1:] != (self.config.max_source_positions, self.config.d_model):
+            raise ValueError(
+                f"hidden_states.shape[1:] must be equal to (self.config.max_source_positions, self.config.d_model)"
+                f"(got {hidden_states.shape[1:]}, but should be ({self.config.max_source_positions}, {self.config.d_model}))"
+            )
+
         hidden_states = hidden_states + self.embed_positions(jnp.arange(self.config.max_source_positions))
 
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
