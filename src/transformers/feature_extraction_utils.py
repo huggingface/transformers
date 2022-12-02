@@ -178,10 +178,15 @@ class BatchFeature(UserDict):
     @torch_required
     def to(self, *args, **kwargs) -> "BatchFeature":
         """
-        Send all values to device by calling `v.to(device)` (PyTorch only). Or cast the values to the indicated dtype
+        Send all values to device by calling `v.to(*args, **kwargs)` (PyTorch only). This
+        should support casting in different  `dtypes` and sending the `BatchFeature` to a
+        different `device`.
 
         Args:
-            target_dtype_or_device (`str` or `torch.device`, or `torch.dtype`): The device to put the tensors on.
+            args (`Tuple`):
+                Will be passed to the `to(...)` function of the tensors.
+            kwargs (`Dict`, *optional*):
+                Will be passed to the `to(...)` function of the tensors.
 
         Returns:
             [`BatchFeature`]: The same instance after modification.
@@ -201,15 +206,15 @@ class BatchFeature(UserDict):
                 # Check if the args are a device or a dtype
                 if device is None:
                     for arg in args:
-                        if isinstance(arg, str) or is_torch_device(arg) or isinstance(arg, int):
-                            device = arg
-                            break
-                        elif is_torch_dtype(arg):
+                        if is_torch_dtype(arg):
                             # Ignore the dtype
                             logger.warning(
                                 "Attempting to cast a non-floating point element of BatchFeature to `dtype`"
                                 f" {str(arg)}. This is not supported."
                             )
+                        elif isinstance(arg, str) or is_torch_device(arg) or isinstance(arg, int):
+                            device = arg
+                            break
                         else:
                             # it's something else
                             logger.warning(
