@@ -218,6 +218,7 @@ class OneFormerConfig(PretrainedConfig):
         self.output_attentions = self.general_config["output_attentions"]
         self.num_attention_heads = self.decoder_config["num_heads"]
         self.num_hidden_layers = self.decoder_config["decoder_layers"]
+        self.output_hidden_states = self.general_config["output_hidden_states"]
         
         super().__init__(**kwargs)
     
