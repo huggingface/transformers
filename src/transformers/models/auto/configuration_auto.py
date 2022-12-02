@@ -29,8 +29,8 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
-        ("altclip", "AltCLIPConfig"),
         ("albert", "AlbertConfig"),
+        ("altclip", "AltCLIPConfig"),
         ("audio-spectrogram-transformer", "ASTConfig"),
         ("bart", "BartConfig"),
         ("beit", "BeitConfig"),
@@ -183,8 +183,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
-        ("altclip", "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("altclip", "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("audio-spectrogram-transformer", "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bart", "BART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -321,8 +321,8 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("altclip", "AltClip"),
         ("albert", "ALBERT"),
+        ("altclip", "AltClip"),
         ("audio-spectrogram-transformer", "Audio Spectrogram Transformer"),
         ("bart", "BART"),
         ("barthez", "BARThez"),

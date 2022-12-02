@@ -17,8 +17,8 @@
 # limitations under the License.
 
 from . import (
-    altclip,
     albert,
+    altclip,
     audio_spectrogram_transformer,
     auto,
     bart,

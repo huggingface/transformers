@@ -122,8 +122,13 @@ _import_structure = {
     ],
     "models": [],
     # Models
-    "models.altclip": ["ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "AltCLIPConfig", "AltCLIPTextConfig", "AltCLIPProcessor"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
+    "models.altclip": [
+        "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "AltCLIPConfig",
+        "AltCLIPProcessor",
+        "AltCLIPTextConfig",
+    ],
     "models.audio_spectrogram_transformer": [
         "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ASTConfig",
@@ -886,14 +891,6 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
-    _import_structure["models.altclip"].extend(
-        [
-            "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "AltCLIPModel",
-            "AltCLIPTextModel",
-        ]
-    )
-    
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -906,6 +903,14 @@ else:
             "AlbertModel",
             "AlbertPreTrainedModel",
             "load_tf_weights_in_albert",
+        ]
+    )
+
+    _import_structure["models.altclip"].extend(
+        [
+            "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "AltCLIPModel",
+            "AltCLIPTextModel",
         ]
     )
 
@@ -3368,8 +3373,13 @@ if TYPE_CHECKING:
         load_tf2_model_in_pytorch_model,
         load_tf2_weights_in_pytorch_model,
     )
-    from .models.altclip import ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, AltCLIPConfig, AltCLIPTextConfig, AltCLIPProcessor
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.altclip import (
+        ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        AltCLIPConfig,
+        AltCLIPProcessor,
+        AltCLIPTextConfig,
+    )
     from .models.audio_spectrogram_transformer import (
         AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ASTConfig,
@@ -4032,14 +4042,6 @@ if TYPE_CHECKING:
             top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
-
-        # PyTorch model imports
-
-        from .models.altclip import (
-            ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            AltCLIPModel,
-            AltCLIPTextModel,
-        )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -4052,6 +4054,9 @@ if TYPE_CHECKING:
             AlbertPreTrainedModel,
             load_tf_weights_in_albert,
         )
+
+        # PyTorch model imports
+        from .models.altclip import ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST, AltCLIPModel, AltCLIPTextModel
         from .models.audio_spectrogram_transformer import (
             AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             ASTForAudioClassification,

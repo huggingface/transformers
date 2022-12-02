@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" AltCLIP model configuration """
+""" AltCLIP model configuration"""
 import copy
 import os
 from collections import OrderedDict
@@ -35,12 +35,13 @@ ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     # See all AltCLIP models at https://huggingface.co/models?filter=altclip
 }
 
+
 class AltCLIPTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AltCLIPTextModel`] or a [`TFAltCLIPTextModel`]. It
-    is used to instantiate a AltCLIP text model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the XLMRoBERTa
-    [xlm-roberta-base](https://huggingface.co/xlm-roberta-base) architecture.
+    This is the configuration class to store the configuration of a [`AltCLIPTextModel`] or a [`TFAltCLIPTextModel`].
+    It is used to instantiate a AltCLIP text model according to the specified arguments, defining the model
+    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    XLMRoBERTa [xlm-roberta-base](https://huggingface.co/xlm-roberta-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -123,8 +124,8 @@ class AltCLIPTextConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
-        project_dim = 512,
-        pooler_fn = 'cls',
+        project_dim=512,
+        pooler_fn="cls",
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -146,6 +147,7 @@ class AltCLIPTextConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.project_dim = project_dim
         self.pooler_fn = pooler_fn
+
 
 # Copied from transformers.models.clip.configuration_clip.AltCLIPVisionConfig with CLIP->AltCLIP
 class AltCLIPVisionConfig(PretrainedConfig):
@@ -255,16 +257,16 @@ class AltCLIPVisionConfig(PretrainedConfig):
 
         return cls.from_dict(config_dict, **kwargs)
 
+
 class AltCLIPConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~AltCLIPModel`].
-    It is used to instantiate an AltCLIP model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the AltCLIP [BAAI/AltCLIP](https://huggingface.co/BAAI/AltCLIP) architecture.
+    This is the configuration class to store the configuration of a [`~AltCLIPModel`]. It is used to instantiate an
+    AltCLIP model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the AltCLIP
+    [BAAI/AltCLIP](https://huggingface.co/BAAI/AltCLIP) architecture.
 
-    Configuration objects inherit from  [`PretrainedConfig`] and can be used
-    to control the model outputs. Read the documentation from  [`PretrainedConfig`]
-    for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):

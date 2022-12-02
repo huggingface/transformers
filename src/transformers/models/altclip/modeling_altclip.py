@@ -12,39 +12,35 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch AltCLIP model. """
-from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union, List
-
+""" PyTorch AltCLIP model."""
 import math
+from dataclasses import dataclass
+from typing import Any, List, Optional, Tuple, Union
+
 import torch
+import torch.nn as nn
 import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
-    BaseModelOutput, 
-    BaseModelOutputWithPooling,
+    BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndCrossAttentions,
+    BaseModelOutputWithPoolingAndprojection,
 )
+from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    logging,
     replace_return_docstrings,
 )
-from ...modeling_outputs import (
-    BaseModelOutputWithPoolingAndprojection
-)
-from ...modeling_utils import PreTrainedModel
-from ...utils import logging
 from .configuration_altclip import AltCLIPConfig, AltCLIPTextConfig, AltCLIPVisionConfig
-
-import torch.nn as nn
-import torch
 
 
 logger = logging.get_logger(__name__)
@@ -217,6 +213,7 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
     image_loss = contrastive_loss(similarity.t())
     return (caption_loss + image_loss) / 2.0
+
 
 # Copied from transformers.models.roberta.modeling_xlm_roberta.XLMRobertaEmbeddings with XLMRoberta->AltRoberta
 class AltRobertaEmbeddings(nn.Module):
@@ -965,8 +962,7 @@ class AltRobertaModel(AltRobertaPreTrainedModel):
 
 
 class AltCLIPTextModel(AltRobertaPreTrainedModel):
-    
-    
+
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
     config_class = AltCLIPTextConfig
@@ -974,9 +970,9 @@ class AltCLIPTextModel(AltRobertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.roberta = AltRobertaModel(config)
-        self.transformation = nn.Linear(config.hidden_size,config.project_dim)
+        self.transformation = nn.Linear(config.hidden_size, config.project_dim)
         self.pre_LN = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = lambda x: x[:,0]
+        self.pooler = lambda x: x[:, 0]
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
@@ -995,12 +991,11 @@ class AltCLIPTextModel(AltRobertaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) :
-        r"""
-        """
+    ):
+        r""" """
 
         return_dict = return_dict if return_dict is not None else True
-        
+
         outputs = self.roberta(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1014,18 +1009,18 @@ class AltCLIPTextModel(AltRobertaPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        
+
         # last module outputs
         sequence_output = outputs[0]
 
         # project every module
         sequence_output = self.pre_LN(sequence_output)
-            
+
         # pooler
         pooler_output = self.pooler(sequence_output)
         pooler_output = self.transformation(pooler_output)
         projection_state = self.transformation(sequence_output)
-        
+
         return BaseModelOutputWithPoolingAndprojection(
             pooler_output=pooler_output,
             last_hidden_state=outputs[0],
@@ -1404,6 +1399,7 @@ class AltCLIPVisionTransformer(nn.Module):
             attentions=encoder_outputs.attentions,
         )
 
+
 @dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->AltCLIP
 class AltCLIPOutput(ModelOutput):
@@ -1420,7 +1416,8 @@ class AltCLIPOutput(ModelOutput):
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`AltCLIPTextModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`AltCLIPVisionModel`].
+            The image embeddings obtained by applying the projection layer to the pooled output of
+            [`AltCLIPVisionModel`].
         text_model_output(`BaseModelOutputWithPooling`):
             The output of the [`AltCLIPTextModel`].
         vision_model_output(`BaseModelOutputWithPooling`):
@@ -1440,6 +1437,7 @@ class AltCLIPOutput(ModelOutput):
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
         )
+
 
 class AltCLIPPreTrainedModel(PreTrainedModel):
     """
@@ -1493,7 +1491,7 @@ class AltCLIPPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_factor)
-            if module.bias is not None :
+            if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_factor)
@@ -1503,6 +1501,7 @@ class AltCLIPPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, AltCLIPEncoder):
             module.gradient_checkpointing = value
+
 
 class AltCLIPModel(AltCLIPPreTrainedModel):
     config_class = AltCLIPConfig
@@ -1521,7 +1520,6 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
                 f" {type(config.text_config)}."
             )
 
-
         text_config = config.text_config
         vision_config = config.vision_config
 
@@ -1538,7 +1536,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-                
+
     def get_text_features(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1556,6 +1554,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         Examples:
         ```python
         >>> from transformers import XLMRobertaTokenizer, AltCLIPModel
+
         >>> model = AltCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
         >>> tokenizer = A.from_pretrained("openai/clip-vit-base-patch32")
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
@@ -1599,6 +1598,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
         >>> from transformers import AltCLIPProcessor, AltCLIPModel
+
         >>> model = AltCLIPModel.from_pretrained("BAAI/AltCLIP")
         >>> processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1640,12 +1640,12 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, AltCLIPOutput]:
         r"""
-        Returns:
-        Examples:
+        Returns: Examples:
         ```python
         >>> from PIL import Image
         >>> import requests
         >>> from transformers import CLIPProcessor, CLIPModel
+
         >>> model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
         >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1714,6 +1714,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )
+
 
 # Copied from transformers.models.roberta.modeling_roberta.create_position_ids_from_input_ids
 def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):

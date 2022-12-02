@@ -19,14 +19,12 @@ import unittest
 
 import numpy as np
 
-from ...test_modeling_common import floats_tensor
-from transformers import is_torch_available
+from transformers import AltCLIPConfig, AltCLIPTextConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
-from transformers import AltCLIPConfig, AltCLIPTextConfig
-from ...test_configuration_common import ConfigTester
 from ...models.clip.test_modeling_clip import CLIPVisionModelTester
+from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
     _config_zero_init,
@@ -39,13 +37,8 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-    from transformers import (
-        AltCLIPModel,
-        AltCLIPTextModel
-    )
-    from transformers.models.altclip.modeling_altclip import (
-        ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
+    from transformers import AltCLIPModel, AltCLIPTextModel
+    from transformers.models.altclip.modeling_altclip import ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -117,7 +110,7 @@ class AltCLIPTextModelTester:
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             projection_dim=self.projection_dim,
-            project_dim = self.project_dim,
+            project_dim=self.project_dim,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
@@ -217,10 +210,11 @@ class AltCLIPModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self, text_config, vision_config):
-        return AltCLIPConfig(text_config_dict=text_config.to_dict(), vision_config_dict=vision_config.to_dict(), projection_dim=64)
+        return AltCLIPConfig(
+            text_config_dict=text_config.to_dict(), vision_config_dict=vision_config.to_dict(), projection_dim=64
+        )
 
-    def create_and_check_model(
-            self, config, input_ids, attention_mask, pixel_values):
+    def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
         model = AltCLIPModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -272,7 +266,7 @@ class AltCLIPModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="CLIPModel does not have input/output embeddings")
     def test_model_common_attributes(self):
         pass
-    
+
     # override as the `logit_scale` parameter initilization is different for AltCLIP
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
