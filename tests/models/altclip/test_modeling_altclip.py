@@ -237,7 +237,8 @@ class AltCLIPModelTester:
 @require_torch
 class AltCLIPModelTest(ModelTesterMixin, unittest.TestCase):
 
-    model_class = AltCLIPModel
+    all_model_classes = (AltCLIPModel,) if is_torch_available() else ()
+    fx_compatible = True
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
@@ -245,7 +246,6 @@ class AltCLIPModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = AltCLIPModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=AltCLIPConfig, hidden_size=37)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
