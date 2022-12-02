@@ -428,6 +428,13 @@ class ViTImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class ViTHybridImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class YolosFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 

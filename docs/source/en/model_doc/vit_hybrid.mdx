@@ -33,18 +33,29 @@ data and transferred to multiple mid-sized or small image recognition benchmarks
 Vision Transformer (ViT) attains excellent results compared to state-of-the-art convolutional networks while requiring
 substantially fewer computational resources to train.*
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vit_architecture.jpg"
-alt="drawing" width="600"/>
-
-<small> ViT architecture. Taken from the <a href="https://arxiv.org/abs/2010.11929">original paper.</a> </small>
-
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code (written in JAX) can be
 found [here](https://github.com/google-research/vision_transformer).
+
+
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ViT Hybrid.
+
+<PipelineTag pipeline="image-classification"/>
+
+- [`ViTHybridForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
+
+If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 
 ## ViTHybridConfig
 
 [[autodoc]] ViTHybridConfig
+
+## ViTHybridImageProcessor
+
+[[autodoc]] ViTHybridImageProcessor
+    - preprocess
 
 ## ViTHybridModel
 
