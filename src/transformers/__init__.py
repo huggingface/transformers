@@ -886,8 +886,6 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
-<<<<<<< HEAD
-
     _import_structure["models.altclip"].extend(
         [
             "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -895,34 +893,7 @@ else:
             "AltCLIPTextModel",
         ]
     )
-
-    _import_structure["models.roc_bert"].extend(
-        [
-            "ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "RoCBertForMaskedLM",
-            "RoCBertForCausalLM",
-            "RoCBertForMultipleChoice",
-            "RoCBertForQuestionAnswering",
-            "RoCBertForSequenceClassification",
-            "RoCBertForTokenClassification",
-            "RoCBertLayer",
-            "RoCBertModel",
-            "RoCBertForPreTraining",
-            "RoCBertPreTrainedModel",
-            "load_tf_weights_in_roc_bert",
-        ]
-    )
-
-    _import_structure["models.time_series_transformer"].extend(
-        [
-            "TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TimeSeriesTransformerForPrediction",
-            "TimeSeriesTransformerModel",
-            "TimeSeriesTransformerPreTrainedModel",
-        ]
-    )
-=======
->>>>>>> e342ac7e0390d157e8c14a8a7c5cf2e715341cee
+    
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3397,8 +3368,8 @@ if TYPE_CHECKING:
         load_tf2_model_in_pytorch_model,
         load_tf2_weights_in_pytorch_model,
     )
-    from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
     from .models.altclip import ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, AltCLIPConfig, AltCLIPTextConfig, AltCLIPProcessor
+    from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
     from .models.audio_spectrogram_transformer import (
         AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ASTConfig,
