@@ -49,6 +49,7 @@ from .utils import (
     SAFE_WEIGHTS_NAME,
     TF2_WEIGHTS_INDEX_NAME,
     TF2_WEIGHTS_NAME,
+    TF_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     ModelOutput,
@@ -2394,11 +2395,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                       save directory.
                     - The model is loaded by supplying a local directory as `pretrained_model_name_or_path` and a
                       configuration JSON file named *config.json* is found in the directory.
-            from_pt: (`bool`, *optional*, defaults to `False`):
+            from_pt (`bool`, *optional*, defaults to `False`):
                 Load the model weights from a PyTorch state_dict save file (see docstring of
-                `pretrained_model_name_or_path` argument).
-            from_flax: (`bool`, *optional*, defaults to `False`):
-                Load the model weights from a Flax state_dict save file (see docstring of
                 `pretrained_model_name_or_path` argument).
             ignore_mismatched_sizes (`bool`, *optional*, defaults to `False`):
                 Whether or not to raise an error if some of the weights from the checkpoint do not have the same size
@@ -2475,7 +2473,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         config = kwargs.pop("config", None)
         cache_dir = kwargs.pop("cache_dir", None)
         from_pt = kwargs.pop("from_pt", False)
-        from_flax = kwargs.pop("from_flax", False)
         ignore_mismatched_sizes = kwargs.pop("ignore_mismatched_sizes", False)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
@@ -2545,15 +2542,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     # Load from a sharded PyTorch checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)
                     is_sharded = True
-                elif from_flax and os.path.isfile(os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)):
-                    # Load from a Flax checkpoint
-                    archive_file = os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)
-                elif from_flax and os.path.isfile(
-                    os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_INDEX_NAME)
-                ):
-                    # Load from a sharded Flax checkpoint
-                    archive_file = os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_INDEX_NAME)
-                    is_sharded = True
                 elif is_safetensors_available() and os.path.isfile(
                     os.path.join(pretrained_model_name_or_path, SAFE_WEIGHTS_NAME)
                 ):
@@ -2602,8 +2590,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 # set correct filename
                 if from_pt:
                     filename = WEIGHTS_NAME
-                elif from_flax:
-                    filename = FLAX_WEIGHTS_NAME
                 elif is_safetensors_available():
                     filename = SAFE_WEIGHTS_NAME
                 else:
@@ -2658,13 +2644,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         )
                         if resolved_archive_file is not None:
                             is_sharded = True
-                    if resolved_archive_file is None and filename == FLAX_WEIGHTS_NAME:
-                        # Maybe the checkpoint is sharded, we try to grab the index name in this case.
-                        resolved_archive_file = cached_file(
-                            pretrained_model_name_or_path, FLAX_WEIGHTS_INDEX_NAME, **cached_file_kwargs
-                        )
-                        if resolved_archive_file is not None:
-                            is_sharded = True
                     if resolved_archive_file is None:
                         # Otherwise, maybe there is a PyTorch or Flax model file.  We try those to give a helpful error
                         # message.
@@ -2677,12 +2656,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                             raise EnvironmentError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {TF2_WEIGHTS_NAME} but there is a file for PyTorch weights. Use `from_pt=True` to"
-                                " load this model from those weights."
-                            )
-                        elif has_file(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME, **has_file_kwargs):
-                            raise EnvironmentError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {WEIGHTS_NAME} but there is a file for TensorFlow weights. Use `from_tf=True` to"
                                 " load this model from those weights."
                             )
                         else:
@@ -2760,18 +2733,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             return load_pytorch_checkpoint_in_tf2_model(
                 model, resolved_archive_file, allow_missing_keys=True, output_loading_info=output_loading_info
             )
-        elif from_flax:
-            try:
-                from .modeling_tf_flax_utils import load_flax_checkpoint_in_tf2_model
-
-                model = load_flax_checkpoint_in_tf2_model(model, resolved_archive_file)
-            except ImportError:
-                logger.error(
-                    "Loading a Flax model in PyTorch, requires both PyTorch and Flax to be installed. Please see"
-                    " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for"
-                    " installation instructions."
-                )
-                raise
         elif safetensors_from_pt:
             from .modeling_tf_pytorch_utils import load_pytorch_state_dict_in_tf2_model
 
