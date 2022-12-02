@@ -284,6 +284,9 @@ def convert_esm_checkpoint_to_pytorch(
         model.lm_head.decoder.weight = esm.lm_head.weight
         model.lm_head.bias = esm.lm_head.bias
 
+    # Contact prediction head
+    transfer_and_check_weights(esm.contact_head, model.esm.contact_head)
+
     # Prepare data (first 2 sequences from ESMStructuralSplitDataset superfamily / 4)
     if is_folding_model:
         # Folding models aren't trained on masked inputs and don't like mask tokens.
@@ -350,6 +353,20 @@ def convert_esm_checkpoint_to_pytorch(
 
         if not success:
             raise Exception("Something went wRoNg")
+
+        if not is_folding_model:
+            # Let's check contact prediction too
+            our_output = model.predict_contacts(hf_tokens["input_ids"], hf_tokens["attention_mask"])
+            their_output = esm.predict_contacts(hf_tokens["input_ids"])
+            max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
+            success = torch.allclose(our_output, their_output, atol=1e-5)
+
+            print("Contact prediction testing:")
+            print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-5
+            print("Do both models output the same tensors?", "🔥" if success else "💩")
+
+            if not success:
+                raise Exception("Something went wRoNg")
 
         pathlib.Path(pytorch_dump_folder_path).mkdir(parents=True, exist_ok=True)
         print(f"Saving model to {pytorch_dump_folder_path}")

@@ -71,6 +71,23 @@ def apply_rotary_pos_emb(x, cos, sin):
     return (x * cos) + (rotate_half(x) * sin)
 
 
+def symmetrize(x):
+    "Make layer symmetric in final two dimensions, used for contact prediction."
+    return x + tf.linalg.matrix_transpose(x)  # Transposes last two dimensions only
+
+
+def average_product_correct(x):
+    "Perform average product correct, used for contact prediction."
+    a1 = tf.reduce_sum(x, -1, keepdims=True)
+    a2 = tf.reduce_sum(x, -2, keepdims=True)
+    a12 = tf.reduce_sum(x, (-1, -2), keepdims=True)
+
+    avg = a1 * a2
+    avg = avg / a12
+    normalized = x - avg
+    return normalized
+
+
 class TFRotaryEmbedding(Layer):
     """
     Rotary position embeddings based on those in
@@ -113,6 +130,43 @@ class TFRotaryEmbedding(Layer):
             apply_rotary_pos_emb(q, cos_emb, sin_emb),
             apply_rotary_pos_emb(k, cos_emb, sin_emb),
         )
+
+
+class TFEsmContactPredictionHead(Layer):
+    """Performs symmetrization, apc, and computes a logistic regression on the output features"""
+
+    def __init__(
+        self,
+        in_features: int,
+        bias=True,
+        eos_idx: int = 2,
+        name=None,
+    ):
+        super().__init__(name=name)
+        self.eos_idx = eos_idx
+        self.in_features = in_features
+        self.regression = Dense(1, use_bias=bias, activation="sigmoid", name="regression")
+
+    def build(self, input_shape):
+        super().build(input_shape)
+        with tf.name_scope("regression"):
+            self.regression.build((None, self.in_features))
+
+    def call(self, tokens, attentions):
+        # remove eos token attentions
+        eos_mask = tf.cast(tokens != self.eos_idx, attentions.dtype)
+        eos_mask = tf.expand_dims(eos_mask, 1) * tf.expand_dims(eos_mask, 2)
+        attentions = attentions * eos_mask[:, None, None, :, :]
+        attentions = attentions[..., :-1, :-1]
+        # remove cls token attentions
+        attentions = attentions[..., 1:, 1:]
+        batch_size, layers, heads, seqlen, _ = shape_list(attentions)
+        attentions = tf.reshape(attentions, (batch_size, layers * heads, seqlen, seqlen))
+
+        # features: batch x channels x tokens x tokens (symmetric)
+        attentions = average_product_correct(symmetrize(attentions))
+        attentions = tf.transpose(attentions, perm=(0, 2, 3, 1))
+        return tf.squeeze(self.regression(attentions), 3)
 
 
 class TFEsmEmbeddings(Layer):
@@ -742,6 +796,15 @@ class TFEsmMainLayer(Layer):
         self.encoder = TFEsmEncoder(config, name="encoder")
         self.pooler = TFEsmPooler(config, name="pooler") if add_pooling_layer else None
 
+        self.contact_head = TFEsmContactPredictionHead(
+            in_features=self.config.num_hidden_layers * self.config.num_attention_heads, bias=True, name="contact_head"
+        )
+
+    def build(self, input_shape):
+        super().build(input_shape)
+        with tf.name_scope("contact_head"):
+            self.contact_head.build(input_shape)
+
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
@@ -906,6 +969,18 @@ class TFEsmMainLayer(Layer):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
+    def predict_contacts(self, tokens, attention_mask):
+        attns = self(tokens, attention_mask=attention_mask, return_dict=True, output_attentions=True).attentions
+        attns = tf.stack(attns, axis=1)  # Matches the original model layout
+        # In the original model, attentions for padding tokens are completely zeroed out.
+        # This makes no difference most of the time because the other tokens won't attend to them,
+        # but it does for the contact prediction task, which takes attentions as input,
+        # so we have to mimic that here.
+        attention_mask = tf.cast(attention_mask, attns.dtype)
+        attns *= attention_mask[:, None, None, None]
+        attns *= attention_mask[:, None, None, :, None]
+        return self.contact_head(tokens, attns)
+
 
 @add_start_docstrings(
     "The bare ESM Model transformer outputting raw hidden-states without any specific head on top.",
@@ -1010,6 +1085,9 @@ class TFEsmModel(TFEsmPreTrainedModel):
             attentions=attns,
             cross_attentions=cross_attns,
         )
+
+    def predict_contacts(self, tokens, attention_mask):
+        return self.esm.predict_contacts(tokens, attention_mask)
 
 
 @add_start_docstrings("""ESM Model with a `language modeling` head on top.""", ESM_START_DOCSTRING)
@@ -1122,6 +1200,9 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
         output = self.call(inputs)
 
         return self.serving_output(output)
+
+    def predict_contacts(self, tokens, attention_mask):
+        return self.esm.predict_contacts(tokens, attention_mask)
 
 
 class TFEsmLMHead(Layer):
