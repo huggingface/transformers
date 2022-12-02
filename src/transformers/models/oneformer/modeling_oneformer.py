@@ -779,7 +779,7 @@ class OneFormerPixelDecoderOutput(ModelOutput):
             Multiscale features of scales [1/8, 1/16, 1/32] from the MSDeformAttn based Pixel Decoder.
         mask_features (`torch.FloatTensor`, of shape `(batch_size, num_channels, height, width)`):
             1/4 scale features from the last Pixel Decoder Layer.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.general_config["output_attentions"]=True`):
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights from pixel decoder.
     """
@@ -1420,11 +1420,11 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.general_config["output_attentions"]
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.general_config["output_hidden_states"]
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.general_config["use_return_dict"]
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = inputs_embeds
         reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=inputs_embeds.device)
@@ -1576,9 +1576,9 @@ class OneFormerPixelDecoder(nn.Module):
         output_hidden_states=None,
         return_dict=None,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.general_config["output_attentions"]
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.general_config["output_hidden_states"]
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
         # Then, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
@@ -2941,11 +2941,11 @@ class OneFormerModel(OneFormerPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.general_config["output_attentions"]
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.general_config["use_return_dict"]
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         batch_size, _, height, width = pixel_values.shape
 
@@ -3169,11 +3169,11 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         ```
         """
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.general_config["output_attentions"]
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.general_config["output_hidden_states"]
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.general_config["use_return_dict"]
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs: OneFormerModelOutput = self.model(
             pixel_values=pixel_values,
