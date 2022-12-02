@@ -2327,7 +2327,6 @@ def ms_deform_attn_core_pytorch(value, value_spatial_shapes, sampling_locations,
     return output.transpose(1, 2).contiguous()
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention
 class DeformableDetrMultiscaleDeformableAttention(nn.Module):
     """
     Multiscale deformable attention as proposed in Deformable DETR.
@@ -2410,8 +2409,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
 
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:
-            # we invert the attention_mask
-            value = value.masked_fill(~attention_mask[..., None], float(0))
+            value = value.masked_fill(attention_mask[..., None], float(0))
         value = value.view(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
         sampling_offsets = self.sampling_offsets(hidden_states).view(
             batch_size, num_queries, self.n_heads, self.n_levels, self.n_points, 2
@@ -2449,6 +2447,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         except Exception:
             # CPU
             output = ms_deform_attn_core_pytorch(value, spatial_shapes, sampling_locations, attention_weights)
+
         output = self.output_proj(output)
 
         return output, attention_weights
@@ -2516,7 +2515,9 @@ class DeformableDetrEncoderLayer(nn.Module):
         )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
         hidden_states = residual + hidden_states
+
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
@@ -2648,6 +2649,7 @@ class DeformableDetrEncoder(nn.Module):
         for i, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
+            
             layer_outputs = encoder_layer(
                 hidden_states,
                 attention_mask,
@@ -2754,8 +2756,10 @@ class Mask2FormerMSDAEmbeddings(nn.Module):
         position_embeddings = []
 
         for idx, feature in enumerate(features[::-1]):
-            input_embeds.append(self.input_projection[idx](feature))
-            position_embeddings.append(self.position_embedding_layer(feature))
+            input_embedding = self.input_projection[idx](feature)
+            input_embeds.append(input_embedding)
+            pos_embedding = self.position_embedding_layer(feature)
+            position_embeddings.append(pos_embedding)
 
         return input_embeds, position_embeddings
 
@@ -2922,9 +2926,10 @@ class Mask2FormerFPNLayer(nn.Module):
 
     def forward(self, down: Tensor, left: Tensor) -> Tensor:
         left = self.proj(left)
-        down = nn.functional.interpolate(down, size=left.shape[-2:], mode="nearest")
+        down = nn.functional.interpolate(down, size=left.shape[-2:], mode="bilinear", align_corners=False)
         down += left
         down = self.block(down)
+
         return down
 
 
@@ -2949,11 +2954,6 @@ class Mask2FormerFPNModel(nn.Module):
                 for in_channels in feature_channels[:num_fpn_levels][::-1]
             ]
         )
-        """
-        print("feature_channels[:num_fpn_levels][::-1]:", feature_channels[:num_fpn_levels][::-1])
-        print("feature_channels:", feature_channels) print("num_fpn_levels:", num_fpn_levels) print("FPN model
-        layers:", self.layers)
-        """
 
     def forward(
         self, encoder_features: List[torch.Tensor], features: List[torch.Tensor], num_fpn_levels: int = 3
@@ -3002,16 +3002,9 @@ class Mask2FormerPixelDecoder(nn.Module):
     def forward(self, backbone_features: List[Tensor]) -> Mask2FormerPixelDecoderOutput:
 
         multi_scale_features = self.msda_module(backbone_features)
-        """
-        for f in multi_scale_features:
-            print("encoderfeatures shape:", f.shape)
-        """
 
         fpn_features = self.feature_pyramid_network(multi_scale_features, backbone_features)
-        """
-        for f in fpn_features:
-            print("encoder_fpn_features shape:", f.shape)
-        """
+        
         last_projected_feature = self.mask_projection(fpn_features[-1])
 
         return Mask2FormerPixelDecoderOutput(
