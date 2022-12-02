@@ -200,6 +200,15 @@ class FeatureExtractionSavingTestMixin:
             with self.assertRaises(TypeError):
                 _ = feature_extractor(image_inputs, return_tensors="pt").to(torch.bfloat16, "cpu")
 
+            # Try with text + image feature
+            encoding = feature_extractor(image_inputs, return_tensors="pt")
+            encoding.update({"input_ids": torch.LongTensor([[1, 2, 3], [4, 5, 6]])})
+            encoding = encoding.to(torch.float16)
+
+            self.assertEqual(encoding.pixel_values.device, torch.device("cpu"))
+            self.assertEqual(encoding.pixel_values.dtype, torch.float16)
+            self.assertEqual(encoding.input_ids.dtype, torch.long)
+
 
 class FeatureExtractorUtilTester(unittest.TestCase):
     def test_cached_files_are_used_when_internet_is_down(self):

@@ -215,7 +215,6 @@ class BatchFeature(UserDict):
                             )
                         elif isinstance(arg, str) or is_torch_device(arg) or isinstance(arg, int):
                             device = arg
-                            break
                         else:
                             # it's something else
                             logger.warning(
@@ -224,6 +223,8 @@ class BatchFeature(UserDict):
                 # Finally send to device
                 if device is not None:
                     new_data[k] = v.to(device=device)
+                else:
+                    new_data[k] = v
         self.data = new_data
         return self
 
