@@ -176,7 +176,7 @@ class BatchFeature(UserDict):
         return self
 
     @torch_required
-    def to(self, target_dtype_or_device) -> "BatchFeature":
+    def to(self, *args, **kwargs) -> "BatchFeature":
         """
         Send all values to device by calling `v.to(device)` (PyTorch only). Or cast the values to the indicated dtype
 
@@ -188,28 +188,37 @@ class BatchFeature(UserDict):
         """
         import torch  # noqa
 
-        # This check catches things like APEX blindly calling "to" on all inputs to a module
-        # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
-        # into a HalfTensor
-        if (
-            isinstance(target_dtype_or_device, str)
-            or is_torch_device(target_dtype_or_device)
-            or isinstance(target_dtype_or_device, int)
-            or is_torch_dtype(target_dtype_or_device)
-        ):
-            new_data = {}
-            for k, v in self.data.items():
-                # for `dtype` cast it only on non-floating points
-                if is_torch_dtype(target_dtype_or_device) and not torch.is_floating_point(v):
-                    new_data[k] = v
-                else:
-                    new_data[k] = v.to(target_dtype_or_device)
-            self.data = new_data
-        else:
-            logger.warning(
-                f"Attempting to cast a BatchFeature to type {str(target_dtype_or_device)}. This is not supported."
-            )
-
+        new_data = {}
+        # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
+        for k, v in self.items():
+            # check if v is a floating point
+            if torch.is_floating_point(v):
+                # cast and send to device
+                new_data[k] = v.to(*args, **kwargs)
+            else:
+                # just send to device
+                device = kwargs.pop("device", None)
+                # Check if the args are a device or a dtype
+                if device is None:
+                    for arg in args:
+                        if isinstance(arg, str) or is_torch_device(arg) or isinstance(arg, int):
+                            device = arg
+                            break
+                        elif is_torch_dtype(arg):
+                            # Ignore the dtype
+                            logger.warning(
+                                "Attempting to cast a non-floating point element of BatchFeature to `dtype`"
+                                f" {str(arg)}. This is not supported."
+                            )
+                        else:
+                            # it's something else
+                            logger.warning(
+                                f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported."
+                            )
+                # Finally send to device
+                if device is not None:
+                    new_data[k] = v.to(device=device)
+        self.data = new_data
         return self
 
 

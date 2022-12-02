@@ -126,6 +126,11 @@ def is_torch_device(x):
 def _is_torch_dtype(x):
     import torch
 
+    if isinstance(x, str):
+        if hasattr(torch, x):
+            return True
+        else:
+            return False
     return isinstance(x, torch.dtype)
 
 
