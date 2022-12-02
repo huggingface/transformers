@@ -1288,7 +1288,8 @@ class BackboneOutput(ModelOutput):
     """
 
     feature_maps: Tuple[torch.FloatTensor] = None
-<<<<<<< HEAD
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -1327,7 +1328,3 @@ class BaseModelOutputWithPoolingAndprojection(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     projection_state: Optional[Tuple[torch.FloatTensor]] = None
-=======
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
->>>>>>> e342ac7e0390d157e8c14a8a7c5cf2e715341cee
