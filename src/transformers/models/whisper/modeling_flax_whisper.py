@@ -153,7 +153,7 @@ WHISPER_DECODE_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-
+# Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartAttention
 class FlaxWhisperAttention(nn.Module):
     config: WhisperConfig
     embed_dim: int
@@ -310,6 +310,7 @@ class FlaxWhisperAttention(nn.Module):
         return key, value, attention_mask
 
 
+# Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartEncoderLayer
 class FlaxWhisperEncoderLayer(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
@@ -366,7 +367,8 @@ class FlaxWhisperEncoderLayer(nn.Module):
         return outputs
 
 
-class EncoderLayerCollection(nn.Module):
+# Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartEncoderLayerCollection
+class FlaxWhisperEncoderLayerCollection(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
 
@@ -412,6 +414,7 @@ class EncoderLayerCollection(nn.Module):
         )
 
 
+# Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderLayer
 class FlaxWhisperDecoderLayer(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
@@ -494,6 +497,7 @@ class FlaxWhisperDecoderLayer(nn.Module):
         return outputs
 
 
+# Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderLayerCollection
 class FlaxWhisperDecoderLayerCollection(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
@@ -578,7 +582,7 @@ class FlaxWhisperEncoder(nn.Module):
 
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
 
-        self.layers = EncoderLayerCollection(
+        self.layers = FlaxWhisperEncoderLayerCollection(
             self.config,
             dtype=self.dtype,
         )
@@ -626,6 +630,7 @@ class FlaxWhisperEncoder(nn.Module):
         )
 
 
+# Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartDecoder
 class FlaxWhisperDecoder(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
