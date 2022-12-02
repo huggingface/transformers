@@ -110,11 +110,11 @@ class ViTHybridConfig(PretrainedConfig):
         if backbone_config is None:
             logger.info("`backbone_config` is `None`. Initializing the config with a `BiT` backbone.")
             backbone_config = {
-                "stem_type": "same",
-                "conv_layer": "std_conv_same",
+                "global_padding": "same",
                 "layer_type": "bottleneck",
-                "depths": (3, 4, 9),
+                "depths": [3, 4, 9],
                 "out_features": ["stage3"],
+                "embedding_dynamic_padding": True,
             }
 
         if isinstance(backbone_config, dict):
