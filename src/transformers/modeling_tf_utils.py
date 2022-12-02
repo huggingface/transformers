@@ -2651,7 +2651,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         else:
                             raise EnvironmentError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named {WEIGHTS_NAME},"
-                                f" {TF2_WEIGHTS_NAME} or {TF_WEIGHT_NAME}"
+                                f" {TF2_WEIGHTS_NAME} or {TF_WEIGHTS_NAME}"
                             )
 
                 except EnvironmentError:
