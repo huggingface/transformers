@@ -1015,7 +1015,7 @@ def test(original_model, our_model: OneFormerForUniversalSegmentation, feature_e
 
         our_model_out: OneFormerForUniversalSegmentationOutput = our_model(x.clone(), task_token, output_hidden_states=True)
 
-        our_segmentation = feature_extractor.post_process_sem_seg_output(our_model_out, target_size=(384, 384))
+        our_segmentation = feature_extractor.post_process_sem_seg_output(our_model_out, target_size=(384, 384))[0]
 
         assert torch.allclose(
             original_segmentation, our_segmentation, atol=1e-3

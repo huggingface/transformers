@@ -803,7 +803,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         classes = []
         masks = []
 
-        for idx in len(classes):
+        for idx in range(len(classes)):
             class_id = annotation_classes[idx]
             mask = annotation_masks[idx]
             if not np.all(mask == False):
@@ -840,7 +840,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         classes = []
         masks = []
 
-        for idx in len(classes):
+        for idx in range(len(classes)):
             class_id = annotation_classes[idx]
             mask = annotation_masks[idx]
             if class_id in self.metadata["thing_ids"]:
@@ -875,7 +875,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         classes = []
         masks = []
 
-        for idx in len(classes):
+        for idx in range(len(classes)):
             class_id = annotation_classes[idx]
             mask = annotation_masks[idx]
             if class_id in self.metadata["thing_ids"]:
@@ -1065,7 +1065,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
         segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
-        return segmentation[0]
+        return segmentation
 
     def post_process_semantic_segmentation(
         self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None
