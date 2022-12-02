@@ -55,6 +55,7 @@ Ready-made configurations include the following architectures:
 - BlenderbotSmall
 - BLOOM
 - CamemBERT
+- Chinese-CLIP
 - CLIP
 - CodeGen
 - Conditional DETR
@@ -84,6 +85,8 @@ Ready-made configurations include the following architectures:
 - Marian
 - mBART
 - MobileBERT
+- MobileNetV1
+- MobileNetV2
 - MobileViT
 - MT5
 - OpenAI GPT-2
@@ -137,7 +140,7 @@ optional arguments:
   --feature {causal-lm, ...}
                         The type of features to export the model with.
   --opset OPSET         ONNX opset version to export the model with.
-  --atol ATOL           Absolute difference tolerence when validating the model.
+  --atol ATOL           Absolute difference tolerance when validating the model.
 ```
 
 Exporting a checkpoint using a ready-made configuration can be done as follows:
@@ -415,7 +418,7 @@ OrderedDict([('logits', {0: 'batch'})])
 <Tip>
 
 All of the base properties and methods associated with [`~onnx.config.OnnxConfig`] and
-the other configuration classes can be overriden if needed. Check out [`BartOnnxConfig`]
+the other configuration classes can be overridden if needed. Check out [`BartOnnxConfig`]
 for an advanced example.
 
 </Tip>

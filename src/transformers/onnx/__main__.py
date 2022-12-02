@@ -38,7 +38,7 @@ def main():
     )
     parser.add_argument("--opset", type=int, default=None, help="ONNX opset version to export the model with.")
     parser.add_argument(
-        "--atol", type=float, default=None, help="Absolute difference tolerence when validating the model."
+        "--atol", type=float, default=None, help="Absolute difference tolerance when validating the model."
     )
     parser.add_argument(
         "--framework",

@@ -1087,6 +1087,8 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
     BLENDERBOT_START_DOCSTRING,
 )
 class BlenderbotModel(BlenderbotPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+
     def __init__(self, config: BlenderbotConfig):
         super().__init__(config)
 
@@ -1231,6 +1233,8 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel):
         r"encoder.version",
         r"decoder.version",
         r"lm_head.weight",
+        "decoder.embed_tokens.weight",
+        "encoder.embed_tokens.weight",
     ]
 
     def __init__(self, config: BlenderbotConfig):
@@ -1420,6 +1424,8 @@ class BlenderbotDecoderWrapper(BlenderbotPreTrainedModel):
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Blenderbot, facebook/bart-base->facebook/blenderbot-400M-distill
 class BlenderbotForCausalLM(BlenderbotPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+
     def __init__(self, config):
         config = copy.deepcopy(config)
         config.is_decoder = True

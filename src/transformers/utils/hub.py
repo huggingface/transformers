@@ -734,7 +734,7 @@ class PushToHubMixin:
             commit_message (`str`, *optional*):
                 Message to commit while pushing. Will default to `"Upload {object}"`.
             private (`bool`, *optional*):
-                Whether or not the repository created should be private (requires a paying subscription).
+                Whether or not the repository created should be private.
             use_auth_token (`bool` or `str`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `huggingface-cli login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
@@ -910,6 +910,7 @@ def get_checkpoint_shard_files(
     shard_filenames = sorted(list(set(index["weight_map"].values())))
     sharded_metadata = index["metadata"]
     sharded_metadata["all_checkpoint_keys"] = list(index["weight_map"].keys())
+    sharded_metadata["weight_map"] = index["weight_map"].copy()
 
     # First, let's deal with local folder.
     if os.path.isdir(pretrained_model_name_or_path):

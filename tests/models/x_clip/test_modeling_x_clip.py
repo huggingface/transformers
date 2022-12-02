@@ -436,12 +436,26 @@ class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class XCLIPModelTester:
-    def __init__(self, parent, projection_dim=64, mit_hidden_size=64, is_training=True):
+    def __init__(
+        self,
+        parent,
+        text_kwargs=None,
+        vision_kwargs=None,
+        projection_dim=64,
+        mit_hidden_size=64,
+        is_training=True,
+    ):
+
+        if text_kwargs is None:
+            text_kwargs = {}
+        if vision_kwargs is None:
+            vision_kwargs = {}
+
         self.parent = parent
         self.projection_dim = projection_dim
         self.mit_hidden_size = mit_hidden_size
-        self.text_model_tester = XCLIPTextModelTester(parent)
-        self.vision_model_tester = XCLIPVisionModelTester(parent)
+        self.text_model_tester = XCLIPTextModelTester(parent, **text_kwargs)
+        self.vision_model_tester = XCLIPVisionModelTester(parent, **vision_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):

@@ -107,3 +107,7 @@ class XCLIPProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+    @property
+    def model_input_names(self):
+        return ["input_ids", "attention_mask", "position_ids", "pixel_values"]

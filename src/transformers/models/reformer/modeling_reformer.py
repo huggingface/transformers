@@ -2192,6 +2192,8 @@ class ReformerModel(ReformerPreTrainedModel):
 
 @add_start_docstrings("""Reformer Model with a `language modeling` head on top.""", REFORMER_START_DOCSTRING)
 class ReformerModelWithLMHead(ReformerPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["lm_head.decoder.bias"]
+
     def __init__(self, config):
         super().__init__(config)
         assert config.is_decoder, "If you want to use `ReformerModelWithLMHead` make sure that `is_decoder=True`."

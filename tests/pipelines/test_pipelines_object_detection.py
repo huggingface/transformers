@@ -243,3 +243,30 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
                 {"score": 0.9987, "label": "cat", "box": {"xmin": 345, "ymin": 23, "xmax": 640, "ymax": 368}},
             ],
         )
+
+    @require_torch
+    @slow
+    def test_layoutlm(self):
+        model_id = "philschmid/layoutlm-funsd"
+        threshold = 0.998
+
+        object_detector = pipeline("object-detection", model=model_id, threshold=threshold)
+
+        outputs = object_detector(
+            "https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png"
+        )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {
+                    "score": 0.9982,
+                    "label": "B-QUESTION",
+                    "box": {"xmin": 654, "ymin": 165, "xmax": 719, "ymax": 719},
+                },
+                {
+                    "score": 0.9982,
+                    "label": "I-QUESTION",
+                    "box": {"xmin": 691, "ymin": 202, "xmax": 735, "ymax": 735},
+                },
+            ],
+        )

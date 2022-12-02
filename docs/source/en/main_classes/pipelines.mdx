@@ -20,31 +20,7 @@ Recognition, Masked Language Modeling, Sentiment Analysis, Feature Extraction an
 There are two categories of pipeline abstractions to be aware about:
 
 - The [`pipeline`] which is the most powerful object encapsulating all other pipelines.
-- The other task-specific pipelines:
-
-  - [`AudioClassificationPipeline`]
-  - [`AutomaticSpeechRecognitionPipeline`]
-  - [`ConversationalPipeline`]
-  - [`DepthEstimationPipeline`]
-  - [`DocumentQuestionAnsweringPipeline`]
-  - [`FeatureExtractionPipeline`]
-  - [`FillMaskPipeline`]
-  - [`ImageClassificationPipeline`]
-  - [`ImageSegmentationPipeline`]
-  - [`ImageToTextPipeline`]
-  - [`ObjectDetectionPipeline`]
-  - [`QuestionAnsweringPipeline`]
-  - [`SummarizationPipeline`]
-  - [`TableQuestionAnsweringPipeline`]
-  - [`TextClassificationPipeline`]
-  - [`TextGenerationPipeline`]
-  - [`Text2TextGenerationPipeline`]
-  - [`TokenClassificationPipeline`]
-  - [`TranslationPipeline`]
-  - [`VisualQuestionAnsweringPipeline`]
-  - [`ZeroShotClassificationPipeline`]
-  - [`ZeroShotImageClassificationPipeline`]
-  - [`ZeroShotObjectDetectionPipeline`]
+- Task-specific pipelines are available for [audio](#audio), [computer vision](#computer-vision), [natural language processing](#natural-language-processing), and [multimodal](#multimodal) tasks.
 
 ## The pipeline abstraction
 
@@ -322,8 +298,9 @@ That should enable you to do all the custom code you want.
 
 [Implementing a new pipeline](../add_new_pipeline)
 
-## The task specific pipelines
+## Audio
 
+Pipelines available for audio tasks include the following.
 
 ### AudioClassificationPipeline
 
@@ -337,33 +314,12 @@ That should enable you to do all the custom code you want.
     - __call__
     - all
 
-### ConversationalPipeline
+## Computer vision
 
-[[autodoc]] Conversation
-
-[[autodoc]] ConversationalPipeline
-    - __call__
-    - all
+Pipelines available for computer vision tasks include the following.
 
 ### DepthEstimationPipeline
 [[autodoc]] DepthEstimationPipeline
-    - __call__
-    - all 
-
-### DocumentQuestionAnsweringPipeline
-
-[[autodoc]] DocumentQuestionAnsweringPipeline
-    - __call__
-    - all
-### FeatureExtractionPipeline
-
-[[autodoc]] FeatureExtractionPipeline
-    - __call__
-    - all
-
-### FillMaskPipeline
-
-[[autodoc]] FillMaskPipeline
     - __call__
     - all
 
@@ -379,9 +335,39 @@ That should enable you to do all the custom code you want.
     - __call__
     - all
 
-### ImageToTextPipeline
+### ObjectDetectionPipeline
 
-[[autodoc]] ImageToTextPipeline
+[[autodoc]] ObjectDetectionPipeline
+    - __call__
+    - all
+
+### ZeroShotImageClassificationPipeline
+
+[[autodoc]] ZeroShotImageClassificationPipeline
+    - __call__
+    - all
+
+### ZeroShotObjectDetectionPipeline
+
+[[autodoc]] ZeroShotObjectDetectionPipeline
+    - __call__
+    - all
+
+## Natural Language Processing
+
+Pipelines available for natural language processing tasks include the following.
+
+### ConversationalPipeline
+
+[[autodoc]] Conversation
+
+[[autodoc]] ConversationalPipeline
+    - __call__
+    - all
+
+### FillMaskPipeline
+
+[[autodoc]] FillMaskPipeline
     - __call__
     - all
 
@@ -390,12 +376,6 @@ That should enable you to do all the custom code you want.
 [[autodoc]] NerPipeline
 
 See [`TokenClassificationPipeline`] for all details.
-
-### ObjectDetectionPipeline
-
-[[autodoc]] ObjectDetectionPipeline
-    - __call__
-    - all
 
 ### QuestionAnsweringPipeline
 
@@ -444,27 +424,37 @@ See [`TokenClassificationPipeline`] for all details.
     - __call__
     - all
 
-### VisualQuestionAnsweringPipeline
-
-[[autodoc]] VisualQuestionAnsweringPipeline
-    - __call__
-    - all
-
 ### ZeroShotClassificationPipeline
 
 [[autodoc]] ZeroShotClassificationPipeline
     - __call__
     - all
 
-### ZeroShotImageClassificationPipeline
+## Multimodal
 
-[[autodoc]] ZeroShotImageClassificationPipeline
+Pipelines available for multimodal tasks include the following.
+
+### DocumentQuestionAnsweringPipeline
+
+[[autodoc]] DocumentQuestionAnsweringPipeline
     - __call__
     - all
 
-### ZeroShotObjectDetectionPipeline
+### FeatureExtractionPipeline
 
-[[autodoc]] ZeroShotObjectDetectionPipeline
+[[autodoc]] FeatureExtractionPipeline
+    - __call__
+    - all
+
+### ImageToTextPipeline
+
+[[autodoc]] ImageToTextPipeline
+    - __call__
+    - all
+
+### VisualQuestionAnsweringPipeline
+
+[[autodoc]] VisualQuestionAnsweringPipeline
     - __call__
     - all
 

@@ -24,7 +24,7 @@ from transformers import DeformableDetrConfig, is_timm_available, is_vision_avai
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_timm, require_torch_gpu, require_vision, slow, torch_device
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 
@@ -569,9 +569,9 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
         results = feature_extractor.post_process_object_detection(
             outputs, threshold=0.3, target_sizes=[image.size[::-1]]
         )[0]
-        expected_scores = torch.tensor([0.7999, 0.7894, 0.6331, 0.4720, 0.4382])
+        expected_scores = torch.tensor([0.7999, 0.7894, 0.6331, 0.4720, 0.4382]).to(torch_device)
         expected_labels = [17, 17, 75, 75, 63]
-        expected_slice_boxes = torch.tensor([16.5028, 52.8390, 318.2544, 470.7841])
+        expected_slice_boxes = torch.tensor([16.5028, 52.8390, 318.2544, 470.7841]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 5)
         self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
