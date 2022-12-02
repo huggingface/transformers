@@ -178,9 +178,8 @@ class BatchFeature(UserDict):
     @torch_required
     def to(self, *args, **kwargs) -> "BatchFeature":
         """
-        Send all values to device by calling `v.to(*args, **kwargs)` (PyTorch only). This
-        should support casting in different  `dtypes` and sending the `BatchFeature` to a
-        different `device`.
+        Send all values to device by calling `v.to(*args, **kwargs)` (PyTorch only). This should support casting in
+        different `dtypes` and sending the `BatchFeature` to a different `device`.
 
         Args:
             args (`Tuple`):
