@@ -371,7 +371,6 @@ class BitPreActivationBottleneckLayer(nn.Module):
         groups=1,
         drop_path_rate=0.0,
         is_first_layer=False,
-        use_activation=False,
     ):
         super().__init__()
 
@@ -407,11 +406,6 @@ class BitPreActivationBottleneckLayer(nn.Module):
 
         self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
 
-        if use_activation:
-            self.activation = ACT2FN[config.hidden_act]
-        else:
-            self.activation = nn.Identity()
-
     def forward(self, x):
         x_preact = self.norm1(x)
 
@@ -425,7 +419,7 @@ class BitPreActivationBottleneckLayer(nn.Module):
         x = self.conv2(self.norm2(x))
         x = self.conv3(self.norm3(x))
         x = self.drop_path(x)
-        return self.activation(x + shortcut)
+        return x + shortcut
 
 
 class BitBottleneckLayer(nn.Module):
@@ -537,9 +531,9 @@ class BitStage(nn.Module):
 
         # Get the layer type
         if config.layer_type == "bottleneck":
-            layer_fn = partial(BitBottleneckLayer)
+            layer_fn = BitBottleneckLayer
         else:
-            layer_fn = partial(BitPreActivationBottleneckLayer, use_activation=False)
+            layer_fn = BitPreActivationBottleneckLayer
 
         prev_chs = in_channels
         self.layers = nn.Sequential()
