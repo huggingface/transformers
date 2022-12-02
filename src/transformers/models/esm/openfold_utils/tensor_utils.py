@@ -92,6 +92,7 @@ def batched_gather(data: torch.Tensor, inds: torch.Tensor, dim: int = 0, no_batc
 
 T = TypeVar("T")
 
+
 # With tree_map, a poor man's JAX tree_map
 def dict_map(
     fn: Callable[[T], Any], dic: Dict[Any, Union[dict, list, tuple, T]], leaf_type: Type[T]
