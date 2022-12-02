@@ -265,3 +265,84 @@ class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
         scores = jnp.where(apply_penalty, scores.at[:, self.eos_token_id].set(-float("inf")), scores)
 
         return scores
+
+
+class FlaxSuppressTokensAtBeginLogitsProcessor:
+    r"""
+    Args:
+    [`FlaxLogitsProcessor`] supressing a list of tokens at an index.
+        begin_suppress_tokens (`list`):
+            Tokens to not sample.
+        begin_index (`int`):
+            Index where the tokens are suppressed.
+    """
+
+    def __init__(self, begin_suppress_tokens, begin_index):
+        self.begin_suppress_tokens = list(begin_suppress_tokens)
+        self.begin_index = begin_index
+
+    def __call__(self, input_ids, scores, cur_len: int):
+        apply_penalty = 1 - jnp.bool_(cur_len - self.begin_index)
+
+        scores = jnp.where(apply_penalty, scores.at[:, self.begin_suppress_tokens].set(-float("inf")), scores)
+
+        return scores
+
+
+class FlaxSuppressTokensLogitsProcessor(FlaxLogitsProcessor):
+    r"""
+    Args:
+    [`FlaxLogitsProcessor`] supressing a list of tokens.
+        suppress_tokens (`list`):
+            Tokens to not sample.
+    """
+
+    def __init__(self, suppress_tokens: list):
+        self.suppress_tokens = list(suppress_tokens)
+
+    def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int) -> jnp.ndarray:
+        scores = scores.at[..., self.suppress_tokens].set(-float("inf"))
+
+        return scores
+
+
+class FlaxForceTokenAtIdxLogitsProcessor(FlaxLogitsProcessor):
+    r"""
+    Args:
+    [`FlaxLogitsProcessor`] that forces a token to be sampled at an index.
+        apply_idx (`int`):
+            Index where sampling is forced.
+        token_id (`int`):
+            Token that is forced to be sampled.
+    """
+
+    def __init__(self, apply_idx: int, token_id: int):
+        self.apply_idx = apply_idx
+        self.token_id = token_id
+
+    def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int) -> jnp.ndarray:
+        new_scores = jnp.full(scores.shape, -float("inf"))
+
+        apply_penalty = 1 - jnp.bool_(cur_len - self.apply_idx)
+
+        scores = jnp.where(apply_penalty, new_scores.at[:, self.token_id].set(0), scores)
+
+        return scores
+
+
+class FlaxForceTokensLogitsProcessor(FlaxLogitsProcessor):
+    r"""
+    Args:
+    [`FlaxLogitsProcessor`] that forces tokens to be sampled at given indices.
+        force_token_map (`list`):
+            Map giving token ids and indices where they will be forced to be sampled.
+    """
+
+    def __init__(self, force_token_map):
+        self.processors = [FlaxForceTokenAtIdxLogitsProcessor(i[0], i[1]) for i in force_token_map]
+
+    def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int) -> jnp.ndarray:
+        for processor in self.processors:
+            scores = processor(input_ids, scores, cur_len)
+
+        return scores

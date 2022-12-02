@@ -18,7 +18,7 @@
 import inspect
 import warnings
 from functools import partial
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -36,8 +36,11 @@ from ..utils import ModelOutput, logging
 from .flax_logits_process import (
     FlaxForcedBOSTokenLogitsProcessor,
     FlaxForcedEOSTokenLogitsProcessor,
+    FlaxForceTokensLogitsProcessor,
     FlaxLogitsProcessorList,
     FlaxMinLengthLogitsProcessor,
+    FlaxSuppressTokensAtBeginLogitsProcessor,
+    FlaxSuppressTokensLogitsProcessor,
     FlaxTemperatureLogitsWarper,
     FlaxTopKLogitsWarper,
     FlaxTopPLogitsWarper,
@@ -50,10 +53,8 @@ logger = logging.get_logger(__name__)
 @flax.struct.dataclass
 class FlaxGreedySearchOutput(ModelOutput):
     """
-    Flax Base class for outputs of decoder-only generation models using greedy search.
-
-
     Args:
+    Flax Base class for outputs of decoder-only generation models using greedy search.
         sequences (`jnp.ndarray` of shape `(batch_size, max_length)`):
             The generated sequences.
     """
@@ -64,10 +65,8 @@ class FlaxGreedySearchOutput(ModelOutput):
 @flax.struct.dataclass
 class FlaxSampleOutput(ModelOutput):
     """
-    Flax Base class for outputs of decoder-only generation models using sampling.
-
-
     Args:
+    Flax Base class for outputs of decoder-only generation models using sampling.
         sequences (`jnp.ndarray` of shape `(batch_size, max_length)`):
             The generated sequences.
     """
@@ -78,10 +77,8 @@ class FlaxSampleOutput(ModelOutput):
 @flax.struct.dataclass
 class FlaxBeamSearchOutput(ModelOutput):
     """
-    Flax Base class for outputs of decoder-only generation models using greedy search.
-
-
     Args:
+    Flax Base class for outputs of decoder-only generation models using greedy search.
         sequences (`jnp.ndarray` of shape `(batch_size, max_length)`):
             The generated sequences.
         scores (`jnp.ndarray` of shape `(batch_size,)`):
@@ -125,9 +122,7 @@ class BeamSearchState:
 class FlaxGenerationMixin:
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in
-    [`FlaxPreTrainedModel`].
-
-    The class exposes [`~generation.FlaxGenerationMixin.generate`], which can be used for:
+    [`FlaxPreTrainedModel`]. The class exposes [`~generation.FlaxGenerationMixin.generate`], which can be used for:
             - *greedy decoding* by calling [`~generation.FlaxGenerationMixin._greedy_search`] if `num_beams=1` and
               `do_sample=False`.
             - *multinomial sampling* by calling [`~generation.FlaxGenerationMixin._sample`] if `num_beams=1` and
@@ -154,6 +149,42 @@ class FlaxGenerationMixin:
         }
         model_kwargs["encoder_outputs"] = self.encode(input_ids, params=params, return_dict=True, **encoder_kwargs)
         return model_kwargs
+
+    def _prepare_decoder_input_ids_for_generation(
+        self,
+        batch_size: int,
+        decoder_start_token_id: int = None,
+        bos_token_id: int = None,
+        model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
+    ) -> jnp.ndarray:
+        if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
+            # Only use this arg if not None, otherwise just remove from model_kwargs
+            decoder_input_ids = model_kwargs.pop("decoder_input_ids")
+            if decoder_input_ids is not None:
+                return decoder_input_ids
+        decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
+        return jnp.array(decoder_start_token_id).reshape(1, -1).repeat(batch_size, axis=0)
+
+    def _get_decoder_start_token_id(
+        self,
+        decoder_start_token_id: int = None,
+        bos_token_id: int = None,
+    ) -> int:
+        decoder_start_token_id = (
+            decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
+        )
+        bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
+
+        if decoder_start_token_id is not None:
+            start_token = decoder_start_token_id
+        elif bos_token_id is not None:
+            start_token = bos_token_id
+        else:
+            raise ValueError(
+                "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
+            )
+
+        return start_token
 
     @staticmethod
     def _expand_to_num_beams(tensor, num_beams):
@@ -227,6 +258,9 @@ class FlaxGenerationMixin:
         min_length: Optional[int] = None,
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
+        suppress_tokens: Optional[List[int]] = None,
+        begin_suppress_tokens: Optional[List[int]] = None,
+        forced_decoder_ids: Optional[List[List[int]]] = None,
         length_penalty: Optional[float] = None,
         early_stopping: Optional[bool] = None,
         trace: bool = True,
@@ -236,7 +270,6 @@ class FlaxGenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head. The method supports the following
         generation methods for text-decoder, text-to-text, speech-to-text, and vision-to-text models:
-
             - *greedy decoding* by calling [`~generation.FlaxGenerationMixin._greedy_search`] if `num_beams=1` and
               `do_sample=False`.
             - *multinomial sampling* by calling [`~generation.FlaxGenerationMixin._sample`] if `num_beams=1` and
@@ -252,10 +285,9 @@ class FlaxGenerationMixin:
 
         </Tip>
 
+        Parameters:
         Most of these parameters are explained in more detail in [this blog
         post](https://huggingface.co/blog/how-to-generate).
-
-        Parameters:
             input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             max_length (`int`, *optional*, defaults to `model.config.max_length`):
@@ -283,6 +315,12 @@ class FlaxGenerationMixin:
                 Number of beams for beam search. 1 means no beam search.
             decoder_start_token_id (`int`, *optional*):
                 If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
+            suppress_tokens (`list`, *optional*):
+                Token ids to not sample
+            begin_suppress_tokens (`list`, *optional*):
+                Token ids to not sample during the first sample step
+            forced_decoder_ids (`list`, *optional*):
+                Sample indices and token ids to force sampling at beginning of generation
             trace (`bool`, *optional*, defaults to `True`):
                 Whether to trace generation. Setting `trace=False` should only be used for debugging and will lead to a
                 considerably slower runtime.
@@ -292,12 +330,9 @@ class FlaxGenerationMixin:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model. If the model
                 is an encoder-decoder model, encoder specific kwargs should not be prefixed and decoder specific kwargs
                 should be prefixed with *decoder_*. Also accepts `encoder_outputs` to skip encoder part.
-
         Return:
             [`~utils.ModelOutput`].
-
         Examples:
-
         ```python
         >>> from transformers import AutoTokenizer, FlaxAutoModelForCausalLM
 
@@ -334,12 +369,21 @@ class FlaxGenerationMixin:
                     "generation results, please set `padding_side='left'` when initializing the tokenizer."
                 )
 
+        batch_size = input_ids.shape[0]
+
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
             if model_kwargs.get("encoder_outputs") is None:
                 model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, params, model_kwargs)
+            if forced_decoder_ids is None and hasattr(self.config, "forced_decoder_ids"):
+                forced_decoder_ids = self.config.forced_decoder_ids
             # prepare decoder_input_ids for generation
-            input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+            input_ids = self._prepare_decoder_input_ids_for_generation(
+                batch_size,
+                decoder_start_token_id=decoder_start_token_id,
+                bos_token_id=bos_token_id,
+                model_kwargs=model_kwargs,
+            )
 
         # Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = input_ids.shape[-1]
@@ -382,7 +426,15 @@ class FlaxGenerationMixin:
 
         if not do_sample and num_beams == 1:
             logits_processor = self._get_logits_processor(
-                no_repeat_ngram_size, min_length, max_length, eos_token_id, forced_bos_token_id, forced_eos_token_id
+                no_repeat_ngram_size,
+                min_length,
+                max_length,
+                eos_token_id,
+                forced_bos_token_id,
+                forced_eos_token_id,
+                input_ids_seq_length,
+                suppress_tokens=suppress_tokens,
+                begin_suppress_tokens=begin_suppress_tokens,
             )
             return self._greedy_search(
                 input_ids,
@@ -397,7 +449,15 @@ class FlaxGenerationMixin:
         elif do_sample and num_beams == 1:
             logits_warper = self._get_logits_warper(top_k=top_k, top_p=top_p, temperature=temperature)
             logits_processor = self._get_logits_processor(
-                no_repeat_ngram_size, min_length, max_length, eos_token_id, forced_bos_token_id, forced_eos_token_id
+                no_repeat_ngram_size,
+                min_length,
+                max_length,
+                eos_token_id,
+                forced_bos_token_id,
+                forced_eos_token_id,
+                input_ids_seq_length,
+                suppress_tokens=suppress_tokens,
+                begin_suppress_tokens=begin_suppress_tokens,
             )
             return self._sample(
                 input_ids,
@@ -426,7 +486,15 @@ class FlaxGenerationMixin:
                 )
 
             logits_processor = self._get_logits_processor(
-                no_repeat_ngram_size, min_length, max_length, eos_token_id, forced_bos_token_id, forced_eos_token_id
+                no_repeat_ngram_size,
+                min_length,
+                max_length,
+                eos_token_id,
+                forced_bos_token_id,
+                forced_eos_token_id,
+                input_ids_seq_length,
+                suppress_tokens=suppress_tokens,
+                begin_suppress_tokens=begin_suppress_tokens,
             )
 
             return self._beam_search(
@@ -478,6 +546,10 @@ class FlaxGenerationMixin:
         eos_token_id: int,
         forced_bos_token_id: int,
         forced_eos_token_id: int,
+        input_ids_seq_length: int,
+        suppress_tokens: Optional[List[int]] = None,
+        begin_suppress_tokens: Optional[List[int]] = None,
+        forced_decoder_ids: Optional[List[List[int]]] = None,
     ) -> FlaxLogitsProcessorList:
         """
         This class returns a [`FlaxLogitsProcessorList`] list object that contains all relevant [`FlaxLogitsProcessor`]
@@ -496,6 +568,12 @@ class FlaxGenerationMixin:
         forced_eos_token_id = (
             forced_eos_token_id if forced_eos_token_id is not None else self.config.forced_eos_token_id
         )
+        suppress_tokens = suppress_tokens if suppress_tokens is not None else self.config.suppress_tokens
+        begin_suppress_tokens = (
+            begin_suppress_tokens if begin_suppress_tokens is not None else self.config.begin_suppress_tokens
+        )
+        if forced_decoder_ids is None and hasattr(self.config, "forced_decoder_ids"):
+            forced_decoder_ids = self.config.forced_decoder_ids
 
         # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
         # all samplers can be found in `generation_utils_samplers.py`
@@ -505,6 +583,17 @@ class FlaxGenerationMixin:
             processors.append(FlaxForcedBOSTokenLogitsProcessor(forced_bos_token_id))
         if forced_eos_token_id is not None:
             processors.append(FlaxForcedEOSTokenLogitsProcessor(max_length, forced_eos_token_id))
+        if suppress_tokens is not None:
+            processors.append(FlaxSuppressTokensLogitsProcessor(suppress_tokens))
+        if begin_suppress_tokens is not None:
+            begin_index = input_ids_seq_length
+            begin_index = begin_index if (input_ids_seq_length > 1 or forced_bos_token_id is None) else begin_index + 1
+            if forced_decoder_ids is not None:
+                begin_index += forced_decoder_ids[-1][0]  # generation starts after the last token that is forced
+            processors.append(FlaxSuppressTokensAtBeginLogitsProcessor(begin_suppress_tokens, begin_index))
+        if forced_decoder_ids is not None:
+            forced_decoder_ids = [[input_ids_seq_length + i[0] - 1, i[1]] for i in forced_decoder_ids]
+            processors.append(FlaxForceTokensLogitsProcessor(forced_decoder_ids))
         return processors
 
     def _greedy_search(
