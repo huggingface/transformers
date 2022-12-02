@@ -124,7 +124,6 @@ class ConvBertConfig(PretrainedConfig):
     ):
         super().__init__(
             pad_token_id=pad_token_id,
-            is_encoder_decoder=is_encoder_decoder,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             **kwargs,
