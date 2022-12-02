@@ -18,7 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {"configuration_bit": ["BIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BitConfig", "BitOnnxConfig"]}
@@ -37,6 +37,16 @@ else:
         "BitBackbone",
     ]
 
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_bit"] = ["BitImageProcessor"]
+
+
 if TYPE_CHECKING:
     from .configuration_bit import BIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BitConfig, BitOnnxConfig
 
@@ -53,6 +63,14 @@ if TYPE_CHECKING:
             BitModel,
             BitPreTrainedModel,
         )
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_bit import BitImageProcessor
 
 else:
     import sys
