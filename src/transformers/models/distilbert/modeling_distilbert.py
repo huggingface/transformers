@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """
  PyTorch DistilBERT model adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM) and in
  part from HuggingFace PyTorch version of Google AI Bert model (https://github.com/google-research/bert)
@@ -142,10 +141,7 @@ class MultiHeadSelfAttention(nn.Module):
         self.dim = config.dim
         self.dropout = nn.Dropout(p=config.attention_dropout)
 
-        # Have an even number of multi heads that divide the dimensions
-        if self.dim % self.n_heads != 0:
-            # Raise value errors for even multi-head attention nodes
-            raise ValueError(f"self.n_heads: {self.n_heads} must divide self.dim: {str(self.dim)} evenly")
+        assert self.dim % self.n_heads == 0
 
         self.q_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
         self.k_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
@@ -259,9 +255,7 @@ class TransformerBlock(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
 
-        # Have an even number of Configure multi-heads
-        if config.dim % config.n_heads != 0:
-            raise ValueError(f"config.n_heads {config.n_heads} must divide config.dim {config.dim} evenly")
+        assert config.dim % config.n_heads == 0
 
         self.attention = MultiHeadSelfAttention(config)
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
@@ -297,9 +291,7 @@ class TransformerBlock(nn.Module):
         if output_attentions:
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
         else:  # To handle these `output_attentions` or `output_hidden_states` cases returning tuples
-            if type(sa_output) != tuple:
-                raise TypeError(f"sa_output must be a tuple but it is {type(sa_output)} type")
-
+            assert type(sa_output) == tuple
             sa_output = sa_output[0]
         sa_output = self.sa_layer_norm(sa_output + x)  # (bs, seq_length, dim)
 
@@ -328,7 +320,6 @@ class Transformer(nn.Module):
         output_hidden_states: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[BaseModelOutput, Tuple[torch.Tensor, ...]]:  # docstyle-ignore
-
         """
         Parameters:
             x: torch.tensor(bs, seq_length, dim) Input sequence embedded.
@@ -357,14 +348,11 @@ class Transformer(nn.Module):
             hidden_state = layer_outputs[-1]
 
             if output_attentions:
-                if len(layer_outputs) != 2:
-                    raise ValueError(f"The length of the layer_outputs should be 2, but it is {len(layer_outputs)}")
-
+                assert len(layer_outputs) == 2
                 attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)
             else:
-                if len(layer_outputs) != 1:
-                    raise ValueError(f"The length of the layer_outputs should be 1, but it is {len(layer_outputs)}")
+                assert len(layer_outputs) == 1
 
         # Add last layer
         if output_hidden_states:
@@ -822,9 +810,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
         self.distilbert = DistilBertModel(config)
         self.qa_outputs = nn.Linear(config.dim, config.num_labels)
-        if config.num_labels != 2:
-            raise ValueError(f"config.num_labels should be 2, but it is {(config.num_labels)}")
-
+        assert config.num_labels == 2
         self.dropout = nn.Dropout(config.qa_dropout)
 
         # Initialize weights and apply final processing

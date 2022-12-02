@@ -36,6 +36,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_conditional_detr"] = ["ConditionalDetrFeatureExtractor"]
+    _import_structure["image_processing_conditional_detr"] = ["ConditionalDetrImageProcessor"]
 
 try:
     if not is_timm_available():
@@ -66,6 +67,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_conditional_detr import ConditionalDetrFeatureExtractor
+        from .image_processing_conditional_detr import ConditionalDetrImageProcessor
 
     try:
         if not is_timm_available():
