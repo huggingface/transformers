@@ -658,7 +658,7 @@ class BitEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNet->Bit,resnet->resnetv2
+# Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNet->Bit,resnet->bit
 class BitPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
