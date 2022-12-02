@@ -170,6 +170,7 @@ WHISPER_DECODE_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 # Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartAttention
 class FlaxWhisperAttention(nn.Module):
     config: WhisperConfig
@@ -1090,6 +1091,7 @@ class FlaxWhisperModel(FlaxWhisperPreTrainedModel):
 append_call_sample_docstring(
     FlaxWhisperModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
 )
+
 
 # Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartForConditionalGenerationModule
 class FlaxWhisperForConditionalGenerationModule(nn.Module):
