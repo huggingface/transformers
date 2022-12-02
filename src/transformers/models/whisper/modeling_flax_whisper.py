@@ -770,6 +770,7 @@ class FlaxWhisperModule(nn.Module):
         return self.decoder
 
 
+# Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartPreTrainedModel
 class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
     config_class = WhisperConfig
     base_model_prefix: str = "model"
@@ -1090,7 +1091,7 @@ append_call_sample_docstring(
     FlaxWhisperModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
 )
 
-
+# Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartForConditionalGenerationModule
 class FlaxWhisperForConditionalGenerationModule(nn.Module):
     config: WhisperConfig
     dtype: jnp.dtype = jnp.float32
@@ -1157,6 +1158,7 @@ class FlaxWhisperForConditionalGenerationModule(nn.Module):
         )
 
 
+# Copied with a few changes from transformers.models.bart.modeling_flax_bart.FlaxBartForConditionalGeneration
 @add_start_docstrings("The Whisper Model with a language modeling head.", WHISPER_START_DOCSTRING)
 class FlaxWhisperForConditionalGeneration(FlaxWhisperPreTrainedModel):
     module_class = FlaxWhisperForConditionalGenerationModule
