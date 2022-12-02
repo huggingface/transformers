@@ -1,25 +1,15 @@
 from PIL import Image
-
 import requests
-from transformers import BertTokenizer, CLIPFeatureExtractor, GITModel, GITProcessor
+from transformers import GITProcessor
 
+processor = GITProcessor.from_pretrained("nielsr/git-base")
 
-processor = GITProcessor(
-    feature_extractor=CLIPFeatureExtractor.from_pretrained("openai/clip-vit-base-patch32"),
-    tokenizer=BertTokenizer.from_pretrained("bert-base-uncased"),
-)
-model = GITModel.from_pretrained("nielsr/git-base-coco")
+print(processor.model_input_names)
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-text = "this is an image of two cats"
+inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
 
-print(processor.tokenizer.model_input_names)
-
-inputs = processor(text, images=image, return_tensors="pt")
-
-for k, v in inputs.items():
-    print(k, v.shape)
-
-outputs = model(**inputs)
+for key, value in inputs.items():
+   print(key, value.shape)

@@ -25,7 +25,7 @@ from PIL import Image
 from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
 
 import requests
-from transformers import AutoTokenizer, BertTokenizerFast, CLIPImageProcessor, GITConfig, GITForCausalLM, GITProcessor
+from transformers import AutoTokenizer, CLIPImageProcessor, GITConfig, GITForCausalLM, GITProcessor
 from transformers.utils import logging
 
 
@@ -215,7 +215,8 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
 
     # verify results
     image_processor = CLIPImageProcessor()
-    tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+    tokenizer.model_input_names = ["input_ids", "attention_mask"]
     processor = GITProcessor(tokenizer=tokenizer, feature_extractor=image_processor)
 
     image = prepare_img()
