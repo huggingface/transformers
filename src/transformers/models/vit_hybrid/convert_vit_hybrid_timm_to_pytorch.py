@@ -245,13 +245,13 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, push_to_hub=False
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         print(f"Saving model {vit_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-        # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving processor to {pytorch_dump_folder_path}")
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print(f"Pushing model and feature extractor to the hub {vit_name}")
+        print(f"Pushing model and processor to the hub {vit_name}")
         model.push_to_hub(f"nielsr/{vit_name}")
-        # feature_extractor.push_to_hub(f"nielsr/{vit_name}")
+        processor.push_to_hub(f"nielsr/{vit_name}")
 
 
 if __name__ == "__main__":

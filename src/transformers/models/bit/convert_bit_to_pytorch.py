@@ -146,15 +146,14 @@ def convert_bit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-        print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
+        print(f"Saving model {model_name} and processor to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-        # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print(f"Pushing model and feature extractor to the hub {model_name}")
+        print(f"Pushing model {model_name} and processor to the hub")
         model.push_to_hub(f"nielsr/{model_name}")
-        # feature_extractor.push_to_hub(f"nielsr/{model_name}")
+        processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
