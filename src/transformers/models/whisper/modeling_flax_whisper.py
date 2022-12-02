@@ -264,7 +264,7 @@ class FlaxWhisperAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0),
-                jnp.full(attention_mask.shape, float("-inf")),
+                jnp.full(attention_mask.shape, -1e4),
             )
         else:
             attention_bias = None
