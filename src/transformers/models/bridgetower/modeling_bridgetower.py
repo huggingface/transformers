@@ -184,10 +184,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             self.mlm_score = BridgeTowerMLMHead(bert_config)
             self.mlm_score.apply(self._init_weights)
 
-        if config.loss_names["itm"] > 0:
-            self.itm_score = BridgeTowerITMHead(config.hidden_size * 2)
-            self.itm_score.apply(self._init_weights)
-
         hs = config.hidden_size
 
         # ===================== Initialize LCI Components ===================== #
@@ -434,7 +430,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         image_token_type_idx=1
         irtr_len=0
         text_ids = input_ids
-        img = pixel_values.resize_(1,3,224,224)
+        img = pixel_values.resize_(1,3,288,288)
         text_masks = attention_mask
         input_shape = input_ids.size() 
         text_embeds = self.text_transformer.embeddings(input_ids=text_ids)
@@ -502,6 +498,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             "text_masks": text_masks,
         }
         return ret
+
     def get_cls_feats(self, text_feats, image_feats):
         cls_feats_text = self.cross_modal_text_pooler(text_feats)
         if self.is_clip:
@@ -916,11 +913,53 @@ class BridgeTowerITMHead(nn.Module):
         x = self.fc(x)
         return x
 
-
+@add_start_docstrings(
+    """
+    BridgeTower Model transformer with a classifier head on top (a linear layer on top of the final hidden state of the [CLS]
+    token) for image-to-text or text-to-image retrieval, e.g. MSCOCO and F30K.
+    """,
+)
 class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.bridgetower = BridgeTowerModel(config)
+        self.itm_score = BridgeTowerITMHead(config.hidden_size * 2)
+        
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        image_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        outputs = self.bridgetower(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            pixel_values=pixel_values,
+            pixel_mask=pixel_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            image_embeds=image_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
-    def forward():
-        return self.bridgetower
+        cls_feats = outputs['cls_feats']
+        logits = self.itm_score(cls_feats)
+
+        return SequenceClassifierOutput(
+            loss=None,
+            logits=logits,
+            hidden_states=None,
+            attentions=None,
+        )

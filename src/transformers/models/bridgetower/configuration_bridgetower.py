@@ -69,7 +69,7 @@ class BridgeTowerConfig(PretrainedConfig):
         freeze_layer_count_vit=False,
         head_hidden_scale=2,
         hidden_size=768,
-        image_size=224,
+        image_size=288,
         input_image_embed_size=768,
         input_text_embed_size=768,
         link_tower_shared=False,
