@@ -2609,7 +2609,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         resolved_archive_file = cached_file(
                             pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME, **cached_file_kwargs
                         )
-                        if resolved_archive_file is not None:  # TODO Arthur, add safetensors support for sharded tf
+                        if resolved_archive_file is not None:
                             is_sharded = True
                             raise NotImplementedError(
                                 "Support for sharded checkpoints using safetensors is coming soon!"
@@ -2693,7 +2693,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 _commit_hash=commit_hash,
             )
 
-        # TODO this might not support the sharded safetensors
         safetensors_from_pt = False
         if filename == SAFE_WEIGHTS_NAME:
             with safe_open(resolved_archive_file, framework="tf") as f:
