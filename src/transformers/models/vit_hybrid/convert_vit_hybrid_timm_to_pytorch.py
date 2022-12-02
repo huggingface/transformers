@@ -25,7 +25,14 @@ import requests
 import timm
 from timm.data import resolve_data_config
 from timm.data.transforms_factory import create_transform
-from transformers import BitConfig, ViTHybridConfig, ViTHybridForImageClassification, ViTHybridModel
+from transformers import (
+    BitConfig,
+    ViTHybridConfig,
+    ViTHybridForImageClassification,
+    ViTHybridImageProcessor,
+    ViTHybridModel,
+)
+from transformers.image_utils import PILImageResampling
 from transformers.utils import logging
 
 
@@ -190,14 +197,35 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, push_to_hub=False
         model = ViTHybridForImageClassification(config).eval()
     model.load_state_dict(state_dict)
 
-    # Check outputs on an image
+    # create image processor
     transform = create_transform(**resolve_data_config({}, model=timm_model))
+    timm_transforms = transform.transforms
 
-    # load image
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
-    pixel_values = transform(image).unsqueeze(0)
+    pillow_resamplings = {
+        "bilinear": PILImageResampling.BILINEAR,
+        "bicubic": PILImageResampling.BICUBIC,
+        "nearest": PILImageResampling.NEAREST,
+    }
 
+    processor = ViTHybridImageProcessor(
+        do_resize=True,
+        size={"shortest_edge": timm_transforms[0].size},
+        resample=pillow_resamplings[timm_transforms[0].interpolation.value],
+        do_center_crop=True,
+        crop_size={"height": timm_transforms[1].size[0], "width": timm_transforms[1].size[1]},
+        do_normalize=True,
+        image_mean=timm_transforms[-1].mean,
+        image_std=timm_transforms[-1].std,
+    )
+
+    image = prepare_img()
+    timm_pixel_values = transform(image).unsqueeze(0)
+    pixel_values = processor(image, return_tensors="pt").pixel_values
+
+    # verify pixel values
+    assert torch.allclose(timm_pixel_values, pixel_values)
+
+    # verify logits
     with torch.no_grad():
         outputs = model(pixel_values)
         logits = outputs.logits
