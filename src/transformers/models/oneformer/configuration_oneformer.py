@@ -212,6 +212,12 @@ class OneFormerConfig(PretrainedConfig):
         self.backbone_config = backbone_config
         self.text_encoder_config = text_encoder_config
         self.decoder_config = decoder_config
+
+        self.return_dict = self.general_config["use_return_dict"]
+        self.hidden_size = self.decoder_config["hidden_dim"]
+        self.output_attentions = self.general_config["output_attentions"]
+        self.num_attention_heads = self.decoder_config["num_heads"]
+        self.num_hidden_layers = self.decoder_config["decoder_layers"]
         
         super().__init__(**kwargs)
     

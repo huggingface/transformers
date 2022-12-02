@@ -107,6 +107,7 @@ if is_torch_available():
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING,
         MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
         MODEL_MAPPING,
         AdaptiveEmbedding,
@@ -246,6 +247,11 @@ class ModelTesterMixin:
                     (self.model_tester.batch_size, num_patches**2), dtype=torch.long, device=torch_device
                 )
             elif model_class in get_values(MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING):
+                batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
+                inputs_dict["labels"] = torch.zeros(
+                    [self.model_tester.batch_size, height, width], device=torch_device
+                ).long()
+            elif model_class in get_values(MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING):
                 batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
                 inputs_dict["labels"] = torch.zeros(
                     [self.model_tester.batch_size, height, width], device=torch_device

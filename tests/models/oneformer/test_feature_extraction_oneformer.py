@@ -15,7 +15,6 @@
 
 
 import unittest
-from collections import OrderedDict
 import numpy as np
 from datasets import load_dataset
 
@@ -40,7 +39,7 @@ if is_vision_available():
 
 
 def prepare_metadata(class_info):
-    metadata = OrderedDict()
+    metadata = {}
     class_names = []
     thing_ids = []
     for idx in range(len(class_info)):
@@ -148,8 +147,8 @@ class OneFormerFeatureExtractionTester(unittest.TestCase):
         else:
             expected_values = []
             for image in image_inputs:
-                expected_height, expected_width = self.get_expected_values([image])
-                expected_values.append((expected_height, expected_width))
+                expected_height, expected_width, expected_sequence_length = self.get_expected_values([image])
+                expected_values.append((expected_height, expected_width, expected_sequence_length))
             expected_height = max(expected_values, key=lambda item: item[0])[0]
             expected_width = max(expected_values, key=lambda item: item[1])[1]
         
@@ -472,7 +471,7 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
         # create a feature extractor
-        feature_extractor = OneFormerFeatureExtractor(reduce_labels=True, ignore_index=255, size=(512, 512),
+        feature_extractor = OneFormerFeatureExtractor(reduce_labels=True, ignore_index=0, size=(512, 512),
                                             max_seq_length=77, task_seq_length=77, class_info=ADE20K_150_CATEGORIES, 
                                             num_text=self.feature_extract_tester.num_text, repo_path= "shi-labs/oneformer_ade20k_swin_tiny")
 
@@ -486,28 +485,39 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
             return_tensors="pt",
         )
 
-        # verify the pixel values and pixel mask
+        # verify the pixel values, task inputs, text inputs and pixel mask
         self.assertEqual(inputs["pixel_values"].shape, (2, 3, 512, 711))
         self.assertEqual(inputs["pixel_mask"].shape, (2, 512, 711))
+        self.assertEqual(inputs["task_inputs"].shape, (2, 77))
         self.assertEqual(inputs["text_inputs"].shape, (2, self.feature_extract_tester.num_text, 77))
 
         # verify the class labels
         self.assertEqual(len(inputs["class_labels"]), 2)
         # fmt: off
-        expected_class_labels = torch.tensor([4, 17, 32, 42, 12, 3, 0, 43, 96, 43, 125, 31, 138, 87, 149, 138, 87])  # noqa: E231
+        expected_class_labels = torch.tensor([4, 17, 32, 42, 12, 3, 5, 0, 43, 96, 104, 31, 125, 138, 87, 149])  # noqa: E231
         # fmt: on
-        self.assertTrue(torch.allclose(inputs["class_labels"][0], torch.tensor(expected_class_labels)))
+        self.assertTrue(torch.allclose(inputs["class_labels"][0], expected_class_labels))
         # fmt: off
-        expected_class_labels = torch.tensor([19, 67, 82, 17, 12, 3, 14, 5, 0, 115, 43, 8, 138, 125, 143])  # noqa: E231
+        expected_class_labels = torch.tensor([19, 67, 82, 17, 12, 42, 3, 14, 5, 0, 115, 43, 8, 138, 125, 143])  # noqa: E231
         # fmt: on
         self.assertTrue(torch.allclose(inputs["class_labels"][1], expected_class_labels))
 
+        # verify the task inputs
+        self.assertEqual(len(inputs["task_inputs"]), 2)
+        self.assertEqual(inputs["task_inputs"][0].sum().item(), 141082)
+        self.assertEqual(inputs["task_inputs"][0].sum().item(), inputs["task_inputs"][1].sum().item())
+
+        # verify the text inputs
+        self.assertEqual(len(inputs["text_inputs"]), 2)
+        self.assertEqual(inputs["text_inputs"][0].sum().item(), 1095752)
+        self.assertEqual(inputs["text_inputs"][1].sum().item(), 1062468)
+
         # verify the mask labels
         self.assertEqual(len(inputs["mask_labels"]), 2)
-        self.assertEqual(inputs["mask_labels"][0].shape, (79, 512, 711))
-        self.assertEqual(inputs["mask_labels"][1].shape, (61, 512, 711))
-        self.assertEquals(inputs["mask_labels"][0].sum().item(), 315193.0)
-        self.assertEquals(inputs["mask_labels"][1].sum().item(), 350747.0)
+        self.assertEqual(inputs["mask_labels"][0].shape, (16, 512, 711))
+        self.assertEqual(inputs["mask_labels"][1].shape, (16, 512, 711))
+        self.assertEqual(inputs["mask_labels"][0].sum().item(), 315193.0)
+        self.assertEqual(inputs["mask_labels"][1].sum().item(), 350747.0)
 
     def test_integration_instance_segmentation(self):
         # load 2 images and corresponding panoptic annotations from the hub
@@ -541,7 +551,7 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
         # create a feature extractor
-        feature_extractor = OneFormerFeatureExtractor(reduce_labels=True, ignore_index=255, size=(512, 512),
+        feature_extractor = OneFormerFeatureExtractor(reduce_labels=True, ignore_index=0, size=(512, 512),
                                             max_seq_length=77, task_seq_length=77, class_info=ADE20K_150_CATEGORIES, 
                                             num_text=self.feature_extract_tester.num_text, repo_path= "shi-labs/oneformer_ade20k_swin_tiny")
 
@@ -555,28 +565,39 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
             return_tensors="pt",
         )
 
-        # verify the pixel values and pixel mask
+        # verify the pixel values, task inputs, text inputs and pixel mask
         self.assertEqual(inputs["pixel_values"].shape, (2, 3, 512, 711))
         self.assertEqual(inputs["pixel_mask"].shape, (2, 512, 711))
+        self.assertEqual(inputs["task_inputs"].shape, (2, 77))
         self.assertEqual(inputs["text_inputs"].shape, (2, self.feature_extract_tester.num_text, 77))
 
         # verify the class labels
         self.assertEqual(len(inputs["class_labels"]), 2)
         # fmt: off
-        expected_class_labels = torch.tensor([4, 17, 32, 42, 42, 42, 42, 42, 42, 42, 32, 12, 12, 12, 12, 12, 42, 42, 12, 12, 12, 42, 12, 12, 12, 12, 12, 3, 12, 12, 12, 12, 42, 42, 42, 12, 42, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 5, 12, 12, 12, 12, 12, 12, 12, 0, 43, 43, 43, 96, 43, 104, 43, 31, 125, 31, 125, 138, 87, 125, 149, 138, 125, 87, 87])  # noqa: E231
+        expected_class_labels = torch.tensor([32, 42, 42, 42, 42, 42, 42, 42, 32, 12, 12, 12, 12, 12, 42, 42, 12, 12, 12, 42, 12, 12, 12, 12, 12, 12, 12, 12, 12, 42, 42, 42, 12, 42, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 43, 43, 43, 43, 104, 43, 31, 125, 31, 125, 138, 87, 125, 149, 138, 125, 87, 87])  # noqa: E231
         # fmt: on
-        self.assertTrue(torch.allclose(inputs["class_labels"][0], torch.tensor(expected_class_labels)))
+        self.assertTrue(torch.allclose(inputs["class_labels"][0], expected_class_labels))
         # fmt: off
-        expected_class_labels = torch.tensor([19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 67, 82, 19, 19, 17, 19, 19, 19, 19, 19, 19, 19, 19, 19, 12, 12, 42, 12, 12, 12, 12, 3, 14, 12, 12, 12, 12, 12, 12, 12, 12, 14, 5, 12, 12, 0, 115, 43, 43, 115, 43, 43, 43, 8, 8, 8, 138, 138, 125, 143])  # noqa: E231
+        expected_class_labels = torch.tensor([19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 67, 82, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 12, 12, 42, 12, 12, 12, 12, 14, 12, 12, 12, 12, 12, 12, 12, 12, 14, 12, 12, 115, 43, 43, 115, 43, 43, 43, 8, 8, 8, 138, 138, 125, 143])  # noqa: E231
         # fmt: on
         self.assertTrue(torch.allclose(inputs["class_labels"][1], expected_class_labels))
 
+        # verify the task inputs
+        self.assertEqual(len(inputs["task_inputs"]), 2)
+        self.assertEqual(inputs["task_inputs"][0].sum().item(), 144985)
+        self.assertEqual(inputs["task_inputs"][0].sum().item(), inputs["task_inputs"][1].sum().item())
+
+        # verify the text inputs
+        self.assertEqual(len(inputs["text_inputs"]), 2)
+        self.assertEqual(inputs["text_inputs"][0].sum().item(), 1037040)
+        self.assertEqual(inputs["text_inputs"][1].sum().item(), 1044078)
+
         # verify the mask labels
         self.assertEqual(len(inputs["mask_labels"]), 2)
-        self.assertEqual(inputs["mask_labels"][0].shape, (79, 512, 711))
-        self.assertEqual(inputs["mask_labels"][1].shape, (61, 512, 711))
-        self.assertEquals(inputs["mask_labels"][0].sum().item(), 315193.0)
-        self.assertEquals(inputs["mask_labels"][1].sum().item(), 350747.0)
+        self.assertEqual(inputs["mask_labels"][0].shape, (73, 512, 711))
+        self.assertEqual(inputs["mask_labels"][1].shape, (57, 512, 711))
+        self.assertEqual(inputs["mask_labels"][0].sum().item(), 35040.0)
+        self.assertEqual(inputs["mask_labels"][1].sum().item(), 98228.0)
     
     def test_integration_panoptic_segmentation(self):
         # load 2 images and corresponding panoptic annotations from the hub
@@ -610,7 +631,7 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
         # create a feature extractor
-        feature_extractor = OneFormerFeatureExtractor(reduce_labels=True, ignore_index=255, size=(512, 512),
+        feature_extractor = OneFormerFeatureExtractor(reduce_labels=True, ignore_index=0, size=(512, 512),
                                             max_seq_length=77, task_seq_length=77, class_info=ADE20K_150_CATEGORIES, 
                                             num_text=self.feature_extract_tester.num_text, repo_path= "shi-labs/oneformer_ade20k_swin_tiny")
 
@@ -624,9 +645,10 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
             return_tensors="pt",
         )
 
-        # verify the pixel values and pixel mask
+        # verify the pixel values, task inputs, text inputs and pixel mask
         self.assertEqual(inputs["pixel_values"].shape, (2, 3, 512, 711))
         self.assertEqual(inputs["pixel_mask"].shape, (2, 512, 711))
+        self.assertEqual(inputs["task_inputs"].shape, (2, 77))
         self.assertEqual(inputs["text_inputs"].shape, (2, self.feature_extract_tester.num_text, 77))
 
         # verify the class labels
@@ -634,18 +656,28 @@ class OneFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
         # fmt: off
         expected_class_labels = torch.tensor([4, 17, 32, 42, 42, 42, 42, 42, 42, 42, 32, 12, 12, 12, 12, 12, 42, 42, 12, 12, 12, 42, 12, 12, 12, 12, 12, 3, 12, 12, 12, 12, 42, 42, 42, 12, 42, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 5, 12, 12, 12, 12, 12, 12, 12, 0, 43, 43, 43, 96, 43, 104, 43, 31, 125, 31, 125, 138, 87, 125, 149, 138, 125, 87, 87])  # noqa: E231
         # fmt: on
-        self.assertTrue(torch.allclose(inputs["class_labels"][0], torch.tensor(expected_class_labels)))
+        self.assertTrue(torch.allclose(inputs["class_labels"][0], expected_class_labels))
         # fmt: off
         expected_class_labels = torch.tensor([19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 67, 82, 19, 19, 17, 19, 19, 19, 19, 19, 19, 19, 19, 19, 12, 12, 42, 12, 12, 12, 12, 3, 14, 12, 12, 12, 12, 12, 12, 12, 12, 14, 5, 12, 12, 0, 115, 43, 43, 115, 43, 43, 43, 8, 8, 8, 138, 138, 125, 143])  # noqa: E231
         # fmt: on
         self.assertTrue(torch.allclose(inputs["class_labels"][1], expected_class_labels))
 
+        # verify the task inputs
+        self.assertEqual(len(inputs["task_inputs"]), 2)
+        self.assertEqual(inputs["task_inputs"][0].sum().item(), 136240)
+        self.assertEqual(inputs["task_inputs"][0].sum().item(), inputs["task_inputs"][1].sum().item())
+
+        # verify the text inputs
+        self.assertEqual(len(inputs["text_inputs"]), 2)
+        self.assertEqual(inputs["text_inputs"][0].sum().item(), 1048653)
+        self.assertEqual(inputs["text_inputs"][1].sum().item(), 1067160)
+
         # verify the mask labels
         self.assertEqual(len(inputs["mask_labels"]), 2)
         self.assertEqual(inputs["mask_labels"][0].shape, (79, 512, 711))
         self.assertEqual(inputs["mask_labels"][1].shape, (61, 512, 711))
-        self.assertEquals(inputs["mask_labels"][0].sum().item(), 315193.0)
-        self.assertEquals(inputs["mask_labels"][1].sum().item(), 350747.0)
+        self.assertEqual(inputs["mask_labels"][0].sum().item(), 315193.0)
+        self.assertEqual(inputs["mask_labels"][1].sum().item(), 350747.0)
 
     def test_binary_mask_to_rle(self):
         fake_binary_mask = np.zeros((20, 50))

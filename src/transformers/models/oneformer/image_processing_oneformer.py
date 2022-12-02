@@ -17,7 +17,6 @@
 import math
 import warnings
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set, Tuple, Union
-from collections import OrderedDict
 import numpy as np
 from transformers import CLIPTokenizer
 from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -62,7 +61,15 @@ if is_torch_available():
     from torch import nn
 
 def pad_tokens_to_max_len(tokens, max_len=77):
-    tokens = tokens["input_ids"]
+    if isinstance(tokens, list):
+        tmp_tokens = []
+        for token in tokens:
+            tmp_tokens.append(token["input_ids"])
+        tokens = tmp_tokens
+        del tmp_tokens
+    else:
+        tokens = tokens["input_ids"]
+
     padded_tokens = torch.zeros(len(tokens), max_len, dtype=torch.long)
     for i in range(len(tokens)):
         token = tokens[i]
@@ -302,7 +309,7 @@ def get_oneformer_resize_output_image_size(
     return output_size
 
 def prepare_metadata(class_info):
-    metadata = OrderedDict()
+    metadata = {}
     class_names = []
     thing_ids = []
     for idx in range(len(class_info)):
@@ -530,7 +537,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
             all_labels = all_labels[all_labels != 0]
 
         # Generate a binary mask for each object instance
-        binary_masks = [np.ma.masked_where(segmentation_map == i, segmentation_map) for i in all_labels]
+        binary_masks = [(segmentation_map == i) for i in all_labels]
         binary_masks = np.stack(binary_masks, axis=0)  # (num_labels, height, width)
 
         # Convert instance ids to class ids
@@ -542,10 +549,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 labels[all_labels == label] = class_id
         else:
             labels = all_labels
-
-        # Decrement labels by 1
-        if self.reduce_labels:
-            labels -= 1
 
         return binary_masks.astype(np.float32), labels.astype(np.int64)
 
@@ -793,29 +796,28 @@ class OneFormerImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def get_semantic_annotations(self, label):
+    def get_semantic_annotations(self, label, num_class_obj):
         
         annotation_classes = label["classes"]
         annotation_masks = label["masks"]
-        
-        num_class_obj = {}
+
         texts = ["a semantic photo"] * self.num_text
         classes = []
         masks = []
 
-        for idx in range(len(classes)):
+        for idx in range(len(annotation_classes)):
             class_id = annotation_classes[idx]
             mask = annotation_masks[idx]
             if not np.all(mask == False):
                 if class_id not in classes:
-                    cls_name = self.metadata[str(class_id)]["name"]
+                    cls_name = self.metadata[str(class_id)]
                     classes.append(class_id)
                     masks.append(mask)
                     num_class_obj[cls_name] += 1
                 else:
                     idx = classes.index(class_id)
                     masks[idx] += mask
-                    masks[idx] = np.clip(masks[idx], 0, 1).astype(np.bool)
+                    masks[idx] = np.clip(masks[idx], 0, 1)
 
         num = 0
         for i, cls_name in enumerate(self.metadata["class_names"]):
@@ -830,27 +832,25 @@ class OneFormerImageProcessor(BaseImageProcessor):
         masks = np.array(masks)
         return classes, masks, texts
 
-    def get_instance_annotations(self, label):
+    def get_instance_annotations(self, label, num_class_obj):
         
         annotation_classes = label["classes"]
         annotation_masks = label["masks"]
-        
-        num_class_obj = {}
+
         texts = ["an instance photo"] * self.num_text
         classes = []
         masks = []
 
-        for idx in range(len(classes)):
+        for idx in range(len(annotation_classes)):
             class_id = annotation_classes[idx]
             mask = annotation_masks[idx]
+            
             if class_id in self.metadata["thing_ids"]:
                 if not np.all(mask == False):
-                    if class_id not in classes:
-                        cls_name = self.metadata[str(class_id)]["name"]
-                        classes.append(class_id)
-                        masks.append(mask)
-                        num_class_obj[cls_name] += 1
-
+                    cls_name = self.metadata[str(class_id)]
+                    classes.append(class_id)
+                    masks.append(mask)
+                    num_class_obj[cls_name] += 1
 
         num = 0
         for i, cls_name in enumerate(self.metadata["class_names"]):
@@ -865,25 +865,23 @@ class OneFormerImageProcessor(BaseImageProcessor):
         masks = np.array(masks)
         return classes, masks, texts
 
-    def get_panoptic_annotations(self, label):
+    def get_panoptic_annotations(self, label, num_class_obj):
         
         annotation_classes = label["classes"]
         annotation_masks = label["masks"]
         
-        num_class_obj = {}
         texts = ["an panoptic photo"] * self.num_text
         classes = []
         masks = []
 
-        for idx in range(len(classes)):
+        for idx in range(len(annotation_classes)):
             class_id = annotation_classes[idx]
-            mask = annotation_masks[idx]
-            if class_id in self.metadata["thing_ids"]:
-                if class_id not in classes:
-                    cls_name = self.metadata[str(class_id)]["name"]
-                    classes.append(class_id)
-                    masks.append(mask)
-                    num_class_obj[cls_name] += 1
+            mask = annotation_masks[idx].data
+            if not np.all(mask == False):
+                cls_name = self.metadata[str(class_id)]
+                classes.append(class_id)
+                masks.append(mask)
+                num_class_obj[cls_name] += 1
 
 
         num = 0
@@ -970,6 +968,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
             )
 
         pixel_values_list = [to_numpy_array(pixel_values) for pixel_values in pixel_values_list]
+        pad_size = get_max_height_width(pixel_values_list)
         encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors)
 
         task_token_inputs = []
@@ -985,7 +984,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         if segmentation_maps is not None:
             segmentation_maps = map(np.array, segmentation_maps)
             converted_segmentation_maps = []
-
             for i, segmentation_map in enumerate(segmentation_maps):
                 # Use instance2class_id mapping per image
                 if isinstance(instance_id_to_semantic_id, List):
@@ -1006,21 +1004,31 @@ class OneFormerImageProcessor(BaseImageProcessor):
             mask_labels = []
             class_labels = []
             text_inputs = []
+
+            num_class_obj = {}
+            for cls_name in self.metadata["class_names"]:
+                num_class_obj[cls_name] = 0
+
             for i, label in enumerate(annotations):
                 task = task_inputs[i]
                 if task == "semantic":
-                    classes, masks, texts = self.get_semantic_annotations(label)
+                    classes, masks, texts = self.get_semantic_annotations(label, num_class_obj)
                 elif task == "instance":
-                    classes, masks, texts = self.get_instance_annotations(label)
+                    classes, masks, texts = self.get_instance_annotations(label, num_class_obj)
                 if task == "panoptic":
-                    classes, masks, texts = self.get_panoptic_annotations(label)
+                    classes, masks, texts = self.get_panoptic_annotations(label, num_class_obj)
                 
                 # we cannot batch them since they don't share a common class size
+                masks = [mask[None, ...] for mask in masks]
+                masks = [
+                    self._pad_image(image=mask, output_size=pad_size, constant_values=ignore_index) for mask in masks
+                ]
+                masks = np.concatenate(masks, axis=0)
                 mask_labels.append(torch.from_numpy(masks))
-                class_labels.append(torch.from_numpy(classes))
+                class_labels.append(torch.from_numpy(classes).long())
                 text_input_list = [tokenizer(texts[i]) for i in range(len(texts))]
                 text_input_list = pad_tokens_to_max_len(text_input_list, max_len=self.max_seq_length)
-                text_inputs.append(text_input_list)
+                text_inputs.append(text_input_list.unsqueeze(0))
 
             encoded_inputs["mask_labels"] = mask_labels
             encoded_inputs["class_labels"] = class_labels
