@@ -43,8 +43,8 @@ While each task has an associated [`pipeline`], it is simpler to use the general
 {'text': 'I HAVE A DREAM BUT ONE DAY THIS NATION WILL RISE UP LIVE UP THE TRUE MEANING OF ITS TREES'}
 ```
 
-Not perfect for what you had in mind ? Check out the models on the hub [Most downloaded models for automatic speech recognition](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=downloads). 
-Let's take [openai/whisper-large](https://huggingface.co/openai/whisper-large) to try it out.
+Not the result you had in mind? Check out some of the [most downloaded automatic speech recognition models](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=downloads) on the Hub to see if you can get a better transcription.
+Let's try [openai/whisper-large](https://huggingface.co/openai/whisper-large):
 
 ```py
 >>> generator = pipeline(model="openai/whisper-large")
