@@ -128,7 +128,7 @@ def _is_torch_dtype(x):
 
     if isinstance(x, str):
         if hasattr(torch, x):
-            return True
+            x = getattr(torch, x)
         else:
             return False
     return isinstance(x, torch.dtype)
