@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Tuple
 
 import flax.linen as nn
 import jax
