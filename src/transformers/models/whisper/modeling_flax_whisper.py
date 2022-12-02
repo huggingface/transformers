@@ -622,8 +622,9 @@ class FlaxWhisperEncoder(nn.Module):
 
         if hidden_states.shape[1:] != (self.config.max_source_positions, self.config.d_model):
             raise ValueError(
-                f"hidden_states.shape[1:] must be equal to (self.config.max_source_positions, self.config.d_model)"
-                f"(got {hidden_states.shape[1:]}, but should be ({self.config.max_source_positions}, {self.config.d_model}))"
+                "hidden_states.shape[1:] must be equal to (self.config.max_source_positions, self.config.d_model)(got"
+                f" {hidden_states.shape[1:]}, but should be ({self.config.max_source_positions},"
+                f" {self.config.d_model}))"
             )
 
         hidden_states = hidden_states + self.embed_positions(jnp.arange(self.config.max_source_positions))
