@@ -102,7 +102,6 @@ class ConvBertConfig(PretrainedConfig):
         self,
         vocab_size=30522,
         hidden_size=768,
-        is_encoder_decoder=False,
         num_hidden_layers=12,
         num_attention_heads=12,
         intermediate_size=3072,

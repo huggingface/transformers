@@ -111,7 +111,6 @@ class RemBertConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         use_cache=True,
-        is_encoder_decoder=False,
         pad_token_id=0,
         bos_token_id=312,
         eos_token_id=313,
