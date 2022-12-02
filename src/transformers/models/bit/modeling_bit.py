@@ -64,14 +64,18 @@ BIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 def get_padding_value(padding=None, kernel_size=7, stride=1, dilation=1) -> Tuple[Tuple, bool]:
     r"""
-    Utility function to get the tuple padding value given the kernel_size and padding
+    Utility function to get the tuple padding value given the kernel_size and padding.
 
     Args:
-        padding, Union[`str`, `int`]:
-            padding value, can be either `"same"`, `"valid"`. If a different value is provided the default padding from
+        padding (Union[`str`, `int`], *optional*):
+            Padding value, can be either `"same"`, `"valid"`. If a different value is provided the default padding from
             PyTorch is used.
-        kernel_size, `int`:
+        kernel_size (`int`, *optional*, defaults to 7):
             Kernel size of the convolution layers.
+        stride (`int`, *optional*, defaults to 1):
+            Stride value of the convolution layers.
+        dilation (`int`, *optional*, defaults to 1):
+            Dilation value of the convolution layers.
     """
     dynamic = False
     if padding is None:
@@ -100,7 +104,7 @@ def get_padding_value(padding=None, kernel_size=7, stride=1, dilation=1) -> Tupl
 
 
 class WeightStandardizedConv2d(nn.Conv2d):
-    """Conv2d with Weight Standardization. TF compatible SAME padding. Used for ViT Hybrid model.
+    """Conv2d with Weight Standardization. Includes TensorFlow compatible SAME padding. Used for ViT Hybrid model.
 
     Paper: [Micro-Batch Training with Batch-Channel Normalization and Weight
     Standardization](https://arxiv.org/abs/1903.10520v2)
@@ -135,51 +139,34 @@ class WeightStandardizedConv2d(nn.Conv2d):
             self.pad = None
         self.eps = eps
 
-    def forward(self, x):
+    def forward(self, hidden_state):
         if self.pad is not None:
-            x = self.pad(x)
+            hidden_state = self.pad(hidden_state)
         weight = nn.functional.batch_norm(
             self.weight.reshape(1, self.out_channels, -1), None, None, training=True, momentum=0.0, eps=self.eps
         ).reshape_as(self.weight)
-        x = nn.functional.conv2d(x, weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
-        return x
-
-
-def _num_groups(num_channels, num_groups, group_size):
-    if group_size:
-        if num_channels % group_size == 0:
-            raise ValueError("num_channels must divide group_size")
-        return num_channels // group_size
-    return num_groups
+        hidden_state = nn.functional.conv2d(
+            hidden_state, weight, self.bias, self.stride, self.padding, self.dilation, self.groups
+        )
+        return hidden_state
 
 
 class BitGroupNormActivation(nn.GroupNorm):
-    # NOTE num_channel and num_groups order flipped for easier layer swaps / binding of fixed args
-    def __init__(
-        self,
-        config,
-        num_channels,
-        eps=1e-5,
-        affine=True,
-        group_size=None,
-        apply_act=True,
-        drop_layer=None,
-    ):
+    r"""
+    A module that combines group normalization with an activation function.
+    """
 
-        super(BitGroupNormActivation, self).__init__(
-            _num_groups(num_channels, config.num_groups, group_size), num_channels, eps=eps, affine=affine
-        )
-        self.drop = drop_layer() if drop_layer is not None else nn.Identity()
-        if apply_act:
+    def __init__(self, config, num_channels, eps=1e-5, affine=True, apply_activation=True):
+        super(BitGroupNormActivation, self).__init__(config.num_groups, num_channels, eps=eps, affine=affine)
+        if apply_activation:
             self.activation = ACT2FN[config.hidden_act]
         else:
             self.activation = nn.Identity()
 
-    def forward(self, x):
-        x = nn.functional.group_norm(x, self.num_groups, self.weight, self.bias, self.eps)
-        x = self.drop(x)
-        x = self.activation(x)
-        return x
+    def forward(self, hidden_state):
+        hidden_state = nn.functional.group_norm(hidden_state, self.num_groups, self.weight, self.bias, self.eps)
+        hidden_state = self.activation(hidden_state)
+        return hidden_state
 
 
 class DynamicPad2d(nn.Module):
@@ -423,7 +410,7 @@ class BitPreActivationBottleneckLayer(nn.Module):
 
 
 class BitBottleneckLayer(nn.Module):
-    """Non Pre-activation bottleneck block, equivalent to V1.5/V1b bottleneck. Used for ViT."""
+    """Non Pre-activation bottleneck block, equivalent to V1.5/V1b bottleneck. Used for ViT Hybrid."""
 
     def __init__(
         self,
@@ -464,7 +451,7 @@ class BitBottleneckLayer(nn.Module):
         self.conv2 = conv_layer(mid_chs, mid_chs, 3, stride=stride, dilation=first_dilation, groups=groups)
         self.norm2 = norm_layer(num_channels=mid_chs)
         self.conv3 = conv_layer(mid_chs, out_channels, 1)
-        self.norm3 = norm_layer(num_channels=out_channels, apply_act=False)
+        self.norm3 = norm_layer(num_channels=out_channels, apply_activation=False)
         self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
 
         self.activation = ACT2FN[config.hidden_act]
@@ -503,7 +490,7 @@ class BitDownsampleConv(nn.Module):
         super(BitDownsampleConv, self).__init__()
         self.conv_layer = conv_layer
         self.conv = conv_layer(in_channels, out_channels, 1, stride=stride)
-        self.norm = nn.Identity() if preact else norm_layer(num_channels=out_channels, apply_act=False)
+        self.norm = nn.Identity() if preact else norm_layer(num_channels=out_channels, apply_activation=False)
 
     def forward(self, x):
         return self.norm(self.conv(x))
