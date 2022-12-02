@@ -23,14 +23,14 @@ speed of BERT:
 
 The abstract from the paper is the following:
 
-*Increasing model size when pretraining natural language representations often results in improved performance on
+_Increasing model size when pretraining natural language representations often results in improved performance on
 downstream tasks. However, at some point further model increases become harder due to GPU/TPU memory limitations,
 longer training times, and unexpected model degradation. To address these problems, we present two parameter-reduction
 techniques to lower memory consumption and increase the training speed of BERT. Comprehensive empirical evidence shows
 that our proposed methods lead to models that scale much better compared to the original BERT. We also use a
 self-supervised loss that focuses on modeling inter-sentence coherence, and show it consistently helps downstream tasks
 with multi-sentence inputs. As a result, our best model establishes new state-of-the-art results on the GLUE, RACE, and
-SQuAD benchmarks while having fewer parameters compared to BERT-large.*
+SQuAD benchmarks while having fewer parameters compared to BERT-large._
 
 Tips:
 
@@ -43,17 +43,40 @@ Tips:
 This model was contributed by [lysandre](https://huggingface.co/lysandre). This model jax version was contributed by
 [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/google-research/ALBERT).
 
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ALBERT. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+
+<PipelineTag pipeline="introduce" />- A blog post on [Getting Started with
+ALBERT](https://huggingface.co/albert-base-v2). - A blog post on
+[Albert-base-v2](https://huggingface.co/albert-base-v2). - A blog post on
+[albert-xlarge-v2](https://huggingface.co/albert-xlarge-v2). - A blog post on
+[Chinese
+Albert](https://huggingface.co/uer/albert-base-chinese-cluecorpussmall). - A
+blog post on [Albert-tiny](https://huggingface.co/clue/albert_chinese_tiny). -
+An article about [ALBERT: A Lite BERT for Self-supervised Learning of Language
+Representations](https://arxiv.org/abs/1909.11942)
+
+<PipelineTag pipeline="text-classification" />- A notebook on how to [Fine-tune ALBERT
+for sentence-pair classification](https://github.com/NadirEM/nlp-notebooks/blob/master/Fine_tune_ALBERT_sentence_pair_classification.ipynb).
+
+<PipelineTag pipeline="text-generation" />
+
+<PipelineTag pipeline="text-recognition" />
+
+<PipelineTag pipeline="token-classification" />- A course material on [Encoder
+Model](https://huggingface.co/course/chapter1/5). - A course material on
+[Creating your own dataset](https://huggingface.co/course/chapter5/5)
+
+<PipelineTag pipeline="QuestionAnswering" />
+
 ## AlbertConfig
 
 [[autodoc]] AlbertConfig
 
 ## AlbertTokenizer
 
-[[autodoc]] AlbertTokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
+[[autodoc]] AlbertTokenizer - build_inputs_with_special_tokens - get_special_tokens_mask - create_token_type_ids_from_sequences - save_vocabulary
 
 ## AlbertTokenizerFast
 
@@ -67,23 +90,19 @@ This model was contributed by [lysandre](https://huggingface.co/lysandre). This 
 
 ## AlbertModel
 
-[[autodoc]] AlbertModel
-    - forward
+[[autodoc]] AlbertModel - forward
 
 ## AlbertForPreTraining
 
-[[autodoc]] AlbertForPreTraining
-    - forward
+[[autodoc]] AlbertForPreTraining - forward
 
 ## AlbertForMaskedLM
 
-[[autodoc]] AlbertForMaskedLM
-    - forward
+[[autodoc]] AlbertForMaskedLM - forward
 
 ## AlbertForSequenceClassification
 
-[[autodoc]] AlbertForSequenceClassification
-    - forward
+[[autodoc]] AlbertForSequenceClassification - forward
 
 ## AlbertForMultipleChoice
 
@@ -91,80 +110,64 @@ This model was contributed by [lysandre](https://huggingface.co/lysandre). This 
 
 ## AlbertForTokenClassification
 
-[[autodoc]] AlbertForTokenClassification
-    - forward
+[[autodoc]] AlbertForTokenClassification - forward
 
 ## AlbertForQuestionAnswering
 
-[[autodoc]] AlbertForQuestionAnswering
-    - forward
+[[autodoc]] AlbertForQuestionAnswering - forward
 
 ## TFAlbertModel
 
-[[autodoc]] TFAlbertModel
-    - call
+[[autodoc]] TFAlbertModel - call
 
 ## TFAlbertForPreTraining
 
-[[autodoc]] TFAlbertForPreTraining
-    - call
+[[autodoc]] TFAlbertForPreTraining - call
 
 ## TFAlbertForMaskedLM
 
-[[autodoc]] TFAlbertForMaskedLM
-    - call
+[[autodoc]] TFAlbertForMaskedLM - call
 
 ## TFAlbertForSequenceClassification
 
-[[autodoc]] TFAlbertForSequenceClassification
-    - call
+[[autodoc]] TFAlbertForSequenceClassification - call
 
 ## TFAlbertForMultipleChoice
 
-[[autodoc]] TFAlbertForMultipleChoice
-    - call
+[[autodoc]] TFAlbertForMultipleChoice - call
 
 ## TFAlbertForTokenClassification
 
-[[autodoc]] TFAlbertForTokenClassification
-    - call
+[[autodoc]] TFAlbertForTokenClassification - call
 
 ## TFAlbertForQuestionAnswering
 
-[[autodoc]] TFAlbertForQuestionAnswering
-    - call
+[[autodoc]] TFAlbertForQuestionAnswering - call
 
 ## FlaxAlbertModel
 
-[[autodoc]] FlaxAlbertModel
-    - __call__
+[[autodoc]] FlaxAlbertModel - **call**
 
 ## FlaxAlbertForPreTraining
 
-[[autodoc]] FlaxAlbertForPreTraining
-    - __call__
+[[autodoc]] FlaxAlbertForPreTraining - **call**
 
 ## FlaxAlbertForMaskedLM
 
-[[autodoc]] FlaxAlbertForMaskedLM
-    - __call__
+[[autodoc]] FlaxAlbertForMaskedLM - **call**
 
 ## FlaxAlbertForSequenceClassification
 
-[[autodoc]] FlaxAlbertForSequenceClassification
-    - __call__
+[[autodoc]] FlaxAlbertForSequenceClassification - **call**
 
 ## FlaxAlbertForMultipleChoice
 
-[[autodoc]] FlaxAlbertForMultipleChoice
-    - __call__
+[[autodoc]] FlaxAlbertForMultipleChoice - **call**
 
 ## FlaxAlbertForTokenClassification
 
-[[autodoc]] FlaxAlbertForTokenClassification
-    - __call__
+[[autodoc]] FlaxAlbertForTokenClassification - **call**
 
 ## FlaxAlbertForQuestionAnswering
 
-[[autodoc]] FlaxAlbertForQuestionAnswering
-    - __call__
+[[autodoc]] FlaxAlbertForQuestionAnswering - **call**
