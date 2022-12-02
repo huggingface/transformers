@@ -204,7 +204,9 @@ class BatchFeature(UserDict):
                 device = kwargs.pop("device", None)
                 # Check if the args are a device or a dtype
                 if device is None:
-                    for arg in args:
+                    if len(args) > 0:
+                        # device should be always the first argument
+                        arg = args[0]
                         if is_torch_dtype(arg):
                             # Ignore the dtype
                             logger.warning(
