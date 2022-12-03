@@ -29,7 +29,7 @@ from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFBartForConditionalGeneration, TFBartModel
+    from transformers import TFBartForConditionalGeneration, TFBartModel, TFBartForSequenceClassification
 
 
 @require_tf
