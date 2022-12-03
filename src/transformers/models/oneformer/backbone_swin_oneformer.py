@@ -16,20 +16,23 @@
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import  Optional, Tuple
-import torch.nn.functional as F
+from typing import Optional, Tuple
+
 import torch
-from torch import  nn
+import torch.nn.functional as F
+from torch import nn
+
 from transformers.utils import logging
-from ...modeling_utils import ModuleUtilsMixin
+
 from ...activations import ACT2FN
+from ...modeling_utils import ModuleUtilsMixin
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput
-
 from .configuration_oneformer import OneFormerConfig
+
+
 logger = logging.get_logger(__name__)
 
-################## Utilities #################
 
 # Copied from transformers.models.maskformer.modeling_maskformer_swin.window_partition
 def window_partition(input_feature, window_size):
@@ -75,9 +78,7 @@ def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
     output = input.div(keep_prob) * random_tensor
     return output
 
-################## Data Classes #################
-    
-# Copied from transformers.models.maskformer.modeling_maskformer_swin.MaskFormerSwinModelOutputWithPooling with Mask->One
+
 @dataclass
 class OneFormerSwinModelOutput(ModelOutput):
     """
@@ -100,9 +101,10 @@ class OneFormerSwinModelOutput(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
+
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states_spatial_dimensions: Tuple[Tuple[int, int]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None   
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # Copied from transformers.models.maskformer.modeling_maskformer_swin.MaskFormerSwinBaseModelOutput with Mask->One
@@ -136,9 +138,7 @@ class OneFormerSwinBaseModelOutput(ModelOutput):
     hidden_states_spatial_dimensions: Tuple[Tuple[int, int]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
-################## Swin Backbone Classes #################
 
-# Copied from transformers.models.maskformer.modeling_maskformer_swin.MaskFormerSwinEmbeddings with Mask->One
 class OneFormerSwinEmbeddings(nn.Module):
     """
     Construct the patch and position embeddings.
@@ -152,7 +152,9 @@ class OneFormerSwinEmbeddings(nn.Module):
         self.patch_grid = self.patch_embeddings.grid_size
 
         if config.backbone_config["use_absolute_embeddings"]:
-            self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.backbone_config["embed_dim"]))
+            self.position_embeddings = nn.Parameter(
+                torch.zeros(1, num_patches + 1, config.backbone_config["embed_dim"])
+            )
         else:
             self.position_embeddings = None
 
@@ -169,8 +171,8 @@ class OneFormerSwinEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
 
         return embeddings, output_dimensions
-    
-# Copied from transformers.models.maskformer.modeling_maskformer_swin.MaskFormerSwinPatchEmbeddings with Mask->One
+
+
 class OneFormerSwinPatchEmbeddings(nn.Module):
     """
     Image to Patch Embedding, including padding.
@@ -286,7 +288,6 @@ class OneFormerSwinDropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
-# Copied from transformers.models.maskformer.modeling_maskformer_swin.MaskFormerSwinSelfAttention with Mask->One
 class OneFormerSwinSelfAttention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
@@ -440,7 +441,6 @@ class OneFormerSwinAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.maskformer.modeling_maskformer_swin.MaskFormerSwinIntermediate with Mask->One
 class OneFormerSwinIntermediate(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -455,8 +455,7 @@ class OneFormerSwinIntermediate(nn.Module):
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
-    
-# Copied from transformers.models.maskformer.modeling_maskformer_swin.MaskFormerSwinOutput with Mask->One
+
 class OneFormerSwinOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -468,8 +467,7 @@ class OneFormerSwinOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         return hidden_states
 
-    
-# Copied from transformers.models.maskformer.modeling_maskformer_swin.MaskFormerSwinIntermediate with Mask->One
+
 class OneFormerSwinLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
         super().__init__()
@@ -479,7 +477,9 @@ class OneFormerSwinLayer(nn.Module):
         self.layernorm_before = nn.LayerNorm(dim, eps=config.general_config["layer_norm_eps"])
         self.attention = OneFormerSwinAttention(config, dim, num_heads, self.window_size)
         self.drop_path = (
-            OneFormerSwinDropPath(config.backbone_config["drop_path_rate"]) if config.backbone_config["drop_path_rate"] > 0.0 else nn.Identity()
+            OneFormerSwinDropPath(config.backbone_config["drop_path_rate"])
+            if config.backbone_config["drop_path_rate"] > 0.0
+            else nn.Identity()
         )
         self.layernorm_after = nn.LayerNorm(dim, eps=config.general_config["layer_norm_eps"])
         self.intermediate = OneFormerSwinIntermediate(config, dim)
@@ -581,8 +581,7 @@ class OneFormerSwinLayer(nn.Module):
 
         return outputs
 
-    
-# Copied from transformers.models.maskformer.modeling_maskformer_swin.MaskFormerSwinStage with Mask->One
+
 class OneFormerSwinStage(nn.Module):
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
         super().__init__()
@@ -638,13 +637,15 @@ class OneFormerSwinStage(nn.Module):
         return hidden_states, output_dimensions, all_hidden_states
 
 
-# Copied from transformers.models.maskformer.modeling_maskformer_swin.MaskFormerSwinEncoder with Mask->One
 class OneFormerSwinEncoder(nn.Module):
     def __init__(self, config, grid_size):
         super().__init__()
         self.num_layers = len(config.backbone_config["depths"])
         self.config = config
-        dpr = [x.item() for x in torch.linspace(0, config.backbone_config["drop_path_rate"], sum(config.backbone_config["depths"]))]
+        dpr = [
+            x.item()
+            for x in torch.linspace(0, config.backbone_config["drop_path_rate"], sum(config.backbone_config["depths"]))
+        ]
         self.layers = nn.ModuleList(
             [
                 OneFormerSwinStage(
@@ -653,7 +654,11 @@ class OneFormerSwinEncoder(nn.Module):
                     input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
                     depth=config.backbone_config["depths"][i_layer],
                     num_heads=config.backbone_config["num_heads"][i_layer],
-                    drop_path=dpr[sum(config.backbone_config["depths"][:i_layer]) : sum(config.backbone_config["depths"][: i_layer + 1])],
+                    drop_path=dpr[
+                        sum(config.backbone_config["depths"][:i_layer]) : sum(
+                            config.backbone_config["depths"][: i_layer + 1]
+                        )
+                    ],
                     downsample=OneFormerSwinPatchMerging if (i_layer < self.num_layers - 1) else None,
                 )
                 for i_layer in range(self.num_layers)
@@ -718,8 +723,7 @@ class OneFormerSwinEncoder(nn.Module):
             attentions=all_self_attentions,
         )
 
-    
-# Modified from transformers.models.maskformer.modeling_maskformer_swin.MaskFormerSwinModel with Mask->One
+
 class OneFormerSwinModel(nn.Module, ModuleUtilsMixin):
     def __init__(self, config: OneFormerConfig, add_pooling_layer=True):
         super().__init__()

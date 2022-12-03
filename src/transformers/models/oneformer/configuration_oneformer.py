@@ -17,27 +17,29 @@ from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..swin import SwinConfig
+
 
 logger = logging.get_logger(__name__)
 
 ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "shi-labs/oneformer_ade20k_swin_tiny": "https://huggingface.co/shi-labs/oneformer_ade20k_swin_tiny/blob/main/config.json",
+    "shi-labs/oneformer_ade20k_swin_tiny": (
+        "https://huggingface.co/shi-labs/oneformer_ade20k_swin_tiny/blob/main/config.json"
+    ),
     # See all OneFormer models at https://huggingface.co/models?filter=oneformer
 }
 
 
 class OneFormerConfig(PretrainedConfig):
     r"""
+    Args:
     This is the configuration class to store the configuration of a [`OneFormerModel`]. It is used to instantiate a
     OneFormer model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the OneFormer.
-    [shi-labs/swin_t_oneformer_ade20k](https://huggingface.co/shi-labs/swin_t_oneformer_ade20k) architecture trained
-    on [ADE20k-150](https://huggingface.co/datasets/scene_parse_150).
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-    Currently, OneFormer supports the [Swin Transformer](swin) and [DiNAT](dinat) as backbones.
-    Args:
+    [shi-labs/swin_t_oneformer_ade20k](https:
+        //huggingface.co/shi-labs/swin_t_oneformer_ade20k) architecture trained on
+    [ADE20k-150](https://huggingface.co/datasets/scene_parse_150). Configuration objects inherit from
+    [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from [`PretrainedConfig`]:
+    for more information. Currently, OneFormer supports the [Swin Transformer](swin) and [DiNAT](dinat) as backbones.
         output_attentions (`bool`, *optional*, defaults to `True`):
             Whether to output attention weights.
         output_hidden_states (`bool`, *optional*, defaults to `True`):
@@ -53,12 +55,13 @@ class OneFormerConfig(PretrainedConfig):
                 num_classes (`int`, *optional*, defaults to 150):
                     Number of classes in the training set.
                 num_queries (`int`, *optional*, defaults to 150):
-                    Number of segments, i.e. segmentation slots. This is the maximal number of segments that can be detected in the image.
+                    Number of segments, i.e. segmentation slots. This is the maximal number of segments that can be
+                    detected in the image.
                 no_object_weight (`float`, *optional*, defaults to 0.1):
                     Weight to apply to the null (no object) class.
                 deep_supervision(`bool`, *optional*, defaults to `True`):
-                    If `True` [`OneFormerForUniversalSegmentationOutput`] will contain the auxiliary losses computed using the
-                    logits from each decoder's stage.
+                    If `True` [`OneFormerForUniversalSegmentationOutput`] will contain the auxiliary losses computed
+                    using the logits from each decoder's stage.
                 class_weight (`float`, *optional*, defaults to 2.0):
                     The weight for the classification loss.
                 mask_weight (`float`, *optional*, defaults to 5.0):
@@ -87,7 +90,7 @@ class OneFormerConfig(PretrainedConfig):
                     Whether to calculate auxiliary losses during training.
                 output_auxiliary_logits (`bool`, *optional*, defaults to `True`):
                     Whether to return intermediate predictions from the transformer decoder layers.
-            
+
         backbone_config (`dict`, *optional*, defaults to a dictionary with the following keys)
             Dictionary containing configuration for the backbone module like patch size, num_heads, etc.
                 image_size (`int`, *optional*, defaults to 224):
@@ -126,15 +129,18 @@ class OneFormerConfig(PretrainedConfig):
                     Size divisibility for feature maps in backbone.
 
         text_encoder_config (`dict`, *optional*, defaults to a dictionary with the following keys)
-            Dictionary containing configuration for the text-mapper module and task encoder like sequence length, number of linear layers in MLP, etc.
+            Dictionary containing configuration for the text-mapper module and task encoder like sequence length,
+            number of linear layers in MLP, etc.
                 task_seq_len (`int`, *optional*, defaults to 77):
                     Sequence length for tokenizer for the task input.
                 max_seq_len (`int`, *optional*, defaults to 77):
                     Sequence length for tokenizer for the text query list input.
                 text_encoder_width (`int`, *optional*, deafults to 256):
-                    Channel number for the text representations inside the text encoder. Must match the mask_dim in the transformer decoder.
+                    Channel number for the text representations inside the text encoder. Must match the mask_dim in the
+                    transformer decoder.
                 text_encoder_context_len (`int`, *optional*, defaults to 77):
-                    Sequence length for the tokenized text representations inside the text encoder. Must match max_seq_len
+                    Sequence length for the tokenized text representations inside the text encoder. Must match
+                    max_seq_len
                 text_encoder_num_layers (`int`, *optional*, deafults to 6):
                     Number of transformer layers inside the text encoder
                 text_encoder_vocab_size (`int`, *optional*, defaults to 49408):
@@ -145,7 +151,8 @@ class OneFormerConfig(PretrainedConfig):
                     Number of learnable text context queries
 
         text_encoder_config (`dict`, *optional*, defaults to a dictionary with the following keys)
-            Dictionary containing configuration for the pixel decoder and transformer decoder like number of decoder layers, etc.
+            Dictionary containing configuration for the pixel decoder and transformer decoder like number of decoder
+            layers, etc.
                 conv_dim (`int`, *optional*, defaults to 256):
                     The number of output channels for the intermediate conv layers inside pixel decoder.
                 mask_dim (`int`, *optional*, defaults to 256):
@@ -155,7 +162,7 @@ class OneFormerConfig(PretrainedConfig):
                 encoder_layers (`int`, *optional*, defaults to 6):
                     Number of layers inside the pixel decoder.
                 decoder_layers (`int`, *optional*, defaults to 10):
-                    Number of layers inside the transformer decoder. 
+                    Number of layers inside the transformer decoder.
                 use_task_norm (`bool`, *optional*, default=`True`):
                     Normalize the mapped task token value before initializing the queries.
                 num_heads (`int`, *optional*, defaults to 8):
@@ -167,7 +174,7 @@ class OneFormerConfig(PretrainedConfig):
                 pre_norm (`bool`, *optional*, defaults to `False`):
                     Pre-Normalization for queries inside the attention layers.
                 enforce_input_proj (`bool`, *optional*, defaults to `False`):
-                    Add input project 1x1 conv even if input channels and hidden dim is identical  
+                    Add input project 1x1 conv even if input channels and hidden dim is identical
                 task_dec_layers (`int`, *optional*, defaults to 2):
                     Number of layers inside transformer to initialize and update queries with task token.
     Raises:
@@ -176,17 +183,13 @@ class OneFormerConfig(PretrainedConfig):
     Examples:
     ```python
     >>> from transformers import OneFormerConfig, OneFormerModel
+
     >>> # Initializing a OneFormer shi-labs/oneformer_ade20k_swin_tiny configuration
     >>> configuration = OneFormerConfig()
     >>> # Initializing a model (with random weights) from the shi-labs/oneformer_ade20k_swin_tiny style configuration
     >>> model = OneFormerModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
-
-
-
-
-
     ```
     """
     model_type = "oneformer"
@@ -200,17 +203,15 @@ class OneFormerConfig(PretrainedConfig):
         decoder_config: Optional[Dict] = None,
         **kwargs,
     ):
-        cfgs = self._setup_cfg(general_config, backbone_config, 
-                text_encoder_config, decoder_config)
-        
+        cfgs = self._setup_cfg(general_config, backbone_config, text_encoder_config, decoder_config)
+
         general_config, backbone_config, text_encoder_config, decoder_config = cfgs
-        
-        backbone_type =  general_config["backbone_type"]
-        
+
+        backbone_type = general_config["backbone_type"]
+
         if backbone_type not in self.backbones_supported:
             raise ValueError(
-                f"Backbone {backbone_type} not supported, please use one of"
-                f" {','.join(self.backbones_supported)}"
+                f"Backbone {backbone_type} not supported, please use one of {','.join(self.backbones_supported)}"
             )
 
         self.general_config = general_config
@@ -223,17 +224,16 @@ class OneFormerConfig(PretrainedConfig):
         self.num_hidden_layers = self.decoder_config["decoder_layers"]
         self.init_std = self.general_config["init_std"]
         self.init_xavier_std = self.general_config["init_xavier_std"]
-        
+
         super().__init__(**kwargs)
-    
+
     def _setup_cfg(
-        self, 
+        self,
         general_config: Optional[Dict] = None,
         backbone_config: Optional[Dict] = None,
         text_encoder_config: Optional[Dict] = None,
         decoder_config: Optional[Dict] = None,
-        ) -> Dict[str, any]:
-        
+    ) -> Dict[str, any]:
         if general_config is None:
             general_config = {}
             general_config["backbone_type"] = "swin"
@@ -256,7 +256,7 @@ class OneFormerConfig(PretrainedConfig):
             general_config["is_train"] = False
             general_config["use_auxiliary_loss"] = True
             general_config["output_auxiliary_logits"] = True
-        
+
         if backbone_config is None:
             backbone_config = {}
             backbone_config["image_size"] = 224
@@ -265,8 +265,8 @@ class OneFormerConfig(PretrainedConfig):
             backbone_config["patch_size"] = 4
             backbone_config["embed_dim"] = 96
             backbone_config["mlp_ratio"] = 4.0
-            backbone_config["depths"] = [2,2,6,2]
-            backbone_config["num_heads"] = [3,6,12,24]
+            backbone_config["depths"] = [2, 2, 6, 2]
+            backbone_config["num_heads"] = [3, 6, 12, 24]
             backbone_config["window_size"] = 7
             backbone_config["qkv_bias"] = True
             backbone_config["hidden_dropout_prob"] = 0.0
@@ -275,12 +275,19 @@ class OneFormerConfig(PretrainedConfig):
             backbone_config["use_absolute_embeddings"] = False
             backbone_config["patch_norm"] = True
             backbone_config["encoder_stride"] = 32
-            backbone_config["strides"] = [4,8,16,32]
+            backbone_config["strides"] = [4, 8, 16, 32]
             backbone_config["kernel_size"] = 11
-            backbone_config["dilations"] = [[1, 20, 1], [1, 5, 1, 10], [1, 2, 1, 3, 1, 4, 1, 5, 1, 2, 1, 3, 1, 4, 1, 5, 1, 5], [1, 2, 1, 2, 1]]
+            backbone_config["dilations"] = [
+                [1, 20, 1],
+                [1, 5, 1, 10],
+                [1, 2, 1, 3, 1, 4, 1, 5, 1, 2, 1, 3, 1, 4, 1, 5, 1, 5],
+                [1, 2, 1, 2, 1],
+            ]
             backbone_config["layer_scale_init_value"] = 0.0
-        backbone_config["feature_channels"] = [int(backbone_config["embed_dim"] * 2 ** i) for i in range(len(backbone_config["depths"]))]
-        
+        backbone_config["feature_channels"] = [
+            int(backbone_config["embed_dim"] * 2**i) for i in range(len(backbone_config["depths"]))
+        ]
+
         if text_encoder_config is None:
             text_encoder_config = {}
             text_encoder_config["task_seq_len"] = 77
@@ -291,7 +298,7 @@ class OneFormerConfig(PretrainedConfig):
             text_encoder_config["text_encoder_vocab_size"] = 49408
             text_encoder_config["text_encoder_proj_layers"] = 2
             text_encoder_config["text_encoder_n_ctx"] = 16
-        
+
         if decoder_config is None:
             decoder_config = {}
             decoder_config["conv_dim"] = 256
@@ -309,5 +316,5 @@ class OneFormerConfig(PretrainedConfig):
             decoder_config["enforce_input_proj"] = False
             decoder_config["query_dec_layers"] = 2
             decoder_config["common_stride"] = 4
-        
+
         return general_config, backbone_config, text_encoder_config, decoder_config
