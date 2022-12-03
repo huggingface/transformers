@@ -173,6 +173,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetConfig"),
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
+        ("mra", "MRAConfig"),
     ]
 )
 
@@ -308,6 +309,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("yolos", "YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("yoso", "YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("mra", "MRA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
     ]
 )
 
@@ -481,6 +483,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("xlsr_wav2vec2", "XLSR-Wav2Vec2"),
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
+        ("mra", "MRA"),
     ]
 )
 

@@ -167,6 +167,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetModel"),
         ("yolos", "YolosModel"),
         ("yoso", "YosoModel"),
+        ("mra", "MRAModel"),
     ]
 )
 
@@ -294,6 +295,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
         ("xlnet", "XLNetLMHeadModel"),
         ("yoso", "YosoForMaskedLM"),
+        ("mra", "MRAForMaskedLM"),
     ]
 )
 
@@ -481,6 +483,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForMaskedLM"),
         ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
         ("yoso", "YosoForMaskedLM"),
+        ("mra", "MRAForMaskedLM"),
     ]
 )
 
@@ -604,6 +607,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta-xl", "XLMRobertaXLForSequenceClassification"),
         ("xlnet", "XLNetForSequenceClassification"),
         ("yoso", "YosoForSequenceClassification"),
+        ("mra", "MRAForSequenceClassification"),
     ]
 )
 
@@ -659,6 +663,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta-xl", "XLMRobertaXLForQuestionAnswering"),
         ("xlnet", "XLNetForQuestionAnsweringSimple"),
         ("yoso", "YosoForQuestionAnswering"),
+        ("mra", "MRAForQuestionAnswering"),
     ]
 )
 
@@ -728,6 +733,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta-xl", "XLMRobertaXLForTokenClassification"),
         ("xlnet", "XLNetForTokenClassification"),
         ("yoso", "YosoForTokenClassification"),
+        ("mra", "MRAForTokenClassification"),
     ]
 )
 
@@ -767,6 +773,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta-xl", "XLMRobertaXLForMultipleChoice"),
         ("xlnet", "XLNetForMultipleChoice"),
         ("yoso", "YosoForMultipleChoice"),
+        ("mra", "MRAForMultipleChoice"),
     ]
 )
 

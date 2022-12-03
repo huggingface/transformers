@@ -449,6 +449,7 @@ _import_structure = {
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
     "models.yolos": ["YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP", "YolosConfig"],
     "models.yoso": ["YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP", "YosoConfig"],
+    "models.mra": ["MRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MRAConfig"],
     "onnx": [],
     "pipelines": [
         "AudioClassificationPipeline",
@@ -2327,6 +2328,19 @@ else:
             "YosoPreTrainedModel",
         ]
     )
+    _import_structure["models.mra"].extend(
+        [
+            "MRA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MRAForMaskedLM",
+            "MRAForMultipleChoice",
+            "MRAForQuestionAnswering",
+            "MRAForSequenceClassification",
+            "MRAForTokenClassification",
+            "MRALayer",
+            "MRAModel",
+            "MRAPreTrainedModel",
+        ]
+    )
     _import_structure["optimization"] = [
         "Adafactor",
         "AdamW",
@@ -3488,6 +3502,7 @@ if TYPE_CHECKING:
     from .models.mobilenet_v2 import MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV2Config
     from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
+    from .models.mra import MRA_PRETRAINED_CONFIG_ARCHIVE_MAP, MRAConfig
     from .models.mt5 import MT5Config
     from .models.mvp import MvpConfig, MvpTokenizer
     from .models.nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NatConfig
@@ -4641,6 +4656,17 @@ if TYPE_CHECKING:
             MPNetLayer,
             MPNetModel,
             MPNetPreTrainedModel,
+        )
+        from .models.mra import (
+            MRA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MRAForMaskedLM,
+            MRAForMultipleChoice,
+            MRAForQuestionAnswering,
+            MRAForSequenceClassification,
+            MRAForTokenClassification,
+            MRALayer,
+            MRAModel,
+            MRAPreTrainedModel,
         )
         from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
         from .models.mvp import (
