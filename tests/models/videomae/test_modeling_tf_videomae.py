@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch VideoMAE model. """
+""" Testing suite for the TensorFlow VideoMAE model. """
 
 
 import copy
@@ -24,31 +24,30 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 from transformers import VideoMAEConfig
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import require_tf, require_vision, slow
+from transformers.utils import cached_property, is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
 
 
-if is_torch_available():
-    import torch
-    from torch import nn
+if is_tf_available():
+    import tensorflow as tf
 
     from transformers import (
-        MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
-        VideoMAEForPreTraining,
-        VideoMAEForVideoClassification,
-        VideoMAEModel,
+        TF_MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
+        TFVideoMAEForPreTraining,
+        TFVideoMAEForVideoClassification,
+        TFVideoMAEModel,
     )
-    from transformers.models.videomae.modeling_videomae import VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.videomae.modeling_tf_videomae import TF_VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from transformers import VideoMAEFeatureExtractor
 
 
-class VideoMAEModelTester:
+class TFVideoMAEModelTester:
     def __init__(
         self,
         parent,
@@ -132,25 +131,22 @@ class VideoMAEModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = VideoMAEModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
+        model = TFVideoMAEModel(config=config)
+        result = model(pixel_values, training=False)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_pretraining(self, config, pixel_values, labels):
-        model = VideoMAEForPreTraining(config)
-        model.to(torch_device)
-        model.eval()
+        model = TFVideoMAEForPreTraining(config)
         # important: each video needs to have the same number of masked patches
         # hence we define a single mask, which we then repeat for each example in the batch
-        mask = torch.ones((self.num_masks,))
-        mask = torch.cat([mask, torch.zeros(self.seq_length - mask.size(0))], axis=0)
-        bool_masked_pos = mask.expand(self.batch_size, -1).bool()
+        mask = tf.ones((self.num_masks,))
+        mask = tf.concat([mask, tf.zeros((self.seq_length - mask.shape(0)))])
+        masked_pos = tf.broadcast_to(mask, (self.batch_size, self.num_masks))
+        bool_masked_pos = tf.cast(masked_pos, "bool")
 
-        result = model(pixel_values, bool_masked_pos)
+        result = model(pixel_values, bool_masked_pos, training=False)
         # model only returns predictions for masked patches
-        num_masked_patches = mask.sum().item()
+        num_masked_patches = int(tf.reduce_sum(mask))
         decoder_num_labels = 3 * self.tubelet_size * self.patch_size**2
         self.parent.assertEqual(result.logits.shape, (self.batch_size, num_masked_patches, decoder_num_labels))
 

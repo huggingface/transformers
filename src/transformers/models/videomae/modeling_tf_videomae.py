@@ -875,6 +875,7 @@ class TFVideoMAEForPreTraining(TFVideoMAEPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
     ):
         r"""
         Returns:
@@ -909,6 +910,7 @@ class TFVideoMAEForPreTraining(TFVideoMAEPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training
         )
 
         sequence_output = outputs[0]
@@ -924,7 +926,7 @@ class TFVideoMAEForPreTraining(TFVideoMAEPreTrainedModel):
         expanded_position_embeddings = tf.cast(expanded_position_embeddings, pixel_values.dtype)
         pos_emb_visible = expanded_position_embeddings[~bool_masked_pos]
         pos_emb_visible = tf.reshape(pos_emb_visible, (batch_size, -1, num_channels))
-        pos_emb_mask = expanded_position_embeddings[bool_masked_pos].reshape(batch_size, -1, num_channels)
+        pos_emb_mask = tf.reshape(expanded_position_embeddings[bool_masked_pos], (batch_size, -1, num_channels))
 
         # [batch_size, num_patches, decoder_hidden_size]
         x_full = tf.concat([sequence_output + pos_emb_visible, self.mask_token + pos_emb_mask], axis=1)
@@ -938,7 +940,7 @@ class TFVideoMAEForPreTraining(TFVideoMAEPreTrainedModel):
         # first, unnormalize the frames
         frames = pixel_values * self.std + self.mean  # in [0, 1]
 
-        batch_size, time, num_channels, height, width = frames.shape
+        batch_size, time, num_channels, height, width = tf.shape(frames)
         tubelet_size, patch_size = self.config.tubelet_size, self.config.patch_size
         if self.config.norm_pix_loss:
             # step 1: split up dimensions (time by tubelet_size, height by patch_size, width by patch_size)
