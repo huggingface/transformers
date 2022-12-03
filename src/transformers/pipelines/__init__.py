@@ -558,8 +558,9 @@ def pipeline(
             pipeline will be allocated.
         device_map (`str` or `Dict[str, Union[int, str, torch.device]`, *optional*):
             Sent directly as `model_kwargs` (just a simpler shortcut). When `accelerate` library is present, set
-            `device_map="auto"` to compute the most optimized `device_map` automatically. [More
-            information](https://huggingface.co/docs/accelerate/main/en/big_modeling#accelerate.cpu_offload)
+            `device_map="auto"` to compute the most optimized `device_map` automatically (see
+            [here](https://huggingface.co/docs/accelerate/main/en/package_reference/big_modeling#accelerate.cpu_offload)
+            for more information).
 
             <Tip warning={true}>
 

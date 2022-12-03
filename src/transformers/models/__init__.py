@@ -18,6 +18,7 @@
 
 from . import (
     albert,
+    audio_spectrogram_transformer,
     auto,
     bart,
     barthez,
@@ -36,6 +37,7 @@ from . import (
     byt5,
     camembert,
     canine,
+    chinese_clip,
     clip,
     clipseg,
     codegen,
@@ -103,6 +105,7 @@ from . import (
     mluke,
     mmbt,
     mobilebert,
+    mobilenet_v1,
     mobilenet_v2,
     mobilevit,
     mpnet,
@@ -149,6 +152,7 @@ from . import (
     tapas,
     tapex,
     time_series_transformer,
+    timesformer,
     trajectory_transformer,
     transfo_xl,
     trocr,

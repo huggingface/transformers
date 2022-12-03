@@ -55,7 +55,7 @@ class ResNetModelTester:
         hidden_act="relu",
         num_labels=3,
         scope=None,
-        out_features=["stage1", "stage2", "stage3", "stage4"],
+        out_features=["stage2", "stage3", "stage4"],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -121,10 +121,11 @@ class ResNetModelTester:
 
         # verify hidden states
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [3, 10, 8, 8])
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 4, 4])
 
         # verify channels
-        self.parent.assertListEqual(model.channels, config.hidden_sizes)
+        self.parent.assertEqual(len(model.channels), len(config.out_features))
+        self.parent.assertListEqual(model.channels, config.hidden_sizes[1:])
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -140,7 +141,15 @@ class ResNetModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (ResNetModel, ResNetForImageClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            ResNetModel,
+            ResNetForImageClassification,
+            ResNetBackbone,
+        )
+        if is_torch_available()
+        else ()
+    )
 
     fx_compatible = True
     test_pruning = False
@@ -245,6 +254,10 @@ class ResNetModelTest(ModelTesterMixin, unittest.TestCase):
                 config.output_hidden_states = True
 
                 check_hidden_states_output(inputs_dict, config, model_class)
+
+    @unittest.skip(reason="ResNet does not use feedforward chunking")
+    def test_feed_forward_chunking(self):
+        pass
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
