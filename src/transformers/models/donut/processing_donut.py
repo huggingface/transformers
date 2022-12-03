@@ -37,12 +37,27 @@ class DonutProcessor(ProcessorMixin):
         tokenizer ([`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]):
             An instance of [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. The tokenizer is a required input.
     """
-    feature_extractor_class = "AutoFeatureExtractor"
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
-        self.current_processor = self.feature_extractor
+    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+        if "feature_extractor" in kwargs:
+            warnings.warn(
+                "The `feature_extractor` argument is deprecated and will be removed in v4.27, use `image_processor`"
+                " instead.",
+                FutureWarning,
+            )
+            feature_extractor = kwargs.pop("feature_extractor")
+
+        image_processor = image_processor if image_processor is not None else feature_extractor
+        if image_processor is None:
+            raise ValueError("You need to specify an `image_processor`.")
+        if tokenizer is None:
+            raise ValueError("You need to specify a `tokenizer`.")
+
+        super().__init__(image_processor, tokenizer)
+        self.current_processor = self.image_processor
         self._in_target_context_manager = False
 
     def __call__(self, *args, **kwargs):
@@ -66,7 +81,7 @@ class DonutProcessor(ProcessorMixin):
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
         if images is not None:
-            inputs = self.feature_extractor(images, *args, **kwargs)
+            inputs = self.image_processor(images, *args, **kwargs)
         if text is not None:
             encodings = self.tokenizer(text, **kwargs)
 
@@ -105,7 +120,7 @@ class DonutProcessor(ProcessorMixin):
         self._in_target_context_manager = True
         self.current_processor = self.tokenizer
         yield
-        self.current_processor = self.feature_extractor
+        self.current_processor = self.image_processor
         self._in_target_context_manager = False
 
     def token2json(self, tokens, is_inner_value=False, added_vocab=None):
@@ -157,3 +172,12 @@ class DonutProcessor(ProcessorMixin):
             return [output] if is_inner_value else output
         else:
             return [] if is_inner_value else {"text_sequence": tokens}
+
+    @property
+    def feature_extractor_class(self):
+        warnings.warn(
+            "`feature_extractor_class` is deprecated and will be removed in v4.27. Use `image_processor_class`"
+            " instead.",
+            FutureWarning,
+        )
+        return self.image_processor_class
