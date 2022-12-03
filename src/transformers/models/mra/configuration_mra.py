@@ -96,7 +96,7 @@ class MRAConfig(PretrainedConfig):
         max_position_embeddings=512,
         type_vocab_size=1,
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
+        layer_norm_eps=1e-5,
         position_embedding_type="absolute",
         block_per_row=4,
         approx_mode="full",
