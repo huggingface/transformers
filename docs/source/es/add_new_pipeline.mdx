@@ -244,14 +244,14 @@ arquitecturas posibles definidas en `model_mapping` y `tf_model_mapping`.
 Esto es muy importante para probar compatibilidades a futuro, lo que significa que si alguien añade un nuevo modelo
 para `XXXForQuestionAnswering` entonces el pipeline intentará ejecutarse con ese modelo. Ya que los modelos son aleatorios,
 es imposible verificar los valores como tales, y es por eso que hay un helper `ANY` que simplemente intentará que la
-salida tenga el mismo tipo que el tipo de salida del pipeline.
+salida tenga el mismo tipo que la salida esperada del pipeline.
 
 También *debes* implementar 2 (preferiblemente 4) pruebas:
 
 - `test_small_model_pt` : Define un (1) modelo pequeño para este pipeline (no importa si los resultados no tienen sentido)
 y prueba las salidas del pipeline. Los resultados deberían ser los mismos que en `test_small_model_tf`.
 - `test_small_model_tf` : Define un (1) modelo pequeño para este pipeline (no importa si los resultados no tienen sentido)
-y prueba las salidas del pipeline. Los resultados deberían ser los mismos que en`test_small_model_pt`.
+y prueba las salidas del pipeline. Los resultados deberían ser los mismos que en `test_small_model_pt`.
 - `test_large_model_pt` (`optional`): Prueba el pipeline en una tarea real en la que los resultados deben tener sentido.
 Estas pruebas son lentas y deben marcarse como tales. El objetivo de esto es ejemplificar el pipeline y asegurarse de que
 no haya divergencias en versiones futuras.
